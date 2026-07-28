@@ -1,6 +1,9 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { logout } from "@/app/login/actions";
+import { AppShell } from "@/components/app-shell/app-shell";
+import { SummaryStatStrip } from "@/components/dashboard/summary-stat-strip";
+import { StaffDirectoryTable, type StaffRow } from "@/components/dashboard/staff-directory-table";
 
 export default async function DashboardPage() {
   const supabase = await createClient();
@@ -15,58 +18,69 @@ export default async function DashboardPage() {
 
   // RLS scopes this to the caller's own row (or all rows, for super_admin) —
   // no manual school_id filter needed here, by design (§6).
-  const { data: schoolUser, error } = await supabase
+  const { data: schoolUser } = await supabase
     .from("school_users")
     .select("full_name, status, roles(display_name), schools(name)")
     .eq("auth_user_id", user.id)
     .maybeSingle();
 
+  // Directory of colleagues in the same school — again, RLS does the
+  // tenant scoping; this query never touches school_id directly.
+  const { data: staffRows } = await supabase
+    .from("school_users")
+    .select("id, full_name, status, email, roles(display_name)")
+    .order("full_name");
+
+  const rows: StaffRow[] = (staffRows ?? []).map((r) => ({
+    id: r.id,
+    full_name: r.full_name,
+    role:
+      (r.roles as unknown as { display_name: string } | null)?.display_name ?? "—",
+    status: r.status,
+    email: r.email,
+  }));
+
+  const roleName =
+    (schoolUser?.roles as unknown as { display_name: string } | null)?.display_name;
+  const schoolName =
+    (schoolUser?.schools as unknown as { name: string } | null)?.name;
+
   return (
-    <div className="mx-auto max-w-2xl px-4 py-10">
-      <div className="mb-6 flex items-center justify-between">
-        <h1 className="text-lg font-semibold">EduCore</h1>
-        <form action={logout}>
-          <button type="submit" className="text-sm underline">
-            Sign out
-          </button>
-        </form>
-      </div>
-
-      {error && (
-        <p className="text-sm text-red-600">
-          Could not load your staff profile: {error.message}
-        </p>
-      )}
-
-      {!error && !schoolUser && (
-        <p className="text-sm text-black/60 dark:text-white/60">
-          Signed in, but no school_users record is linked to this account
-          yet — ask an administrator to add you to a school.
-        </p>
-      )}
-
-      {schoolUser && (
-        <div className="space-y-1 text-sm">
-          <p>
-            <span className="text-black/60 dark:text-white/60">Name:</span>{" "}
-            {schoolUser.full_name}
-          </p>
-          <p>
-            <span className="text-black/60 dark:text-white/60">Role:</span>{" "}
-            {(schoolUser.roles as unknown as { display_name: string } | null)
-              ?.display_name ?? "—"}
-          </p>
-          <p>
-            <span className="text-black/60 dark:text-white/60">School:</span>{" "}
-            {(schoolUser.schools as unknown as { name: string } | null)
-              ?.name ?? "—"}
-          </p>
-          <p>
-            <span className="text-black/60 dark:text-white/60">Status:</span>{" "}
-            {schoolUser.status}
+    <AppShell
+      breadcrumbs={[{ label: schoolName ?? "EduCore" }, { label: "Dashboard" }]}
+      userName={schoolUser?.full_name ?? user.email ?? "Account"}
+      userRole={roleName}
+      onSignOut={logout}
+    >
+      <div className="flex flex-col gap-6">
+        <div>
+          <h1 className="text-lg font-semibold">Dashboard</h1>
+          <p className="text-sm text-muted-foreground">
+            {schoolName ? `${schoolName} — ` : ""}
+            operational overview
           </p>
         </div>
-      )}
-    </div>
+
+        <SummaryStatStrip
+          stats={[
+            { label: "Staff", value: String(rows.length) },
+            {
+              label: "Active",
+              value: String(rows.filter((r) => r.status === "active").length),
+            },
+            {
+              label: "Inactive",
+              value: String(rows.filter((r) => r.status !== "active").length),
+            },
+            { label: "Your role", value: roleName ?? "—" },
+          ]}
+        />
+
+        <div>
+          <h2 className="mb-2 text-sm font-medium">Staff directory</h2>
+          <StaffDirectoryTable rows={rows} />
+        </div>
+      </div>
+    </AppShell>
   );
 }

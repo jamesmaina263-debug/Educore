@@ -1,27 +1,100 @@
 @import "tailwindcss";
+@import "tw-animate-css";
+@import "@fontsource/inter/400.css";
+@import "@fontsource/inter/500.css";
+@import "@fontsource/inter/600.css";
+@import "@fontsource/ibm-plex-mono/400.css";
+@import "@fontsource/ibm-plex-mono/500.css";
 
+/*
+ * EduCore design tokens — enterprise operational software, not a
+ * marketing surface. Neutral white/light-gray surfaces, thin borders
+ * carry separation (not shadow), one restrained accent color used only
+ * for primary actions/active state, never for decoration. Spacing
+ * throughout the app should stick to the 8px grid (Tailwind's 2/4/6/8
+ * scale = 8/16/24/32px) rather than odd values.
+ */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #f7f8f9;
+  --surface: #ffffff;
+  --foreground: #1a1d1f;
+  --muted: #f1f2f4;
+  --muted-foreground: #6b7280;
+  --border: #e4e7eb;
+
+  --primary: #2563eb;
+  --primary-hover: #1d4ed8;
+  --primary-foreground: #ffffff;
+
+  --success: #16a34a;
+  --warning: #d97706;
+  --danger: #dc2626;
+  --info: #2563eb;
+
+  --radius: 0.375rem;
+
+  /* Elevation comes from borders first; shadow is a barely-there hint,
+     reserved for floating elements (dialogs, dropdowns, popovers) —
+     resting surfaces (cards, table panels) use border only, no shadow. */
+  --shadow-sm: 0 1px 2px 0 rgb(16 24 40 / 0.04);
+  --shadow-md: 0 4px 8px -2px rgb(16 24 40 / 0.08), 0 1px 3px -1px rgb(16 24 40 / 0.06);
+}
+
+.dark {
+  --background: #101214;
+  --surface: #16181b;
+  --foreground: #edeef0;
+  --muted: #1c1f23;
+  --muted-foreground: #9199a3;
+  --border: #262a2f;
+
+  --primary: #4c8dff;
+  --primary-hover: #3b7ae8;
+  --primary-foreground: #0b0d0f;
+
+  --success: #34b566;
+  --warning: #e2922a;
+  --danger: #f16060;
+  --info: #4c8dff;
+
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.3);
+  --shadow-md: 0 4px 8px -2px rgb(0 0 0 / 0.4), 0 1px 3px -1px rgb(0 0 0 / 0.3);
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
-    "Helvetica Neue", Arial, sans-serif;
-  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-}
+  --color-surface: var(--surface);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-border: var(--border);
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-foreground: var(--primary-foreground);
+
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-danger: var(--danger);
+  --color-info: var(--info);
+
+  --radius-sm: calc(var(--radius) - 2px);
+  --radius-md: var(--radius);
+  --radius-lg: calc(var(--radius) + 2px);
+  --radius-xl: calc(var(--radius) + 6px);
+
+  --shadow-token-sm: var(--shadow-sm);
+  --shadow-token-md: var(--shadow-md);
+
+  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.4285714;
 }

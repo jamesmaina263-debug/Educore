@@ -2,6 +2,9 @@
 
 import { useState, type FormEvent } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
 const FUNCTIONS_BASE = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1`;
 
@@ -67,53 +70,44 @@ export default function ParentLoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center px-4">
-      <div className="w-full max-w-sm space-y-4 rounded-lg border border-black/10 p-6 dark:border-white/10">
+    <div className="flex min-h-screen items-center justify-center bg-background px-4">
+      <div className="w-full max-w-sm space-y-4 rounded-md border border-border bg-surface p-6">
         <div>
-          <h1 className="text-lg font-semibold">Parent / student sign in</h1>
-          <p className="text-sm text-black/60 dark:text-white/60">
+          <h1 className="text-base font-semibold">Parent / student sign in</h1>
+          <p className="text-sm text-muted-foreground">
             Staff should use the staff sign-in page instead.
           </p>
         </div>
 
         {step === "phone" && (
           <form onSubmit={requestCode} className="space-y-3">
-            <div className="space-y-1">
-              <label htmlFor="phone" className="text-sm font-medium">
-                Phone number
-              </label>
-              <input
+            <div className="space-y-1.5">
+              <Label htmlFor="phone">Phone number</Label>
+              <Input
                 id="phone"
                 type="tel"
                 required
                 placeholder="+2547XXXXXXXX"
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
-                className="w-full rounded-md border border-black/15 px-3 py-2 text-sm dark:border-white/15"
               />
             </div>
             {error && (
-              <p role="alert" className="text-sm text-red-600">
+              <p role="alert" className="text-sm text-danger">
                 {error}
               </p>
             )}
-            <button
-              type="submit"
-              disabled={pending}
-              className="w-full rounded-md bg-black px-3 py-2 text-sm font-medium text-white disabled:opacity-50 dark:bg-white dark:text-black"
-            >
+            <Button type="submit" disabled={pending} className="w-full">
               {pending ? "Sending…" : "Send code"}
-            </button>
+            </Button>
           </form>
         )}
 
         {step === "code" && (
           <form onSubmit={verifyCode} className="space-y-3">
-            <div className="space-y-1">
-              <label htmlFor="code" className="text-sm font-medium">
-                6-digit code
-              </label>
-              <input
+            <div className="space-y-1.5">
+              <Label htmlFor="code">6-digit code</Label>
+              <Input
                 id="code"
                 type="text"
                 inputMode="numeric"
@@ -121,21 +115,16 @@ export default function ParentLoginPage() {
                 required
                 value={code}
                 onChange={(e) => setCode(e.target.value)}
-                className="w-full rounded-md border border-black/15 px-3 py-2 text-sm dark:border-white/15"
               />
             </div>
             {error && (
-              <p role="alert" className="text-sm text-red-600">
+              <p role="alert" className="text-sm text-danger">
                 {error}
               </p>
             )}
-            <button
-              type="submit"
-              disabled={pending}
-              className="w-full rounded-md bg-black px-3 py-2 text-sm font-medium text-white disabled:opacity-50 dark:bg-white dark:text-black"
-            >
+            <Button type="submit" disabled={pending} className="w-full">
               {pending ? "Verifying…" : "Verify"}
-            </button>
+            </Button>
           </form>
         )}
       </div>

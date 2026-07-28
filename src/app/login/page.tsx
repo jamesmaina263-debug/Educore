@@ -1,6 +1,9 @@
 "use client";
 
 import { useActionState } from "react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { login, type LoginState } from "./actions";
 
 const initialState: LoginState = { error: null };
@@ -9,60 +12,43 @@ export default function LoginPage() {
   const [state, formAction, pending] = useActionState(login, initialState);
 
   return (
-    <div className="flex min-h-screen items-center justify-center px-4">
+    <div className="flex min-h-screen items-center justify-center bg-background px-4">
       <form
         action={formAction}
-        className="w-full max-w-sm space-y-4 rounded-lg border border-black/10 p-6 dark:border-white/10"
+        className="w-full max-w-sm space-y-4 rounded-md border border-border bg-surface p-6"
       >
         <div>
-          <h1 className="text-lg font-semibold">Staff sign in</h1>
-          <p className="text-sm text-black/60 dark:text-white/60">
-            EduCore staff access. Parents and students sign in with a phone
-            number instead.
+          <h1 className="text-base font-semibold">Staff sign in</h1>
+          <p className="text-sm text-muted-foreground">
+            Parents and students sign in with a phone number instead.
           </p>
         </div>
 
-        <div className="space-y-1">
-          <label htmlFor="email" className="text-sm font-medium">
-            Email
-          </label>
-          <input
-            id="email"
-            name="email"
-            type="email"
-            required
-            autoComplete="email"
-            className="w-full rounded-md border border-black/15 px-3 py-2 text-sm dark:border-white/15"
-          />
+        <div className="space-y-1.5">
+          <Label htmlFor="email">Email</Label>
+          <Input id="email" name="email" type="email" required autoComplete="email" />
         </div>
 
-        <div className="space-y-1">
-          <label htmlFor="password" className="text-sm font-medium">
-            Password
-          </label>
-          <input
+        <div className="space-y-1.5">
+          <Label htmlFor="password">Password</Label>
+          <Input
             id="password"
             name="password"
             type="password"
             required
             autoComplete="current-password"
-            className="w-full rounded-md border border-black/15 px-3 py-2 text-sm dark:border-white/15"
           />
         </div>
 
         {state.error && (
-          <p role="alert" className="text-sm text-red-600">
+          <p role="alert" className="text-sm text-danger">
             {state.error}
           </p>
         )}
 
-        <button
-          type="submit"
-          disabled={pending}
-          className="w-full rounded-md bg-black px-3 py-2 text-sm font-medium text-white disabled:opacity-50 dark:bg-white dark:text-black"
-        >
+        <Button type="submit" disabled={pending} className="w-full">
           {pending ? "Signing in…" : "Sign in"}
-        </button>
+        </Button>
       </form>
     </div>
   );
