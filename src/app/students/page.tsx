@@ -22,7 +22,7 @@ export default async function StudentsPage() {
 
   const { data: students } = await supabase
     .from("students")
-    .select("id, admission_number, first_name, last_name, status")
+    .select("id, admission_number, first_name, last_name, status, current_class_id, streams(name, classes(name))")
     .order("last_name");
 
   const { data: primaryGuardians } = await supabase
@@ -36,13 +36,18 @@ export default async function StudentsPage() {
     if (name) guardianByStudent.set(g.student_id as string, name);
   }
 
-  const rows: StudentRow[] = (students ?? []).map((s) => ({
-    id: s.id,
-    admission_number: s.admission_number,
-    full_name: `${s.first_name} ${s.last_name}`,
-    status: s.status,
-    guardian_name: guardianByStudent.get(s.id) ?? null,
-  }));
+  const rows: StudentRow[] = (students ?? []).map((s) => {
+    const stream = s.streams as unknown as { name: string; classes: { name: string } | null } | null;
+    const classLabel = stream ? `${stream.classes?.name ?? ""} ${stream.name}`.trim() : null;
+    return {
+      id: s.id,
+      admission_number: s.admission_number,
+      full_name: `${s.first_name} ${s.last_name}`,
+      status: s.status,
+      class_label: classLabel,
+      guardian_name: guardianByStudent.get(s.id) ?? null,
+    };
+  });
 
   const roleName =
     (schoolUser?.roles as unknown as { display_name: string } | null)?.display_name;

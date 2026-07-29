@@ -12,6 +12,7 @@ export interface StudentRow {
   admission_number: string;
   full_name: string;
   status: string;
+  class_label: string | null;
   guardian_name: string | null;
 }
 
@@ -41,8 +42,7 @@ const columns: ColumnDef<StudentRow>[] = [
   {
     id: "class",
     header: "Class / Stream",
-    // current_class_id has no linked classes table yet (Phase 1 Item 2).
-    cell: () => <span className="text-muted-foreground">Unassigned</span>,
+    cell: ({ row }) => row.original.class_label ?? <span className="text-muted-foreground">Unassigned</span>,
   },
   {
     accessorKey: "guardian_name",

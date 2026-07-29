@@ -30,7 +30,9 @@ export default async function StudentProfilePage({
 
   const { data: student } = await supabase
     .from("students")
-    .select("id, admission_number, upi_number, first_name, last_name, other_names, date_of_birth, gender, status, admission_date")
+    .select(
+      "id, admission_number, upi_number, first_name, last_name, other_names, date_of_birth, gender, status, admission_date, streams(name, classes(name))",
+    )
     .eq("id", id)
     .maybeSingle();
 
@@ -63,6 +65,8 @@ export default async function StudentProfilePage({
   const roleName = (schoolUser?.roles as unknown as { display_name: string } | null)?.display_name;
   const schoolName = (schoolUser?.schools as unknown as { name: string } | null)?.name;
   const fullName = [student.first_name, student.other_names, student.last_name].filter(Boolean).join(" ");
+  const stream = student.streams as unknown as { name: string; classes: { name: string } | null } | null;
+  const classLabel = stream ? `${stream.classes?.name ?? ""} ${stream.name}`.trim() : "Unassigned";
 
   return (
     <AppShell
@@ -123,7 +127,7 @@ export default async function StudentProfilePage({
               </div>
               <div>
                 <dt className="text-muted-foreground">Class / Stream</dt>
-                <dd className="text-muted-foreground">Unassigned</dd>
+                <dd className={stream ? undefined : "text-muted-foreground"}>{classLabel}</dd>
               </div>
             </dl>
           </TabsContent>

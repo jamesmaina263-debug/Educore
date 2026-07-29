@@ -64,17 +64,10 @@ export async function createStudentWithGuardian(
   });
   if (linkError) return { error: linkError.message };
 
-  // Manual registration (MVP) still has to walk the enrollment state machine
-  // (applied -> approved -> enrolled -> active) one step at a time — the database
-  // now enforces this transition graph and rejects a direct applied -> active jump.
-  for (const nextStatus of ["approved", "enrolled", "active"] as const) {
-    const { error: transitionError } = await supabase
-      .from("students")
-      .update({ status: nextStatus })
-      .eq("id", student.id);
-    if (transitionError) return { error: transitionError.message };
-  }
-
+  // Registration creates an application (status defaults to 'applied') — advancing
+  // it through approved -> enrolled -> active is the Admissions review flow's job,
+  // not this form's. See /admissions.
   revalidatePath("/students");
+  revalidatePath("/admissions");
   return { success: true as const, studentId: student.id as string };
 }
