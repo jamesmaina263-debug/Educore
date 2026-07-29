@@ -64,11 +64,16 @@ export async function createStudentWithGuardian(
   });
   if (linkError) return { error: linkError.message };
 
-  const { error: activateError } = await supabase
-    .from("students")
-    .update({ status: "active" })
-    .eq("id", student.id);
-  if (activateError) return { error: activateError.message };
+  // Manual registration (MVP) still has to walk the enrollment state machine
+  // (applied -> approved -> enrolled -> active) one step at a time — the database
+  // now enforces this transition graph and rejects a direct applied -> active jump.
+  for (const nextStatus of ["approved", "enrolled", "active"] as const) {
+    const { error: transitionError } = await supabase
+      .from("students")
+      .update({ status: nextStatus })
+      .eq("id", student.id);
+    if (transitionError) return { error: transitionError.message };
+  }
 
   revalidatePath("/students");
   return { success: true as const, studentId: student.id as string };
