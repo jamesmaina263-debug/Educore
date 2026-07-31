@@ -24,6 +24,11 @@ export interface AcademicsSummary {
   subjectCount: number;
 }
 
+export interface ExamsSummary {
+  open: number;
+  closed: number;
+}
+
 export function EnrollmentWidget({ data }: { data: EnrollmentSummary }) {
   return (
     <Card>
@@ -147,6 +152,32 @@ export function AcademicsWidget({ data }: { data: AcademicsSummary }) {
       <CardFooter>
         <Button asChild size="sm" variant="outline">
           <Link href="/academics">Manage academics</Link>
+        </Button>
+      </CardFooter>
+    </Card>
+  );
+}
+
+export function ExamsWidget({ data }: { data: ExamsSummary }) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Exams</CardTitle>
+        <CardDescription>{data.open} open, {data.closed} closed</CardDescription>
+      </CardHeader>
+      <CardContent className="flex gap-4 text-sm">
+        <div>
+          <div className="text-xs text-muted-foreground">Open</div>
+          <div className="text-lg font-semibold tabular-nums">{data.open}</div>
+        </div>
+        <div>
+          <div className="text-xs text-muted-foreground">Closed</div>
+          <div className="text-lg font-semibold tabular-nums">{data.closed}</div>
+        </div>
+      </CardContent>
+      <CardFooter>
+        <Button asChild size="sm" variant="outline">
+          <Link href="/exams">Manage exams</Link>
         </Button>
       </CardFooter>
     </Card>

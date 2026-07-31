@@ -9,9 +9,11 @@ import {
   AdmissionsWidget,
   AttendanceWidget,
   AcademicsWidget,
+  ExamsWidget,
   type EnrollmentSummary,
   type AttendanceSummary,
   type AcademicsSummary,
+  type ExamsSummary,
 } from "@/components/dashboard/module-widgets";
 
 function todayISO() {
@@ -50,12 +52,14 @@ export default async function DashboardPage() {
     { data: canSeeAttendance },
     { data: canMarkAny },
     { data: canReviewAdmissions },
+    { data: canSeeExams },
   ] = await Promise.all([
     supabase.rpc("auth_has_permission", { p_permission_key: "students.read" }),
     supabase.rpc("auth_has_permission", { p_permission_key: "academics.read" }),
     supabase.rpc("auth_has_permission", { p_permission_key: "attendance.read" }),
     supabase.rpc("auth_has_permission", { p_permission_key: "attendance.mark_any" }),
     supabase.rpc("auth_has_permission", { p_permission_key: "students.write" }),
+    supabase.rpc("auth_has_permission", { p_permission_key: "exams.read" }),
   ]);
 
   let enrollment: EnrollmentSummary | null = null;
@@ -131,6 +135,17 @@ export default async function DashboardPage() {
     }
   }
 
+  let exams: ExamsSummary | null = null;
+  if (canSeeExams) {
+    const { data: examStatusRows } = await supabase.from("exams").select("status");
+    const counts = { open: 0, closed: 0 };
+    for (const e of examStatusRows ?? []) {
+      if (e.status === "open") counts.open += 1;
+      else counts.closed += 1;
+    }
+    exams = counts;
+  }
+
   const rows: StaffRow[] = (staffRows ?? []).map((r) => ({
     id: r.id,
     full_name: r.full_name,
@@ -181,6 +196,7 @@ export default async function DashboardPage() {
           {enrollment && canReviewAdmissions === true && <AdmissionsWidget data={enrollment} />}
           {attendance && <AttendanceWidget data={attendance} />}
           {academics && <AcademicsWidget data={academics} />}
+          {exams && <ExamsWidget data={exams} />}
         </div>
 
         <div>

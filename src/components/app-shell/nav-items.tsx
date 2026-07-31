@@ -5,6 +5,7 @@ import {
   ClipboardList,
   BookOpen,
   CalendarCheck,
+  FileText,
   Wallet,
   Settings,
 } from "lucide-react";
@@ -24,6 +25,7 @@ export const navItems: NavItem[] = [
   { label: "Admissions", href: "/admissions", icon: ClipboardList },
   { label: "Academics", href: "/academics", icon: BookOpen },
   { label: "Attendance", href: "/attendance", icon: CalendarCheck },
+  { label: "Exams", href: "/exams", icon: FileText },
   { label: "Staff", href: "/staff", icon: Users },
   { label: "Fees", href: "/fees", icon: Wallet },
   { label: "Settings", href: "/settings", icon: Settings },
