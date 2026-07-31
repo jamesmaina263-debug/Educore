@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
-import { generateReportCards, approveComment, writeComment } from "@/app/exams/report-cards/actions";
+import { generateReportCards, approveComment, writeComment, draftCommentWithAI } from "@/app/exams/report-cards/actions";
 
 export interface StudentMarkLine {
   subject_name: string;
@@ -66,6 +66,15 @@ export function ReportCardList({
     if (!comment?.trim()) return;
     setPending(true);
     const result = await writeComment({ exam_id: examId, student_id: studentId, comment });
+    setPending(false);
+    if ("error" in result) return setError(result.error);
+    router.refresh();
+  }
+
+  async function handleDraftAI(studentId: string, studentName: string) {
+    setPending(true);
+    setError(null);
+    const result = await draftCommentWithAI({ exam_id: examId, student_id: studentId, student_name: studentName });
     setPending(false);
     if ("error" in result) return setError(result.error);
     router.refresh();
@@ -151,15 +160,24 @@ export function ReportCardList({
                         value={drafts[r.student_id] ?? ""}
                         onChange={(e) => setDrafts((p) => ({ ...p, [r.student_id]: e.target.value }))}
                       />
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="self-start"
-                        disabled={pending || !drafts[r.student_id]?.trim()}
-                        onClick={() => handleWrite(r.student_id)}
-                      >
-                        Save comment
-                      </Button>
+                      <div className="flex gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={pending || !drafts[r.student_id]?.trim()}
+                          onClick={() => handleWrite(r.student_id)}
+                        >
+                          Save comment
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          disabled={pending}
+                          onClick={() => handleDraftAI(r.student_id, r.full_name)}
+                        >
+                          {pending ? "Drafting…" : "Draft with AI"}
+                        </Button>
+                      </div>
                     </div>
                   ) : (
                     <p className="text-sm text-muted-foreground">No comment yet.</p>
