@@ -10,10 +10,12 @@ import {
   AttendanceWidget,
   AcademicsWidget,
   ExamsWidget,
+  FinanceWidget,
   type EnrollmentSummary,
   type AttendanceSummary,
   type AcademicsSummary,
   type ExamsSummary,
+  type FinanceSummary,
 } from "@/components/dashboard/module-widgets";
 
 function todayISO() {
@@ -53,6 +55,7 @@ export default async function DashboardPage() {
     { data: canMarkAny },
     { data: canReviewAdmissions },
     { data: canSeeExams },
+    { data: canSeeFinance },
   ] = await Promise.all([
     supabase.rpc("auth_has_permission", { p_permission_key: "students.read" }),
     supabase.rpc("auth_has_permission", { p_permission_key: "academics.read" }),
@@ -60,6 +63,7 @@ export default async function DashboardPage() {
     supabase.rpc("auth_has_permission", { p_permission_key: "attendance.mark_any" }),
     supabase.rpc("auth_has_permission", { p_permission_key: "students.write" }),
     supabase.rpc("auth_has_permission", { p_permission_key: "exams.read" }),
+    supabase.rpc("auth_has_permission", { p_permission_key: "finance.read" }),
   ]);
 
   let enrollment: EnrollmentSummary | null = null;
@@ -146,6 +150,21 @@ export default async function DashboardPage() {
     exams = counts;
   }
 
+  let finance: FinanceSummary | null = null;
+  if (canSeeFinance) {
+    const [{ data: balanceRows }, { data: pendingDiscountRows }, { data: pendingExpenseRows }] = await Promise.all([
+      supabase.from("v_student_balances").select("balance"),
+      supabase.from("discounts").select("id").eq("status", "pending"),
+      supabase.from("expenses").select("id").eq("status", "pending"),
+    ]);
+    const totalOutstanding = (balanceRows ?? []).reduce((sum, b) => sum + Math.max(0, Number(b.balance)), 0);
+    finance = {
+      totalOutstanding,
+      pendingDiscounts: (pendingDiscountRows ?? []).length,
+      pendingExpenses: (pendingExpenseRows ?? []).length,
+    };
+  }
+
   const rows: StaffRow[] = (staffRows ?? []).map((r) => ({
     id: r.id,
     full_name: r.full_name,
@@ -197,6 +216,7 @@ export default async function DashboardPage() {
           {attendance && <AttendanceWidget data={attendance} />}
           {academics && <AcademicsWidget data={academics} />}
           {exams && <ExamsWidget data={exams} />}
+          {finance && <FinanceWidget data={finance} />}
         </div>
 
         <div>

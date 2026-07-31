@@ -29,6 +29,12 @@ export interface ExamsSummary {
   closed: number;
 }
 
+export interface FinanceSummary {
+  totalOutstanding: number;
+  pendingDiscounts: number;
+  pendingExpenses: number;
+}
+
 export function EnrollmentWidget({ data }: { data: EnrollmentSummary }) {
   return (
     <Card>
@@ -178,6 +184,32 @@ export function ExamsWidget({ data }: { data: ExamsSummary }) {
       <CardFooter>
         <Button asChild size="sm" variant="outline">
           <Link href="/exams">Manage exams</Link>
+        </Button>
+      </CardFooter>
+    </Card>
+  );
+}
+
+export function FinanceWidget({ data }: { data: FinanceSummary }) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Finance</CardTitle>
+        <CardDescription>KES {data.totalOutstanding.toLocaleString()} outstanding</CardDescription>
+      </CardHeader>
+      <CardContent className="flex gap-4 text-sm">
+        <div>
+          <div className="text-xs text-muted-foreground">Pending discounts</div>
+          <div className="text-lg font-semibold tabular-nums">{data.pendingDiscounts}</div>
+        </div>
+        <div>
+          <div className="text-xs text-muted-foreground">Pending expenses</div>
+          <div className="text-lg font-semibold tabular-nums">{data.pendingExpenses}</div>
+        </div>
+      </CardContent>
+      <CardFooter>
+        <Button asChild size="sm" variant="outline">
+          <Link href="/finance">Open Finance</Link>
         </Button>
       </CardFooter>
     </Card>
