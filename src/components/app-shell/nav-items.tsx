@@ -7,6 +7,7 @@ import {
   CalendarCheck,
   FileText,
   Wallet,
+  TrendingUp,
   Settings,
 } from "lucide-react";
 
@@ -27,5 +28,6 @@ export const navItems: NavItem[] = [
   { label: "Exams", href: "/exams", icon: FileText },
   { label: "Staff", href: "/staff", icon: Users },
   { label: "Finance", href: "/finance", icon: Wallet },
+  { label: "Performance", href: "/performance", icon: TrendingUp },
   { label: "Settings", href: "/settings", icon: Settings },
 ];
