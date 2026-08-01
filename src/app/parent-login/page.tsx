@@ -61,7 +61,7 @@ export default function ParentLoginPage() {
       });
       if (sessionError) throw sessionError;
 
-      window.location.href = "/dashboard";
+      window.location.href = "/portal";
     } catch (err) {
       setError(err instanceof Error ? err.message : "Invalid code.");
     } finally {

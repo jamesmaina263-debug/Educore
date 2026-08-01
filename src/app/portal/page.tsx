@@ -1,0 +1,200 @@
+import { redirect } from "next/navigation";
+import { createClient } from "@/lib/supabase/server";
+import { portalLogout } from "@/app/portal/actions";
+import { ChildSwitcher } from "@/components/portal/child-switcher";
+
+const WEEKDAY_NAMES = ["", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+
+export default async function PortalPage({ searchParams }: { searchParams: Promise<{ child?: string }> }) {
+  const { child: childParam } = await searchParams;
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect("/parent-login");
+
+  const { data: schoolUser } = await supabase
+    .from("school_users")
+    .select("id, full_name, roles(name, display_name), schools(name)")
+    .eq("auth_user_id", user.id)
+    .maybeSingle();
+
+  if (!schoolUser) redirect("/parent-login");
+
+  const roleName = (schoolUser.roles as unknown as { name: string; display_name: string } | null)?.name;
+  const schoolName = (schoolUser.schools as unknown as { name: string } | null)?.name ?? "EduCore";
+
+  // Staff accounts don't belong on this single-page portal — send them to the real dashboard.
+  if (roleName !== "parent" && roleName !== "student") {
+    redirect("/dashboard");
+  }
+
+  let students: { id: string; name: string; current_class_id: string }[] = [];
+
+  if (roleName === "parent") {
+    const { data: links } = await supabase
+      .from("student_guardians")
+      .select("students(id, first_name, last_name, current_class_id)")
+      .eq("guardian_user_id", schoolUser.id);
+    students = (links ?? [])
+      .map((l) => l.students as unknown as { id: string; first_name: string; last_name: string; current_class_id: string } | null)
+      .filter((s): s is NonNullable<typeof s> => s !== null)
+      .map((s) => ({ id: s.id, name: `${s.first_name} ${s.last_name}`, current_class_id: s.current_class_id }));
+  } else {
+    const { data: own } = await supabase
+      .from("students")
+      .select("id, first_name, last_name, current_class_id")
+      .eq("school_user_id", schoolUser.id)
+      .maybeSingle();
+    if (own) students = [{ id: own.id, name: `${own.first_name} ${own.last_name}`, current_class_id: own.current_class_id }];
+  }
+
+  if (students.length === 0) {
+    return (
+      <PortalShell schoolName={schoolName} userName={schoolUser.full_name}>
+        <p className="rounded-md border border-dashed border-border p-10 text-center text-sm text-muted-foreground">
+          Your child&apos;s information will appear here once the school has added it.
+        </p>
+      </PortalShell>
+    );
+  }
+
+  const selected = students.find((s) => s.id === childParam) ?? students[0];
+
+  const [{ data: balance }, { data: activeTerm }, { data: latestReportCard }] = await Promise.all([
+    supabase.from("v_student_balances").select("balance, total_invoiced").eq("student_id", selected.id).maybeSingle(),
+    supabase.from("terms").select("id, start_date, end_date").eq("status", "active").maybeSingle(),
+    supabase
+      .from("report_cards")
+      .select("comment, generated_at, exams(name), class_rankings(average_score, rank_in_stream)")
+      .eq("student_id", selected.id)
+      .in("comment_source", ["teacher_approved", "teacher_written"])
+      .order("generated_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+  ]);
+
+  let attendanceRate: number | null = null;
+  if (activeTerm) {
+    const { data: attendanceRows } = await supabase
+      .from("student_attendance")
+      .select("status")
+      .eq("student_id", selected.id)
+      .gte("attendance_date", activeTerm.start_date)
+      .lte("attendance_date", activeTerm.end_date);
+    if (attendanceRows && attendanceRows.length > 0) {
+      const present = attendanceRows.filter((r) => r.status === "present").length;
+      attendanceRate = Math.round((present / attendanceRows.length) * 100);
+    }
+  }
+
+  let todaysTimetable: { subject_name: string; start_time: string; end_time: string }[] = [];
+  if (roleName === "student") {
+    // Postgres ISO day-of-week (1=Monday..7=Sunday) — no prior convention exists in the codebase,
+    // since the Timetable UI itself was deferred in Phase 1 (schema only). Chosen as the standard
+    // Mon-Fri school-week default; whichever convention actually populates timetable_slots data
+    // later should match this.
+    const { data: slots } = await supabase
+      .from("timetable_slots")
+      .select("start_time, end_time, subjects(name)")
+      .eq("stream_id", selected.current_class_id)
+      .eq("day_of_week", new Date().getDay() === 0 ? 7 : new Date().getDay())
+      .order("start_time");
+    todaysTimetable = (slots ?? []).map((s) => ({
+      subject_name: (s.subjects as unknown as { name: string } | null)?.name ?? "",
+      start_time: s.start_time,
+      end_time: s.end_time,
+    }));
+  }
+
+  const rc = latestReportCard as unknown as {
+    comment: string | null;
+    generated_at: string;
+    exams: { name: string } | null;
+    class_rankings: { average_score: number; rank_in_stream: number } | { average_score: number; rank_in_stream: number }[] | null;
+  } | null;
+  const ranking = rc?.class_rankings ? (Array.isArray(rc.class_rankings) ? rc.class_rankings[0] : rc.class_rankings) : null;
+
+  return (
+    <PortalShell schoolName={schoolName} userName={schoolUser.full_name}>
+      <ChildSwitcher options={students} selectedId={selected.id} />
+
+      <div className="rounded-md border border-border p-4">
+        <p className="text-xs text-muted-foreground">Fee balance</p>
+        {balance ? (
+          <p className={`text-lg font-semibold ${Number(balance.balance) > 0 ? "text-danger" : "text-success"}`}>
+            KES {Number(balance.balance).toLocaleString()}
+            {Number(balance.balance) > 0 && " ⚠"}
+          </p>
+        ) : (
+          <p className="text-sm text-muted-foreground">No invoices yet.</p>
+        )}
+      </div>
+
+      <div className="rounded-md border border-border p-4">
+        <p className="text-xs text-muted-foreground">Attendance this term</p>
+        <p className="text-lg font-semibold">{attendanceRate !== null ? `${attendanceRate}%` : "No records yet"}</p>
+      </div>
+
+      {roleName === "student" && (
+        <div className="rounded-md border border-border p-4">
+          <p className="mb-2 text-xs text-muted-foreground">
+            Today ({WEEKDAY_NAMES[new Date().getDay() === 0 ? 7 : new Date().getDay()]})
+          </p>
+          {todaysTimetable.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No classes scheduled for today yet.</p>
+          ) : (
+            <ul className="flex flex-col gap-1 text-sm">
+              {todaysTimetable.map((s, i) => (
+                <li key={i}>
+                  {s.start_time.slice(0, 5)} {s.subject_name}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+
+      <div className="rounded-md border border-border p-4">
+        <p className="mb-1 text-xs text-muted-foreground">Latest result</p>
+        {rc ? (
+          <div>
+            <p className="text-sm font-medium">
+              {rc.exams?.name}
+              {ranking && ` — Average ${ranking.average_score}, Rank ${ranking.rank_in_stream} in stream`}
+            </p>
+            {rc.comment && <p className="mt-1 text-sm text-muted-foreground">{rc.comment}</p>}
+          </div>
+        ) : (
+          <p className="text-sm text-muted-foreground">No results published yet.</p>
+        )}
+      </div>
+
+      <div className="rounded-md border border-border p-4">
+        <p className="mb-2 text-xs text-muted-foreground">Recent messages</p>
+        <p className="text-sm text-muted-foreground">
+          Messages will appear here once the school starts sending communications.
+        </p>
+      </div>
+    </PortalShell>
+  );
+}
+
+function PortalShell({ schoolName, userName, children }: { schoolName: string; userName: string; children: React.ReactNode }) {
+  return (
+    <div className="mx-auto flex min-h-screen max-w-md flex-col gap-4 bg-background p-4">
+      <div className="flex items-center justify-between border-b border-border pb-3">
+        <div>
+          <p className="text-sm font-semibold">{schoolName}</p>
+          <p className="text-xs text-muted-foreground">{userName}</p>
+        </div>
+        <form action={portalLogout}>
+          <button type="submit" className="text-xs text-muted-foreground underline">
+            Sign out
+          </button>
+        </form>
+      </div>
+      {children}
+    </div>
+  );
+}
