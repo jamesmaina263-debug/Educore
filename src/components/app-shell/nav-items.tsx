@@ -8,6 +8,7 @@ import {
   FileText,
   Wallet,
   TrendingUp,
+  MessageSquare,
   Settings,
 } from "lucide-react";
 
@@ -29,5 +30,6 @@ export const navItems: NavItem[] = [
   { label: "Staff", href: "/staff", icon: Users },
   { label: "Finance", href: "/finance", icon: Wallet },
   { label: "Performance", href: "/performance", icon: TrendingUp },
+  { label: "Communication", href: "/communication", icon: MessageSquare },
   { label: "Settings", href: "/settings", icon: Settings },
 ];

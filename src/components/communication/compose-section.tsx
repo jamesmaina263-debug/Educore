@@ -1,0 +1,188 @@
+"use client";
+
+import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
+import { composeAndSendAction, type Recipient } from "@/app/communication/actions";
+
+export interface TemplateOption {
+  id: string;
+  name: string;
+  body: string;
+}
+
+export interface RosterEntry {
+  student_id: string;
+  student_name: string;
+  class_id: string;
+  class_name: string;
+  guardian_phone: string | null;
+}
+
+export function ComposeSection({
+  roster,
+  classes,
+  templates,
+  schoolName,
+}: {
+  roster: RosterEntry[];
+  classes: { id: string; name: string }[];
+  templates: TemplateOption[];
+  schoolName: string;
+}) {
+  const router = useRouter();
+  const [scope, setScope] = useState<"all" | "class" | "student">("all");
+  const [classId, setClassId] = useState(classes[0]?.id ?? "");
+  const [studentId, setStudentId] = useState(roster[0]?.student_id ?? "");
+  const [templateId, setTemplateId] = useState<string>("__none__");
+  const [body, setBody] = useState("");
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [result, setResult] = useState<{ sent: number; failed: number; total: number } | null>(null);
+
+  const withPhone = roster.filter((r) => r.guardian_phone);
+  const scoped =
+    scope === "all" ? withPhone : scope === "class" ? withPhone.filter((r) => r.class_id === classId) : withPhone.filter((r) => r.student_id === studentId);
+
+  const previewBody = templateId !== "__none__" ? templates.find((t) => t.id === templateId)?.body ?? "" : body;
+  const previewRendered = previewBody
+    .replace("{{student_name}}", scoped[0]?.student_name ?? "{{student_name}}")
+    .replace("{{school_name}}", schoolName)
+    .replace("{{balance}}", "{{balance}}");
+  const segments = Math.max(1, Math.ceil(previewRendered.length / 160));
+
+  const skippedNoPhone = useMemo(() => {
+    const all = scope === "all" ? roster : scope === "class" ? roster.filter((r) => r.class_id === classId) : roster.filter((r) => r.student_id === studentId);
+    return all.length - scoped.length;
+  }, [scope, classId, studentId, roster, scoped.length]);
+
+  async function handleSend() {
+    setPending(true);
+    setError(null);
+    setResult(null);
+    const recipients: Recipient[] = scoped.map((r) => ({
+      phone: r.guardian_phone as string,
+      student_id: r.student_id,
+      recipient_type: "guardian",
+      values: { student_name: r.student_name, school_name: schoolName },
+    }));
+    const res = await composeAndSendAction({
+      recipients,
+      template_id: templateId !== "__none__" ? templateId : undefined,
+      body: templateId === "__none__" ? body : undefined,
+    });
+    setPending(false);
+    if ("error" in res) return setError(res.error);
+    setResult({ sent: res.sent, failed: res.failed, total: res.total });
+    setBody("");
+    router.refresh();
+  }
+
+  return (
+    <div className="flex flex-col gap-4">
+      {error && <p className="text-sm text-danger">{error}</p>}
+      {result && (
+        <p className="rounded-md border border-success/30 bg-success/10 p-3 text-sm text-success">
+          Sent {result.sent} of {result.total}{result.failed > 0 && ` — ${result.failed} failed, check History`}
+        </p>
+      )}
+
+      <div className="grid grid-cols-3 gap-3">
+        <div className="space-y-1.5">
+          <Label>Recipients</Label>
+          <Select value={scope} onValueChange={(v) => setScope(v as typeof scope)}>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All guardians</SelectItem>
+              <SelectItem value="class">A specific class</SelectItem>
+              <SelectItem value="student">A single student</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        {scope === "class" && (
+          <div className="space-y-1.5">
+            <Label>Class</Label>
+            <Select value={classId} onValueChange={setClassId}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {classes.map((c) => (
+                  <SelectItem key={c.id} value={c.id}>
+                    {c.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+        {scope === "student" && (
+          <div className="space-y-1.5">
+            <Label>Student</Label>
+            <Select value={studentId} onValueChange={setStudentId}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {roster.map((r) => (
+                  <SelectItem key={r.student_id} value={r.student_id}>
+                    {r.student_name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+        <div className="space-y-1.5">
+          <Label>Template</Label>
+          <Select value={templateId} onValueChange={setTemplateId}>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__none__">Write my own</SelectItem>
+              {templates.map((t) => (
+                <SelectItem key={t.id} value={t.id}>
+                  {t.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      {templateId === "__none__" ? (
+        <div className="space-y-1.5">
+          <Label>Message</Label>
+          <Textarea value={body} onChange={(e) => setBody(e.target.value)} rows={4} placeholder="Use {{student_name}} to personalize per recipient." />
+        </div>
+      ) : (
+        <div className="rounded-md border border-border p-3">
+          <p className="mb-1 text-xs text-muted-foreground">Preview (first recipient)</p>
+          <p className="text-sm">{previewRendered}</p>
+        </div>
+      )}
+
+      <div className="flex items-center justify-between text-sm text-muted-foreground">
+        <span>
+          {scoped.length} recipient{scoped.length !== 1 && "s"}
+          {skippedNoPhone > 0 && ` (${skippedNoPhone} skipped — no phone on file)`}
+        </span>
+        <span>{previewRendered.length} chars — {segments} segment{segments !== 1 && "s"}</span>
+      </div>
+
+      <Button
+        onClick={handleSend}
+        disabled={pending || scoped.length === 0 || (templateId === "__none__" && !body.trim())}
+        className="self-start"
+      >
+        {pending ? "Sending…" : `Send to ${scoped.length}`}
+      </Button>
+    </div>
+  );
+}
