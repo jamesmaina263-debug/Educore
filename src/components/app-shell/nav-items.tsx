@@ -12,6 +12,7 @@ import {
   Library,
   Bus,
   BedDouble,
+  Package,
   MessageSquare,
   Settings,
 } from "lucide-react";
@@ -37,6 +38,7 @@ export const navItems: NavItem[] = [
   { label: "Library", href: "/library", icon: Library },
   { label: "Transport", href: "/transport", icon: Bus },
   { label: "Hostel", href: "/hostel", icon: BedDouble },
+  { label: "Inventory", href: "/inventory", icon: Package },
   { label: "Performance", href: "/performance", icon: TrendingUp },
   { label: "Communication", href: "/communication", icon: MessageSquare },
   { label: "Settings", href: "/settings", icon: Settings },
