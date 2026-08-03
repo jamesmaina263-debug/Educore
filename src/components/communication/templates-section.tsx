@@ -16,6 +16,7 @@ export interface TemplateRow {
   name: string;
   category: string;
   body: string;
+  channel: "sms" | "email" | "whatsapp";
 }
 
 const CATEGORIES = [
@@ -26,6 +27,12 @@ const CATEGORIES = [
   { value: "other", label: "Other" },
 ] as const;
 
+const CHANNELS = [
+  { value: "sms", label: "SMS" },
+  { value: "email", label: "Email" },
+  { value: "whatsapp", label: "WhatsApp" },
+] as const;
+
 export function TemplatesSection({ templates }: { templates: TemplateRow[] }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -33,12 +40,13 @@ export function TemplatesSection({ templates }: { templates: TemplateRow[] }) {
   const [error, setError] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [category, setCategory] = useState<(typeof CATEGORIES)[number]["value"]>("fee_reminder");
+  const [channel, setChannel] = useState<(typeof CHANNELS)[number]["value"]>("sms");
   const [body, setBody] = useState("");
 
   async function handleCreate() {
     setPending(true);
     setError(null);
-    const result = await createTemplateAction({ name, category, body });
+    const result = await createTemplateAction({ name, category, body, channel });
     setPending(false);
     if ("error" in result) return setError(result.error);
     setOpen(false);
@@ -82,6 +90,21 @@ export function TemplatesSection({ templates }: { templates: TemplateRow[] }) {
                 </Select>
               </div>
               <div className="space-y-1.5">
+                <Label>Channel</Label>
+                <Select value={channel} onValueChange={(v) => setChannel(v as typeof channel)}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {CHANNELS.map((c) => (
+                      <SelectItem key={c.value} value={c.value}>
+                        {c.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
                 <Label>Body</Label>
                 <Textarea
                   value={body}
@@ -112,6 +135,7 @@ export function TemplatesSection({ templates }: { templates: TemplateRow[] }) {
               <div className="mb-1 flex items-center gap-2">
                 <p className="font-medium">{t.name}</p>
                 <Badge variant="secondary">{CATEGORIES.find((c) => c.value === t.category)?.label ?? t.category}</Badge>
+                <Badge variant="outline">{CHANNELS.find((c) => c.value === t.channel)?.label ?? t.channel}</Badge>
               </div>
               <p className="text-sm text-muted-foreground">{t.body}</p>
             </div>

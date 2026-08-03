@@ -1,6 +1,8 @@
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/cors.ts";
 import { getSmsProvider } from "../_shared/sms/index.ts";
+import { getEmailProvider } from "../_shared/email/index.ts";
+import { getWhatsAppProvider } from "../_shared/whatsapp/index.ts";
 
 // Dispatches every status='queued' row for the caller's school. Called right after
 // queue_communication() for a manual send, and also doubles as the delivery mechanism for
@@ -46,7 +48,7 @@ Deno.serve(async (req) => {
 
     const { data: queued, error: fetchError } = await serviceClient
       .from("notification_logs")
-      .select("id, recipient_phone, body")
+      .select("id, channel, recipient_phone, recipient_email, subject, body")
       .eq("school_id", schoolId)
       .eq("status", "queued")
       .limit(100); // one batch per call; a large backlog just needs the page visited again
@@ -55,13 +57,21 @@ Deno.serve(async (req) => {
       return json({ error: fetchError.message }, 500);
     }
 
-    const provider = getSmsProvider();
+    const smsProvider = getSmsProvider();
+    const emailProvider = getEmailProvider();
+    const whatsappProvider = getWhatsAppProvider();
     let sent = 0;
     let failed = 0;
 
     for (const row of queued ?? []) {
       try {
-        await provider.send(row.recipient_phone, row.body);
+        if (row.channel === "email") {
+          await emailProvider.send(row.recipient_email!, row.subject ?? "", row.body);
+        } else if (row.channel === "whatsapp") {
+          await whatsappProvider.send(row.recipient_phone!, row.body);
+        } else {
+          await smsProvider.send(row.recipient_phone!, row.body);
+        }
         await serviceClient.from("notification_logs").update({ status: "sent", updated_at: new Date().toISOString() }).eq("id", row.id);
         sent++;
       } catch (err) {

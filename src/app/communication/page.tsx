@@ -38,22 +38,22 @@ export default async function CommunicationPage() {
   }
 
   const [{ data: templates }, { data: logs }, { data: students }, { data: classes }] = await Promise.all([
-    supabase.from("communication_templates").select("id, name, category, body").order("created_at", { ascending: false }),
+    supabase.from("communication_templates").select("id, name, category, body, channel").order("created_at", { ascending: false }),
     supabase
       .from("notification_logs")
-      .select("id, recipient_phone, body, status, provider_response, created_at, students(first_name, last_name)")
+      .select("id, channel, recipient_phone, recipient_email, subject, body, status, provider_response, created_at, students(first_name, last_name)")
       .order("created_at", { ascending: false })
       .limit(200),
     supabase
       .from("students")
-      .select("id, first_name, last_name, current_class_id, streams(class_id, classes(name)), student_guardians(primary_contact, school_users(phone))")
+      .select("id, first_name, last_name, current_class_id, streams(class_id, classes(name)), student_guardians(primary_contact, school_users(phone, email))")
       .eq("status", "active"),
     supabase.from("classes").select("id, name").order("level_order"),
   ]);
 
   const roster: RosterEntry[] = (students ?? []).map((s) => {
     const stream = s.streams as unknown as { class_id: string; classes: { name: string } | null } | null;
-    const guardians = (s.student_guardians ?? []) as unknown as { primary_contact: boolean; school_users: { phone: string | null } | null }[];
+    const guardians = (s.student_guardians ?? []) as unknown as { primary_contact: boolean; school_users: { phone: string | null; email: string | null } | null }[];
     const primary = guardians.find((g) => g.primary_contact);
     return {
       student_id: s.id,
@@ -61,6 +61,7 @@ export default async function CommunicationPage() {
       class_id: stream?.class_id ?? "",
       class_name: stream?.classes?.name ?? "",
       guardian_phone: primary?.school_users?.phone ?? null,
+      guardian_email: primary?.school_users?.email ?? null,
     };
   });
 
@@ -68,7 +69,10 @@ export default async function CommunicationPage() {
     const st = l.students as unknown as { first_name: string; last_name: string } | null;
     return {
       id: l.id,
+      channel: l.channel as LogRow["channel"],
       recipient_phone: l.recipient_phone,
+      recipient_email: l.recipient_email,
+      subject: l.subject,
       student_name: st ? `${st.first_name} ${st.last_name}` : null,
       body: l.body,
       status: l.status as LogRow["status"],
@@ -87,7 +91,7 @@ export default async function CommunicationPage() {
       <div className="flex flex-col gap-4">
         <div>
           <h1 className="text-lg font-semibold">Communication</h1>
-          <p className="text-sm text-muted-foreground">SMS composer, templates, and delivery history</p>
+          <p className="text-sm text-muted-foreground">SMS, Email &amp; WhatsApp composer, templates, and delivery history</p>
         </div>
 
         <Tabs defaultValue="compose">

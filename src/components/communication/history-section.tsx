@@ -9,13 +9,18 @@ import { dispatchPending } from "@/app/communication/actions";
 
 export interface LogRow {
   id: string;
-  recipient_phone: string;
+  channel: "sms" | "email" | "whatsapp";
+  recipient_phone: string | null;
+  recipient_email: string | null;
+  subject: string | null;
   student_name: string | null;
   body: string;
   status: "queued" | "sent" | "failed" | "delivered";
   provider_response: string | null;
   created_at: string;
 }
+
+const CHANNEL_LABELS: Record<LogRow["channel"], string> = { sms: "SMS", email: "Email", whatsapp: "WhatsApp" };
 
 export function HistorySection({ logs }: { logs: LogRow[] }) {
   const router = useRouter();
@@ -56,6 +61,7 @@ export function HistorySection({ logs }: { logs: LogRow[] }) {
         <Table>
           <TableHeader>
             <TableRow>
+              <TableHead>Channel</TableHead>
               <TableHead>Recipient</TableHead>
               <TableHead>Student</TableHead>
               <TableHead>Message</TableHead>
@@ -66,9 +72,13 @@ export function HistorySection({ logs }: { logs: LogRow[] }) {
           <TableBody>
             {logs.map((l) => (
               <TableRow key={l.id}>
-                <TableCell>{l.recipient_phone}</TableCell>
+                <TableCell>
+                  <Badge variant="outline">{CHANNEL_LABELS[l.channel]}</Badge>
+                </TableCell>
+                <TableCell>{l.channel === "email" ? l.recipient_email : l.recipient_phone}</TableCell>
                 <TableCell>{l.student_name ?? "—"}</TableCell>
-                <TableCell className="max-w-xs truncate" title={l.body}>
+                <TableCell className="max-w-xs truncate" title={l.subject ? `${l.subject}\n\n${l.body}` : l.body}>
+                  {l.subject ? `${l.subject}: ` : ""}
                   {l.body}
                 </TableCell>
                 <TableCell>

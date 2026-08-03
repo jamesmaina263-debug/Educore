@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
@@ -12,6 +13,7 @@ export interface TemplateOption {
   id: string;
   name: string;
   body: string;
+  channel: "sms" | "email" | "whatsapp";
 }
 
 export interface RosterEntry {
@@ -20,7 +22,14 @@ export interface RosterEntry {
   class_id: string;
   class_name: string;
   guardian_phone: string | null;
+  guardian_email: string | null;
 }
+
+const CHANNELS = [
+  { value: "sms", label: "SMS" },
+  { value: "email", label: "Email" },
+  { value: "whatsapp", label: "WhatsApp" },
+] as const;
 
 export function ComposeSection({
   roster,
@@ -34,6 +43,8 @@ export function ComposeSection({
   schoolName: string;
 }) {
   const router = useRouter();
+  const [channel, setChannel] = useState<(typeof CHANNELS)[number]["value"]>("sms");
+  const [subject, setSubject] = useState("");
   const [scope, setScope] = useState<"all" | "class" | "student">("all");
   const [classId, setClassId] = useState(classes[0]?.id ?? "");
   const [studentId, setStudentId] = useState(roster[0]?.student_id ?? "");
@@ -43,9 +54,10 @@ export function ComposeSection({
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<{ sent: number; failed: number; total: number } | null>(null);
 
-  const withPhone = roster.filter((r) => r.guardian_phone);
+  const contactField = channel === "email" ? "guardian_email" : "guardian_phone";
+  const withContact = roster.filter((r) => r[contactField]);
   const scoped =
-    scope === "all" ? withPhone : scope === "class" ? withPhone.filter((r) => r.class_id === classId) : withPhone.filter((r) => r.student_id === studentId);
+    scope === "all" ? withContact : scope === "class" ? withContact.filter((r) => r.class_id === classId) : withContact.filter((r) => r.student_id === studentId);
 
   const previewBody = templateId !== "__none__" ? templates.find((t) => t.id === templateId)?.body ?? "" : body;
   const previewRendered = previewBody
@@ -54,17 +66,25 @@ export function ComposeSection({
     .replace("{{balance}}", "{{balance}}");
   const segments = Math.max(1, Math.ceil(previewRendered.length / 160));
 
-  const skippedNoPhone = useMemo(() => {
+  const skippedNoContact = useMemo(() => {
     const all = scope === "all" ? roster : scope === "class" ? roster.filter((r) => r.class_id === classId) : roster.filter((r) => r.student_id === studentId);
     return all.length - scoped.length;
   }, [scope, classId, studentId, roster, scoped.length]);
+
+  function handleTemplateChange(id: string) {
+    setTemplateId(id);
+    if (id !== "__none__") {
+      const t = templates.find((tpl) => tpl.id === id);
+      if (t) setChannel(t.channel);
+    }
+  }
 
   async function handleSend() {
     setPending(true);
     setError(null);
     setResult(null);
     const recipients: Recipient[] = scoped.map((r) => ({
-      phone: r.guardian_phone as string,
+      ...(channel === "email" ? { email: r.guardian_email as string } : { phone: r.guardian_phone as string }),
       student_id: r.student_id,
       recipient_type: "guardian",
       values: { student_name: r.student_name, school_name: schoolName },
@@ -73,6 +93,8 @@ export function ComposeSection({
       recipients,
       template_id: templateId !== "__none__" ? templateId : undefined,
       body: templateId === "__none__" ? body : undefined,
+      channel,
+      subject: channel === "email" ? subject : undefined,
     });
     setPending(false);
     if ("error" in res) return setError(res.error);
@@ -90,7 +112,22 @@ export function ComposeSection({
         </p>
       )}
 
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-4 gap-3">
+        <div className="space-y-1.5">
+          <Label>Channel</Label>
+          <Select value={channel} onValueChange={(v) => setChannel(v as typeof channel)}>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {CHANNELS.map((c) => (
+                <SelectItem key={c.value} value={c.value}>
+                  {c.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
         <div className="space-y-1.5">
           <Label>Recipients</Label>
           <Select value={scope} onValueChange={(v) => setScope(v as typeof scope)}>
@@ -140,7 +177,7 @@ export function ComposeSection({
         )}
         <div className="space-y-1.5">
           <Label>Template</Label>
-          <Select value={templateId} onValueChange={setTemplateId}>
+          <Select value={templateId} onValueChange={handleTemplateChange}>
             <SelectTrigger>
               <SelectValue />
             </SelectTrigger>
@@ -155,6 +192,13 @@ export function ComposeSection({
           </Select>
         </div>
       </div>
+
+      {channel === "email" && (
+        <div className="space-y-1.5">
+          <Label>Subject</Label>
+          <Input value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="Fee reminder" />
+        </div>
+      )}
 
       {templateId === "__none__" ? (
         <div className="space-y-1.5">
@@ -171,14 +215,16 @@ export function ComposeSection({
       <div className="flex items-center justify-between text-sm text-muted-foreground">
         <span>
           {scoped.length} recipient{scoped.length !== 1 && "s"}
-          {skippedNoPhone > 0 && ` (${skippedNoPhone} skipped — no phone on file)`}
+          {skippedNoContact > 0 && ` (${skippedNoContact} skipped — no ${channel === "email" ? "email" : "phone"} on file)`}
         </span>
-        <span>{previewRendered.length} chars — {segments} segment{segments !== 1 && "s"}</span>
+        {channel === "sms" && (
+          <span>{previewRendered.length} chars — {segments} segment{segments !== 1 && "s"}</span>
+        )}
       </div>
 
       <Button
         onClick={handleSend}
-        disabled={pending || scoped.length === 0 || (templateId === "__none__" && !body.trim())}
+        disabled={pending || scoped.length === 0 || (templateId === "__none__" && !body.trim()) || (channel === "email" && !subject.trim())}
         className="self-start"
       >
         {pending ? "Sending…" : `Send to ${scoped.length}`}

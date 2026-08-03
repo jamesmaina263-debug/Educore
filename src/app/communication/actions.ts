@@ -15,6 +15,7 @@ export async function createTemplateAction(input: {
   name: string;
   category: "fee_reminder" | "absence_alert" | "result_published" | "announcement" | "other";
   body: string;
+  channel: "sms" | "email" | "whatsapp";
 }): Promise<ActionResult> {
   const supabase = await createClient();
   try {
@@ -28,16 +29,25 @@ export async function createTemplateAction(input: {
   return { success: true };
 }
 
-export type Recipient = { phone: string; student_id: string | null; recipient_type: "guardian" | "student" | "staff"; values: Record<string, string> };
+export type Recipient = {
+  phone?: string;
+  email?: string;
+  student_id: string | null;
+  recipient_type: "guardian" | "student" | "staff";
+  values: Record<string, string>;
+};
 
 // Queues the message (RLS-gated insert via queue_communication), then invokes the Edge Function to
-// actually dispatch it through the configured SMS provider. Queueing and dispatch are deliberately
-// two steps — if the Edge Function call fails partway (e.g. Africa's Talking is unreachable), the
-// rows are still safely queued and can be retried via "Send pending" rather than lost.
+// actually dispatch it through the configured channel provider (SMS/Email/WhatsApp). Queueing and
+// dispatch are deliberately two steps — if the Edge Function call fails partway (e.g. the provider
+// is unreachable), the rows are still safely queued and can be retried via "Send pending" rather
+// than lost.
 export async function composeAndSendAction(input: {
   recipients: Recipient[];
   template_id?: string;
   body?: string;
+  channel: "sms" | "email" | "whatsapp";
+  subject?: string;
 }): Promise<{ error: string } | { success: true; sent: number; failed: number; total: number }> {
   const supabase = await createClient();
 
@@ -45,6 +55,8 @@ export async function composeAndSendAction(input: {
     p_recipients: input.recipients,
     p_template_id: input.template_id ?? null,
     p_body: input.body ?? null,
+    p_channel: input.channel,
+    p_subject: input.subject ?? null,
   });
   if (queueError) return { error: queueError.message };
   if (!queuedCount) return { error: "No recipients to send to." };
