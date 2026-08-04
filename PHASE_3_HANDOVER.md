@@ -72,11 +72,29 @@ Covers all 4 Phase 3 items, built and shipped in build-order (Payroll → Librar
 
 ---
 
+## Migration files recovered (happened after the 4 items above, before this report closed out)
+
+The recurring gap flagged in every phase handover since Phase 1 — no local migration files, schema living only in Supabase — is now closed. All 63 migrations ever applied to this project (Phase 0 through this session's Phase 3 work) were pulled verbatim from Supabase's internal `supabase_migrations.schema_migrations.statements` column, which tracks the exact original SQL for every migration regardless of whether it was ever written to a file. This is real recovered history, not a reconstructed snapshot.
+
+`supabase/migrations/` in the repo now has all 63 files, correctly named and timestamped. A fresh clone plus `supabase db push` can reproduce the entire database from scratch. Committed across three checkpoints: `36c6a58` (Phase 0/1 + Exams, 35/63), `115ada6` (Report Cards + Finance, 46/63), `036b1af` (Teacher Performance, Portals, Communication, all of Phase 3, 63/63).
+
+**Standing rule for every future session, not just phase boundaries**: before ending a work session, pull any new migrations applied that session —
+
+```sql
+select version, name, statements[1] as sql
+from supabase_migrations.schema_migrations
+where version > '<last-recovered-version>'
+order by version;
+```
+
+— and write them to `supabase/migrations/<version>_<name>.sql`, then commit. The gap sat unaddressed for three phases before it got fixed in one sitting; the rule exists so it doesn't reopen.
+
 ## Outstanding from Phase 2, still not done
 
 Both flagged in `PHASE_2_HANDOVER.md` §16, carried forward unchanged:
-- Four secrets still unconfirmed in the deployed environment: `GEMINI_API_KEY`, `AT_USERNAME`/`AT_API_KEY`, `SUPABASE_SERVICE_ROLE_KEY`. Now also relevant to Item 4: `RESEND_API_KEY`/`RESEND_FROM_ADDRESS` and `TWILIO_ACCOUNT_SID`/`TWILIO_AUTH_TOKEN`/`TWILIO_WHATSAPP_FROM` are unset too — email/WhatsApp will silently use the console-log dev fallback until they're provided.
-- No local migration files exist in the repo — three phases of schema now live only in Supabase, not in git. Flagged since Phase 1, still not addressed; Phase 3 added roughly a dozen new migrations on top of the existing debt.
+- Provider secrets unset, correction from earlier phases' framing: `AT_USERNAME`/`AT_API_KEY` (SMS), `RESEND_API_KEY`/`RESEND_FROM_ADDRESS` (Email), `TWILIO_ACCOUNT_SID`/`TWILIO_AUTH_TOKEN`/`TWILIO_WHATSAPP_FROM` (WhatsApp) are all unset in Supabase Edge Function secrets — but this is expected, not a gap: no Africa's Talking, Resend, or Twilio account has been created yet. Set these once those accounts exist, not before. `SUPABASE_SERVICE_ROLE_KEY` does NOT need manual setting — Supabase auto-injects it into every Edge Function; earlier phase handovers listed it as unconfirmed in error.
+- `GEMINI_API_KEY` (Vercel) status genuinely unconfirmed — no available tool can list Vercel environment variable names or values; needs a manual check in the Vercel dashboard (Settings → Environment Variables → Production).
+- No local migration files — RESOLVED this session, see the section above. This was flagged since Phase 1 and carried through Phase 2; closed now, don't let it reopen.
 
 ## Phase-wide sanity check
 
