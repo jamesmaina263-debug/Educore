@@ -11,11 +11,13 @@ import {
   AcademicsWidget,
   ExamsWidget,
   FinanceWidget,
+  AtRiskWidget,
   type EnrollmentSummary,
   type AttendanceSummary,
   type AcademicsSummary,
   type ExamsSummary,
   type FinanceSummary,
+  type AtRiskSummary,
 } from "@/components/dashboard/module-widgets";
 
 function todayISO() {
@@ -56,6 +58,7 @@ export default async function DashboardPage() {
     { data: canReviewAdmissions },
     { data: canSeeExams },
     { data: canSeeFinance },
+    { data: canSeeAI },
   ] = await Promise.all([
     supabase.rpc("auth_has_permission", { p_permission_key: "students.read" }),
     supabase.rpc("auth_has_permission", { p_permission_key: "academics.read" }),
@@ -64,6 +67,7 @@ export default async function DashboardPage() {
     supabase.rpc("auth_has_permission", { p_permission_key: "students.write" }),
     supabase.rpc("auth_has_permission", { p_permission_key: "exams.read" }),
     supabase.rpc("auth_has_permission", { p_permission_key: "finance.read" }),
+    supabase.rpc("auth_has_permission", { p_permission_key: "ai.read" }),
   ]);
 
   let enrollment: EnrollmentSummary | null = null;
@@ -165,6 +169,18 @@ export default async function DashboardPage() {
     };
   }
 
+  let atRisk: AtRiskSummary | null = null;
+  if (canSeeAI) {
+    const { data: riskRows } = await supabase
+      .from("v_at_risk_students")
+      .select("first_name, last_name")
+      .order("risk_score", { ascending: false });
+    atRisk = {
+      count: riskRows?.length ?? 0,
+      topNames: (riskRows ?? []).slice(0, 3).map((r) => `${r.first_name} ${r.last_name}`),
+    };
+  }
+
   const rows: StaffRow[] = (staffRows ?? []).map((r) => ({
     id: r.id,
     full_name: r.full_name,
@@ -217,6 +233,7 @@ export default async function DashboardPage() {
           {academics && <AcademicsWidget data={academics} />}
           {exams && <ExamsWidget data={exams} />}
           {finance && <FinanceWidget data={finance} />}
+          {atRisk && <AtRiskWidget data={atRisk} />}
         </div>
 
         <div>

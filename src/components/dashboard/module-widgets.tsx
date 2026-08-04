@@ -35,6 +35,11 @@ export interface FinanceSummary {
   pendingExpenses: number;
 }
 
+export interface AtRiskSummary {
+  count: number;
+  topNames: string[];
+}
+
 export function EnrollmentWidget({ data }: { data: EnrollmentSummary }) {
   return (
     <Card>
@@ -210,6 +215,29 @@ export function FinanceWidget({ data }: { data: FinanceSummary }) {
       <CardFooter>
         <Button asChild size="sm" variant="outline">
           <Link href="/finance">Open Finance</Link>
+        </Button>
+      </CardFooter>
+    </Card>
+  );
+}
+
+export function AtRiskWidget({ data }: { data: AtRiskSummary }) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>AI-flagged at-risk</CardTitle>
+        <CardDescription>{data.count} student(s) flagged by rule-based checks</CardDescription>
+      </CardHeader>
+      <CardContent className="text-sm">
+        {data.count === 0 ? (
+          <p className="text-muted-foreground">No students currently flagged.</p>
+        ) : (
+          <p>{data.topNames.join(", ")}{data.count > data.topNames.length ? ", …" : ""}</p>
+        )}
+      </CardContent>
+      <CardFooter>
+        <Button asChild size="sm" variant="outline">
+          <Link href="/reports">View report</Link>
         </Button>
       </CardFooter>
     </Card>

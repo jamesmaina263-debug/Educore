@@ -15,6 +15,8 @@ import {
   Package,
   MessageSquare,
   Settings,
+  Sparkles,
+  BarChart3,
 } from "lucide-react";
 
 export interface NavItem {
@@ -41,5 +43,7 @@ export const navItems: NavItem[] = [
   { label: "Inventory", href: "/inventory", icon: Package },
   { label: "Performance", href: "/performance", icon: TrendingUp },
   { label: "Communication", href: "/communication", icon: MessageSquare },
+  { label: "Trimora AI", href: "/ai", icon: Sparkles },
+  { label: "Reports", href: "/reports", icon: BarChart3 },
   { label: "Settings", href: "/settings", icon: Settings },
 ];
