@@ -132,6 +132,31 @@ export async function updateStreamClassTeacher(
   return { success: true };
 }
 
+export async function rolloverAcademicYear(input: {
+  from_academic_year_id: string;
+  to_academic_year_id: string;
+  repeat_student_ids: string[];
+}): Promise<
+  { error: string } | { success: true; promoted: number; repeated: number; graduated: number }
+> {
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("rollover_academic_year", {
+    p_from_academic_year_id: input.from_academic_year_id,
+    p_to_academic_year_id: input.to_academic_year_id,
+    p_repeat_student_ids: input.repeat_student_ids,
+  });
+  if (error) return { error: error.message };
+  const row = Array.isArray(data) ? data[0] : data;
+  revalidatePath("/academics");
+  revalidatePath("/students");
+  return {
+    success: true,
+    promoted: row?.promoted_count ?? 0,
+    repeated: row?.repeated_count ?? 0,
+    graduated: row?.graduated_count ?? 0,
+  };
+}
+
 export async function createSubject(input: {
   name: string;
   code?: string;

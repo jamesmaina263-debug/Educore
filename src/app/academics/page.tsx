@@ -11,6 +11,7 @@ import {
   type TeacherOption,
 } from "@/components/academics/classes-streams-section";
 import { SubjectsSection, type SubjectRow } from "@/components/academics/subjects-section";
+import { RolloverSection, type StudentOption } from "@/components/academics/rollover-section";
 
 export default async function AcademicsPage() {
   const supabase = await createClient();
@@ -34,6 +35,8 @@ export default async function AcademicsPage() {
     { data: subjects },
     { data: teacherRows },
     { data: canWriteData },
+    { data: canRolloverData },
+    { data: activeStudents },
   ] = await Promise.all([
     supabase.from("academic_years").select("id, name, start_date, end_date, status").order("start_date", { ascending: false }),
     supabase.from("terms").select("id, academic_year_id, name, term_number, start_date, end_date, status").order("term_number"),
@@ -46,9 +49,17 @@ export default async function AcademicsPage() {
       .in("roles.name", ["teacher", "class_teacher"])
       .eq("status", "active"),
     supabase.rpc("auth_has_permission", { p_permission_key: "academics.write" }),
+    supabase.rpc("auth_has_permission", { p_permission_key: "students.write" }),
+    supabase
+      .from("students")
+      .select("id, admission_number, first_name, last_name")
+      .eq("status", "active")
+      .order("first_name"),
   ]);
 
   const canWrite = canWriteData === true;
+  const canRollover = canRolloverData === true;
+  const students: StudentOption[] = (activeStudents ?? []) as StudentOption[];
   const activeYear = (years ?? []).find((y) => y.status === "active") ?? null;
 
   const teachers: TeacherOption[] = (teacherRows ?? [])
@@ -76,6 +87,7 @@ export default async function AcademicsPage() {
             <TabsTrigger value="years">Years &amp; Terms</TabsTrigger>
             <TabsTrigger value="classes">Classes &amp; Streams</TabsTrigger>
             <TabsTrigger value="subjects">Subjects</TabsTrigger>
+            {canRollover && <TabsTrigger value="rollover">Rollover</TabsTrigger>}
           </TabsList>
 
           <TabsContent value="years">
@@ -96,6 +108,12 @@ export default async function AcademicsPage() {
           <TabsContent value="subjects">
             <SubjectsSection subjects={(subjects ?? []) as SubjectRow[]} canWrite={canWrite} />
           </TabsContent>
+
+          {canRollover && (
+            <TabsContent value="rollover">
+              <RolloverSection years={(years ?? []) as AcademicYearRow[]} students={students} />
+            </TabsContent>
+          )}
         </Tabs>
       </div>
     </AppShell>

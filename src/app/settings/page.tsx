@@ -6,6 +6,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { BrandingForm, type BrandingData } from "@/components/settings/branding-form";
 import { StaffRolesTable, type StaffRow, type RoleOption } from "@/components/settings/staff-roles-table";
 import { InviteStaffDialog } from "@/components/settings/invite-staff-dialog";
+import { BillingPanel, type BillingData } from "@/components/settings/billing-panel";
 
 export default async function SettingsPage() {
   const supabase = await createClient();
@@ -15,15 +16,17 @@ export default async function SettingsPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const [{ data: schoolUser }, { data: canWriteBranding }, { data: canManageStaff }] = await Promise.all([
-    supabase
-      .from("school_users")
-      .select("id, full_name, roles(display_name), schools(id, name, motto, logo_url, primary_color)")
-      .eq("auth_user_id", user.id)
-      .maybeSingle(),
-    supabase.rpc("auth_has_permission", { p_permission_key: "settings.branding.write" }),
-    supabase.rpc("auth_has_permission", { p_permission_key: "staff.manage" }),
-  ]);
+  const [{ data: schoolUser }, { data: canWriteBranding }, { data: canManageStaff }, { data: canReadBilling }] =
+    await Promise.all([
+      supabase
+        .from("school_users")
+        .select("id, full_name, roles(display_name), schools(id, name, motto, logo_url, primary_color)")
+        .eq("auth_user_id", user.id)
+        .maybeSingle(),
+      supabase.rpc("auth_has_permission", { p_permission_key: "settings.branding.write" }),
+      supabase.rpc("auth_has_permission", { p_permission_key: "staff.manage" }),
+      supabase.rpc("auth_has_permission", { p_permission_key: "billing.read" }),
+    ]);
 
   const roleName = (schoolUser?.roles as unknown as { display_name: string } | null)?.display_name;
   const school = schoolUser?.schools as unknown as {
@@ -57,6 +60,27 @@ export default async function SettingsPage() {
 
   const roles: RoleOption[] = (roleRows ?? []).map((r) => ({ id: r.id, name: r.name, display_name: r.display_name }));
 
+  let billingData: BillingData | null = null;
+  if (canReadBilling === true) {
+    const { data: sub } = await supabase
+      .from("school_subscriptions")
+      .select("status, trial_ends_at, current_period_end, subscription_plans(name)")
+      .maybeSingle();
+    const { data: invoiceRows } = await supabase
+      .from("platform_invoices")
+      .select("id, period_start, period_end, student_count, amount_kes, status, due_at, paid_at")
+      .order("period_start", { ascending: false })
+      .limit(12);
+    const plan = sub?.subscription_plans as unknown as { name: string } | null;
+    billingData = {
+      status: sub?.status ?? null,
+      plan_name: plan?.name ?? null,
+      trial_ends_at: sub?.trial_ends_at ?? null,
+      current_period_end: sub?.current_period_end ?? null,
+      invoices: invoiceRows ?? [],
+    };
+  }
+
   const brandingData: BrandingData = {
     name: school?.name ?? "",
     motto: school?.motto ?? null,
@@ -81,6 +105,7 @@ export default async function SettingsPage() {
           <TabsList>
             <TabsTrigger value="branding">Branding</TabsTrigger>
             <TabsTrigger value="staff">Users &amp; Roles</TabsTrigger>
+            {billingData && <TabsTrigger value="billing">Billing</TabsTrigger>}
           </TabsList>
 
           <TabsContent value="branding">
@@ -101,6 +126,12 @@ export default async function SettingsPage() {
               />
             </div>
           </TabsContent>
+
+          {billingData && (
+            <TabsContent value="billing">
+              <BillingPanel data={billingData} />
+            </TabsContent>
+          )}
         </Tabs>
       </div>
     </AppShell>
