@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { slugify } from "@/lib/slug";
 
 export type Plan = {
   id: string;
@@ -33,16 +34,6 @@ export async function getActivePlans(): Promise<Plan[]> {
 }
 
 export type SignupState = { error: string | null };
-
-function slugify(name: string) {
-  return (
-    name
-      .toLowerCase()
-      .trim()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/(^-|-$)/g, "") || "school"
-  );
-}
 
 export async function signUpSchool(
   _prevState: SignupState,
