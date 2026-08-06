@@ -9,6 +9,7 @@ import { BalancesSection, type BalanceRow } from "@/components/finance/balances-
 import { PaymentsSection, type PaymentListRow } from "@/components/finance/payments-section";
 import { DiscountsSection, type DiscountRow, type InvoiceOption } from "@/components/finance/discounts-section";
 import { ExpensesSection, type ExpenseRow } from "@/components/finance/expenses-section";
+import { WaiversSection, type FeeWaiverRow, type StudentOption, type TermOption } from "@/components/finance/waivers-section";
 
 export default async function FinancePage() {
   const supabase = await createClient();
@@ -48,7 +49,7 @@ export default async function FinancePage() {
     );
   }
 
-  const [{ data: years }, { data: classes }, { data: structures }, { data: feeItems }, { data: invoices }, { data: payments }, { data: discounts }, { data: expenses }, { data: balances }] =
+  const [{ data: years }, { data: classes }, { data: structures }, { data: feeItems }, { data: invoices }, { data: payments }, { data: discounts }, { data: expenses }, { data: balances }, { data: waivers }, { data: activeStudents }] =
     await Promise.all([
       supabase.from("academic_years").select("id, status").eq("status", "active"),
       supabase.from("classes").select("id, name").order("level_order"),
@@ -59,6 +60,11 @@ export default async function FinancePage() {
       supabase.from("discounts").select("id, invoice_id, amount, reason, status, students(first_name, last_name)").order("created_at", { ascending: false }),
       supabase.from("expenses").select("id, category, vendor, amount, description, status").order("created_at", { ascending: false }),
       supabase.from("v_student_balances").select("student_id, total_invoiced, total_discounted, total_paid, balance, stream_id"),
+      supabase
+        .from("fee_waivers")
+        .select("id, name, waiver_type, discount_kind, discount_value, status, students(first_name, last_name), starts_term:terms!fee_waivers_starts_term_id_fkey(name)")
+        .order("created_at", { ascending: false }),
+      supabase.from("students").select("id, first_name, last_name").eq("status", "active").order("first_name"),
     ]);
 
   const activeYearId = years?.[0]?.id ?? "";
@@ -139,6 +145,29 @@ export default async function FinancePage() {
     status: e.status as "pending" | "approved" | "rejected",
   }));
 
+  const waiverRows: FeeWaiverRow[] = (waivers ?? []).map((w) => {
+    const st = w.students as unknown as { first_name: string; last_name: string } | null;
+    const startsTerm = w.starts_term as unknown as { name: string } | null;
+    return {
+      id: w.id,
+      student_name: st ? `${st.first_name} ${st.last_name}` : "",
+      name: w.name,
+      waiver_type: w.waiver_type,
+      discount_kind: w.discount_kind as "percentage" | "fixed_amount",
+      discount_value: Number(w.discount_value),
+      status: w.status as "active" | "expired" | "revoked",
+      starts_term_name: startsTerm?.name ?? null,
+      ends_term_name: null,
+    };
+  });
+
+  const studentOptions: StudentOption[] = (activeStudents ?? []).map((s) => ({
+    id: s.id,
+    name: `${s.first_name} ${s.last_name}`,
+  }));
+
+  const termOptions: TermOption[] = (terms ?? []).map((t) => ({ id: t.id, name: t.name }));
+
   const studentNameByStreamMap = new Map<string, { name: string; class_name: string }>();
   for (const inv of invoices ?? []) {
     const st = inv.students as unknown as { first_name: string; last_name: string; current_class_id: string } | null;
@@ -177,6 +206,7 @@ export default async function FinancePage() {
             <TabsTrigger value="invoices">Invoices</TabsTrigger>
             <TabsTrigger value="payments">Payments</TabsTrigger>
             <TabsTrigger value="discounts">Discounts</TabsTrigger>
+            <TabsTrigger value="waivers">Waivers</TabsTrigger>
             <TabsTrigger value="expenses">Expenses</TabsTrigger>
           </TabsList>
 
@@ -208,6 +238,15 @@ export default async function FinancePage() {
               invoiceOptions={invoiceOptions}
               canRequest={canWrite === true}
               canApprove={canApproveDiscounts === true}
+            />
+          </TabsContent>
+
+          <TabsContent value="waivers">
+            <WaiversSection
+              waivers={waiverRows}
+              students={studentOptions}
+              terms={termOptions}
+              canManage={canApproveDiscounts === true}
             />
           </TabsContent>
 

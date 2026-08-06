@@ -126,6 +126,44 @@ export async function rejectDiscountAction(discountId: string): Promise<ActionRe
 }
 
 // ---------------------------------------------------------------------------
+// Fee waivers / scholarships
+// ---------------------------------------------------------------------------
+
+export async function createFeeWaiverAction(input: {
+  student_id: string;
+  name: string;
+  waiver_type: "scholarship" | "bursary" | "staff_discount" | "sibling_discount" | "other";
+  discount_kind: "percentage" | "fixed_amount";
+  discount_value: number;
+  starts_term_id?: string;
+  ends_term_id?: string;
+  notes?: string;
+}): Promise<ActionResult> {
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("create_fee_waiver", {
+    p_student_id: input.student_id,
+    p_name: input.name,
+    p_waiver_type: input.waiver_type,
+    p_discount_kind: input.discount_kind,
+    p_discount_value: input.discount_value,
+    p_starts_term_id: input.starts_term_id ?? null,
+    p_ends_term_id: input.ends_term_id ?? null,
+    p_notes: input.notes ?? null,
+  });
+  if (error) return { error: error.message };
+  revalidatePath("/finance");
+  return { success: true };
+}
+
+export async function revokeFeeWaiverAction(waiverId: string): Promise<ActionResult> {
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("revoke_fee_waiver", { p_waiver_id: waiverId });
+  if (error) return { error: error.message };
+  revalidatePath("/finance");
+  return { success: true };
+}
+
+// ---------------------------------------------------------------------------
 // Expenses
 // ---------------------------------------------------------------------------
 
