@@ -122,6 +122,102 @@ export async function reopenExam(examId: string): Promise<ActionResult> {
 
 export type MarkInput = { student_id: string; raw_score?: number; band_id?: string };
 
+// ---------------------------------------------------------------------------
+// CBC curriculum strands / sub-strands + sub-strand-level competency marks
+// ---------------------------------------------------------------------------
+
+export async function createCurriculumStrand(input: {
+  subject_id: string;
+  name: string;
+  level_order?: number;
+}): Promise<ActionResult> {
+  const supabase = await createClient();
+  const school_id = await schoolId(supabase);
+  const { error } = await supabase.from("curriculum_strands").insert({
+    school_id,
+    subject_id: input.subject_id,
+    name: input.name,
+    level_order: input.level_order ?? 0,
+  });
+  if (error) return { error: error.message };
+  revalidatePath("/exams/marks");
+  return { success: true };
+}
+
+export async function createCurriculumSubStrand(input: {
+  strand_id: string;
+  name: string;
+  level_order?: number;
+}): Promise<ActionResult> {
+  const supabase = await createClient();
+  const { error } = await supabase.from("curriculum_sub_strands").insert({
+    strand_id: input.strand_id,
+    name: input.name,
+    level_order: input.level_order ?? 0,
+  });
+  if (error) return { error: error.message };
+  revalidatePath("/exams/marks");
+  return { success: true };
+}
+
+export async function submitCompetencyMarks(input: {
+  exam_id: string;
+  class_id: string;
+  ratings: { student_id: string; sub_strand_id: string; band_id: string }[];
+}): Promise<ActionResult> {
+  const supabase = await createClient();
+  try {
+    const school_id = await schoolId(supabase);
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    const { data: schoolUser } = await supabase
+      .from("school_users")
+      .select("id")
+      .eq("auth_user_id", user?.id ?? "")
+      .maybeSingle();
+
+    const rows = input.ratings.map((r) => ({
+      school_id,
+      exam_id: input.exam_id,
+      class_id: input.class_id,
+      student_id: r.student_id,
+      sub_strand_id: r.sub_strand_id,
+      band_id: r.band_id,
+      entered_by: schoolUser?.id ?? null,
+    }));
+    if (rows.length === 0) return { success: true };
+
+    const { error } = await supabase
+      .from("competency_marks")
+      .upsert(rows, { onConflict: "exam_id,student_id,sub_strand_id" });
+    if (error) return { error: error.message };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Could not save competency marks." };
+  }
+  revalidatePath("/exams/marks");
+  return { success: true };
+}
+
+export async function editCompetencyMark(input: {
+  exam_id: string;
+  student_id: string;
+  sub_strand_id: string;
+  band_id: string;
+  edit_reason: string;
+}): Promise<ActionResult> {
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("competency_marks")
+    .update({ band_id: input.band_id, edit_reason: input.edit_reason })
+    .eq("exam_id", input.exam_id)
+    .eq("student_id", input.student_id)
+    .eq("sub_strand_id", input.sub_strand_id);
+  if (error) return { error: error.message };
+  revalidatePath("/exams/marks");
+  return { success: true };
+}
+
 export async function submitMarks(input: {
   exam_id: string;
   class_id: string;

@@ -4,6 +4,11 @@ import { logout } from "@/app/login/actions";
 import { AppShell } from "@/components/app-shell/app-shell";
 import { MarksPicker } from "@/components/exams/marks-picker";
 import { MarksEntryForm, type MarksRosterRow, type BandOption } from "@/components/exams/marks-entry-form";
+import {
+  CompetencyMarksSection,
+  type StrandOption,
+  type CompetencyRatingRow,
+} from "@/components/exams/competency-marks-section";
 
 export default async function MarksPage({
   searchParams,
@@ -19,7 +24,7 @@ export default async function MarksPage({
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const [{ data: schoolUser }, { data: canWriteAny }, { data: canWrite }] = await Promise.all([
+  const [{ data: schoolUser }, { data: canWriteAny }, { data: canWrite }, { data: canManageCurriculum }] = await Promise.all([
     supabase
       .from("school_users")
       .select("full_name, roles(display_name), schools(name)")
@@ -27,6 +32,7 @@ export default async function MarksPage({
       .maybeSingle(),
     supabase.rpc("auth_has_permission", { p_permission_key: "marks.write_any" }),
     supabase.rpc("auth_has_permission", { p_permission_key: "marks.write" }),
+    supabase.rpc("auth_has_permission", { p_permission_key: "academics.write" }),
   ]);
 
   const roleName = (schoolUser?.roles as unknown as { display_name: string } | null)?.display_name;
@@ -67,6 +73,8 @@ export default async function MarksPage({
   let gradingModel: "numeric" | "cbc" = "numeric";
   let bandOptions: BandOption[] = [];
   let roster: MarksRosterRow[] = [];
+  let strandsWithSubStrands: StrandOption[] = [];
+  let competencyRatings: CompetencyRatingRow[] = [];
 
   if (selectedClass && selectedSubjectId) {
     // Resolve the class's effective grading scale: its own override, else the school default.
@@ -106,6 +114,32 @@ export default async function MarksPage({
       full_name: `${s.first_name} ${s.last_name}`,
       existing: existingByStudent.get(s.id) ?? null,
     }));
+
+    if (gradingModel === "cbc") {
+      const { data: strandRows } = await supabase
+        .from("curriculum_strands")
+        .select("id, name, level_order, curriculum_sub_strands(id, name, level_order)")
+        .eq("subject_id", selectedSubjectId)
+        .order("level_order");
+
+      strandsWithSubStrands = (strandRows ?? []).map((s) => ({
+        id: s.id,
+        name: s.name,
+        sub_strands: ((s.curriculum_sub_strands as unknown as { id: string; name: string; level_order: number }[]) ?? [])
+          .sort((a, b) => a.level_order - b.level_order)
+          .map((ss) => ({ id: ss.id, name: ss.name })),
+      }));
+
+      const subStrandIds = strandsWithSubStrands.flatMap((s) => s.sub_strands.map((ss) => ss.id));
+      const { data: existingCompetency } = subStrandIds.length
+        ? await supabase
+            .from("competency_marks")
+            .select("student_id, sub_strand_id, band_id")
+            .eq("exam_id", examId)
+            .in("sub_strand_id", subStrandIds)
+        : { data: [] };
+      competencyRatings = existingCompetency ?? [];
+    }
   }
 
   return (
@@ -147,6 +181,21 @@ export default async function MarksPage({
             roster={roster}
             examStatus={exam.status as "open" | "closed"}
             canEnter={canWriteAny === true || canWrite === true}
+          />
+        )}
+
+        {selectedClassId && selectedSubjectId && gradingModel === "cbc" && (
+          <CompetencyMarksSection
+            examId={examId}
+            classId={selectedClassId}
+            subjectId={selectedSubjectId}
+            strands={strandsWithSubStrands}
+            bandOptions={bandOptions}
+            roster={roster.map((r) => ({ student_id: r.student_id, full_name: r.full_name }))}
+            existingRatings={competencyRatings}
+            examStatus={exam.status as "open" | "closed"}
+            canEnter={canWriteAny === true || canWrite === true}
+            canManageCurriculum={canManageCurriculum === true}
           />
         )}
       </div>
