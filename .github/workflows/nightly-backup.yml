@@ -1,0 +1,34 @@
+name: Nightly database backup
+
+on:
+  schedule:
+    # 02:00 UTC daily. Interim stopgap only -- see RPO_RTO_POLICY.md.
+    - cron: "0 2 * * *"
+  workflow_dispatch: {}
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check SUPABASE_DB_URL is set
+        run: |
+          if [ -z "${{ secrets.SUPABASE_DB_URL }}" ]; then
+            echo "SUPABASE_DB_URL repo secret is not set -- see RPO_RTO_POLICY.md section 3. Failing loudly instead of skipping silently."
+            exit 1
+          fi
+
+      - name: Install postgresql-client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+
+      - name: Dump database
+        run: |
+          pg_dump "${{ secrets.SUPABASE_DB_URL }}" \
+            --no-owner --no-privileges --format=custom \
+            --file=educore-backup-$(date +%Y-%m-%d).dump
+
+      - name: Upload backup artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: educore-backup-${{ github.run_id }}
+          path: educore-backup-*.dump
+          retention-days: 90
