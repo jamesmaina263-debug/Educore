@@ -7,6 +7,8 @@ import { BrandingForm, type BrandingData } from "@/components/settings/branding-
 import { StaffRolesTable, type StaffRow, type RoleOption } from "@/components/settings/staff-roles-table";
 import { InviteStaffDialog } from "@/components/settings/invite-staff-dialog";
 import { BillingPanel, type BillingData } from "@/components/settings/billing-panel";
+import { NotificationPreferencesPanel } from "@/components/notifications/preferences-panel";
+import { getMyNotificationPreferences } from "@/app/notifications/actions";
 
 export default async function SettingsPage() {
   const supabase = await createClient();
@@ -81,6 +83,9 @@ export default async function SettingsPage() {
     };
   }
 
+  const prefsResult = await getMyNotificationPreferences();
+  const preferenceRows = "success" in prefsResult ? prefsResult.rows : [];
+
   const brandingData: BrandingData = {
     name: school?.name ?? "",
     motto: school?.motto ?? null,
@@ -106,6 +111,7 @@ export default async function SettingsPage() {
             <TabsTrigger value="branding">Branding</TabsTrigger>
             <TabsTrigger value="staff">Users &amp; Roles</TabsTrigger>
             {billingData && <TabsTrigger value="billing">Billing</TabsTrigger>}
+            <TabsTrigger value="notifications">Notifications</TabsTrigger>
           </TabsList>
 
           <TabsContent value="branding">
@@ -132,6 +138,10 @@ export default async function SettingsPage() {
               <BillingPanel data={billingData} />
             </TabsContent>
           )}
+
+          <TabsContent value="notifications">
+            <NotificationPreferencesPanel initialRows={preferenceRows} />
+          </TabsContent>
         </Tabs>
       </div>
     </AppShell>

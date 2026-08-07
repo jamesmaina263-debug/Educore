@@ -24,6 +24,7 @@ export interface ApplicantRow {
   full_name: string;
   admission_number: string;
   status: "applied" | "approved" | "enrolled";
+  application_notes: string | null;
 }
 
 export interface StreamOption {
@@ -81,6 +82,9 @@ export function PipelineTable({
                 <Link href={`/students/${r.id}`} className="hover:underline">
                   {r.full_name}
                 </Link>
+                {r.application_notes && (
+                  <p className="mt-0.5 text-xs font-normal text-muted-foreground">{r.application_notes}</p>
+                )}
               </TableCell>
               <TableCell>{r.admission_number}</TableCell>
               <TableCell className="capitalize">{r.status}</TableCell>

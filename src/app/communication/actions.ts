@@ -34,6 +34,10 @@ export type Recipient = {
   email?: string;
   student_id: string | null;
   recipient_type: "guardian" | "student" | "staff";
+  // Lets queue_communication check the recipient's own notification_preferences before queueing —
+  // omitted entirely (rather than sent null) falls back to "always send", same as before this
+  // feature existed, so an older caller of this action never regresses.
+  school_user_id?: string;
   values: Record<string, string>;
 };
 

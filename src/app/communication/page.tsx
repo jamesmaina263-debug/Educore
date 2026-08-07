@@ -46,14 +46,14 @@ export default async function CommunicationPage() {
       .limit(200),
     supabase
       .from("students")
-      .select("id, first_name, last_name, current_class_id, streams(class_id, classes(name)), student_guardians(primary_contact, school_users(phone, email))")
+      .select("id, first_name, last_name, current_class_id, streams(class_id, classes(name)), student_guardians(primary_contact, school_users(id, phone, email))")
       .eq("status", "active"),
     supabase.from("classes").select("id, name").order("level_order"),
   ]);
 
   const roster: RosterEntry[] = (students ?? []).map((s) => {
     const stream = s.streams as unknown as { class_id: string; classes: { name: string } | null } | null;
-    const guardians = (s.student_guardians ?? []) as unknown as { primary_contact: boolean; school_users: { phone: string | null; email: string | null } | null }[];
+    const guardians = (s.student_guardians ?? []) as unknown as { primary_contact: boolean; school_users: { id: string; phone: string | null; email: string | null } | null }[];
     const primary = guardians.find((g) => g.primary_contact);
     return {
       student_id: s.id,
@@ -62,6 +62,7 @@ export default async function CommunicationPage() {
       class_name: stream?.classes?.name ?? "",
       guardian_phone: primary?.school_users?.phone ?? null,
       guardian_email: primary?.school_users?.email ?? null,
+      guardian_school_user_id: primary?.school_users?.id ?? null,
     };
   });
 

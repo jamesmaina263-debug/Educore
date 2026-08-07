@@ -23,6 +23,7 @@ export interface RosterEntry {
   class_name: string;
   guardian_phone: string | null;
   guardian_email: string | null;
+  guardian_school_user_id: string | null;
 }
 
 const CHANNELS = [
@@ -87,6 +88,7 @@ export function ComposeSection({
       ...(channel === "email" ? { email: r.guardian_email as string } : { phone: r.guardian_phone as string }),
       student_id: r.student_id,
       recipient_type: "guardian",
+      school_user_id: r.guardian_school_user_id ?? undefined,
       values: { student_name: r.student_name, school_name: schoolName },
     }));
     const res = await composeAndSendAction({
