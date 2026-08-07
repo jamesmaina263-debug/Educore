@@ -12,6 +12,7 @@ import {
 } from "@/components/academics/classes-streams-section";
 import { SubjectsSection, type SubjectRow } from "@/components/academics/subjects-section";
 import { RolloverSection, type StudentOption } from "@/components/academics/rollover-section";
+import { TimetableSection, type TimetableSlotRow } from "@/components/academics/timetable-section";
 
 export default async function AcademicsPage() {
   const supabase = await createClient();
@@ -37,6 +38,7 @@ export default async function AcademicsPage() {
     { data: canWriteData },
     { data: canRolloverData },
     { data: activeStudents },
+    { data: timetableSlots },
   ] = await Promise.all([
     supabase.from("academic_years").select("id, name, start_date, end_date, status").order("start_date", { ascending: false }),
     supabase.from("terms").select("id, academic_year_id, name, term_number, start_date, end_date, status").order("term_number"),
@@ -55,6 +57,11 @@ export default async function AcademicsPage() {
       .select("id, admission_number, first_name, last_name")
       .eq("status", "active")
       .order("first_name"),
+    supabase
+      .from("timetable_slots")
+      .select("id, stream_id, subject_id, teacher_id, day_of_week, period_number, start_time, end_time")
+      .order("day_of_week")
+      .order("period_number"),
   ]);
 
   const canWrite = canWriteData === true;
@@ -87,6 +94,7 @@ export default async function AcademicsPage() {
             <TabsTrigger value="years">Years &amp; Terms</TabsTrigger>
             <TabsTrigger value="classes">Classes &amp; Streams</TabsTrigger>
             <TabsTrigger value="subjects">Subjects</TabsTrigger>
+            <TabsTrigger value="timetable">Timetable</TabsTrigger>
             {canRollover && <TabsTrigger value="rollover">Rollover</TabsTrigger>}
           </TabsList>
 
@@ -107,6 +115,17 @@ export default async function AcademicsPage() {
 
           <TabsContent value="subjects">
             <SubjectsSection subjects={(subjects ?? []) as SubjectRow[]} canWrite={canWrite} />
+          </TabsContent>
+
+          <TabsContent value="timetable">
+            <TimetableSection
+              streams={(streams ?? []) as StreamRow[]}
+              classes={(classes ?? []) as ClassRow[]}
+              subjects={(subjects ?? []) as SubjectRow[]}
+              teachers={teachers}
+              slots={(timetableSlots ?? []) as TimetableSlotRow[]}
+              canWrite={canWrite}
+            />
           </TabsContent>
 
           {canRollover && (

@@ -25,8 +25,6 @@ export interface NavItem {
   icon: typeof LayoutDashboard;
 }
 
-// Staff still points at a page that doesn't exist yet — the nav shell
-// doesn't need to wait for every module to be built before it's wired in.
 export const navItems: NavItem[] = [
   { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { label: "Students", href: "/students", icon: GraduationCap },

@@ -132,6 +132,36 @@ export async function updateStreamClassTeacher(
   return { success: true };
 }
 
+export async function createTimetableSlot(input: {
+  stream_id: string;
+  subject_id: string;
+  teacher_id: string;
+  day_of_week: number;
+  period_number: number;
+  start_time: string;
+  end_time: string;
+}): Promise<{ error: string } | { success: true }> {
+  const supabase = await createClient();
+  const school_id = await schoolId(supabase);
+  const { error } = await supabase.from("timetable_slots").insert({ school_id, ...input });
+  if (error) {
+    if (error.code === "23505") {
+      return { error: "This stream or teacher already has a class scheduled for that day and period." };
+    }
+    return { error: error.message };
+  }
+  revalidatePath("/academics");
+  return { success: true };
+}
+
+export async function deleteTimetableSlot(id: string): Promise<{ error: string } | { success: true }> {
+  const supabase = await createClient();
+  const { error } = await supabase.from("timetable_slots").delete().eq("id", id);
+  if (error) return { error: error.message };
+  revalidatePath("/academics");
+  return { success: true };
+}
+
 export async function rolloverAcademicYear(input: {
   from_academic_year_id: string;
   to_academic_year_id: string;
