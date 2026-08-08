@@ -5,6 +5,7 @@ import { logout } from "@/app/login/actions";
 import { AppShell } from "@/components/app-shell/app-shell";
 import { Button } from "@/components/ui/button";
 import { PipelineTable, type ApplicantRow, type StreamOption } from "@/components/admissions/pipeline-table";
+import { CopyApplicationLink } from "@/components/admissions/copy-application-link";
 
 export default async function AdmissionsPage() {
   const supabase = await createClient();
@@ -16,14 +17,14 @@ export default async function AdmissionsPage() {
 
   const { data: schoolUser } = await supabase
     .from("school_users")
-    .select("full_name, roles(display_name), schools(name)")
+    .select("full_name, roles(display_name), schools(name, slug)")
     .eq("auth_user_id", user.id)
     .maybeSingle();
 
   const [{ data: applicants }, { data: streamRows }, { data: canReviewData }] = await Promise.all([
     supabase
       .from("students")
-      .select("id, admission_number, first_name, last_name, status")
+      .select("id, admission_number, first_name, last_name, status, application_notes")
       .in("status", ["applied", "approved", "enrolled"])
       .order("status"),
     supabase.from("streams").select("id, name, classes(name)"),
@@ -35,6 +36,7 @@ export default async function AdmissionsPage() {
     full_name: `${a.first_name} ${a.last_name}`,
     admission_number: a.admission_number,
     status: a.status as ApplicantRow["status"],
+    application_notes: a.application_notes,
   }));
 
   const streams: StreamOption[] = (streamRows ?? []).map((s) => ({
@@ -43,7 +45,8 @@ export default async function AdmissionsPage() {
   }));
 
   const roleName = (schoolUser?.roles as unknown as { display_name: string } | null)?.display_name;
-  const schoolName = (schoolUser?.schools as unknown as { name: string } | null)?.name;
+  const school = schoolUser?.schools as unknown as { name: string; slug: string } | null;
+  const schoolName = school?.name;
 
   const counts = {
     applied: rows.filter((r) => r.status === "applied").length,
@@ -71,6 +74,15 @@ export default async function AdmissionsPage() {
             <Link href="/students/new">New application</Link>
           </Button>
         </div>
+
+        {school?.slug && (
+          <div className="flex items-center justify-between rounded-md border border-dashed border-border p-3">
+            <p className="text-sm text-muted-foreground">
+              Families can apply online — share this link:
+            </p>
+            <CopyApplicationLink slug={school.slug} />
+          </div>
+        )}
 
         <PipelineTable rows={rows} streams={streams} canReview={canReviewData === true} />
       </div>

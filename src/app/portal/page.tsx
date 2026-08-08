@@ -2,6 +2,8 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { portalLogout } from "@/app/portal/actions";
 import { ChildSwitcher } from "@/components/portal/child-switcher";
+import { NotificationPreferencesPanel } from "@/components/notifications/preferences-panel";
+import { getMyNotificationPreferences } from "@/app/notifications/actions";
 
 const WEEKDAY_NAMES = ["", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 
@@ -60,6 +62,8 @@ export default async function PortalPage({ searchParams }: { searchParams: Promi
   }
 
   const selected = students.find((s) => s.id === childParam) ?? students[0];
+  const prefsResult = await getMyNotificationPreferences();
+  const preferenceRows = "success" in prefsResult ? prefsResult.rows : [];
 
   const [{ data: balance }, { data: activeTerm }, { data: latestReportCard }] = await Promise.all([
     supabase.from("v_student_balances").select("balance, total_invoiced").eq("student_id", selected.id).maybeSingle(),
@@ -175,6 +179,11 @@ export default async function PortalPage({ searchParams }: { searchParams: Promi
         <p className="text-sm text-muted-foreground">
           Messages will appear here once the school starts sending communications.
         </p>
+      </div>
+
+      <div className="rounded-md border border-border p-4">
+        <p className="mb-2 text-xs font-medium">Notification preferences</p>
+        <NotificationPreferencesPanel initialRows={preferenceRows} />
       </div>
     </PortalShell>
   );
