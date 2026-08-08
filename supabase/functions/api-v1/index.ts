@@ -19,7 +19,7 @@
 // running as service_role, writes to it).
 
 import { createClient } from "jsr:@supabase/supabase-js@2";
-import { corsHeaders } from "../_shared/cors.ts";
+import { corsHeaders } from "./cors.ts";
 
 type Resource = "students" | "attendance" | "fees" | "exams";
 
