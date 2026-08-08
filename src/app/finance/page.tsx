@@ -49,17 +49,18 @@ export default async function FinancePage() {
     );
   }
 
-  const [{ data: years }, { data: classes }, { data: structures }, { data: feeItems }, { data: invoices }, { data: payments }, { data: discounts }, { data: expenses }, { data: balances }, { data: waivers }, { data: activeStudents }] =
+  const [{ data: years }, { data: classes }, { data: structures }, { data: feeItems }, { data: invoices }, { data: payments }, { data: discounts }, { data: expenses }, { data: balances }, { data: allocations }, { data: waivers }, { data: activeStudents }] =
     await Promise.all([
       supabase.from("academic_years").select("id, status").eq("status", "active"),
       supabase.from("classes").select("id, name").order("level_order"),
       supabase.from("fee_structures").select("id, name, term_id, class_id, boarding_type, is_active, terms(name), classes(name)").order("created_at", { ascending: false }),
       supabase.from("fee_items").select("fee_structure_id, name, amount"),
-      supabase.from("invoices").select("id, student_id, total_amount, status, students(first_name, last_name, current_class_id), terms(name)").order("created_at", { ascending: false }),
+      supabase.from("invoices").select("id, student_id, total_amount, status, created_at, term_id, students(first_name, last_name, current_class_id), terms(name)").order("created_at", { ascending: false }),
       supabase.from("payments").select("id, student_id, method, amount, reference, recorded_at, students(first_name, last_name)").order("recorded_at", { ascending: false }),
       supabase.from("discounts").select("id, invoice_id, amount, reason, status, students(first_name, last_name)").order("created_at", { ascending: false }),
       supabase.from("expenses").select("id, category, vendor, amount, description, status").order("created_at", { ascending: false }),
       supabase.from("v_student_balances").select("student_id, total_invoiced, total_discounted, total_paid, balance, stream_id"),
+      supabase.from("payment_allocations").select("invoice_id, amount_allocated"),
       supabase
         .from("fee_waivers")
         .select("id, name, waiver_type, discount_kind, discount_value, status, students(first_name, last_name), starts_term:terms!fee_waivers_starts_term_id_fkey(name)")
@@ -93,14 +94,28 @@ export default async function FinancePage() {
     };
   });
 
+  const paidByInvoice = new Map<string, number>();
+  for (const a of allocations ?? []) {
+    paidByInvoice.set(a.invoice_id, (paidByInvoice.get(a.invoice_id) ?? 0) + Number(a.amount_allocated));
+  }
+  const discountedByInvoice = new Map<string, number>();
+  for (const d of discounts ?? []) {
+    if (d.status === "approved" && d.invoice_id) {
+      discountedByInvoice.set(d.invoice_id, (discountedByInvoice.get(d.invoice_id) ?? 0) + Number(d.amount));
+    }
+  }
+
   const invoiceRows: InvoiceListRow[] = (invoices ?? []).map((inv) => {
     const st = inv.students as unknown as { first_name: string; last_name: string; current_class_id: string } | null;
     return {
       id: inv.id,
+      student_id: inv.student_id,
       student_name: st ? `${st.first_name} ${st.last_name}` : "",
       class_name: st ? classNameByStream.get(st.current_class_id) ?? "" : "",
-      term_name: (inv.terms as unknown as { name: string } | null)?.name ?? "",
+      created_at: inv.created_at,
       total_amount: Number(inv.total_amount),
+      paid: paidByInvoice.get(inv.id) ?? 0,
+      discounted: discountedByInvoice.get(inv.id) ?? 0,
       status: inv.status as "unpaid" | "partially_paid" | "paid",
     };
   });
@@ -186,9 +201,12 @@ export default async function FinancePage() {
       balance: Number(b.balance),
     }));
 
-  const totalInvoiced = balanceRows.reduce((sum, b) => sum + b.total_invoiced, 0);
-  const totalCollected = balanceRows.reduce((sum, b) => sum + b.total_paid, 0);
-  const totalOutstanding = balanceRows.reduce((sum, b) => sum + b.balance, 0);
+  const activeTerm = (terms ?? []).find((t) => t.status === "active") ?? null;
+  const termInvoiceRows = activeTerm ? (invoices ?? []).filter((inv) => inv.term_id === activeTerm.id) : (invoices ?? []);
+  const termInvoiced = termInvoiceRows.reduce((sum, inv) => sum + Number(inv.total_amount), 0);
+  const termCollected = termInvoiceRows.reduce((sum, inv) => sum + (paidByInvoice.get(inv.id) ?? 0), 0);
+  const termDiscounted = termInvoiceRows.reduce((sum, inv) => sum + (discountedByInvoice.get(inv.id) ?? 0), 0);
+  const termOutstanding = termInvoiced - termCollected - termDiscounted;
   const kes = (n: number) => `KES ${Math.round(n).toLocaleString()}`;
 
   return (
@@ -201,26 +219,34 @@ export default async function FinancePage() {
       <div className="flex flex-col gap-4">
         <div>
           <h1 className="text-lg font-semibold">Finance</h1>
-          <p className="text-sm text-muted-foreground">Fee structures, invoices, payments, balances, discounts and expenses</p>
+          <p className="text-sm text-muted-foreground">
+            {activeTerm ? activeTerm.name : "No active term"} · Bursar office
+          </p>
         </div>
 
-        <div className="grid grid-cols-2 gap-3 xl:grid-cols-3">
+        <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
           <div className="panel px-4 py-3">
-            <p className="label-eyebrow">Invoiced</p>
+            <p className="label-eyebrow">Invoiced this term</p>
             <p className="mt-1 text-xl font-semibold tracking-tight" data-numeric>
-              {kes(totalInvoiced)}
+              {kes(termInvoiced)}
             </p>
           </div>
           <div className="panel px-4 py-3">
             <p className="label-eyebrow">Collected</p>
             <p className="mt-1 text-xl font-semibold tracking-tight" data-numeric>
-              {kes(totalCollected)}
+              {kes(termCollected)}
+            </p>
+          </div>
+          <div className="panel px-4 py-3">
+            <p className="label-eyebrow">Discounted</p>
+            <p className="mt-1 text-xl font-semibold tracking-tight" data-numeric>
+              {kes(termDiscounted)}
             </p>
           </div>
           <div className="panel px-4 py-3">
             <p className="label-eyebrow">Outstanding</p>
             <p className="mt-1 text-xl font-semibold tracking-tight text-destructive" data-numeric>
-              {kes(totalOutstanding)}
+              {kes(termOutstanding)}
             </p>
           </div>
         </div>
@@ -251,7 +277,7 @@ export default async function FinancePage() {
           </TabsContent>
 
           <TabsContent value="invoices">
-            <InvoicesSection invoices={invoiceRows} />
+            <InvoicesSection invoices={invoiceRows} canWrite={canWrite === true} />
           </TabsContent>
 
           <TabsContent value="payments">
