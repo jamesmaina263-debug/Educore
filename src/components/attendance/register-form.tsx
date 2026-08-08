@@ -2,25 +2,27 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { Check, Minus, Save, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { StatusBadge } from "@/components/status-badge";
-import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { submitAttendance, editAttendanceRecord } from "@/app/attendance/actions";
 
 export interface RosterRow {
   student_id: string;
+  admission_number: string;
   full_name: string;
+  term_attendance_rate: number | null;
   existing: { record_id: string; status: "present" | "absent" | "late" } | null;
 }
 
 type Mark = "present" | "absent" | "late";
 
-const STATUS_OPTIONS: { value: Mark; label: string }[] = [
-  { value: "present", label: "Present" },
-  { value: "absent", label: "Absent" },
-  { value: "late", label: "Late" },
+const marks: { key: Mark; label: string; icon: typeof Check }[] = [
+  { key: "present", label: "Present", icon: Check },
+  { key: "absent", label: "Absent", icon: X },
+  { key: "late", label: "Late", icon: Minus },
 ];
 
 function statusTone(status: Mark) {
@@ -50,6 +52,9 @@ export function RegisterForm({
 
   const unmarked = roster.filter((r) => !r.existing);
   const marked = roster.filter((r) => r.existing);
+  const presentCount = marked.filter((r) => r.existing!.status === "present").length;
+  const absentCount = marked.filter((r) => r.existing!.status === "absent").length;
+  const lateCount = marked.filter((r) => r.existing!.status === "late").length;
 
   async function handleSubmit() {
     setPending(true);
@@ -64,6 +69,22 @@ export function RegisterForm({
     router.refresh();
   }
 
+  function handleMarkAllPresent() {
+    setDraft(Object.fromEntries(unmarked.map((r) => [r.student_id, "present" as Mark])));
+  }
+
+  function handleMarkClick(row: RosterRow, mark: Mark) {
+    if (!canMark) return;
+    if (!row.existing) {
+      setDraft((d) => ({ ...d, [row.student_id]: mark }));
+      return;
+    }
+    if (row.existing.status === mark) return;
+    setEditTarget(row);
+    setEditStatus(mark);
+    setEditReason("");
+  }
+
   async function handleEditSave() {
     if (!editTarget?.existing) return;
     setPending(true);
@@ -76,10 +97,6 @@ export function RegisterForm({
     router.refresh();
   }
 
-  const presentCount = marked.filter((r) => r.existing!.status === "present").length;
-  const absentCount = marked.filter((r) => r.existing!.status === "absent").length;
-  const lateCount = marked.filter((r) => r.existing!.status === "late").length;
-
   if (roster.length === 0) {
     return (
       <div className="panel border-dashed p-10 text-center text-sm text-muted-foreground">
@@ -89,109 +106,90 @@ export function RegisterForm({
   }
 
   return (
-    <div className="flex flex-col gap-4">
+    <>
       {error && <p className="text-sm text-danger">{error}</p>}
 
-      {unmarked.length > 0 && (
-        <div className="panel">
-          <header className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-2.5">
-            <h2 className="text-[0.8125rem] font-semibold">To mark · {unmarked.length} learners</h2>
-          </header>
-          {canMark ? (
-            <>
-              <div className="overflow-x-auto">
-                <Table className="table-dense">
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Student</TableHead>
-                      <TableHead>Mark</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {unmarked.map((r) => (
-                      <TableRow key={r.student_id}>
-                        <TableCell className="font-medium">{r.full_name}</TableCell>
-                        <TableCell>
-                          <div className="flex gap-1.5">
-                            {STATUS_OPTIONS.map((opt) => (
-                              <Button
-                                key={opt.value}
-                                size="sm"
-                                variant={draft[r.student_id] === opt.value ? "default" : "outline"}
-                                onClick={() => setDraft((d) => ({ ...d, [r.student_id]: opt.value }))}
-                              >
-                                {opt.label}
-                              </Button>
-                            ))}
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+      <div className="panel">
+        <header className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-2.5">
+          <h2 className="text-[0.8125rem] font-semibold">Class roll · {roster.length} learners</h2>
+          <div className="flex flex-wrap items-center gap-3">
+            {marked.length > 0 && (
+              <div className="flex items-center gap-2 text-[0.6875rem] text-muted-foreground">
+                <StatusBadge tone="success" label={`${presentCount} present`} />
+                <StatusBadge tone="danger" label={`${absentCount} absent`} />
+                <StatusBadge tone="warning" label={`${lateCount} late`} />
               </div>
-              <div className="flex justify-end border-t border-border px-4 py-2.5">
-                <Button onClick={handleSubmit} disabled={pending}>
-                  {pending ? "Submitting…" : `Submit register (${unmarked.length} students)`}
+            )}
+            {canMark && unmarked.length > 0 && (
+              <div className="flex items-center gap-2">
+                <Button variant="outline" size="sm" onClick={handleMarkAllPresent}>
+                  Mark all present
+                </Button>
+                <Button size="sm" onClick={handleSubmit} disabled={pending}>
+                  <Save className="size-4" aria-hidden /> {pending ? "Submitting…" : `Submit register (${unmarked.length})`}
                 </Button>
               </div>
-            </>
-          ) : (
-            <p className="px-4 py-3 text-sm text-muted-foreground">
-              Not yet marked. You don&apos;t have permission to mark it.
-            </p>
-          )}
-        </div>
-      )}
-
-      {marked.length > 0 && (
-        <div className="panel">
-          <header className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-2.5">
-            <h2 className="text-[0.8125rem] font-semibold">Already marked · {marked.length} learners</h2>
-            <div className="flex items-center gap-2">
-              <StatusBadge tone="success" label={`${presentCount} present`} />
-              <StatusBadge tone="danger" label={`${absentCount} absent`} />
-              <StatusBadge tone="warning" label={`${lateCount} late`} />
-            </div>
-          </header>
-          <div className="overflow-x-auto">
-            <Table className="table-dense">
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Student</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead />
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {marked.map((r) => (
-                  <TableRow key={r.student_id}>
-                    <TableCell className="font-medium">{r.full_name}</TableCell>
-                    <TableCell>
-                      <StatusBadge tone={statusTone(r.existing!.status)} label={r.existing!.status} />
-                    </TableCell>
-                    <TableCell>
-                      {canMark && (
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => {
-                            setEditTarget(r);
-                            setEditStatus(r.existing!.status);
-                            setEditReason("");
-                          }}
-                        >
-                          Correct
-                        </Button>
-                      )}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+            )}
           </div>
+        </header>
+        <div className="overflow-x-auto">
+          <table className="table-dense w-full">
+            <thead className="bg-muted/70">
+              <tr>
+                <th className="w-10">#</th>
+                <th>Adm. no.</th>
+                <th>Student</th>
+                <th className="text-right">Term attendance</th>
+                <th className="w-56">Mark</th>
+              </tr>
+            </thead>
+            <tbody>
+              {roster.map((r, i) => {
+                const currentMark = r.existing?.status ?? draft[r.student_id];
+                return (
+                  <tr key={r.student_id}>
+                    <td className="text-muted-foreground">{i + 1}</td>
+                    <td className="font-mono text-[0.75rem] text-muted-foreground">{r.admission_number}</td>
+                    <td className="font-medium">{r.full_name}</td>
+                    <td className="text-right" data-numeric>
+                      {r.term_attendance_rate === null ? "—" : `${r.term_attendance_rate}%`}
+                    </td>
+                    <td>
+                      <div
+                        role="group"
+                        aria-label={`Attendance mark for ${r.full_name}`}
+                        className="inline-flex overflow-hidden rounded-md border border-input"
+                      >
+                        {marks.map((m) => {
+                          const active = currentMark === m.key;
+                          return (
+                            <button
+                              key={m.key}
+                              type="button"
+                              disabled={!canMark}
+                              onClick={() => handleMarkClick(r, m.key)}
+                              className={
+                                "inline-flex h-6 items-center gap-1 border-r border-input px-2 text-[0.6875rem] font-medium last:border-r-0 hover:bg-accent hover:text-accent-foreground focus-visible:relative disabled:cursor-not-allowed disabled:opacity-50 " +
+                                (active ? "bg-accent text-accent-foreground" : "text-muted-foreground")
+                              }
+                            >
+                              <m.icon className="size-3" aria-hidden />
+                              {m.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      {r.existing && (
+                        <p className="mt-1 text-[0.625rem] text-muted-foreground">Submitted — pick a different mark to correct</p>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
-      )}
+      </div>
 
       <Dialog open={editTarget !== null} onOpenChange={(open) => !open && setEditTarget(null)}>
         <DialogContent>
@@ -200,14 +198,14 @@ export function RegisterForm({
           </DialogHeader>
           <div className="space-y-3">
             <div className="flex gap-1.5">
-              {STATUS_OPTIONS.map((opt) => (
+              {marks.map((m) => (
                 <Button
-                  key={opt.value}
+                  key={m.key}
                   size="sm"
-                  variant={editStatus === opt.value ? "default" : "outline"}
-                  onClick={() => setEditStatus(opt.value)}
+                  variant={editStatus === m.key ? "default" : "outline"}
+                  onClick={() => setEditStatus(m.key)}
                 >
-                  {opt.label}
+                  <m.icon className="size-3.5" aria-hidden /> {m.label}
                 </Button>
               ))}
             </div>
@@ -223,6 +221,6 @@ export function RegisterForm({
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </>
   );
 }

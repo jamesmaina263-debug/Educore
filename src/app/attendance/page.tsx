@@ -9,6 +9,15 @@ function todayISO() {
   return new Date().toISOString().slice(0, 10);
 }
 
+function formatLongDate(iso: string) {
+  return new Date(`${iso}T00:00:00`).toLocaleDateString("en-GB", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
+}
+
 export default async function AttendancePage({
   searchParams,
 }: {
@@ -23,13 +32,14 @@ export default async function AttendancePage({
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const [{ data: schoolUser }, { data: canMarkAny }] = await Promise.all([
+  const [{ data: schoolUser }, { data: canMarkAny }, { data: canMark }] = await Promise.all([
     supabase
       .from("school_users")
       .select("id, full_name, roles(display_name), schools(name)")
       .eq("auth_user_id", user.id)
       .maybeSingle(),
     supabase.rpc("auth_has_permission", { p_permission_key: "attendance.mark_any" }),
+    supabase.rpc("auth_has_permission", { p_permission_key: "attendance.mark" }),
   ]);
 
   const roleName = (schoolUser?.roles as unknown as { display_name: string } | null)?.display_name;
@@ -48,13 +58,20 @@ export default async function AttendancePage({
   }));
 
   const selectedStreamId = streamParam || streamOptions[0]?.id || null;
+  const selectedStreamLabel = streamOptions.find((s) => s.id === selectedStreamId)?.label;
+
+  const { data: activeTerm } = await supabase
+    .from("terms")
+    .select("id, start_date, end_date")
+    .eq("status", "active")
+    .maybeSingle();
 
   let roster: RosterRow[] = [];
   if (selectedStreamId) {
     const [{ data: students }, { data: existingRecords }] = await Promise.all([
       supabase
         .from("students")
-        .select("id, first_name, last_name")
+        .select("id, admission_number, first_name, last_name")
         .eq("current_class_id", selectedStreamId)
         .eq("status", "active")
         .order("last_name"),
@@ -65,6 +82,28 @@ export default async function AttendancePage({
         .eq("attendance_date", attendanceDate),
     ]);
 
+    const studentIds = (students ?? []).map((s) => s.id);
+    let termRateByStudent = new Map<string, number>();
+    if (activeTerm && studentIds.length > 0) {
+      const { data: termRecords } = await supabase
+        .from("student_attendance")
+        .select("student_id, status")
+        .in("student_id", studentIds)
+        .gte("attendance_date", activeTerm.start_date)
+        .lte("attendance_date", activeTerm.end_date);
+
+      const totalsByStudent = new Map<string, { present: number; total: number }>();
+      for (const r of termRecords ?? []) {
+        const t = totalsByStudent.get(r.student_id) ?? { present: 0, total: 0 };
+        t.total += 1;
+        if (r.status === "present" || r.status === "late") t.present += 1;
+        totalsByStudent.set(r.student_id, t);
+      }
+      termRateByStudent = new Map(
+        Array.from(totalsByStudent.entries()).map(([id, t]) => [id, t.total > 0 ? Math.round((t.present / t.total) * 1000) / 10 : 0]),
+      );
+    }
+
     const existingByStudent = new Map<string, NonNullable<RosterRow["existing"]>>(
       (existingRecords ?? []).map((r) => [
         r.student_id,
@@ -74,25 +113,43 @@ export default async function AttendancePage({
 
     roster = (students ?? []).map((s) => ({
       student_id: s.id,
+      admission_number: s.admission_number,
       full_name: `${s.first_name} ${s.last_name}`,
+      term_attendance_rate: termRateByStudent.get(s.id) ?? null,
       existing: existingByStudent.get(s.id) ?? null,
     }));
   }
 
+  const submittedCount = roster.filter((r) => r.existing).length;
+  const submissionStatus =
+    roster.length === 0
+      ? null
+      : submittedCount === 0
+        ? "Not yet submitted"
+        : submittedCount === roster.length
+          ? "Fully submitted"
+          : `Partially submitted (${submittedCount} of ${roster.length})`;
+
   return (
     <AppShell
-      breadcrumbs={[{ label: schoolName ?? "EduCore", href: "/dashboard" }, { label: "Attendance" }]}
+      breadcrumbs={[
+        { label: schoolName ?? "EduCore", href: "/dashboard" },
+        { label: "Attendance", href: selectedStreamId ? "/attendance" : undefined },
+        ...(selectedStreamLabel ? [{ label: selectedStreamLabel }] : []),
+      ]}
       userName={schoolUser?.full_name ?? user.email ?? "Account"}
       userRole={roleName}
       onSignOut={logout}
     >
       <div className="flex flex-col gap-4">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-3">
           <div>
             <h1 className="text-lg font-semibold">Attendance</h1>
-            <p className="text-sm text-muted-foreground">{attendanceDate}</p>
+            <p className="text-sm text-muted-foreground">
+              {formatLongDate(attendanceDate)}
+              {submissionStatus ? ` · ${submissionStatus}` : ""}
+            </p>
           </div>
-
           {streamOptions.length > 1 && selectedStreamId && (
             <StreamPicker options={streamOptions} value={selectedStreamId} date={attendanceDate} />
           )}
@@ -103,10 +160,9 @@ export default async function AttendancePage({
             You don&apos;t have a class assigned to mark attendance for.
           </p>
         ) : (
-          <RegisterForm streamId={selectedStreamId} attendanceDate={attendanceDate} roster={roster} canMark={true} />
+          <RegisterForm streamId={selectedStreamId} attendanceDate={attendanceDate} roster={roster} canMark={!!canMark} />
         )}
       </div>
     </AppShell>
   );
 }
-
