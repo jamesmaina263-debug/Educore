@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Badge } from "@/components/ui/badge";
+import { StatusBadge } from "@/components/status-badge";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
 import { raiseExpenseAction, approveExpenseAction, rejectExpenseAction } from "@/app/finance/actions";
@@ -123,11 +123,12 @@ export function ExpensesSection({
       </div>
 
       {expenses.length === 0 ? (
-        <p className="rounded-md border border-dashed border-border p-10 text-center text-sm text-muted-foreground">
+        <div className="panel border-dashed p-10 text-center text-sm text-muted-foreground">
           No expenses recorded yet.
-        </p>
+        </div>
       ) : (
-        <Table>
+        <div className="panel overflow-x-auto">
+          <Table className="table-dense">
           <TableHeader>
             <TableRow>
               <TableHead>Category</TableHead>
@@ -144,9 +145,10 @@ export function ExpensesSection({
                 <TableCell>{e.vendor}</TableCell>
                 <TableCell>{e.amount.toLocaleString()}</TableCell>
                 <TableCell>
-                  <Badge variant={e.status === "approved" ? "success" : e.status === "rejected" ? "danger" : "secondary"}>
-                    {e.status}
-                  </Badge>
+                  <StatusBadge
+                    tone={e.status === "approved" ? "success" : e.status === "rejected" ? "danger" : "neutral"}
+                    label={e.status}
+                  />
                 </TableCell>
                 {canApprove && (
                   <TableCell className="text-right">
@@ -166,6 +168,7 @@ export function ExpensesSection({
             ))}
           </TableBody>
         </Table>
+        </div>
       )}
     </div>
   );

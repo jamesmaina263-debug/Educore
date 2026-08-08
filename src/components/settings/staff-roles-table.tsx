@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
+import { StatusBadge } from "@/components/status-badge";
 import {
   Select,
   SelectTrigger,
@@ -31,8 +31,8 @@ export interface RoleOption {
   display_name: string;
 }
 
-function statusVariant(status: string) {
-  return status === "active" ? "success" : status === "suspended" ? "danger" : "secondary";
+function statusTone(status: string) {
+  return status === "active" ? "success" : status === "suspended" ? "danger" : "neutral";
 }
 
 export function StaffRolesTable({
@@ -81,7 +81,8 @@ export function StaffRolesTable({
   return (
     <div className="flex flex-col gap-3">
       {error && <p className="text-sm text-danger">{error}</p>}
-      <Table>
+      <div className="panel overflow-x-auto">
+      <Table className="table-dense">
         <TableHeader>
           <TableRow>
             <TableHead>Name</TableHead>
@@ -118,9 +119,7 @@ export function StaffRolesTable({
                 )}
               </TableCell>
               <TableCell>
-                <Badge dot variant={statusVariant(r.status)}>
-                  {r.status}
-                </Badge>
+                <StatusBadge tone={statusTone(r.status)} label={r.status} />
               </TableCell>
               <TableCell>
                 {canManage && (
@@ -133,6 +132,7 @@ export function StaffRolesTable({
           ))}
         </TableBody>
       </Table>
+      </div>
 
       <Dialog open={pendingRoleChange !== null} onOpenChange={(open) => !open && setPendingRoleChange(null)}>
         <DialogContent>

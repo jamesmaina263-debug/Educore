@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { StatusBadge } from "@/components/status-badge";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
@@ -281,10 +282,10 @@ export function InventorySection({
                     <TableCell>{i.category_name ?? "—"}</TableCell>
                     <TableCell>{i.location ?? "—"}</TableCell>
                     <TableCell>
-                      <Badge variant={low ? "warning" : "secondary"}>
-                        {i.quantity} {i.unit}
-                        {low ? " · low stock" : ""}
-                      </Badge>
+                      <StatusBadge
+                        tone={low ? "warning" : "neutral"}
+                        label={`${i.quantity} ${i.unit}${low ? " · low stock" : ""}`}
+                      />
                     </TableCell>
                   </TableRow>
                 );
@@ -314,7 +315,10 @@ export function InventorySection({
                 <TableRow key={m.id}>
                   <TableCell className="font-medium">{m.item_name}</TableCell>
                   <TableCell>
-                    <Badge variant={m.movement_type === "in" ? "success" : "secondary"}>{m.movement_type === "in" ? "In" : "Out"}</Badge>
+                    <StatusBadge
+                      tone={m.movement_type === "in" ? "success" : "neutral"}
+                      label={m.movement_type === "in" ? "In" : "Out"}
+                    />
                   </TableCell>
                   <TableCell>{m.quantity}</TableCell>
                   <TableCell>{m.reason ?? "—"}</TableCell>

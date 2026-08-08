@@ -99,7 +99,7 @@ export default async function AttendancePage({
         </div>
 
         {!selectedStreamId ? (
-          <p className="rounded-md border border-dashed border-border p-10 text-center text-sm text-muted-foreground">
+          <p className="panel border-dashed p-10 text-center text-sm text-muted-foreground">
             You don&apos;t have a class assigned to mark attendance for.
           </p>
         ) : (

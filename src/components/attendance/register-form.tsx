@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Badge } from "@/components/ui/badge";
+import { StatusBadge } from "@/components/status-badge";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { submitAttendance, editAttendanceRecord } from "@/app/attendance/actions";
@@ -23,7 +23,7 @@ const STATUS_OPTIONS: { value: Mark; label: string }[] = [
   { value: "late", label: "Late" },
 ];
 
-function badgeVariant(status: Mark) {
+function statusTone(status: Mark) {
   return status === "present" ? "success" : status === "late" ? "warning" : "danger";
 }
 
@@ -76,11 +76,15 @@ export function RegisterForm({
     router.refresh();
   }
 
+  const presentCount = marked.filter((r) => r.existing!.status === "present").length;
+  const absentCount = marked.filter((r) => r.existing!.status === "absent").length;
+  const lateCount = marked.filter((r) => r.existing!.status === "late").length;
+
   if (roster.length === 0) {
     return (
-      <p className="rounded-md border border-dashed border-border p-10 text-center text-sm text-muted-foreground">
+      <div className="panel border-dashed p-10 text-center text-sm text-muted-foreground">
         No active students in this class.
-      </p>
+      </div>
     );
   }
 
@@ -89,89 +93,103 @@ export function RegisterForm({
       {error && <p className="text-sm text-danger">{error}</p>}
 
       {unmarked.length > 0 && (
-        <div>
+        <div className="panel">
+          <header className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-2.5">
+            <h2 className="text-[0.8125rem] font-semibold">To mark · {unmarked.length} learners</h2>
+          </header>
           {canMark ? (
             <>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Student</TableHead>
-                    <TableHead>Mark</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {unmarked.map((r) => (
-                    <TableRow key={r.student_id}>
-                      <TableCell className="font-medium">{r.full_name}</TableCell>
-                      <TableCell>
-                        <div className="flex gap-1.5">
-                          {STATUS_OPTIONS.map((opt) => (
-                            <Button
-                              key={opt.value}
-                              size="sm"
-                              variant={draft[r.student_id] === opt.value ? "default" : "outline"}
-                              onClick={() => setDraft((d) => ({ ...d, [r.student_id]: opt.value }))}
-                            >
-                              {opt.label}
-                            </Button>
-                          ))}
-                        </div>
-                      </TableCell>
+              <div className="overflow-x-auto">
+                <Table className="table-dense">
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Student</TableHead>
+                      <TableHead>Mark</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-              <div className="mt-3 flex justify-end">
+                  </TableHeader>
+                  <TableBody>
+                    {unmarked.map((r) => (
+                      <TableRow key={r.student_id}>
+                        <TableCell className="font-medium">{r.full_name}</TableCell>
+                        <TableCell>
+                          <div className="flex gap-1.5">
+                            {STATUS_OPTIONS.map((opt) => (
+                              <Button
+                                key={opt.value}
+                                size="sm"
+                                variant={draft[r.student_id] === opt.value ? "default" : "outline"}
+                                onClick={() => setDraft((d) => ({ ...d, [r.student_id]: opt.value }))}
+                              >
+                                {opt.label}
+                              </Button>
+                            ))}
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+              <div className="flex justify-end border-t border-border px-4 py-2.5">
                 <Button onClick={handleSubmit} disabled={pending}>
                   {pending ? "Submitting…" : `Submit register (${unmarked.length} students)`}
                 </Button>
               </div>
             </>
           ) : (
-            <p className="text-sm text-muted-foreground">Not yet marked. You don&apos;t have permission to mark it.</p>
+            <p className="px-4 py-3 text-sm text-muted-foreground">
+              Not yet marked. You don&apos;t have permission to mark it.
+            </p>
           )}
         </div>
       )}
 
       {marked.length > 0 && (
-        <div>
-          <h2 className="mb-2 text-sm font-medium">Already marked</h2>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Student</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead />
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {marked.map((r) => (
-                <TableRow key={r.student_id}>
-                  <TableCell className="font-medium">{r.full_name}</TableCell>
-                  <TableCell>
-                    <Badge dot variant={badgeVariant(r.existing!.status)}>
-                      {r.existing!.status}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    {canMark && (
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => {
-                          setEditTarget(r);
-                          setEditStatus(r.existing!.status);
-                          setEditReason("");
-                        }}
-                      >
-                        Correct
-                      </Button>
-                    )}
-                  </TableCell>
+        <div className="panel">
+          <header className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-2.5">
+            <h2 className="text-[0.8125rem] font-semibold">Already marked · {marked.length} learners</h2>
+            <div className="flex items-center gap-2">
+              <StatusBadge tone="success" label={`${presentCount} present`} />
+              <StatusBadge tone="danger" label={`${absentCount} absent`} />
+              <StatusBadge tone="warning" label={`${lateCount} late`} />
+            </div>
+          </header>
+          <div className="overflow-x-auto">
+            <Table className="table-dense">
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Student</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead />
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {marked.map((r) => (
+                  <TableRow key={r.student_id}>
+                    <TableCell className="font-medium">{r.full_name}</TableCell>
+                    <TableCell>
+                      <StatusBadge tone={statusTone(r.existing!.status)} label={r.existing!.status} />
+                    </TableCell>
+                    <TableCell>
+                      {canMark && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => {
+                            setEditTarget(r);
+                            setEditStatus(r.existing!.status);
+                            setEditReason("");
+                          }}
+                        >
+                          Correct
+                        </Button>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
         </div>
       )}
 

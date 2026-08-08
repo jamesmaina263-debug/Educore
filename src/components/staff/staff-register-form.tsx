@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Badge } from "@/components/ui/badge";
+import { StatusBadge } from "@/components/status-badge";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { submitStaffAttendance, editStaffAttendanceRecord } from "@/app/staff/actions";
@@ -26,7 +26,7 @@ const STATUS_OPTIONS: { value: Mark; label: string }[] = [
   { value: "half_day", label: "Half day" },
 ];
 
-function badgeVariant(status: Mark) {
+function statusTone(status: Mark) {
   if (status === "present") return "success";
   if (status === "late" || status === "half_day") return "warning";
   return "danger";
@@ -155,9 +155,7 @@ export function StaffRegisterForm({
                   <TableCell className="font-medium">{r.full_name}</TableCell>
                   <TableCell className="text-muted-foreground">{r.role_name}</TableCell>
                   <TableCell>
-                    <Badge dot variant={badgeVariant(r.existing!.status)}>
-                      {r.existing!.status.replace("_", " ")}
-                    </Badge>
+                    <StatusBadge tone={statusTone(r.existing!.status)} label={r.existing!.status.replace("_", " ")} />
                   </TableCell>
                   <TableCell>
                     {canMark && (

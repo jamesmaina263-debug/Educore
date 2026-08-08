@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Badge } from "@/components/ui/badge";
+import { StatusBadge } from "@/components/status-badge";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
@@ -237,61 +237,69 @@ export function ExamsSection({
       </div>
 
       {exams.length === 0 ? (
-        <p className="rounded-md border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
+        <div className="panel border-dashed p-6 text-center text-sm text-muted-foreground">
           No exams yet.
-        </p>
+        </div>
       ) : (
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Name</TableHead>
-              <TableHead>Term</TableHead>
-              <TableHead>Type</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead className="text-right">Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {exams.map((e) => (
-              <TableRow key={e.id}>
-                <TableCell className="font-medium">{e.name}</TableCell>
-                <TableCell>{e.term_name}</TableCell>
-                <TableCell className="uppercase">{e.exam_type}</TableCell>
-                <TableCell>
-                  <Badge variant={e.status === "open" ? "success" : "secondary"}>{e.status}</Badge>
-                </TableCell>
-                <TableCell className="flex justify-end gap-2">
-                  {e.status === "open" ? (
-                    <>
-                      <Button asChild size="sm" variant="outline">
-                        <Link href={`/exams/marks?exam=${e.id}`}>Enter marks</Link>
-                      </Button>
-                      {canWrite && (
-                        <Button size="sm" variant="ghost" disabled={pending} onClick={() => handleClose(e.id)}>
-                          Close exam
-                        </Button>
+        <div className="panel">
+          <header className="flex items-center justify-between border-b border-border px-4 py-2.5">
+            <h2 className="text-[0.8125rem] font-semibold">Exam schedule</h2>
+            <span className="text-[0.6875rem] text-muted-foreground">{exams.length} exams</span>
+          </header>
+          <div className="overflow-x-auto">
+            <Table className="table-dense">
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Term</TableHead>
+                  <TableHead>Type</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {exams.map((e) => (
+                  <TableRow key={e.id}>
+                    <TableCell className="font-medium">{e.name}</TableCell>
+                    <TableCell>{e.term_name}</TableCell>
+                    <TableCell className="uppercase">{e.exam_type}</TableCell>
+                    <TableCell>
+                      <StatusBadge tone={e.status === "open" ? "success" : "neutral"} label={e.status} />
+                    </TableCell>
+                    <TableCell className="flex justify-end gap-2">
+                      {e.status === "open" ? (
+                        <>
+                          <Button asChild size="sm" variant="outline">
+                            <Link href={`/exams/marks?exam=${e.id}`}>Enter marks</Link>
+                          </Button>
+                          {canWrite && (
+                            <Button size="sm" variant="ghost" disabled={pending} onClick={() => handleClose(e.id)}>
+                              Close exam
+                            </Button>
+                          )}
+                        </>
+                      ) : (
+                        <>
+                          <Button asChild size="sm" variant="outline">
+                            <Link href={`/exams/marks?exam=${e.id}`}>View marks</Link>
+                          </Button>
+                          <Button asChild size="sm" variant="outline">
+                            <Link href={`/exams/report-cards?exam=${e.id}`}>Report cards</Link>
+                          </Button>
+                          {canWrite && (
+                            <Button size="sm" variant="ghost" disabled={pending} onClick={() => handleReopen(e.id)}>
+                              Reopen
+                            </Button>
+                          )}
+                        </>
                       )}
-                    </>
-                  ) : (
-                    <>
-                      <Button asChild size="sm" variant="outline">
-                        <Link href={`/exams/marks?exam=${e.id}`}>View marks</Link>
-                      </Button>
-                      <Button asChild size="sm" variant="outline">
-                        <Link href={`/exams/report-cards?exam=${e.id}`}>Report cards</Link>
-                      </Button>
-                      {canWrite && (
-                        <Button size="sm" variant="ghost" disabled={pending} onClick={() => handleReopen(e.id)}>
-                          Reopen
-                        </Button>
-                      )}
-                    </>
-                  )}
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        </div>
       )}
     </div>
   );

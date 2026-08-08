@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Badge } from "@/components/ui/badge";
+import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -43,9 +43,9 @@ export type SchoolBillingRow = {
 
 type PlanOption = { id: string; code: string; name: string; price_per_student_kes: number };
 
-const STATUS_TONE: Record<string, "default" | "success" | "warning" | "danger"> = {
-  trial: "default",
-  trialing: "default",
+const STATUS_TONE: Record<string, "neutral" | "success" | "warning" | "danger"> = {
+  trial: "neutral",
+  trialing: "neutral",
   active: "success",
   past_due: "warning",
   suspended: "danger",
@@ -53,7 +53,7 @@ const STATUS_TONE: Record<string, "default" | "success" | "warning" | "danger"> 
 };
 
 function toneFor(status: string | null) {
-  return status ? STATUS_TONE[status] ?? "default" : "default";
+  return status ? STATUS_TONE[status] ?? "neutral" : "neutral";
 }
 
 export function AdminBillingTable({ rows, plans }: { rows: SchoolBillingRow[]; plans: PlanOption[] }) {
@@ -98,12 +98,13 @@ export function AdminBillingTable({ rows, plans }: { rows: SchoolBillingRow[]; p
               <TableRow key={row.school_id}>
                 <TableCell className="font-medium">{row.school_name}</TableCell>
                 <TableCell>
-                  <Badge variant={toneFor(row.school_status)}>{row.school_status}</Badge>
+                  <StatusBadge tone={toneFor(row.school_status)} label={row.school_status ?? "—"} />
                 </TableCell>
                 <TableCell>
-                  <Badge variant={toneFor(row.subscription_status)}>
-                    {row.subscription_status ?? "no subscription"}
-                  </Badge>
+                  <StatusBadge
+                    tone={toneFor(row.subscription_status)}
+                    label={row.subscription_status ?? "no subscription"}
+                  />
                 </TableCell>
                 <TableCell>
                   {row.trial_ends_at
@@ -254,9 +255,10 @@ export function AdminBillingTable({ rows, plans }: { rows: SchoolBillingRow[]; p
                                 </TableCell>
                                 <TableCell>{inv.amount_kes.toLocaleString()}</TableCell>
                                 <TableCell>
-                                  <Badge variant={inv.status === "paid" ? "success" : inv.status === "overdue" ? "danger" : "default"}>
-                                    {inv.status}
-                                  </Badge>
+                                  <StatusBadge
+                                    tone={inv.status === "paid" ? "success" : inv.status === "overdue" ? "danger" : "neutral"}
+                                    label={inv.status}
+                                  />
                                 </TableCell>
                                 <TableCell>{new Date(inv.due_at).toLocaleDateString()}</TableCell>
                                 <TableCell>

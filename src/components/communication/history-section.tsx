@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { StatusBadge } from "@/components/status-badge";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { dispatchPending } from "@/app/communication/actions";
 
@@ -82,12 +83,11 @@ export function HistorySection({ logs }: { logs: LogRow[] }) {
                   {l.body}
                 </TableCell>
                 <TableCell>
-                  <Badge
-                    variant={l.status === "sent" || l.status === "delivered" ? "success" : l.status === "failed" ? "danger" : "secondary"}
+                  <StatusBadge
+                    tone={l.status === "sent" || l.status === "delivered" ? "success" : l.status === "failed" ? "danger" : "neutral"}
+                    label={l.status}
                     title={l.provider_response ?? undefined}
-                  >
-                    {l.status}
-                  </Badge>
+                  />
                 </TableCell>
                 <TableCell>{new Date(l.created_at).toLocaleString()}</TableCell>
               </TableRow>

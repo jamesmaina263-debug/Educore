@@ -52,15 +52,16 @@ export function BalancesSection({ rows, canWrite }: { rows: BalanceRow[]; canWri
 
   if (rows.length === 0) {
     return (
-      <p className="rounded-md border border-dashed border-border p-10 text-center text-sm text-muted-foreground">
+      <div className="panel border-dashed p-10 text-center text-sm text-muted-foreground">
         No invoices generated yet — balances appear once invoices exist.
-      </p>
+      </div>
     );
   }
 
   return (
     <div className="flex flex-col gap-4">
-      <Table>
+      <div className="panel overflow-x-auto">
+        <Table className="table-dense">
         <TableHeader>
           <TableRow>
             <TableHead>Student</TableHead>
@@ -77,10 +78,10 @@ export function BalancesSection({ rows, canWrite }: { rows: BalanceRow[]; canWri
             <TableRow key={r.student_id}>
               <TableCell className="font-medium">{r.full_name}</TableCell>
               <TableCell>{r.class_name}</TableCell>
-              <TableCell>{r.total_invoiced.toLocaleString()}</TableCell>
-              <TableCell>{r.total_discounted.toLocaleString()}</TableCell>
-              <TableCell>{r.total_paid.toLocaleString()}</TableCell>
-              <TableCell className={r.balance > 0 ? "font-medium text-danger" : "text-success"}>
+              <TableCell data-numeric>{r.total_invoiced.toLocaleString()}</TableCell>
+              <TableCell data-numeric>{r.total_discounted.toLocaleString()}</TableCell>
+              <TableCell data-numeric>{r.total_paid.toLocaleString()}</TableCell>
+              <TableCell className={r.balance > 0 ? "font-medium text-danger" : "text-success"} data-numeric>
                 {r.balance.toLocaleString()}
               </TableCell>
               {canWrite && (
@@ -94,6 +95,7 @@ export function BalancesSection({ rows, canWrite }: { rows: BalanceRow[]; canWri
           ))}
         </TableBody>
       </Table>
+      </div>
 
       <Dialog open={!!target} onOpenChange={(o) => !o && setTarget(null)}>
         <DialogContent>

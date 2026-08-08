@@ -38,7 +38,7 @@ export function BrandingForm({ initial, canWrite }: { initial: BrandingData; can
   }
 
   return (
-    <div className="max-w-md space-y-4">
+    <div className="panel max-w-md space-y-4 p-5">
       <div className="space-y-1.5">
         <Label htmlFor="school_name">School name</Label>
         <Input

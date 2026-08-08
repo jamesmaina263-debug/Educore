@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { StatusBadge } from "@/components/status-badge";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
@@ -222,9 +223,10 @@ export function HostelSection({
                   <TableCell>{r.block ?? "—"}</TableCell>
                   <TableCell className="capitalize">{r.gender}</TableCell>
                   <TableCell>
-                    <Badge variant={r.occupied >= r.capacity ? "warning" : "secondary"}>
-                      {r.occupied} / {r.capacity}
-                    </Badge>
+                    <StatusBadge
+                      tone={r.occupied >= r.capacity ? "warning" : "neutral"}
+                      label={`${r.occupied} / ${r.capacity}`}
+                    />
                   </TableCell>
                 </TableRow>
               ))}
@@ -255,7 +257,7 @@ export function HostelSection({
                   <TableCell>{a.room_label}</TableCell>
                   <TableCell>{a.start_date}</TableCell>
                   <TableCell>
-                    <Badge variant={a.status === "active" ? "success" : "secondary"}>{a.status}</Badge>
+                    <StatusBadge tone={a.status === "active" ? "success" : "neutral"} label={a.status} />
                   </TableCell>
                   <TableCell className="text-right">
                     {canWrite && a.status === "active" && (

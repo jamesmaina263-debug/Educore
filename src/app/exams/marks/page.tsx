@@ -167,9 +167,9 @@ export default async function MarksPage({
         </div>
 
         {!selectedClassId || !selectedSubjectId ? (
-          <p className="rounded-md border border-dashed border-border p-10 text-center text-sm text-muted-foreground">
+          <div className="panel border-dashed p-10 text-center text-sm text-muted-foreground">
             This exam has no classes or subjects configured yet.
-          </p>
+          </div>
         ) : (
           <MarksEntryForm
             examId={examId}

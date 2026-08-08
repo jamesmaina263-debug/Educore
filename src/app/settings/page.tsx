@@ -115,7 +115,7 @@ export default async function SettingsPage() {
           <TabsContent value="staff">
             <div className="flex flex-col gap-3">
               <div className="flex items-center justify-between">
-                <p className="text-sm text-muted-foreground">{staff.length} staff</p>
+                <p className="label-eyebrow">{staff.length} staff</p>
                 {canManageStaff === true && <InviteStaffDialog roles={roles} />}
               </div>
               <StaffRolesTable

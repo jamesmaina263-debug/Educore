@@ -1,4 +1,4 @@
-import { Badge } from "@/components/ui/badge";
+import { StatusBadge } from "@/components/status-badge";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 
 export interface InvoiceListRow {
@@ -13,14 +13,15 @@ export interface InvoiceListRow {
 export function InvoicesSection({ invoices }: { invoices: InvoiceListRow[] }) {
   if (invoices.length === 0) {
     return (
-      <p className="rounded-md border border-dashed border-border p-10 text-center text-sm text-muted-foreground">
+      <div className="panel border-dashed p-10 text-center text-sm text-muted-foreground">
         No invoices generated yet — create a fee structure and generate invoices first.
-      </p>
+      </div>
     );
   }
 
   return (
-    <Table>
+    <div className="panel overflow-x-auto">
+    <Table className="table-dense">
       <TableHeader>
         <TableRow>
           <TableHead>Student</TableHead>
@@ -38,13 +39,15 @@ export function InvoicesSection({ invoices }: { invoices: InvoiceListRow[] }) {
             <TableCell>{inv.term_name}</TableCell>
             <TableCell>{inv.total_amount.toLocaleString()}</TableCell>
             <TableCell>
-              <Badge variant={inv.status === "paid" ? "success" : inv.status === "partially_paid" ? "info" : "secondary"}>
-                {inv.status.replace("_", " ")}
-              </Badge>
+              <StatusBadge
+                tone={inv.status === "paid" ? "success" : inv.status === "partially_paid" ? "info" : "neutral"}
+                label={inv.status.replace("_", " ")}
+              />
             </TableCell>
           </TableRow>
         ))}
       </TableBody>
     </Table>
+    </div>
   );
 }

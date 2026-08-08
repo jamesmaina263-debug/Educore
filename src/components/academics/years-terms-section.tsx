@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
+import { StatusBadge } from "@/components/status-badge";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import {
   Dialog,
@@ -35,8 +35,8 @@ export interface TermRow {
   status: string;
 }
 
-function statusVariant(status: string) {
-  return status === "active" ? "success" : status === "closed" ? "secondary" : "secondary";
+function statusTone(status: string) {
+  return status === "active" ? "success" : "neutral";
 }
 
 export function YearsTermsSection({
@@ -172,9 +172,7 @@ export function YearsTermsSection({
                   <TableCell>{y.start_date}</TableCell>
                   <TableCell>{y.end_date}</TableCell>
                   <TableCell>
-                    <Badge dot variant={statusVariant(y.status)}>
-                      {y.status}
-                    </Badge>
+                    <StatusBadge tone={statusTone(y.status)} label={y.status} />
                   </TableCell>
                   <TableCell>
                     {canWrite && y.status !== "active" && (
@@ -278,9 +276,7 @@ export function YearsTermsSection({
                             {t.name} · {t.start_date} – {t.end_date}
                           </span>
                           <span className="flex items-center gap-2">
-                            <Badge dot variant={statusVariant(t.status)}>
-                              {t.status}
-                            </Badge>
+                            <StatusBadge tone={statusTone(t.status)} label={t.status} />
                             {canWrite && t.status !== "active" && (
                               <Button
                                 size="sm"

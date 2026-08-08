@@ -72,7 +72,7 @@ export default async function StudentsPage() {
         </div>
 
         {rows.length === 0 ? (
-          <div className="rounded-md border border-dashed border-border p-10 text-center text-sm text-muted-foreground">
+          <div className="panel border-dashed p-10 text-center text-sm text-muted-foreground">
             No students in this school yet.
           </div>
         ) : (

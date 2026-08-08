@@ -22,8 +22,8 @@ export function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
             className={cn(
               "flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-sm font-medium transition-colors",
               active
-                ? "bg-primary/10 text-primary"
-                : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                ? "bg-sidebar-primary/10 text-sidebar-primary"
+                : "text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
             )}
           >
             <Icon className="size-4 shrink-0" />

@@ -1,7 +1,7 @@
 "use client";
 
 import { type ColumnDef } from "@tanstack/react-table";
-import { Badge } from "@/components/ui/badge";
+import { StatusBadge } from "@/components/status-badge";
 import { DataTable } from "@/components/ui/data-table";
 
 export interface StaffRow {
@@ -21,12 +21,10 @@ const columns: ColumnDef<StaffRow>[] = [
     cell: ({ row }) => {
       const status = row.getValue<string>("status");
       return (
-        <Badge
-          dot
-          variant={status === "active" ? "success" : status === "suspended" ? "danger" : "secondary"}
-        >
-          {status}
-        </Badge>
+        <StatusBadge
+          tone={status === "active" ? "success" : status === "suspended" ? "danger" : "neutral"}
+          label={status}
+        />
       );
     },
   },

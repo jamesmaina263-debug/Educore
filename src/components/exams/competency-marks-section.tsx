@@ -169,13 +169,13 @@ export function CompetencyMarksSection({
       )}
 
       {subStrandList.length === 0 ? (
-        <p className="rounded-md border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
+        <div className="panel border-dashed p-6 text-center text-sm text-muted-foreground">
           No strands/sub-strands defined for this subject yet.
-        </p>
+        </div>
       ) : (
         <>
-          <div className="overflow-x-auto">
-            <Table>
+          <div className="panel overflow-x-auto">
+            <Table className="table-dense">
               <TableHeader>
                 <TableRow>
                   <TableHead>Student</TableHead>
@@ -215,11 +215,11 @@ export function CompetencyMarksSection({
                     })}
                   </TableRow>
                 ))}
-              </TableBody>
+            </TableBody>
             </Table>
           </div>
           {canEnter && (
-            <Button disabled={pending} onClick={handleSave} className="w-fit">
+            <Button disabled={pending} onClick={handleSave} className="mt-3 w-fit">
               {pending ? "Saving…" : "Save competency marks"}
             </Button>
           )}

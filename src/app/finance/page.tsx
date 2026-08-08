@@ -42,9 +42,9 @@ export default async function FinancePage() {
         userRole={roleName}
         onSignOut={logout}
       >
-        <p className="rounded-md border border-dashed border-border p-10 text-center text-sm text-muted-foreground">
+        <div className="panel border-dashed p-10 text-center text-sm text-muted-foreground">
           You don&apos;t have access to Finance.
-        </p>
+        </div>
       </AppShell>
     );
   }
@@ -186,6 +186,11 @@ export default async function FinancePage() {
       balance: Number(b.balance),
     }));
 
+  const totalInvoiced = balanceRows.reduce((sum, b) => sum + b.total_invoiced, 0);
+  const totalCollected = balanceRows.reduce((sum, b) => sum + b.total_paid, 0);
+  const totalOutstanding = balanceRows.reduce((sum, b) => sum + b.balance, 0);
+  const kes = (n: number) => `KES ${Math.round(n).toLocaleString()}`;
+
   return (
     <AppShell
       breadcrumbs={[{ label: school?.name ?? "EduCore", href: "/dashboard" }, { label: "Finance" }]}
@@ -197,6 +202,27 @@ export default async function FinancePage() {
         <div>
           <h1 className="text-lg font-semibold">Finance</h1>
           <p className="text-sm text-muted-foreground">Fee structures, invoices, payments, balances, discounts and expenses</p>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3 xl:grid-cols-3">
+          <div className="panel px-4 py-3">
+            <p className="label-eyebrow">Invoiced</p>
+            <p className="mt-1 text-xl font-semibold tracking-tight" data-numeric>
+              {kes(totalInvoiced)}
+            </p>
+          </div>
+          <div className="panel px-4 py-3">
+            <p className="label-eyebrow">Collected</p>
+            <p className="mt-1 text-xl font-semibold tracking-tight" data-numeric>
+              {kes(totalCollected)}
+            </p>
+          </div>
+          <div className="panel px-4 py-3">
+            <p className="label-eyebrow">Outstanding</p>
+            <p className="mt-1 text-xl font-semibold tracking-tight text-destructive" data-numeric>
+              {kes(totalOutstanding)}
+            </p>
+          </div>
         </div>
 
         <Tabs defaultValue="balances">
