@@ -12,6 +12,7 @@ export interface GroupBrandingData {
   logo_url: string | null;
   primary_color: string | null;
   custom_domain: string | null;
+  custom_domain_status: "pending" | "verified";
   whitelabel_enabled: boolean;
 }
 
@@ -84,16 +85,23 @@ export function GroupBrandingForm({ initial }: { initial: GroupBrandingData }) {
       </div>
       <div className="space-y-1.5">
         <Label htmlFor="custom_domain">Custom domain</Label>
-        <Input
-          id="custom_domain"
-          placeholder="portal.yourschoolgroup.ac.ke"
-          value={form.custom_domain}
-          onChange={(e) => setForm({ ...form, custom_domain: e.target.value })}
-        />
+        <div className="flex items-center gap-2">
+          <Input
+            id="custom_domain"
+            placeholder="portal.yourschoolgroup.ac.ke"
+            value={form.custom_domain}
+            onChange={(e) => setForm({ ...form, custom_domain: e.target.value })}
+          />
+          {initial.custom_domain && (
+            <Badge variant={initial.custom_domain_status === "verified" ? "default" : "secondary"}>
+              {initial.custom_domain_status === "verified" ? "Verified" : "Pending verification"}
+            </Badge>
+          )}
+        </div>
         <p className="text-xs text-muted-foreground">
           Saving a domain here records your request — Trimora still needs to verify DNS
-          ownership and attach it on our side before it goes live. This is a manual step for
-          now, not an automated check.
+          ownership and attach it on our side before it goes live. Changing the domain resets
+          verification, since a new domain string means starting the ownership check over.
         </p>
       </div>
 

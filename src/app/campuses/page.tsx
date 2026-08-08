@@ -37,7 +37,7 @@ export default async function CampusesPage() {
       supabase.rpc("group_schools_summary"),
       supabase
         .from("school_groups")
-        .select("logo_url, primary_color, custom_domain, whitelabel_enabled")
+        .select("logo_url, primary_color, custom_domain, custom_domain_status, whitelabel_enabled")
         .eq("id", groupId)
         .maybeSingle(),
       supabase.rpc("auth_has_permission", { p_permission_key: "api.manage" }),
@@ -49,6 +49,7 @@ export default async function CampusesPage() {
           logo_url: group.logo_url,
           primary_color: group.primary_color,
           custom_domain: group.custom_domain,
+          custom_domain_status: group.custom_domain_status,
           whitelabel_enabled: group.whitelabel_enabled,
         }
       : null;
