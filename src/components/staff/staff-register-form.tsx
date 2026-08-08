@@ -78,11 +78,15 @@ export function StaffRegisterForm({
     router.refresh();
   }
 
+  const presentCount = marked.filter((r) => r.existing!.status === "present").length;
+  const absentCount = marked.filter((r) => r.existing!.status === "absent").length;
+  const otherCount = marked.length - presentCount - absentCount;
+
   if (roster.length === 0) {
     return (
-      <p className="rounded-md border border-dashed border-border p-10 text-center text-sm text-muted-foreground">
+      <div className="panel border-dashed p-10 text-center text-sm text-muted-foreground">
         No active staff found.
-      </p>
+      </div>
     );
   }
 
@@ -91,91 +95,107 @@ export function StaffRegisterForm({
       {error && <p className="text-sm text-danger">{error}</p>}
 
       {unmarked.length > 0 && (
-        <div>
+        <div className="panel">
+          <header className="border-b border-border px-4 py-2.5">
+            <h2 className="text-[0.8125rem] font-semibold">To mark · {unmarked.length} staff</h2>
+          </header>
           {canMark ? (
             <>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Staff</TableHead>
-                    <TableHead>Role</TableHead>
-                    <TableHead>Mark</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {unmarked.map((r) => (
-                    <TableRow key={r.staff_id}>
-                      <TableCell className="font-medium">{r.full_name}</TableCell>
-                      <TableCell className="text-muted-foreground">{r.role_name}</TableCell>
-                      <TableCell>
-                        <div className="flex flex-wrap gap-1.5">
-                          {STATUS_OPTIONS.map((opt) => (
-                            <Button
-                              key={opt.value}
-                              size="sm"
-                              variant={draft[r.staff_id] === opt.value ? "default" : "outline"}
-                              onClick={() => setDraft((d) => ({ ...d, [r.staff_id]: opt.value }))}
-                            >
-                              {opt.label}
-                            </Button>
-                          ))}
-                        </div>
-                      </TableCell>
+              <div className="overflow-x-auto">
+                <Table className="table-dense">
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Staff</TableHead>
+                      <TableHead>Role</TableHead>
+                      <TableHead>Mark</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-              <div className="mt-3 flex justify-end">
+                  </TableHeader>
+                  <TableBody>
+                    {unmarked.map((r) => (
+                      <TableRow key={r.staff_id}>
+                        <TableCell className="font-medium">{r.full_name}</TableCell>
+                        <TableCell className="text-muted-foreground">{r.role_name}</TableCell>
+                        <TableCell>
+                          <div className="flex flex-wrap gap-1.5">
+                            {STATUS_OPTIONS.map((opt) => (
+                              <Button
+                                key={opt.value}
+                                size="sm"
+                                variant={draft[r.staff_id] === opt.value ? "default" : "outline"}
+                                onClick={() => setDraft((d) => ({ ...d, [r.staff_id]: opt.value }))}
+                              >
+                                {opt.label}
+                              </Button>
+                            ))}
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+              <div className="flex justify-end border-t border-border px-4 py-2.5">
                 <Button onClick={handleSubmit} disabled={pending}>
                   {pending ? "Submitting…" : `Submit register (${unmarked.length} staff)`}
                 </Button>
               </div>
             </>
           ) : (
-            <p className="text-sm text-muted-foreground">Not yet marked. You don&apos;t have permission to mark it.</p>
+            <p className="px-4 py-3 text-sm text-muted-foreground">
+              Not yet marked. You don&apos;t have permission to mark it.
+            </p>
           )}
         </div>
       )}
 
       {marked.length > 0 && (
-        <div>
-          <h2 className="mb-2 text-sm font-medium">Already marked</h2>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Staff</TableHead>
-                <TableHead>Role</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead />
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {marked.map((r) => (
-                <TableRow key={r.staff_id}>
-                  <TableCell className="font-medium">{r.full_name}</TableCell>
-                  <TableCell className="text-muted-foreground">{r.role_name}</TableCell>
-                  <TableCell>
-                    <StatusBadge tone={statusTone(r.existing!.status)} label={r.existing!.status.replace("_", " ")} />
-                  </TableCell>
-                  <TableCell>
-                    {canMark && (
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => {
-                          setEditTarget(r);
-                          setEditStatus(r.existing!.status);
-                          setEditReason("");
-                        }}
-                      >
-                        Correct
-                      </Button>
-                    )}
-                  </TableCell>
+        <div className="panel">
+          <header className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-2.5">
+            <h2 className="text-[0.8125rem] font-semibold">Already marked · {marked.length} staff</h2>
+            <div className="flex items-center gap-2">
+              <StatusBadge tone="success" label={`${presentCount} present`} />
+              <StatusBadge tone="danger" label={`${absentCount} absent`} />
+              {otherCount > 0 && <StatusBadge tone="warning" label={`${otherCount} other`} />}
+            </div>
+          </header>
+          <div className="overflow-x-auto">
+            <Table className="table-dense">
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Staff</TableHead>
+                  <TableHead>Role</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead />
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {marked.map((r) => (
+                  <TableRow key={r.staff_id}>
+                    <TableCell className="font-medium">{r.full_name}</TableCell>
+                    <TableCell className="text-muted-foreground">{r.role_name}</TableCell>
+                    <TableCell>
+                      <StatusBadge tone={statusTone(r.existing!.status)} label={r.existing!.status.replace("_", " ")} />
+                    </TableCell>
+                    <TableCell>
+                      {canMark && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => {
+                            setEditTarget(r);
+                            setEditStatus(r.existing!.status);
+                            setEditReason("");
+                          }}
+                        >
+                          Correct
+                        </Button>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
         </div>
       )}
 
