@@ -111,3 +111,49 @@ export async function setStaffStatus(
   revalidatePath("/settings");
   return { success: true };
 }
+
+// School-scoped API keys (Phase 5 Item 3). issue_api_key() itself re-checks api.manage and
+// school scope server-side — the RPC is the actual gate, this is just a clean error path.
+type IssueApiKeyResult = { error: string } | { success: true; raw_key: string; key_prefix: string };
+
+export async function issueSchoolApiKey(input: {
+  name: string;
+  scopes: string[];
+}): Promise<IssueApiKeyResult> {
+  const supabase = await createClient();
+  const { data: schoolId, error: schoolIdError } = await supabase.rpc("auth_school_id");
+  if (schoolIdError || !schoolId) return { error: "Could not resolve your school." };
+
+  const { data, error } = await supabase
+    .rpc("issue_api_key", {
+      p_name: input.name,
+      p_scopes: input.scopes,
+      p_school_id: schoolId,
+      p_school_group_id: null,
+      p_expires_at: null,
+    })
+    .single();
+
+  if (error || !data) return { error: error?.message ?? "Could not create the API key." };
+  const issued = data as { id: string; raw_key: string; key_prefix: string };
+
+  revalidatePath("/settings");
+  return { success: true, raw_key: issued.raw_key, key_prefix: issued.key_prefix };
+}
+
+export async function revokeSchoolApiKey(id: string): Promise<ActionResult> {
+  const supabase = await createClient();
+  const { data: schoolUser } = await supabase
+    .from("school_users")
+    .select("id")
+    .eq("auth_user_id", (await supabase.auth.getUser()).data.user?.id ?? "")
+    .maybeSingle();
+
+  const { error } = await supabase
+    .from("api_keys")
+    .update({ status: "revoked", revoked_at: new Date().toISOString(), revoked_by: schoolUser?.id })
+    .eq("id", id);
+  if (error) return { error: error.message };
+  revalidatePath("/settings");
+  return { success: true };
+}

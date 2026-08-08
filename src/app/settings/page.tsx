@@ -9,6 +9,8 @@ import { InviteStaffDialog } from "@/components/settings/invite-staff-dialog";
 import { BillingPanel, type BillingData } from "@/components/settings/billing-panel";
 import { NotificationPreferencesPanel } from "@/components/notifications/preferences-panel";
 import { getMyNotificationPreferences } from "@/app/notifications/actions";
+import { ApiKeysPanel, type ApiKeyRow } from "@/components/settings/api-keys-panel";
+import { issueSchoolApiKey, revokeSchoolApiKey } from "@/app/settings/actions";
 
 export default async function SettingsPage() {
   const supabase = await createClient();
@@ -18,17 +20,23 @@ export default async function SettingsPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const [{ data: schoolUser }, { data: canWriteBranding }, { data: canManageStaff }, { data: canReadBilling }] =
-    await Promise.all([
-      supabase
-        .from("school_users")
-        .select("id, full_name, roles(display_name), schools(id, name, motto, logo_url, primary_color)")
-        .eq("auth_user_id", user.id)
-        .maybeSingle(),
-      supabase.rpc("auth_has_permission", { p_permission_key: "settings.branding.write" }),
-      supabase.rpc("auth_has_permission", { p_permission_key: "staff.manage" }),
-      supabase.rpc("auth_has_permission", { p_permission_key: "billing.read" }),
-    ]);
+  const [
+    { data: schoolUser },
+    { data: canWriteBranding },
+    { data: canManageStaff },
+    { data: canReadBilling },
+    { data: canManageApiKeys },
+  ] = await Promise.all([
+    supabase
+      .from("school_users")
+      .select("id, full_name, roles(display_name), schools(id, name, motto, logo_url, primary_color)")
+      .eq("auth_user_id", user.id)
+      .maybeSingle(),
+    supabase.rpc("auth_has_permission", { p_permission_key: "settings.branding.write" }),
+    supabase.rpc("auth_has_permission", { p_permission_key: "staff.manage" }),
+    supabase.rpc("auth_has_permission", { p_permission_key: "billing.read" }),
+    supabase.rpc("auth_has_permission", { p_permission_key: "api.manage" }),
+  ]);
 
   const roleName = (schoolUser?.roles as unknown as { display_name: string } | null)?.display_name;
   const school = schoolUser?.schools as unknown as {
@@ -86,6 +94,18 @@ export default async function SettingsPage() {
   const prefsResult = await getMyNotificationPreferences();
   const preferenceRows = "success" in prefsResult ? prefsResult.rows : [];
 
+  let apiKeyRows: ApiKeyRow[] = [];
+  if (canManageApiKeys === true) {
+    // RLS on api_keys already scopes this to the caller's own school (or group, for a
+    // group_admin, though this page is the school-scoped surface — see /campuses for that).
+    const { data } = await supabase
+      .from("api_keys")
+      .select("id, name, key_prefix, scopes, status, last_used_at, expires_at, created_at")
+      .is("school_group_id", null)
+      .order("created_at", { ascending: false });
+    apiKeyRows = (data ?? []) as ApiKeyRow[];
+  }
+
   const brandingData: BrandingData = {
     name: school?.name ?? "",
     motto: school?.motto ?? null,
@@ -112,6 +132,7 @@ export default async function SettingsPage() {
             <TabsTrigger value="staff">Users &amp; Roles</TabsTrigger>
             {billingData && <TabsTrigger value="billing">Billing</TabsTrigger>}
             <TabsTrigger value="notifications">Notifications</TabsTrigger>
+            {canManageApiKeys === true && <TabsTrigger value="api-keys">API Keys</TabsTrigger>}
           </TabsList>
 
           <TabsContent value="branding">
@@ -142,6 +163,17 @@ export default async function SettingsPage() {
           <TabsContent value="notifications">
             <NotificationPreferencesPanel initialRows={preferenceRows} />
           </TabsContent>
+
+          {canManageApiKeys === true && (
+            <TabsContent value="api-keys">
+              <ApiKeysPanel
+                rows={apiKeyRows}
+                canManage
+                issueAction={issueSchoolApiKey}
+                revokeAction={revokeSchoolApiKey}
+              />
+            </TabsContent>
+          )}
         </Tabs>
       </div>
     </AppShell>
