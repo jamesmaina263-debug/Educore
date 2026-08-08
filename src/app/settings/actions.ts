@@ -10,6 +10,7 @@ type InviteResult = { error: string } | { success: true; temporaryPassword: stri
 
 export async function updateBranding(input: {
   name: string;
+  email?: string;
   motto?: string;
   logo_url?: string;
   primary_color?: string;
@@ -22,6 +23,7 @@ export async function updateBranding(input: {
     .from("schools")
     .update({
       name: input.name,
+      email: input.email || null,
       motto: input.motto || null,
       logo_url: input.logo_url || null,
       primary_color: input.primary_color || null,

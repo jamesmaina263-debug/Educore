@@ -4,6 +4,7 @@ import { logout } from "@/app/login/actions";
 import { AppShell } from "@/components/app-shell/app-shell";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { BrandingForm, type BrandingData } from "@/components/settings/branding-form";
+import { GeneralSettingsPanel, type GeneralSettingsData } from "@/components/settings/general-panel";
 import { StaffRolesTable, type StaffRow, type RoleOption } from "@/components/settings/staff-roles-table";
 import { InviteStaffDialog } from "@/components/settings/invite-staff-dialog";
 import { BillingPanel, type BillingData } from "@/components/settings/billing-panel";
@@ -29,7 +30,7 @@ export default async function SettingsPage() {
   ] = await Promise.all([
     supabase
       .from("school_users")
-      .select("id, full_name, roles(display_name), schools(id, name, motto, logo_url, primary_color)")
+      .select("id, full_name, roles(display_name), schools(id, name, email, motto, logo_url, primary_color)")
       .eq("auth_user_id", user.id)
       .maybeSingle(),
     supabase.rpc("auth_has_permission", { p_permission_key: "settings.branding.write" }),
@@ -42,6 +43,7 @@ export default async function SettingsPage() {
   const school = schoolUser?.schools as unknown as {
     id: string;
     name: string;
+    email: string | null;
     motto: string | null;
     logo_url: string | null;
     primary_color: string | null;
@@ -113,9 +115,36 @@ export default async function SettingsPage() {
     primary_color: school?.primary_color ?? null,
   };
 
+  const { data: activeYear } = await supabase.from("academic_years").select("id, name").eq("status", "active").maybeSingle();
+  const { data: yearTerms } = activeYear
+    ? await supabase
+        .from("terms")
+        .select("id, name, status, start_date, end_date")
+        .eq("academic_year_id", activeYear.id)
+        .order("term_number")
+    : { data: [] };
+
+  const generalData: GeneralSettingsData = {
+    name: school?.name ?? "",
+    email: school?.email ?? "",
+    academic_year_id: activeYear?.id ?? null,
+    academic_year_name: activeYear?.name ?? null,
+    terms: (yearTerms ?? []).map((t) => ({
+      id: t.id,
+      name: t.name,
+      status: t.status as "active" | "closed" | "upcoming",
+      start_date: t.start_date,
+      end_date: t.end_date,
+    })),
+  };
+
   return (
     <AppShell
-      breadcrumbs={[{ label: school?.name ?? "EduCore", href: "/dashboard" }, { label: "Settings" }]}
+      breadcrumbs={[
+        { label: school?.name ?? "EduCore", href: "/dashboard" },
+        { label: "Settings" },
+        { label: "School profile" },
+      ]}
       userName={schoolUser?.full_name ?? user.email ?? "Account"}
       userRole={roleName}
       onSignOut={logout}
@@ -123,17 +152,22 @@ export default async function SettingsPage() {
       <div className="flex flex-col gap-4">
         <div>
           <h1 className="text-lg font-semibold">Settings</h1>
-          <p className="text-sm text-muted-foreground">Branding and staff administration</p>
+          <p className="text-sm text-muted-foreground">Applies to all users in this school</p>
         </div>
 
-        <Tabs defaultValue="branding">
+        <Tabs defaultValue="general">
           <TabsList>
+            <TabsTrigger value="general">General</TabsTrigger>
             <TabsTrigger value="branding">Branding</TabsTrigger>
             <TabsTrigger value="staff">Users &amp; Roles</TabsTrigger>
             {billingData && <TabsTrigger value="billing">Billing</TabsTrigger>}
             <TabsTrigger value="notifications">Notifications</TabsTrigger>
             {canManageApiKeys === true && <TabsTrigger value="api-keys">API Keys</TabsTrigger>}
           </TabsList>
+
+          <TabsContent value="general">
+            <GeneralSettingsPanel initial={generalData} canWrite={canWriteBranding === true} />
+          </TabsContent>
 
           <TabsContent value="branding">
             <BrandingForm initial={brandingData} canWrite={canWriteBranding === true} />
