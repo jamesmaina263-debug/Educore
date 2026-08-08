@@ -205,9 +205,9 @@ export function TimetableSection({
       {error && !open && <p className="text-sm text-danger">{error}</p>}
 
       {!streamId ? (
-        <p className="rounded-md border border-dashed border-border p-10 text-center text-sm text-muted-foreground">
+        <div className="panel border-dashed p-10 text-center text-sm text-muted-foreground">
           No streams available. Create a class and stream first.
-        </p>
+        </div>
       ) : (
         <div className="grid grid-cols-5 gap-3">
           {DAYS.map((d) => {
@@ -216,12 +216,12 @@ export function TimetableSection({
               .sort((a, b) => a.period_number - b.period_number);
             return (
               <div key={d.value} className="flex flex-col gap-2">
-                <p className="text-sm font-semibold">{d.label}</p>
+                <p className="label-eyebrow">{d.label}</p>
                 {daySlots.length === 0 ? (
                   <p className="text-xs text-muted-foreground">No classes</p>
                 ) : (
                   daySlots.map((s) => (
-                    <div key={s.id} className="rounded-md border border-border p-2 text-xs">
+                    <div key={s.id} className="panel p-2 text-xs">
                       <p className="font-medium">{subjectNameById.get(s.subject_id) ?? ""}</p>
                       <p className="text-muted-foreground">
                         {s.start_time.slice(0, 5)}–{s.end_time.slice(0, 5)}

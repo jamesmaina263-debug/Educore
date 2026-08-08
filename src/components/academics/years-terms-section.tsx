@@ -151,11 +151,12 @@ export function YearsTermsSection({
         </div>
 
         {years.length === 0 ? (
-          <p className="rounded-md border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
+          <div className="panel border-dashed p-6 text-center text-sm text-muted-foreground">
             No academic years yet.
-          </p>
+          </div>
         ) : (
-          <Table>
+          <div className="panel overflow-x-auto">
+          <Table className="table-dense">
             <TableHeader>
               <TableRow>
                 <TableHead>Name</TableHead>
@@ -185,6 +186,7 @@ export function YearsTermsSection({
               ))}
             </TableBody>
           </Table>
+          </div>
         )}
       </div>
 
@@ -197,7 +199,7 @@ export function YearsTermsSection({
             {years.map((y) => {
               const yearTerms = terms.filter((t) => t.academic_year_id === y.id);
               return (
-                <div key={y.id} className="rounded-md border border-border p-4">
+                <div key={y.id} className="panel p-4">
                   <div className="mb-2 flex items-center justify-between">
                     <p className="text-sm font-medium">{y.name}</p>
                     {canWrite && (

@@ -98,11 +98,12 @@ export function SubjectsSection({ subjects, canWrite }: { subjects: SubjectRow[]
       </div>
 
       {subjects.length === 0 ? (
-        <p className="rounded-md border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
+        <div className="panel border-dashed p-6 text-center text-sm text-muted-foreground">
           No subjects yet.
-        </p>
+        </div>
       ) : (
-        <Table>
+        <div className="panel overflow-x-auto">
+        <Table className="table-dense">
           <TableHeader>
             <TableRow>
               <TableHead>Name</TableHead>
@@ -124,6 +125,7 @@ export function SubjectsSection({ subjects, canWrite }: { subjects: SubjectRow[]
             ))}
           </TableBody>
         </Table>
+        </div>
       )}
     </div>
   );
