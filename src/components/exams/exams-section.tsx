@@ -270,7 +270,7 @@ export function ExamsSection({
                       {e.status === "open" ? (
                         <>
                           <Button asChild size="sm" variant="outline">
-                            <Link href={`/exams/marks?exam=${e.id}`}>Enter marks</Link>
+                            <Link href={`/exams/${e.id}`}>Enter marks</Link>
                           </Button>
                           {canWrite && (
                             <Button size="sm" variant="ghost" disabled={pending} onClick={() => handleClose(e.id)}>
@@ -281,7 +281,7 @@ export function ExamsSection({
                       ) : (
                         <>
                           <Button asChild size="sm" variant="outline">
-                            <Link href={`/exams/marks?exam=${e.id}`}>View marks</Link>
+                            <Link href={`/exams/${e.id}`}>View marks</Link>
                           </Button>
                           <Button asChild size="sm" variant="outline">
                             <Link href={`/exams/report-cards?exam=${e.id}`}>Report cards</Link>
