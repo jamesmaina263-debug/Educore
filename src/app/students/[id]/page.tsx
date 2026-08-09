@@ -6,7 +6,7 @@ import { StatusBadge } from "@/components/status-badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { GuardiansTab, type GuardianRow } from "./guardians-tab";
-import { DocumentsTab, type DocumentRow } from "./documents-tab";
+import { DocumentsTab, type DocumentRow } from "@/components/documents-tab";
 import { MedicalTab } from "./medical-tab";
 
 export default async function StudentProfilePage({
@@ -61,6 +61,68 @@ export default async function StudentProfilePage({
 
   const canManageStudents = (await supabase.rpc("auth_has_permission", { p_permission_key: "students.write" })).data === true;
   const canUploadDocuments = (await supabase.rpc("auth_has_permission", { p_permission_key: "students.documents.write" })).data === true;
+  const canReadMedical = (await supabase.rpc("auth_has_permission", { p_permission_key: "students.medical.read" })).data === true;
+  const canReadDiscipline = (await supabase.rpc("auth_has_permission", { p_permission_key: "discipline.read_any" })).data === true;
+  const canReadFinance = (await supabase.rpc("auth_has_permission", { p_permission_key: "finance.read" })).data === true;
+
+  // Overview tab: display-only aggregation pulled live from each module's own
+  // authoritative table (Section 5.1) — nothing here is duplicated/stored on Students.
+  const ninetyDaysAgo = new Date();
+  ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
+
+  const [
+    { data: attendanceRows },
+    { data: balanceRow },
+    { data: boardingRow },
+    { data: transportRow },
+    { data: disciplineRows },
+    { data: latestReportCard },
+  ] = await Promise.all([
+    supabase
+      .from("student_attendance")
+      .select("status")
+      .eq("student_id", id)
+      .gte("attendance_date", ninetyDaysAgo.toISOString().slice(0, 10)),
+    supabase.from("v_student_balances").select("balance").eq("student_id", id).maybeSingle(),
+    supabase
+      .from("hostel_allocations")
+      .select("hostel_rooms(room_number, block)")
+      .eq("student_id", id)
+      .eq("status", "active")
+      .maybeSingle(),
+    supabase
+      .from("student_transport_assignments")
+      .select("pickup_point, transport_routes(name)")
+      .eq("student_id", id)
+      .eq("status", "active")
+      .maybeSingle(),
+    canReadDiscipline
+      ? supabase
+          .from("discipline_records")
+          .select("id, incident_date, category")
+          .eq("student_id", id)
+          .order("incident_date", { ascending: false })
+          .limit(3)
+      : Promise.resolve({ data: null }),
+    supabase
+      .from("report_cards")
+      .select("id, generated_at, exams(name)")
+      .eq("student_id", id)
+      .order("generated_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+  ]);
+
+  const attendanceTotal = attendanceRows?.length ?? 0;
+  const attendancePresent = (attendanceRows ?? []).filter((a) => a.status === "present").length;
+  const attendanceRate = attendanceTotal > 0 ? Math.round((attendancePresent / attendanceTotal) * 100) : null;
+
+  const boarding = boardingRow?.hostel_rooms as unknown as { room_number: string; block: string | null } | null;
+  const transport = transportRow as unknown as {
+    pickup_point: string | null;
+    transport_routes: { name: string } | null;
+  } | null;
+  const latestExam = latestReportCard?.exams as unknown as { name: string } | null;
 
   const roleName = (schoolUser?.roles as unknown as { display_name: string } | null)?.display_name;
   const schoolName = (schoolUser?.schools as unknown as { name: string } | null)?.name;
@@ -109,7 +171,7 @@ export default async function StudentProfilePage({
             <TabsTrigger value="medical">Medical</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="overview">
+          <TabsContent value="overview" className="flex flex-col gap-6">
             <dl className="grid grid-cols-2 gap-4 text-sm">
               <div>
                 <dt className="text-muted-foreground">Date of birth</dt>
@@ -128,6 +190,64 @@ export default async function StudentProfilePage({
                 <dd className={stream ? undefined : "text-muted-foreground"}>{classLabel}</dd>
               </div>
             </dl>
+
+            <div className="grid grid-cols-2 gap-4 border-t border-border pt-6 sm:grid-cols-3">
+              <div className="panel p-4">
+                <p className="label-eyebrow">Attendance (90d)</p>
+                <p className="mt-1 text-lg font-semibold">
+                  {attendanceRate !== null ? `${attendanceRate}%` : "—"}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {attendanceTotal > 0 ? `${attendancePresent}/${attendanceTotal} days present` : "No records yet"}
+                </p>
+              </div>
+
+              <div className="panel p-4">
+                <p className="label-eyebrow">Fee balance</p>
+                <p className={`mt-1 text-lg font-semibold ${(balanceRow?.balance ?? 0) > 0 ? "text-danger" : "text-success"}`}>
+                  {balanceRow ? `KES ${Number(balanceRow.balance).toLocaleString()}` : "—"}
+                </p>
+                <p className="text-xs text-muted-foreground">From Finance</p>
+              </div>
+
+              <div className="panel p-4">
+                <p className="label-eyebrow">Latest report card</p>
+                <p className="mt-1 text-lg font-semibold">{latestExam?.name ?? "—"}</p>
+                <p className="text-xs text-muted-foreground">From Exams</p>
+              </div>
+
+              <div className="panel p-4">
+                <p className="label-eyebrow">Boarding</p>
+                <p className="mt-1 text-lg font-semibold">
+                  {boarding ? `Room ${boarding.room_number}` : "Day scholar"}
+                </p>
+                <p className="text-xs text-muted-foreground">{boarding?.block ? `Block ${boarding.block}` : "From Boarding"}</p>
+              </div>
+
+              <div className="panel p-4">
+                <p className="label-eyebrow">Transport</p>
+                <p className="mt-1 text-lg font-semibold">
+                  {transport?.transport_routes?.name ?? "Not assigned"}
+                </p>
+                <p className="text-xs text-muted-foreground">{transport?.pickup_point ?? "From Transport"}</p>
+              </div>
+
+              {canReadDiscipline && (
+                <div className="panel p-4">
+                  <p className="label-eyebrow">Discipline</p>
+                  <p className="mt-1 text-lg font-semibold">{disciplineRows?.length ?? 0} recent record(s)</p>
+                  <p className="text-xs text-muted-foreground">
+                    {disciplineRows?.[0] ? `Latest: ${disciplineRows[0].category}` : "None on file"}
+                  </p>
+                </div>
+              )}
+
+              {!canReadMedical && (
+                <p className="col-span-full text-xs text-muted-foreground">
+                  Health summary hidden — you don&apos;t have medical record access.
+                </p>
+              )}
+            </div>
           </TabsContent>
 
           <TabsContent value="guardians">
@@ -135,7 +255,7 @@ export default async function StudentProfilePage({
           </TabsContent>
 
           <TabsContent value="documents">
-            <DocumentsTab studentId={id} documents={documents} canUpload={canUploadDocuments} />
+            <DocumentsTab ownerId={id} ownerType="student" documents={documents} canUpload={canUploadDocuments} />
           </TabsContent>
 
           <TabsContent value="medical">

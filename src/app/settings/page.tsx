@@ -13,7 +13,12 @@ import { getMyNotificationPreferences } from "@/app/notifications/actions";
 import { ApiKeysPanel, type ApiKeyRow } from "@/components/settings/api-keys-panel";
 import { issueSchoolApiKey, revokeSchoolApiKey } from "@/app/settings/actions";
 
-export default async function SettingsPage() {
+export default async function SettingsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ tab?: string }>;
+}) {
+  const { tab } = await searchParams;
   const supabase = await createClient();
 
   const {
@@ -172,7 +177,7 @@ export default async function SettingsPage() {
           <p className="text-sm text-muted-foreground">Applies to all users in this school</p>
         </div>
 
-        <Tabs defaultValue="general">
+        <Tabs defaultValue={tab === "staff" ? "staff" : "general"}>
           <TabsList>
             <TabsTrigger value="general">General</TabsTrigger>
             <TabsTrigger value="branding">Branding</TabsTrigger>

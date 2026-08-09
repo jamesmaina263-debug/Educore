@@ -22,17 +22,39 @@ export interface DocumentRow {
   created_at: string;
 }
 
-export function DocumentsTab({
-  studentId,
-  documents,
-  canUpload,
-}: {
-  studentId: string;
+const STUDENT_CATEGORIES = [
+  { value: "birth_certificate", label: "Birth certificate" },
+  { value: "id_scan", label: "ID scan" },
+  { value: "report_card", label: "Report card" },
+  { value: "transfer_letter", label: "Transfer letter" },
+  { value: "other", label: "Other" },
+];
+
+const STAFF_CATEGORIES = [
+  { value: "contract", label: "Contract" },
+  { value: "certificate", label: "Certificate" },
+  { value: "qualification", label: "Qualification" },
+  { value: "id_document", label: "ID document" },
+  { value: "licence", label: "Licence" },
+  { value: "other", label: "Other" },
+];
+
+interface DocumentsTabProps {
+  ownerId: string;
   documents: DocumentRow[];
   canUpload: boolean;
-}) {
+  /** Which single-owner column this document set belongs to — matches the
+   * documents table's "exactly one owner" constraint (student_id XOR staff_id). */
+  ownerType: "student" | "staff";
+}
+
+export function DocumentsTab({ ownerId, documents, canUpload, ownerType }: DocumentsTabProps) {
   const router = useRouter();
-  const [category, setCategory] = useState("other");
+  const categories = ownerType === "staff" ? STAFF_CATEGORIES : STUDENT_CATEGORIES;
+  const bucket = ownerType === "staff" ? "staff-documents" : "student-documents";
+  const ownerColumn = ownerType === "staff" ? "staff_id" : "student_id";
+
+  const [category, setCategory] = useState(categories[0].value);
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -54,15 +76,13 @@ export function DocumentsTab({
         .eq("auth_user_id", authData.user!.id)
         .single();
 
-      const path = `${schoolId}/${studentId}/${crypto.randomUUID()}-${file.name}`;
-      const { error: uploadError } = await supabase.storage
-        .from("student-documents")
-        .upload(path, file);
+      const path = `${schoolId}/${ownerId}/${crypto.randomUUID()}-${file.name}`;
+      const { error: uploadError } = await supabase.storage.from(bucket).upload(path, file);
       if (uploadError) throw uploadError;
 
       const { error: insertError } = await supabase.from("documents").insert({
         school_id: schoolId,
-        student_id: studentId,
+        [ownerColumn]: ownerId,
         category,
         file_name: file.name,
         storage_path: path,
@@ -85,7 +105,7 @@ export function DocumentsTab({
       const supabase = createClient();
       // Signed, short-expiry URL — never a public bucket link (Part I).
       const { data, error: signError } = await supabase.storage
-        .from("student-documents")
+        .from(bucket)
         .createSignedUrl(doc.storage_path, 60);
       if (signError || !data) throw signError ?? new Error("Could not generate a link.");
       window.open(data.signedUrl, "_blank", "noopener,noreferrer");
@@ -129,11 +149,11 @@ export function DocumentsTab({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="birth_certificate">Birth certificate</SelectItem>
-                <SelectItem value="id_scan">ID scan</SelectItem>
-                <SelectItem value="report_card">Report card</SelectItem>
-                <SelectItem value="transfer_letter">Transfer letter</SelectItem>
-                <SelectItem value="other">Other</SelectItem>
+                {categories.map((c) => (
+                  <SelectItem key={c.value} value={c.value}>
+                    {c.label}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
