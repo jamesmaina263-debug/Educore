@@ -115,7 +115,7 @@ export default async function ReportsPage() {
 
   return (
     <AppShell
-      breadcrumbs={[{ label: schoolName ?? "EduCore" }, { label: "Reports" }]}
+      breadcrumbs={[{ label: schoolName ?? "EduCore", href: "/dashboard" }, { label: "Reports" }]}
       userName={schoolUser?.full_name ?? user.email ?? "Account"}
       userRole={roleName}
       onSignOut={logout}
