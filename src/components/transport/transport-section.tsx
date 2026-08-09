@@ -5,9 +5,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
 import { StatusBadge } from "@/components/status-badge";
-import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { createRouteAction, createVehicleAction, assignTransportAction, endTransportAssignmentAction } from "@/app/transport/actions";
@@ -129,218 +127,246 @@ export function TransportSection({
     <div className="flex flex-col gap-6">
       {error && <p className="text-sm text-danger">{error}</p>}
 
-      {canWrite && (
-        <div className="flex flex-wrap gap-2">
-          <Dialog open={routeOpen} onOpenChange={setRouteOpen}>
-            <DialogTrigger asChild>
-              <Button size="sm" variant="outline">
-                Add route
-              </Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Add a route</DialogTitle>
-              </DialogHeader>
-              <div className="space-y-3">
-                <div className="space-y-1.5">
-                  <Label>Name</Label>
-                  <Input value={routeName} onChange={(e) => setRouteName(e.target.value)} />
-                </div>
-                <div className="space-y-1.5">
-                  <Label>Fee (KES, per term)</Label>
-                  <Input type="number" value={routeFee} onChange={(e) => setRouteFee(e.target.value)} />
-                </div>
-              </div>
-              <DialogFooter>
-                <Button onClick={handleCreateRoute} disabled={pending || !routeName}>
-                  {pending ? "Adding…" : "Add"}
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
-
-          <Dialog open={vehicleOpen} onOpenChange={setVehicleOpen}>
-            <DialogTrigger asChild>
-              <Button size="sm" variant="outline">
-                Add vehicle
-              </Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Add a vehicle</DialogTitle>
-              </DialogHeader>
-              <div className="space-y-3">
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1.5">
-                    <Label>Registration number</Label>
-                    <Input value={regNumber} onChange={(e) => setRegNumber(e.target.value)} />
+      <div className="grid gap-4 md:grid-cols-2">
+        <div className="panel">
+          <header className="flex items-center justify-between border-b border-border px-4 py-2.5">
+            <div className="flex items-center gap-3">
+              <h2 className="text-[0.8125rem] font-semibold">Routes</h2>
+              <span className="text-[0.6875rem] text-muted-foreground">
+                {routes.length} route{routes.length === 1 ? "" : "s"}
+              </span>
+            </div>
+            {canWrite && (
+              <Dialog open={routeOpen} onOpenChange={setRouteOpen}>
+                <DialogTrigger asChild>
+                  <Button size="sm" variant="outline">
+                    Add route
+                  </Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Add a route</DialogTitle>
+                  </DialogHeader>
+                  <div className="space-y-3">
+                    <div className="space-y-1.5">
+                      <Label>Name</Label>
+                      <Input value={routeName} onChange={(e) => setRouteName(e.target.value)} />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label>Fee (KES, per term)</Label>
+                      <Input type="number" value={routeFee} onChange={(e) => setRouteFee(e.target.value)} />
+                    </div>
                   </div>
-                  <div className="space-y-1.5">
-                    <Label>Capacity</Label>
-                    <Input type="number" value={capacity} onChange={(e) => setCapacity(e.target.value)} />
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1.5">
-                    <Label>Driver name</Label>
-                    <Input value={driverName} onChange={(e) => setDriverName(e.target.value)} />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label>Driver phone</Label>
-                    <Input value={driverPhone} onChange={(e) => setDriverPhone(e.target.value)} />
-                  </div>
-                </div>
-              </div>
-              <DialogFooter>
-                <Button onClick={handleCreateVehicle} disabled={pending || !regNumber || !capacity}>
-                  {pending ? "Adding…" : "Add"}
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
-
-          <Dialog open={assignOpen} onOpenChange={setAssignOpen}>
-            <DialogTrigger asChild>
-              <Button size="sm">Assign student</Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Assign a student to a route</DialogTitle>
-              </DialogHeader>
-              <div className="space-y-3">
-                <div className="space-y-1.5">
-                  <Label>Student</Label>
-                  <Select value={assignStudentId} onValueChange={setAssignStudentId}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select student" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {studentOptions.map((s) => (
-                        <SelectItem key={s.id} value={s.id}>
-                          {s.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-1.5">
-                  <Label>Route</Label>
-                  <Select value={assignRouteId} onValueChange={setAssignRouteId}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select route" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {routes.map((r) => (
-                        <SelectItem key={r.id} value={r.id}>
-                          {r.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-1.5">
-                  <Label>Pickup point</Label>
-                  <Input value={pickupPoint} onChange={(e) => setPickupPoint(e.target.value)} />
-                </div>
-                <p className="text-xs text-muted-foreground">Any existing active assignment for this student ends automatically.</p>
-              </div>
-              <DialogFooter>
-                <Button onClick={handleAssign} disabled={pending || !assignStudentId || !assignRouteId}>
-                  {pending ? "Assigning…" : "Assign"}
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
-        </div>
-      )}
-
-      <div className="grid gap-6 md:grid-cols-2">
-        <div className="flex flex-col gap-2">
-          <h2 className="text-sm font-semibold">Routes</h2>
+                  <DialogFooter>
+                    <Button onClick={handleCreateRoute} disabled={pending || !routeName}>
+                      {pending ? "Adding…" : "Add"}
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
+            )}
+          </header>
           {routes.length === 0 ? (
-            <p className="rounded-md border border-dashed border-border p-6 text-center text-sm text-muted-foreground">No routes yet.</p>
+            <p className="p-10 text-center text-sm text-muted-foreground">No routes yet.</p>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Fee</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {routes.map((r) => (
-                  <TableRow key={r.id}>
-                    <TableCell className="font-medium">{r.name}</TableCell>
-                    <TableCell>{r.fee_amount.toLocaleString()}</TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+            <div className="overflow-x-auto">
+              <table className="table-dense w-full">
+                <thead className="bg-muted/70">
+                  <tr>
+                    <th>Name</th>
+                    <th className="text-right">Fee</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {routes.map((r) => (
+                    <tr key={r.id}>
+                      <td className="font-medium">{r.name}</td>
+                      <td className="text-right" data-numeric>
+                        {r.fee_amount.toLocaleString()}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </div>
 
-        <div className="flex flex-col gap-2">
-          <h2 className="text-sm font-semibold">Vehicles</h2>
+        <div className="panel">
+          <header className="flex items-center justify-between border-b border-border px-4 py-2.5">
+            <div className="flex items-center gap-3">
+              <h2 className="text-[0.8125rem] font-semibold">Vehicles</h2>
+              <span className="text-[0.6875rem] text-muted-foreground">
+                {vehicles.length} vehicle{vehicles.length === 1 ? "" : "s"}
+              </span>
+            </div>
+            {canWrite && (
+              <Dialog open={vehicleOpen} onOpenChange={setVehicleOpen}>
+                <DialogTrigger asChild>
+                  <Button size="sm" variant="outline">
+                    Add vehicle
+                  </Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Add a vehicle</DialogTitle>
+                  </DialogHeader>
+                  <div className="space-y-3">
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1.5">
+                        <Label>Registration number</Label>
+                        <Input value={regNumber} onChange={(e) => setRegNumber(e.target.value)} />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label>Capacity</Label>
+                        <Input type="number" value={capacity} onChange={(e) => setCapacity(e.target.value)} />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1.5">
+                        <Label>Driver name</Label>
+                        <Input value={driverName} onChange={(e) => setDriverName(e.target.value)} />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label>Driver phone</Label>
+                        <Input value={driverPhone} onChange={(e) => setDriverPhone(e.target.value)} />
+                      </div>
+                    </div>
+                  </div>
+                  <DialogFooter>
+                    <Button onClick={handleCreateVehicle} disabled={pending || !regNumber || !capacity}>
+                      {pending ? "Adding…" : "Add"}
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
+            )}
+          </header>
           {vehicles.length === 0 ? (
-            <p className="rounded-md border border-dashed border-border p-6 text-center text-sm text-muted-foreground">No vehicles yet.</p>
+            <p className="p-10 text-center text-sm text-muted-foreground">No vehicles yet.</p>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Reg. number</TableHead>
-                  <TableHead>Capacity</TableHead>
-                  <TableHead>Driver</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {vehicles.map((v) => (
-                  <TableRow key={v.id}>
-                    <TableCell className="font-medium">{v.registration_number}</TableCell>
-                    <TableCell>{v.capacity}</TableCell>
-                    <TableCell>{v.driver_name ?? "—"}</TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+            <div className="overflow-x-auto">
+              <table className="table-dense w-full">
+                <thead className="bg-muted/70">
+                  <tr>
+                    <th>Reg. number</th>
+                    <th>Capacity</th>
+                    <th>Driver</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {vehicles.map((v) => (
+                    <tr key={v.id}>
+                      <td className="font-medium">{v.registration_number}</td>
+                      <td data-numeric>{v.capacity}</td>
+                      <td className="text-muted-foreground">{v.driver_name ?? "—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </div>
       </div>
 
-      <div className="flex flex-col gap-2">
-        <h2 className="text-sm font-semibold">Student assignments</h2>
+      <div className="panel">
+        <header className="flex items-center justify-between border-b border-border px-4 py-2.5">
+          <div className="flex items-center gap-3">
+            <h2 className="text-[0.8125rem] font-semibold">Student assignments</h2>
+            <span className="text-[0.6875rem] text-muted-foreground">
+              {assignments.length} assignment{assignments.length === 1 ? "" : "s"}
+            </span>
+          </div>
+          {canWrite && (
+            <Dialog open={assignOpen} onOpenChange={setAssignOpen}>
+              <DialogTrigger asChild>
+                <Button size="sm">Assign student</Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Assign a student to a route</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-3">
+                  <div className="space-y-1.5">
+                    <Label>Student</Label>
+                    <Select value={assignStudentId} onValueChange={setAssignStudentId}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select student" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {studentOptions.map((s) => (
+                          <SelectItem key={s.id} value={s.id}>
+                            {s.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Route</Label>
+                    <Select value={assignRouteId} onValueChange={setAssignRouteId}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select route" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {routes.map((r) => (
+                          <SelectItem key={r.id} value={r.id}>
+                            {r.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Pickup point</Label>
+                    <Input value={pickupPoint} onChange={(e) => setPickupPoint(e.target.value)} />
+                  </div>
+                  <p className="text-[0.75rem] text-muted-foreground">Any existing active assignment for this student ends automatically.</p>
+                </div>
+                <DialogFooter>
+                  <Button onClick={handleAssign} disabled={pending || !assignStudentId || !assignRouteId}>
+                    {pending ? "Assigning…" : "Assign"}
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+          )}
+        </header>
         {assignments.length === 0 ? (
-          <p className="rounded-md border border-dashed border-border p-6 text-center text-sm text-muted-foreground">No assignments yet.</p>
+          <p className="p-10 text-center text-sm text-muted-foreground">No assignments yet.</p>
         ) : (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Student</TableHead>
-                <TableHead>Route</TableHead>
-                <TableHead>Pickup point</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {assignments.map((a) => (
-                <TableRow key={a.id}>
-                  <TableCell className="font-medium">{a.student_name}</TableCell>
-                  <TableCell>{a.route_name}</TableCell>
-                  <TableCell>{a.pickup_point ?? "—"}</TableCell>
-                  <TableCell>
-                    <StatusBadge tone={a.status === "active" ? "success" : "neutral"} label={a.status} />
-                  </TableCell>
-                  <TableCell className="text-right">
-                    {canWrite && a.status === "active" && (
-                      <Button size="sm" variant="ghost" disabled={pending} onClick={() => handleEnd(a.id)}>
-                        End
-                      </Button>
-                    )}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+          <div className="overflow-x-auto">
+            <table className="table-dense w-full">
+              <thead className="bg-muted/70">
+                <tr>
+                  <th>Student</th>
+                  <th>Route</th>
+                  <th>Pickup point</th>
+                  <th>Status</th>
+                  <th className="text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {assignments.map((a) => (
+                  <tr key={a.id}>
+                    <td className="font-medium">{a.student_name}</td>
+                    <td className="text-muted-foreground">{a.route_name}</td>
+                    <td className="text-muted-foreground">{a.pickup_point ?? "—"}</td>
+                    <td>
+                      <StatusBadge tone={a.status === "active" ? "success" : "neutral"} label={a.status} />
+                    </td>
+                    <td className="text-right">
+                      {canWrite && a.status === "active" && (
+                        <Button size="sm" variant="ghost" disabled={pending} onClick={() => handleEnd(a.id)}>
+                          End
+                        </Button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
     </div>
