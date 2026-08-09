@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { StatusBadge } from "@/components/status-badge";
-import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { submitStaffAttendance, editStaffAttendanceRecord } from "@/app/staff/actions";
 
@@ -102,20 +101,20 @@ export function StaffRegisterForm({
           {canMark ? (
             <>
               <div className="overflow-x-auto">
-                <Table className="table-dense">
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Staff</TableHead>
-                      <TableHead>Role</TableHead>
-                      <TableHead>Mark</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
+                <table className="table-dense w-full">
+                  <thead className="bg-muted/70">
+                    <tr>
+                      <th>Staff</th>
+                      <th>Role</th>
+                      <th>Mark</th>
+                    </tr>
+                  </thead>
+                  <tbody>
                     {unmarked.map((r) => (
-                      <TableRow key={r.staff_id}>
-                        <TableCell className="font-medium">{r.full_name}</TableCell>
-                        <TableCell className="text-muted-foreground">{r.role_name}</TableCell>
-                        <TableCell>
+                      <tr key={r.staff_id}>
+                        <td className="font-medium">{r.full_name}</td>
+                        <td className="text-muted-foreground">{r.role_name}</td>
+                        <td>
                           <div className="flex flex-wrap gap-1.5">
                             {STATUS_OPTIONS.map((opt) => (
                               <Button
@@ -128,11 +127,11 @@ export function StaffRegisterForm({
                               </Button>
                             ))}
                           </div>
-                        </TableCell>
-                      </TableRow>
+                        </td>
+                      </tr>
                     ))}
-                  </TableBody>
-                </Table>
+                  </tbody>
+                </table>
               </div>
               <div className="flex justify-end border-t border-border px-4 py-2.5">
                 <Button onClick={handleSubmit} disabled={pending}>
@@ -159,24 +158,24 @@ export function StaffRegisterForm({
             </div>
           </header>
           <div className="overflow-x-auto">
-            <Table className="table-dense">
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Staff</TableHead>
-                  <TableHead>Role</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead />
-                </TableRow>
-              </TableHeader>
-              <TableBody>
+            <table className="table-dense w-full">
+              <thead className="bg-muted/70">
+                <tr>
+                  <th>Staff</th>
+                  <th>Role</th>
+                  <th>Status</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
                 {marked.map((r) => (
-                  <TableRow key={r.staff_id}>
-                    <TableCell className="font-medium">{r.full_name}</TableCell>
-                    <TableCell className="text-muted-foreground">{r.role_name}</TableCell>
-                    <TableCell>
+                  <tr key={r.staff_id}>
+                    <td className="font-medium">{r.full_name}</td>
+                    <td className="text-muted-foreground">{r.role_name}</td>
+                    <td>
                       <StatusBadge tone={statusTone(r.existing!.status)} label={r.existing!.status.replace("_", " ")} />
-                    </TableCell>
-                    <TableCell>
+                    </td>
+                    <td>
                       {canMark && (
                         <Button
                           size="sm"
@@ -190,11 +189,11 @@ export function StaffRegisterForm({
                           Correct
                         </Button>
                       )}
-                    </TableCell>
-                  </TableRow>
+                    </td>
+                  </tr>
                 ))}
-              </TableBody>
-            </Table>
+              </tbody>
+            </table>
           </div>
         </div>
       )}
