@@ -5,9 +5,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
 import { StatusBadge } from "@/components/status-badge";
-import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { createInventoryItemAction, createCategoryAction, recordStockMovementAction } from "@/app/inventory/actions";
@@ -259,74 +257,88 @@ export function InventorySection({
         </div>
       )}
 
-      <div className="flex flex-col gap-2">
-        <h2 className="text-sm font-semibold">Items</h2>
+      <div className="panel">
+        <header className="flex items-center justify-between border-b border-border px-4 py-2.5">
+          <h2 className="text-[0.8125rem] font-semibold">Items</h2>
+          <span className="text-[0.6875rem] text-muted-foreground">
+            {items.length} item{items.length === 1 ? "" : "s"}
+          </span>
+        </header>
         {items.length === 0 ? (
-          <p className="rounded-md border border-dashed border-border p-6 text-center text-sm text-muted-foreground">No items yet.</p>
+          <p className="p-10 text-center text-sm text-muted-foreground">No items yet.</p>
         ) : (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>Category</TableHead>
-                <TableHead>Location</TableHead>
-                <TableHead>Quantity</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {items.map((i) => {
-                const low = i.reorder_level !== null && i.quantity <= i.reorder_level;
-                return (
-                  <TableRow key={i.id}>
-                    <TableCell className="font-medium">{i.name}</TableCell>
-                    <TableCell>{i.category_name ?? "—"}</TableCell>
-                    <TableCell>{i.location ?? "—"}</TableCell>
-                    <TableCell>
-                      <StatusBadge
-                        tone={low ? "warning" : "neutral"}
-                        label={`${i.quantity} ${i.unit}${low ? " · low stock" : ""}`}
-                      />
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
+          <div className="overflow-x-auto">
+            <table className="table-dense w-full">
+              <thead className="bg-muted/70">
+                <tr>
+                  <th>Name</th>
+                  <th>Category</th>
+                  <th>Location</th>
+                  <th>Quantity</th>
+                </tr>
+              </thead>
+              <tbody>
+                {items.map((i) => {
+                  const low = i.reorder_level !== null && i.quantity <= i.reorder_level;
+                  return (
+                    <tr key={i.id}>
+                      <td className="font-medium">{i.name}</td>
+                      <td className="text-muted-foreground">{i.category_name ?? "—"}</td>
+                      <td className="text-muted-foreground">{i.location ?? "—"}</td>
+                      <td>
+                        <StatusBadge
+                          tone={low ? "warning" : "neutral"}
+                          label={`${i.quantity} ${i.unit}${low ? " · low stock" : ""}`}
+                        />
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
 
-      <div className="flex flex-col gap-2">
-        <h2 className="text-sm font-semibold">Recent movements</h2>
+      <div className="panel">
+        <header className="flex items-center justify-between border-b border-border px-4 py-2.5">
+          <h2 className="text-[0.8125rem] font-semibold">Recent movements</h2>
+          <span className="text-[0.6875rem] text-muted-foreground">
+            {movements.length} movement{movements.length === 1 ? "" : "s"}
+          </span>
+        </header>
         {movements.length === 0 ? (
-          <p className="rounded-md border border-dashed border-border p-6 text-center text-sm text-muted-foreground">No movements yet.</p>
+          <p className="p-10 text-center text-sm text-muted-foreground">No movements yet.</p>
         ) : (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Item</TableHead>
-                <TableHead>Direction</TableHead>
-                <TableHead>Quantity</TableHead>
-                <TableHead>Reason</TableHead>
-                <TableHead>By</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {movements.map((m) => (
-                <TableRow key={m.id}>
-                  <TableCell className="font-medium">{m.item_name}</TableCell>
-                  <TableCell>
-                    <StatusBadge
-                      tone={m.movement_type === "in" ? "success" : "neutral"}
-                      label={m.movement_type === "in" ? "In" : "Out"}
-                    />
-                  </TableCell>
-                  <TableCell>{m.quantity}</TableCell>
-                  <TableCell>{m.reason ?? "—"}</TableCell>
-                  <TableCell>{m.actor_name ?? "—"}</TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+          <div className="overflow-x-auto">
+            <table className="table-dense w-full">
+              <thead className="bg-muted/70">
+                <tr>
+                  <th>Item</th>
+                  <th>Direction</th>
+                  <th>Quantity</th>
+                  <th>Reason</th>
+                  <th>By</th>
+                </tr>
+              </thead>
+              <tbody>
+                {movements.map((m) => (
+                  <tr key={m.id}>
+                    <td className="font-medium">{m.item_name}</td>
+                    <td>
+                      <StatusBadge
+                        tone={m.movement_type === "in" ? "success" : "neutral"}
+                        label={m.movement_type === "in" ? "In" : "Out"}
+                      />
+                    </td>
+                    <td data-numeric>{m.quantity}</td>
+                    <td className="text-muted-foreground">{m.reason ?? "—"}</td>
+                    <td className="text-muted-foreground">{m.actor_name ?? "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
     </div>
