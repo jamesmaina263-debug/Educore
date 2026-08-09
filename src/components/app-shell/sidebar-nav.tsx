@@ -9,7 +9,7 @@ export function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
 
   return (
-    <nav className="flex flex-col gap-0.5 p-2">
+    <nav className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto p-2">
       {navItems.map((item) => {
         const active =
           pathname === item.href || pathname.startsWith(`${item.href}/`);
