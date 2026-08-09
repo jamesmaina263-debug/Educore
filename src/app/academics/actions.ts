@@ -132,6 +132,36 @@ export async function updateStreamClassTeacher(
   return { success: true };
 }
 
+export async function updateStreamCapacity(streamId: string, capacity: number | null): Promise<ActionResult> {
+  const supabase = await createClient();
+  const { error } = await supabase.from("streams").update({ capacity }).eq("id", streamId);
+  if (error) return { error: error.message };
+  revalidatePath("/academics");
+  return { success: true };
+}
+
+export async function assignSubjectTeacher(
+  streamId: string,
+  subjectId: string,
+  teacherId: string | null,
+): Promise<ActionResult> {
+  const supabase = await createClient();
+  try {
+    const school_id = await schoolId(supabase);
+    const { error } = await supabase
+      .from("class_subjects")
+      .upsert(
+        { school_id, stream_id: streamId, subject_id: subjectId, teacher_id: teacherId },
+        { onConflict: "stream_id,subject_id" },
+      );
+    if (error) return { error: error.message };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Could not update the allocation." };
+  }
+  revalidatePath("/academics");
+  return { success: true };
+}
+
 export async function createTimetableSlot(input: {
   stream_id: string;
   subject_id: string;

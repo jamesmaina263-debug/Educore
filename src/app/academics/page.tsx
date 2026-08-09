@@ -11,6 +11,7 @@ import {
   type TeacherOption,
 } from "@/components/academics/classes-streams-section";
 import { SubjectsSection, type SubjectRow } from "@/components/academics/subjects-section";
+import { TeacherAllocationSection, type ClassSubjectRow } from "@/components/academics/teacher-allocation-section";
 import { RolloverSection, type StudentOption } from "@/components/academics/rollover-section";
 import { TimetableSection, type TimetableSlotRow } from "@/components/academics/timetable-section";
 
@@ -39,6 +40,7 @@ export default async function AcademicsPage() {
     { data: canRolloverData },
     { data: activeStudents },
     { data: timetableSlots },
+    { data: classSubjectRows },
   ] = await Promise.all([
     supabase.from("academic_years").select("id, name, start_date, end_date, status").order("start_date", { ascending: false }),
     supabase.from("terms").select("id, academic_year_id, name, term_number, start_date, end_date, status").order("term_number"),
@@ -54,7 +56,7 @@ export default async function AcademicsPage() {
     supabase.rpc("auth_has_permission", { p_permission_key: "students.write" }),
     supabase
       .from("students")
-      .select("id, admission_number, first_name, last_name")
+      .select("id, admission_number, first_name, last_name, current_class_id")
       .eq("status", "active")
       .order("first_name"),
     supabase
@@ -62,12 +64,22 @@ export default async function AcademicsPage() {
       .select("id, stream_id, subject_id, teacher_id, day_of_week, period_number, start_time, end_time")
       .order("day_of_week")
       .order("period_number"),
+    supabase.from("class_subjects").select("stream_id, subject_id, teacher_id"),
   ]);
 
   const canWrite = canWriteData === true;
   const canRollover = canRolloverData === true;
   const students: StudentOption[] = (activeStudents ?? []) as StudentOption[];
   const activeYear = (years ?? []).find((y) => y.status === "active") ?? null;
+
+  // Live occupancy per stream — "43/45" on the Classes & Streams screen,
+  // and the same number Admissions will read from later (Section 4.16 Step 5).
+  // Computed on read from the authoritative students table, never stored.
+  const occupancyByStream = new Map<string, number>();
+  for (const s of activeStudents ?? []) {
+    if (!s.current_class_id) continue;
+    occupancyByStream.set(s.current_class_id, (occupancyByStream.get(s.current_class_id) ?? 0) + 1);
+  }
 
   const teachers: TeacherOption[] = (teacherRows ?? [])
     .filter((t) => (t.roles as unknown as { name: string } | null)?.name)
@@ -93,6 +105,7 @@ export default async function AcademicsPage() {
           <TabsList>
             <TabsTrigger value="years">Years &amp; Terms</TabsTrigger>
             <TabsTrigger value="classes">Classes &amp; Streams</TabsTrigger>
+            <TabsTrigger value="allocation">Teacher Allocation</TabsTrigger>
             <TabsTrigger value="subjects">Subjects</TabsTrigger>
             <TabsTrigger value="timetable">Timetable</TabsTrigger>
             {canRollover && <TabsTrigger value="rollover">Rollover</TabsTrigger>}
@@ -108,7 +121,19 @@ export default async function AcademicsPage() {
               activeYearName={activeYear?.name ?? null}
               classes={(classes ?? []).filter((c) => c.academic_year_id === activeYear?.id) as ClassRow[]}
               streams={(streams ?? []) as StreamRow[]}
+              occupancyByStream={Object.fromEntries(occupancyByStream)}
               teachers={teachers}
+              canWrite={canWrite}
+            />
+          </TabsContent>
+
+          <TabsContent value="allocation">
+            <TeacherAllocationSection
+              classes={(classes ?? []).filter((c) => c.academic_year_id === activeYear?.id) as ClassRow[]}
+              streams={(streams ?? []) as StreamRow[]}
+              subjects={(subjects ?? []) as SubjectRow[]}
+              teachers={teachers}
+              allocations={(classSubjectRows ?? []) as ClassSubjectRow[]}
               canWrite={canWrite}
             />
           </TabsContent>

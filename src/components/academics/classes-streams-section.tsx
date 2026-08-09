@@ -20,7 +20,7 @@ import {
   DialogFooter,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { createClassLevel, createStream, updateStreamClassTeacher } from "@/app/academics/actions";
+import { createClassLevel, createStream, updateStreamClassTeacher, updateStreamCapacity } from "@/app/academics/actions";
 
 export interface ClassRow {
   id: string;
@@ -47,6 +47,7 @@ export function ClassesStreamsSection({
   activeYearName,
   classes,
   streams,
+  occupancyByStream,
   teachers,
   canWrite,
 }: {
@@ -54,6 +55,8 @@ export function ClassesStreamsSection({
   activeYearName: string | null;
   classes: ClassRow[];
   streams: StreamRow[];
+  /** Live count of active students currently in each stream, keyed by stream id — computed on read, never stored. */
+  occupancyByStream: Record<string, number>;
   teachers: TeacherOption[];
   canWrite: boolean;
 }) {
@@ -62,9 +65,11 @@ export function ClassesStreamsSection({
   const [streamDialogOpen, setStreamDialogOpen] = useState<string | null>(null); // class_id
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const [editingCapacityFor, setEditingCapacityFor] = useState<string | null>(null);
+  const [capacityDraft, setCapacityDraft] = useState("");
 
   const [classForm, setClassForm] = useState({ name: "", level_order: 1 });
-  const [streamForm, setStreamForm] = useState({ name: "", class_teacher_id: "" });
+  const [streamForm, setStreamForm] = useState({ name: "", class_teacher_id: "", capacity: "" });
 
   if (!activeYearId) {
     return (
@@ -92,11 +97,28 @@ export function ClassesStreamsSection({
       class_id: classId,
       name: streamForm.name,
       class_teacher_id: streamForm.class_teacher_id || undefined,
+      capacity: streamForm.capacity ? Number(streamForm.capacity) : undefined,
     });
     setPending(false);
     if ("error" in result) return setError(result.error);
     setStreamDialogOpen(null);
-    setStreamForm({ name: "", class_teacher_id: "" });
+    setStreamForm({ name: "", class_teacher_id: "", capacity: "" });
+    router.refresh();
+  }
+
+  async function handleUpdateCapacity(streamId: string) {
+    setPending(true);
+    setError(null);
+    const parsed = capacityDraft.trim() === "" ? null : Number(capacityDraft);
+    if (parsed !== null && (Number.isNaN(parsed) || parsed < 0)) {
+      setPending(false);
+      setError("Capacity must be a positive number, or blank for unlimited.");
+      return;
+    }
+    const result = await updateStreamCapacity(streamId, parsed);
+    setPending(false);
+    if ("error" in result) return setError(result.error);
+    setEditingCapacityFor(null);
     router.refresh();
   }
 
@@ -208,6 +230,16 @@ export function ClassesStreamsSection({
                                 </SelectContent>
                               </Select>
                             </div>
+                            <div className="space-y-1.5">
+                              <Label>Capacity (optional — leave blank for unlimited)</Label>
+                              <Input
+                                type="number"
+                                min={0}
+                                placeholder="e.g. 45"
+                                value={streamForm.capacity}
+                                onChange={(e) => setStreamForm({ ...streamForm, capacity: e.target.value })}
+                              />
+                            </div>
                             {error && <p className="text-sm text-danger">{error}</p>}
                           </div>
                           <DialogFooter>
@@ -224,35 +256,78 @@ export function ClassesStreamsSection({
                     <p className="text-sm text-muted-foreground">No streams yet.</p>
                   ) : (
                     <ul className="flex flex-col gap-2">
-                      {classStreams.map((s) => (
-                        <li key={s.id} className="flex items-center justify-between text-sm">
-                          <span>
-                            {c.name} {s.name}
-                          </span>
-                          {canWrite ? (
-                            <Select
-                              value={s.class_teacher_id ?? "none"}
-                              onValueChange={(v) => handleReassignTeacher(s.id, v)}
-                            >
-                              <SelectTrigger className="h-8 w-48">
-                                <SelectValue placeholder="Unassigned" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="none">Unassigned</SelectItem>
-                                {teachers.map((t) => (
-                                  <SelectItem key={t.id} value={t.id}>
-                                    {t.full_name}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          ) : (
-                            <span className="text-muted-foreground">
-                              {teachers.find((t) => t.id === s.class_teacher_id)?.full_name ?? "Unassigned"}
+                      {classStreams.map((s) => {
+                        const occupied = occupancyByStream[s.id] ?? 0;
+                        const atOrOverCapacity = s.capacity !== null && occupied >= s.capacity;
+                        return (
+                          <li key={s.id} className="flex items-center justify-between gap-3 text-sm">
+                            <span className="flex items-center gap-2">
+                              {c.name} {s.name}
+                              {editingCapacityFor === s.id ? (
+                                <span className="flex items-center gap-1">
+                                  <Input
+                                    autoFocus
+                                    type="number"
+                                    min={0}
+                                    className="h-7 w-20"
+                                    value={capacityDraft}
+                                    onChange={(e) => setCapacityDraft(e.target.value)}
+                                    onKeyDown={(e) => e.key === "Enter" && handleUpdateCapacity(s.id)}
+                                  />
+                                  <Button size="sm" variant="ghost" className="h-7 px-2" onClick={() => handleUpdateCapacity(s.id)} disabled={pending}>
+                                    Save
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    className="h-7 px-2"
+                                    onClick={() => setEditingCapacityFor(null)}
+                                    disabled={pending}
+                                  >
+                                    Cancel
+                                  </Button>
+                                </span>
+                              ) : (
+                                <span
+                                  className={atOrOverCapacity ? "font-medium text-danger" : "text-muted-foreground"}
+                                  title={canWrite ? "Click to edit capacity" : undefined}
+                                  onClick={() => {
+                                    if (!canWrite) return;
+                                    setEditingCapacityFor(s.id);
+                                    setCapacityDraft(s.capacity?.toString() ?? "");
+                                  }}
+                                  role={canWrite ? "button" : undefined}
+                                  style={canWrite ? { cursor: "pointer" } : undefined}
+                                >
+                                  — {occupied}{s.capacity !== null ? `/${s.capacity}` : " students"}
+                                </span>
+                              )}
                             </span>
-                          )}
-                        </li>
-                      ))}
+                            {canWrite ? (
+                              <Select
+                                value={s.class_teacher_id ?? "none"}
+                                onValueChange={(v) => handleReassignTeacher(s.id, v)}
+                              >
+                                <SelectTrigger className="h-8 w-48">
+                                  <SelectValue placeholder="Unassigned" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="none">Unassigned</SelectItem>
+                                  {teachers.map((t) => (
+                                    <SelectItem key={t.id} value={t.id}>
+                                      {t.full_name}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            ) : (
+                              <span className="text-muted-foreground">
+                                {teachers.find((t) => t.id === s.class_teacher_id)?.full_name ?? "Unassigned"}
+                              </span>
+                            )}
+                          </li>
+                        );
+                      })}
                     </ul>
                   )}
                 </div>
