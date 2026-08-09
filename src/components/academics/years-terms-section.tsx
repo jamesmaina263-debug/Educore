@@ -94,12 +94,62 @@ export function YearsTermsSection({
     else router.refresh();
   }
 
+  const addYearDialog = canWrite && (
+    <Dialog open={yearDialogOpen} onOpenChange={setYearDialogOpen}>
+      <DialogTrigger asChild>
+        <Button size="sm" variant="outline">
+          Add year
+        </Button>
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>New academic year</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3">
+          <div className="space-y-1.5">
+            <Label>Name</Label>
+            <Input
+              placeholder="2026"
+              value={yearForm.name}
+              onChange={(e) => setYearForm({ ...yearForm, name: e.target.value })}
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label>Start date</Label>
+              <Input
+                type="date"
+                value={yearForm.start_date}
+                onChange={(e) => setYearForm({ ...yearForm, start_date: e.target.value })}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>End date</Label>
+              <Input
+                type="date"
+                value={yearForm.end_date}
+                onChange={(e) => setYearForm({ ...yearForm, end_date: e.target.value })}
+              />
+            </div>
+          </div>
+          {error && <p className="text-sm text-danger">{error}</p>}
+        </div>
+        <DialogFooter>
+          <Button onClick={handleCreateYear} disabled={pending}>
+            {pending ? "Creating…" : "Create year"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+
   return (
     <div className="flex flex-col gap-6">
       <div>
         {years.length === 0 ? (
           <div className="panel border-dashed p-6 text-center text-sm text-muted-foreground">
-            No academic years yet.
+            <p>No academic years yet.</p>
+            {canWrite && <div className="mt-3 flex justify-center">{addYearDialog}</div>}
           </div>
         ) : (
           <div className="panel">
@@ -109,54 +159,7 @@ export function YearsTermsSection({
                 <span className="text-[0.6875rem] text-muted-foreground">
                   {years.length} year{years.length === 1 ? "" : "s"}
                 </span>
-                {canWrite && (
-                  <Dialog open={yearDialogOpen} onOpenChange={setYearDialogOpen}>
-                    <DialogTrigger asChild>
-                      <Button size="sm" variant="outline">
-                        Add year
-                      </Button>
-                    </DialogTrigger>
-                    <DialogContent>
-                      <DialogHeader>
-                        <DialogTitle>New academic year</DialogTitle>
-                      </DialogHeader>
-                      <div className="space-y-3">
-                        <div className="space-y-1.5">
-                          <Label>Name</Label>
-                          <Input
-                            placeholder="2026"
-                            value={yearForm.name}
-                            onChange={(e) => setYearForm({ ...yearForm, name: e.target.value })}
-                          />
-                        </div>
-                        <div className="grid grid-cols-2 gap-3">
-                          <div className="space-y-1.5">
-                            <Label>Start date</Label>
-                            <Input
-                              type="date"
-                              value={yearForm.start_date}
-                              onChange={(e) => setYearForm({ ...yearForm, start_date: e.target.value })}
-                            />
-                          </div>
-                          <div className="space-y-1.5">
-                            <Label>End date</Label>
-                            <Input
-                              type="date"
-                              value={yearForm.end_date}
-                              onChange={(e) => setYearForm({ ...yearForm, end_date: e.target.value })}
-                            />
-                          </div>
-                        </div>
-                        {error && <p className="text-sm text-danger">{error}</p>}
-                      </div>
-                      <DialogFooter>
-                        <Button onClick={handleCreateYear} disabled={pending}>
-                          {pending ? "Creating…" : "Create year"}
-                        </Button>
-                      </DialogFooter>
-                    </DialogContent>
-                  </Dialog>
-                )}
+                {addYearDialog}
               </div>
             </header>
             <div className="overflow-x-auto">
