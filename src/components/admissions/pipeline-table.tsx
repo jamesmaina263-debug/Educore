@@ -117,30 +117,39 @@ export function PipelineTable({
                           </Button>
                         </div>
                       ) : r.status === "approved" ? (
-                        <div className="flex justify-end gap-2">
-                          <Select
-                            value={streamChoice[r.id] ?? ""}
-                            onValueChange={(v) => setStreamChoice((s) => ({ ...s, [r.id]: v }))}
-                          >
-                            <SelectTrigger className="h-8 w-40">
-                              <SelectValue placeholder="Choose class" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {streams.map((s) => (
-                                <SelectItem key={s.id} value={s.id}>
-                                  {s.label}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                          <Button
-                            size="sm"
-                            disabled={pendingId === r.id || !streamChoice[r.id]}
-                            onClick={() => run(r.id, () => enrollApplication(r.id, streamChoice[r.id]))}
-                          >
-                            Enroll
-                          </Button>
-                        </div>
+                        streams.length === 0 ? (
+                          <div className="flex items-center justify-end gap-2 text-[0.8125rem] text-muted-foreground">
+                            <span>No streams set up yet.</span>
+                            <Link href="/academics" className="font-medium text-primary hover:underline">
+                              Add one in Academics
+                            </Link>
+                          </div>
+                        ) : (
+                          <div className="flex justify-end gap-2">
+                            <Select
+                              value={streamChoice[r.id] ?? ""}
+                              onValueChange={(v) => setStreamChoice((s) => ({ ...s, [r.id]: v }))}
+                            >
+                              <SelectTrigger className="h-8 w-40">
+                                <SelectValue placeholder="Choose stream" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {streams.map((s) => (
+                                  <SelectItem key={s.id} value={s.id}>
+                                    {s.label}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <Button
+                              size="sm"
+                              disabled={pendingId === r.id || !streamChoice[r.id]}
+                              onClick={() => run(r.id, () => enrollApplication(r.id, streamChoice[r.id]))}
+                            >
+                              Enroll
+                            </Button>
+                          </div>
+                        )
                       ) : (
                         <div className="flex justify-end">
                           <Button
