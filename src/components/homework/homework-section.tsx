@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
+import { StatusBadge } from "@/components/status-badge";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
@@ -231,7 +232,7 @@ export function HomeworkSection({
                   <p className="text-sm font-medium">
                     {s.student_name} <span className="text-xs text-muted-foreground">({s.admission_number})</span>
                   </p>
-                  <Badge variant={s.status === "graded" ? "success" : "secondary"}>{s.status}</Badge>
+                  <StatusBadge tone={s.status === "graded" ? "success" : "neutral"} label={s.status} />
                 </div>
                 <p className="mt-2 text-sm">{s.submission_text}</p>
                 <div className="mt-2 grid grid-cols-2 gap-2">

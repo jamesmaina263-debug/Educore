@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Badge } from "@/components/ui/badge";
+import { StatusBadge } from "@/components/status-badge";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 
 export interface DisciplineRow {
@@ -18,8 +18,8 @@ export interface DisciplineRow {
   visible_to_guardian: boolean;
 }
 
-const CATEGORY_VARIANT: Record<DisciplineRow["category"], "secondary" | "warning" | "danger"> = {
-  minor: "secondary",
+const CATEGORY_TONE: Record<DisciplineRow["category"], "neutral" | "warning" | "danger"> = {
+  minor: "neutral",
   moderate: "warning",
   major: "danger",
 };
@@ -92,7 +92,7 @@ export function DisciplineTab({
       {rows.map((r) => (
         <div key={r.id} className="rounded-md border border-border p-3">
           <div className="flex items-center gap-2">
-            <Badge variant={CATEGORY_VARIANT[r.category]}>{r.category}</Badge>
+            <StatusBadge tone={CATEGORY_TONE[r.category]} label={r.category} />
             <span className="text-xs text-muted-foreground">{r.incident_date}</span>
             {!r.visible_to_guardian && (
               <span className="text-xs text-muted-foreground">· internal only</span>

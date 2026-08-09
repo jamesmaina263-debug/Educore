@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
+import { StatusBadge } from "@/components/status-badge";
 import { bookPtSlotAction, cancelPtBookingAction } from "@/app/portal/actions";
 
 export interface PortalSlotRow {
@@ -69,7 +69,7 @@ export function PortalPtMeetingsSection({ studentId, slots }: { studentId: strin
             </div>
             {s.my_booking_id ? (
               <div className="flex items-center gap-2">
-                <Badge variant="success">Booked</Badge>
+                <StatusBadge tone="success" label="Booked" />
                 <Button size="sm" variant="outline" onClick={() => cancel(s.my_booking_id as string)} disabled={pendingId === s.my_booking_id}>
                   Cancel
                 </Button>

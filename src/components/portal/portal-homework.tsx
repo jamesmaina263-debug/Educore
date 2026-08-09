@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Badge } from "@/components/ui/badge";
+import { StatusBadge } from "@/components/status-badge";
 import { submitHomeworkAction } from "@/app/portal/actions";
 
 export interface PortalAssignmentRow {
@@ -54,9 +54,10 @@ export function PortalHomeworkSection({ studentId, assignments }: { studentId: s
 
           {a.submission ? (
             <div className="mt-2">
-              <Badge variant={a.submission.status === "graded" ? "success" : "secondary"}>
-                {a.submission.status === "graded" ? `Graded${a.submission.grade ? `: ${a.submission.grade}` : ""}` : "Submitted"}
-              </Badge>
+              <StatusBadge
+                tone={a.submission.status === "graded" ? "success" : "neutral"}
+                label={a.submission.status === "graded" ? `Graded${a.submission.grade ? `: ${a.submission.grade}` : ""}` : "Submitted"}
+              />
               <p className="mt-1 text-sm">{a.submission.submission_text}</p>
               {a.submission.feedback && (
                 <p className="mt-1 text-xs text-muted-foreground">Feedback: {a.submission.feedback}</p>
