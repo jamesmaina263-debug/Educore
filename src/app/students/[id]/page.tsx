@@ -8,6 +8,10 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { GuardiansTab, type GuardianRow } from "./guardians-tab";
 import { DocumentsTab, type DocumentRow } from "./documents-tab";
 import { MedicalTab } from "./medical-tab";
+import { CertificatesTab, type CertificateRow } from "./certificates-tab";
+import { DisciplineTab, type DisciplineRow } from "./discipline-tab";
+import { Button } from "@/components/ui/button";
+import Link from "next/link";
 
 export default async function StudentProfilePage({
   params,
@@ -59,8 +63,24 @@ export default async function StudentProfilePage({
 
   const documents: DocumentRow[] = documentRows ?? [];
 
+  const { data: certificateRows } = await supabase
+    .from("certificates")
+    .select("id, certificate_type, title, description, issued_date")
+    .eq("student_id", id)
+    .order("issued_date", { ascending: false });
+  const certificates: CertificateRow[] = certificateRows ?? [];
+
+  const { data: disciplineRows } = await supabase
+    .from("discipline_records")
+    .select("id, incident_date, category, description, action_taken, visible_to_guardian")
+    .eq("student_id", id)
+    .order("incident_date", { ascending: false });
+  const disciplineRecords: DisciplineRow[] = disciplineRows ?? [];
+
   const canManageStudents = (await supabase.rpc("auth_has_permission", { p_permission_key: "students.write" })).data === true;
   const canUploadDocuments = (await supabase.rpc("auth_has_permission", { p_permission_key: "students.documents.write" })).data === true;
+  const canIssueCertificates = (await supabase.rpc("auth_has_permission", { p_permission_key: "certificates.write" })).data === true;
+  const canWriteDiscipline = (await supabase.rpc("auth_has_permission", { p_permission_key: "discipline.write" })).data === true;
 
   const roleName = (schoolUser?.roles as unknown as { display_name: string } | null)?.display_name;
   const schoolName = (schoolUser?.schools as unknown as { name: string } | null)?.name;
@@ -101,6 +121,11 @@ export default async function StudentProfilePage({
           >
             {student.status}
           </Badge>
+          <Button asChild variant="outline" size="sm">
+            <Link href={`/students/${id}/id-card`} target="_blank">
+              Print ID card
+            </Link>
+          </Button>
         </div>
 
         <Tabs defaultValue="overview">
@@ -109,6 +134,8 @@ export default async function StudentProfilePage({
             <TabsTrigger value="guardians">Guardians</TabsTrigger>
             <TabsTrigger value="documents">Documents</TabsTrigger>
             <TabsTrigger value="medical">Medical</TabsTrigger>
+            <TabsTrigger value="certificates">Certificates</TabsTrigger>
+            <TabsTrigger value="discipline">Discipline</TabsTrigger>
           </TabsList>
 
           <TabsContent value="overview">
@@ -142,6 +169,14 @@ export default async function StudentProfilePage({
 
           <TabsContent value="medical">
             <MedicalTab studentId={id} />
+          </TabsContent>
+
+          <TabsContent value="certificates">
+            <CertificatesTab studentId={id} certificates={certificates} canIssue={canIssueCertificates} />
+          </TabsContent>
+
+          <TabsContent value="discipline">
+            <DisciplineTab studentId={id} records={disciplineRecords} canWrite={canWriteDiscipline} />
           </TabsContent>
         </Tabs>
       </div>

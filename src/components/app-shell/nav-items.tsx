@@ -17,6 +17,8 @@ import {
   Settings,
   Sparkles,
   BarChart3,
+  NotebookPen,
+  Users2,
 } from "lucide-react";
 
 export interface NavItem {
@@ -32,6 +34,7 @@ export const navItems: NavItem[] = [
   { label: "Academics", href: "/academics", icon: BookOpen },
   { label: "Attendance", href: "/attendance", icon: CalendarCheck },
   { label: "Exams", href: "/exams", icon: FileText },
+  { label: "Homework", href: "/homework", icon: NotebookPen },
   { label: "Staff", href: "/staff", icon: Users },
   { label: "Finance", href: "/finance", icon: Wallet },
   { label: "Payroll", href: "/payroll", icon: Banknote },
@@ -40,8 +43,10 @@ export const navItems: NavItem[] = [
   { label: "Hostel", href: "/hostel", icon: BedDouble },
   { label: "Inventory", href: "/inventory", icon: Package },
   { label: "Performance", href: "/performance", icon: TrendingUp },
+  { label: "PT Meetings", href: "/pt-meetings", icon: Users2 },
   { label: "Communication", href: "/communication", icon: MessageSquare },
   { label: "Trimora AI", href: "/ai", icon: Sparkles },
   { label: "Reports", href: "/reports", icon: BarChart3 },
   { label: "Settings", href: "/settings", icon: Settings },
 ];
+
