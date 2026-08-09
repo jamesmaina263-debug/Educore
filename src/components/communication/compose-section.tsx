@@ -106,7 +106,7 @@ export function ComposeSection({
   }
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-3">
       {error && <p className="text-sm text-danger">{error}</p>}
       {result && (
         <p className="rounded-md border border-success/30 bg-success/10 p-3 text-sm text-success">
@@ -114,123 +114,130 @@ export function ComposeSection({
         </p>
       )}
 
-      <div className="grid grid-cols-4 gap-3">
-        <div className="space-y-1.5">
-          <Label>Channel</Label>
-          <Select value={channel} onValueChange={(v) => setChannel(v as typeof channel)}>
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {CHANNELS.map((c) => (
-                <SelectItem key={c.value} value={c.value}>
-                  {c.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="space-y-1.5">
-          <Label>Recipients</Label>
-          <Select value={scope} onValueChange={(v) => setScope(v as typeof scope)}>
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All guardians</SelectItem>
-              <SelectItem value="class">A specific class</SelectItem>
-              <SelectItem value="student">A single student</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-        {scope === "class" && (
-          <div className="space-y-1.5">
-            <Label>Class</Label>
-            <Select value={classId} onValueChange={setClassId}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {classes.map((c) => (
-                  <SelectItem key={c.id} value={c.id}>
-                    {c.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+      <div className="panel max-w-3xl">
+        <header className="border-b border-border px-4 py-2.5">
+          <h2 className="text-[0.8125rem] font-semibold">Compose message</h2>
+        </header>
+        <div className="flex flex-col gap-4 p-4">
+          <div className="grid grid-cols-4 gap-3">
+            <div className="space-y-1.5">
+              <Label>Channel</Label>
+              <Select value={channel} onValueChange={(v) => setChannel(v as typeof channel)}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {CHANNELS.map((c) => (
+                    <SelectItem key={c.value} value={c.value}>
+                      {c.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Recipients</Label>
+              <Select value={scope} onValueChange={(v) => setScope(v as typeof scope)}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All guardians</SelectItem>
+                  <SelectItem value="class">A specific class</SelectItem>
+                  <SelectItem value="student">A single student</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            {scope === "class" && (
+              <div className="space-y-1.5">
+                <Label>Class</Label>
+                <Select value={classId} onValueChange={setClassId}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {classes.map((c) => (
+                      <SelectItem key={c.id} value={c.id}>
+                        {c.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+            {scope === "student" && (
+              <div className="space-y-1.5">
+                <Label>Student</Label>
+                <Select value={studentId} onValueChange={setStudentId}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {roster.map((r) => (
+                      <SelectItem key={r.student_id} value={r.student_id}>
+                        {r.student_name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+            <div className="space-y-1.5">
+              <Label>Template</Label>
+              <Select value={templateId} onValueChange={handleTemplateChange}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">Write my own</SelectItem>
+                  {templates.map((t) => (
+                    <SelectItem key={t.id} value={t.id}>
+                      {t.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
-        )}
-        {scope === "student" && (
-          <div className="space-y-1.5">
-            <Label>Student</Label>
-            <Select value={studentId} onValueChange={setStudentId}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {roster.map((r) => (
-                  <SelectItem key={r.student_id} value={r.student_id}>
-                    {r.student_name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+
+          {channel === "email" && (
+            <div className="space-y-1.5">
+              <Label>Subject</Label>
+              <Input value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="Fee reminder" />
+            </div>
+          )}
+
+          {templateId === "__none__" ? (
+            <div className="space-y-1.5">
+              <Label>Message</Label>
+              <Textarea value={body} onChange={(e) => setBody(e.target.value)} rows={4} placeholder="Use {{student_name}} to personalize per recipient." />
+            </div>
+          ) : (
+            <div className="rounded-md border border-border bg-muted/40 p-3">
+              <p className="mb-1 text-[0.6875rem] text-muted-foreground">Preview (first recipient)</p>
+              <p className="text-sm">{previewRendered}</p>
+            </div>
+          )}
+
+          <div className="flex items-center justify-between text-[0.75rem] text-muted-foreground">
+            <span>
+              {scoped.length} recipient{scoped.length !== 1 && "s"}
+              {skippedNoContact > 0 && ` (${skippedNoContact} skipped — no ${channel === "email" ? "email" : "phone"} on file)`}
+            </span>
+            {channel === "sms" && (
+              <span>{previewRendered.length} chars — {segments} segment{segments !== 1 && "s"}</span>
+            )}
           </div>
-        )}
-        <div className="space-y-1.5">
-          <Label>Template</Label>
-          <Select value={templateId} onValueChange={handleTemplateChange}>
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="__none__">Write my own</SelectItem>
-              {templates.map((t) => (
-                <SelectItem key={t.id} value={t.id}>
-                  {t.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+
+          <Button
+            onClick={handleSend}
+            disabled={pending || scoped.length === 0 || (templateId === "__none__" && !body.trim()) || (channel === "email" && !subject.trim())}
+            className="self-start"
+          >
+            {pending ? "Sending…" : `Send to ${scoped.length}`}
+          </Button>
         </div>
       </div>
-
-      {channel === "email" && (
-        <div className="space-y-1.5">
-          <Label>Subject</Label>
-          <Input value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="Fee reminder" />
-        </div>
-      )}
-
-      {templateId === "__none__" ? (
-        <div className="space-y-1.5">
-          <Label>Message</Label>
-          <Textarea value={body} onChange={(e) => setBody(e.target.value)} rows={4} placeholder="Use {{student_name}} to personalize per recipient." />
-        </div>
-      ) : (
-        <div className="rounded-md border border-border p-3">
-          <p className="mb-1 text-xs text-muted-foreground">Preview (first recipient)</p>
-          <p className="text-sm">{previewRendered}</p>
-        </div>
-      )}
-
-      <div className="flex items-center justify-between text-sm text-muted-foreground">
-        <span>
-          {scoped.length} recipient{scoped.length !== 1 && "s"}
-          {skippedNoContact > 0 && ` (${skippedNoContact} skipped — no ${channel === "email" ? "email" : "phone"} on file)`}
-        </span>
-        {channel === "sms" && (
-          <span>{previewRendered.length} chars — {segments} segment{segments !== 1 && "s"}</span>
-        )}
-      </div>
-
-      <Button
-        onClick={handleSend}
-        disabled={pending || scoped.length === 0 || (templateId === "__none__" && !body.trim()) || (channel === "email" && !subject.trim())}
-        className="self-start"
-      >
-        {pending ? "Sending…" : `Send to ${scoped.length}`}
-      </Button>
     </div>
   );
 }

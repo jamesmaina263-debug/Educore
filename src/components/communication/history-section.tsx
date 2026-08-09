@@ -3,9 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { StatusBadge } from "@/components/status-badge";
-import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { dispatchPending } from "@/app/communication/actions";
 
 export interface LogRow {
@@ -54,47 +52,55 @@ export function HistorySection({ logs }: { logs: LogRow[] }) {
         </div>
       )}
 
-      {logs.length === 0 ? (
-        <p className="rounded-md border border-dashed border-border p-10 text-center text-sm text-muted-foreground">
-          No messages sent yet.
-        </p>
-      ) : (
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Channel</TableHead>
-              <TableHead>Recipient</TableHead>
-              <TableHead>Student</TableHead>
-              <TableHead>Message</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead>Sent</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {logs.map((l) => (
-              <TableRow key={l.id}>
-                <TableCell>
-                  <Badge variant="outline">{CHANNEL_LABELS[l.channel]}</Badge>
-                </TableCell>
-                <TableCell>{l.channel === "email" ? l.recipient_email : l.recipient_phone}</TableCell>
-                <TableCell>{l.student_name ?? "—"}</TableCell>
-                <TableCell className="max-w-xs truncate" title={l.subject ? `${l.subject}\n\n${l.body}` : l.body}>
-                  {l.subject ? `${l.subject}: ` : ""}
-                  {l.body}
-                </TableCell>
-                <TableCell>
-                  <StatusBadge
-                    tone={l.status === "sent" || l.status === "delivered" ? "success" : l.status === "failed" ? "danger" : "neutral"}
-                    label={l.status}
-                    title={l.provider_response ?? undefined}
-                  />
-                </TableCell>
-                <TableCell>{new Date(l.created_at).toLocaleString()}</TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      )}
+      <div className="panel">
+        <header className="flex items-center justify-between border-b border-border px-4 py-2.5">
+          <h2 className="text-[0.8125rem] font-semibold">Delivery history</h2>
+          <span className="text-[0.6875rem] text-muted-foreground">
+            {logs.length} message{logs.length === 1 ? "" : "s"}
+          </span>
+        </header>
+        {logs.length === 0 ? (
+          <p className="p-10 text-center text-sm text-muted-foreground">No messages sent yet.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="table-dense w-full">
+              <thead className="bg-muted/70">
+                <tr>
+                  <th>Channel</th>
+                  <th>Recipient</th>
+                  <th>Student</th>
+                  <th>Message</th>
+                  <th>Status</th>
+                  <th>Sent</th>
+                </tr>
+              </thead>
+              <tbody>
+                {logs.map((l) => (
+                  <tr key={l.id}>
+                    <td>
+                      <StatusBadge tone="neutral" label={CHANNEL_LABELS[l.channel]} />
+                    </td>
+                    <td className="text-muted-foreground">{l.channel === "email" ? l.recipient_email : l.recipient_phone}</td>
+                    <td>{l.student_name ?? "—"}</td>
+                    <td className="max-w-xs truncate" title={l.subject ? `${l.subject}\n\n${l.body}` : l.body}>
+                      {l.subject ? `${l.subject}: ` : ""}
+                      {l.body}
+                    </td>
+                    <td>
+                      <StatusBadge
+                        tone={l.status === "sent" || l.status === "delivered" ? "success" : l.status === "failed" ? "danger" : "neutral"}
+                        label={l.status}
+                        title={l.provider_response ?? undefined}
+                      />
+                    </td>
+                    <td className="text-muted-foreground">{new Date(l.created_at).toLocaleString()}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
