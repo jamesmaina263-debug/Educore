@@ -5,9 +5,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
 import { StatusBadge } from "@/components/status-badge";
-import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { createHostelRoomAction, allocateHostelRoomAction, endHostelAllocationAction } from "@/app/hostel/actions";
@@ -202,74 +200,88 @@ export function HostelSection({
         </div>
       )}
 
-      <div className="flex flex-col gap-2">
-        <h2 className="text-sm font-semibold">Rooms</h2>
+      <div className="panel">
+        <header className="flex items-center justify-between border-b border-border px-4 py-2.5">
+          <h2 className="text-[0.8125rem] font-semibold">Rooms</h2>
+          <span className="text-[0.6875rem] text-muted-foreground">
+            {rooms.length} room{rooms.length === 1 ? "" : "s"}
+          </span>
+        </header>
         {rooms.length === 0 ? (
-          <p className="rounded-md border border-dashed border-border p-6 text-center text-sm text-muted-foreground">No rooms yet.</p>
+          <p className="p-10 text-center text-sm text-muted-foreground">No rooms yet.</p>
         ) : (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Room</TableHead>
-                <TableHead>Block</TableHead>
-                <TableHead>Gender</TableHead>
-                <TableHead>Occupancy</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {rooms.map((r) => (
-                <TableRow key={r.id}>
-                  <TableCell className="font-medium">{r.room_number}</TableCell>
-                  <TableCell>{r.block ?? "—"}</TableCell>
-                  <TableCell className="capitalize">{r.gender}</TableCell>
-                  <TableCell>
-                    <StatusBadge
-                      tone={r.occupied >= r.capacity ? "warning" : "neutral"}
-                      label={`${r.occupied} / ${r.capacity}`}
-                    />
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+          <div className="overflow-x-auto">
+            <table className="table-dense w-full">
+              <thead className="bg-muted/70">
+                <tr>
+                  <th>Room</th>
+                  <th>Block</th>
+                  <th>Gender</th>
+                  <th>Occupancy</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rooms.map((r) => (
+                  <tr key={r.id}>
+                    <td className="font-medium">{r.room_number}</td>
+                    <td className="text-muted-foreground">{r.block ?? "—"}</td>
+                    <td className="text-muted-foreground capitalize">{r.gender}</td>
+                    <td>
+                      <StatusBadge
+                        tone={r.occupied >= r.capacity ? "warning" : "neutral"}
+                        label={`${r.occupied} / ${r.capacity}`}
+                      />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
 
-      <div className="flex flex-col gap-2">
-        <h2 className="text-sm font-semibold">Allocations</h2>
+      <div className="panel">
+        <header className="flex items-center justify-between border-b border-border px-4 py-2.5">
+          <h2 className="text-[0.8125rem] font-semibold">Allocations</h2>
+          <span className="text-[0.6875rem] text-muted-foreground">
+            {allocations.length} allocation{allocations.length === 1 ? "" : "s"}
+          </span>
+        </header>
         {allocations.length === 0 ? (
-          <p className="rounded-md border border-dashed border-border p-6 text-center text-sm text-muted-foreground">No allocations yet.</p>
+          <p className="p-10 text-center text-sm text-muted-foreground">No allocations yet.</p>
         ) : (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Student</TableHead>
-                <TableHead>Room</TableHead>
-                <TableHead>Since</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {allocations.map((a) => (
-                <TableRow key={a.id}>
-                  <TableCell className="font-medium">{a.student_name}</TableCell>
-                  <TableCell>{a.room_label}</TableCell>
-                  <TableCell>{a.start_date}</TableCell>
-                  <TableCell>
-                    <StatusBadge tone={a.status === "active" ? "success" : "neutral"} label={a.status} />
-                  </TableCell>
-                  <TableCell className="text-right">
-                    {canWrite && a.status === "active" && (
-                      <Button size="sm" variant="ghost" disabled={pending} onClick={() => handleEnd(a.id)}>
-                        End
-                      </Button>
-                    )}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+          <div className="overflow-x-auto">
+            <table className="table-dense w-full">
+              <thead className="bg-muted/70">
+                <tr>
+                  <th>Student</th>
+                  <th>Room</th>
+                  <th>Since</th>
+                  <th>Status</th>
+                  <th className="text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {allocations.map((a) => (
+                  <tr key={a.id}>
+                    <td className="font-medium">{a.student_name}</td>
+                    <td className="text-muted-foreground">{a.room_label}</td>
+                    <td className="text-muted-foreground">{a.start_date}</td>
+                    <td>
+                      <StatusBadge tone={a.status === "active" ? "success" : "neutral"} label={a.status} />
+                    </td>
+                    <td className="text-right">
+                      {canWrite && a.status === "active" && (
+                        <Button size="sm" variant="ghost" disabled={pending} onClick={() => handleEnd(a.id)}>
+                          End
+                        </Button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
     </div>
