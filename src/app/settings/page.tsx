@@ -30,7 +30,9 @@ export default async function SettingsPage() {
   ] = await Promise.all([
     supabase
       .from("school_users")
-      .select("id, full_name, roles(display_name), schools(id, name, email, motto, logo_url, primary_color)")
+      .select(
+        "id, full_name, roles(display_name), schools(id, name, email, motto, logo_url, primary_color, school_group_id)"
+      )
       .eq("auth_user_id", user.id)
       .maybeSingle(),
     supabase.rpc("auth_has_permission", { p_permission_key: "settings.branding.write" }),
@@ -43,6 +45,7 @@ export default async function SettingsPage() {
   const school = schoolUser?.schools as unknown as {
     id: string;
     name: string;
+    school_group_id: string | null;
     email: string | null;
     motto: string | null;
     logo_url: string | null;
@@ -108,6 +111,20 @@ export default async function SettingsPage() {
     apiKeyRows = (data ?? []) as ApiKeyRow[];
   }
 
+  let groupBranding: { logo_url: string | null; primary_color: string | null } | null = null;
+  if (school?.school_group_id) {
+    const { data: group } = await supabase
+      .from("school_groups")
+      .select("logo_url, primary_color, whitelabel_enabled")
+      .eq("id", school.school_group_id)
+      .maybeSingle();
+    // Only offer the group's values as a fallback if white-label is actually on —
+    // otherwise a group's stale/unused branding fields shouldn't leak in as a fallback.
+    if (group?.whitelabel_enabled) {
+      groupBranding = { logo_url: group.logo_url, primary_color: group.primary_color };
+    }
+  }
+
   const brandingData: BrandingData = {
     name: school?.name ?? "",
     motto: school?.motto ?? null,
@@ -170,7 +187,11 @@ export default async function SettingsPage() {
           </TabsContent>
 
           <TabsContent value="branding">
-            <BrandingForm initial={brandingData} canWrite={canWriteBranding === true} />
+            <BrandingForm
+              initial={brandingData}
+              canWrite={canWriteBranding === true}
+              groupFallback={groupBranding}
+            />
           </TabsContent>
 
           <TabsContent value="staff">
