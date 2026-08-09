@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
 import { StatusBadge } from "@/components/status-badge";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
@@ -106,9 +105,14 @@ export function LibrarySection({
     <div className="flex flex-col gap-6">
       {error && <p className="text-sm text-danger">{error}</p>}
 
-      <div className="flex flex-col gap-2">
-        <div className="flex items-center justify-between">
-          <h2 className="text-sm font-semibold">Catalogue</h2>
+      <div className="panel">
+        <header className="flex items-center justify-between border-b border-border px-4 py-2.5">
+          <div className="flex items-center gap-3">
+            <h2 className="text-[0.8125rem] font-semibold">Catalogue</h2>
+            <span className="text-[0.6875rem] text-muted-foreground">
+              {items.length} title{items.length === 1 ? "" : "s"}
+            </span>
+          </div>
           {canWrite && (
             <div className="flex gap-2">
               <Dialog open={addOpen} onOpenChange={setAddOpen}>
@@ -204,74 +208,83 @@ export function LibrarySection({
               </Dialog>
             </div>
           )}
-        </div>
+        </header>
 
         {items.length === 0 ? (
-          <p className="rounded-md border border-dashed border-border p-6 text-center text-sm text-muted-foreground">No items catalogued yet.</p>
+          <p className="p-10 text-center text-sm text-muted-foreground">No items catalogued yet.</p>
         ) : (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Title</TableHead>
-                <TableHead>Author</TableHead>
-                <TableHead>Category</TableHead>
-                <TableHead>Available</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {items.map((i) => (
-                <TableRow key={i.id}>
-                  <TableCell className="font-medium">{i.title}</TableCell>
-                  <TableCell>{i.author ?? "—"}</TableCell>
-                  <TableCell>{i.category ?? "—"}</TableCell>
-                  <TableCell>
-                    {i.available_copies} / {i.total_copies}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+          <div className="overflow-x-auto">
+            <table className="table-dense w-full">
+              <thead className="bg-muted/70">
+                <tr>
+                  <th>Title</th>
+                  <th>Author</th>
+                  <th>Category</th>
+                  <th>Available</th>
+                </tr>
+              </thead>
+              <tbody>
+                {items.map((i) => (
+                  <tr key={i.id}>
+                    <td className="font-medium">{i.title}</td>
+                    <td className="text-muted-foreground">{i.author ?? "—"}</td>
+                    <td className="text-muted-foreground">{i.category ?? "—"}</td>
+                    <td data-numeric>
+                      {i.available_copies} / {i.total_copies}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
 
-      <div className="flex flex-col gap-2">
-        <h2 className="text-sm font-semibold">Loans</h2>
+      <div className="panel">
+        <header className="flex items-center justify-between border-b border-border px-4 py-2.5">
+          <h2 className="text-[0.8125rem] font-semibold">Loans</h2>
+          <span className="text-[0.6875rem] text-muted-foreground">
+            {loans.length} loan{loans.length === 1 ? "" : "s"}
+          </span>
+        </header>
         {loans.length === 0 ? (
-          <p className="rounded-md border border-dashed border-border p-6 text-center text-sm text-muted-foreground">No loans yet.</p>
+          <p className="p-10 text-center text-sm text-muted-foreground">No loans yet.</p>
         ) : (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Item</TableHead>
-                <TableHead>Student</TableHead>
-                <TableHead>Due</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {loans.map((l) => (
-                <TableRow key={l.id}>
-                  <TableCell className="font-medium">{l.item_title}</TableCell>
-                  <TableCell>{l.student_name}</TableCell>
-                  <TableCell>{l.due_date}</TableCell>
-                  <TableCell>
-                    <StatusBadge
-                      tone={l.status === "returned" ? "success" : l.status === "lost" ? "danger" : "neutral"}
-                      label={l.status}
-                    />
-                  </TableCell>
-                  <TableCell className="text-right">
-                    {canWrite && l.status === "borrowed" && (
-                      <Button size="sm" variant="ghost" disabled={pending} onClick={() => handleReturn(l.id)}>
-                        Mark returned
-                      </Button>
-                    )}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+          <div className="overflow-x-auto">
+            <table className="table-dense w-full">
+              <thead className="bg-muted/70">
+                <tr>
+                  <th>Item</th>
+                  <th>Student</th>
+                  <th>Due</th>
+                  <th>Status</th>
+                  <th className="text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {loans.map((l) => (
+                  <tr key={l.id}>
+                    <td className="font-medium">{l.item_title}</td>
+                    <td className="text-muted-foreground">{l.student_name}</td>
+                    <td className="text-muted-foreground">{l.due_date}</td>
+                    <td>
+                      <StatusBadge
+                        tone={l.status === "returned" ? "success" : l.status === "lost" ? "danger" : "neutral"}
+                        label={l.status}
+                      />
+                    </td>
+                    <td className="text-right">
+                      {canWrite && l.status === "borrowed" && (
+                        <Button size="sm" variant="ghost" disabled={pending} onClick={() => handleReturn(l.id)}>
+                          Mark returned
+                        </Button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
     </div>
