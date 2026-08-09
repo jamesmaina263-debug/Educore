@@ -35,7 +35,7 @@ export default async function AIPage() {
 
   return (
     <AppShell
-      breadcrumbs={[{ label: schoolName ?? "EduCore" }, { label: "Trimora AI" }]}
+      breadcrumbs={[{ label: schoolName ?? "EduCore", href: "/dashboard" }, { label: "Trimora AI" }]}
       userName={schoolUser?.full_name ?? user.email ?? "Account"}
       userRole={roleName}
       onSignOut={logout}
