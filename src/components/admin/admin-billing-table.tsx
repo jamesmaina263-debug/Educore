@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
   Select,
   SelectContent,
@@ -82,217 +81,231 @@ export function AdminBillingTable({ rows, plans }: { rows: SchoolBillingRow[]; p
           {error}
         </p>
       )}
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>School</TableHead>
-            <TableHead>School status</TableHead>
-            <TableHead>Subscription</TableHead>
-            <TableHead>Trial / period end</TableHead>
-            <TableHead>Actions</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {rows.map((row) => (
-            <>
-              <TableRow key={row.school_id}>
-                <TableCell className="font-medium">{row.school_name}</TableCell>
-                <TableCell>
-                  <StatusBadge tone={toneFor(row.school_status)} label={row.school_status ?? "—"} />
-                </TableCell>
-                <TableCell>
-                  <StatusBadge
-                    tone={toneFor(row.subscription_status)}
-                    label={row.subscription_status ?? "no subscription"}
-                  />
-                </TableCell>
-                <TableCell>
-                  {row.trial_ends_at
-                    ? new Date(row.trial_ends_at).toLocaleDateString()
-                    : row.current_period_end
-                      ? new Date(row.current_period_end).toLocaleDateString()
-                      : "—"}
-                </TableCell>
-                <TableCell>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => setExpanded(expanded === row.school_id ? null : row.school_id)}
-                  >
-                    {expanded === row.school_id ? "Close" : "Manage"}
-                  </Button>
-                </TableCell>
-              </TableRow>
-              {expanded === row.school_id && (
-                <TableRow key={`${row.school_id}-expanded`}>
-                  <TableCell colSpan={5}>
-                    <div className="flex flex-col gap-4 rounded-md border border-border p-4">
-                      <div className="flex flex-wrap items-end gap-2">
-                        <div className="space-y-1">
-                          <p className="text-xs text-muted-foreground">Activate on plan</p>
-                          <Select
-                            value={selectedPlan[row.school_id] ?? ""}
-                            onValueChange={(v) => setSelectedPlan((p) => ({ ...p, [row.school_id]: v }))}
-                          >
-                            <SelectTrigger className="w-40">
-                              <SelectValue placeholder="Plan" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {plans.map((p) => (
-                                <SelectItem key={p.id} value={p.id}>
-                                  {p.name}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <div className="space-y-1">
-                          <p className="text-xs text-muted-foreground">Period end</p>
-                          <Input
-                            type="date"
-                            className="w-40"
-                            value={periodEnd[row.school_id] ?? ""}
-                            onChange={(e) => setPeriodEnd((p) => ({ ...p, [row.school_id]: e.target.value }))}
-                          />
-                        </div>
-                        <Button
-                          size="sm"
-                          disabled={pending || !selectedPlan[row.school_id] || !periodEnd[row.school_id]}
-                          onClick={() =>
-                            run(() =>
-                              activateSchoolSubscription(
-                                row.school_id,
-                                selectedPlan[row.school_id],
-                                periodEnd[row.school_id],
-                              ),
-                            )
-                          }
-                        >
-                          Activate
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="destructive"
-                          disabled={pending}
-                          onClick={() => run(() => suspendSchoolSubscription(row.school_id, "Suspended by platform admin."))}
-                        >
-                          Suspend
-                        </Button>
-                      </div>
+      <div className="panel">
+        <header className="flex items-center justify-between border-b border-border px-4 py-2.5">
+          <h2 className="text-[0.8125rem] font-semibold">Schools</h2>
+          <span className="text-[0.6875rem] text-muted-foreground">
+            {rows.length} school{rows.length === 1 ? "" : "s"}
+          </span>
+        </header>
+        <div className="overflow-x-auto">
+          <table className="table-dense w-full">
+            <thead className="bg-muted/70">
+              <tr>
+                <th>School</th>
+                <th>School status</th>
+                <th>Subscription</th>
+                <th>Trial / period end</th>
+                <th className="text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row) => (
+                <>
+                  <tr key={row.school_id}>
+                    <td className="font-medium">{row.school_name}</td>
+                    <td>
+                      <StatusBadge tone={toneFor(row.school_status)} label={row.school_status ?? "—"} />
+                    </td>
+                    <td>
+                      <StatusBadge
+                        tone={toneFor(row.subscription_status)}
+                        label={row.subscription_status ?? "no subscription"}
+                      />
+                    </td>
+                    <td className="text-muted-foreground">
+                      {row.trial_ends_at
+                        ? new Date(row.trial_ends_at).toLocaleDateString()
+                        : row.current_period_end
+                          ? new Date(row.current_period_end).toLocaleDateString()
+                          : "—"}
+                    </td>
+                    <td className="text-right">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setExpanded(expanded === row.school_id ? null : row.school_id)}
+                      >
+                        {expanded === row.school_id ? "Close" : "Manage"}
+                      </Button>
+                    </td>
+                  </tr>
+                  {expanded === row.school_id && (
+                    <tr key={`${row.school_id}-expanded`}>
+                      <td colSpan={5} className="bg-muted/30">
+                        <div className="flex flex-col gap-4 p-4">
+                          <div className="flex flex-wrap items-end gap-2">
+                            <div className="space-y-1">
+                              <p className="text-xs text-muted-foreground">Activate on plan</p>
+                              <Select
+                                value={selectedPlan[row.school_id] ?? ""}
+                                onValueChange={(v) => setSelectedPlan((p) => ({ ...p, [row.school_id]: v }))}
+                              >
+                                <SelectTrigger className="w-40">
+                                  <SelectValue placeholder="Plan" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {plans.map((p) => (
+                                    <SelectItem key={p.id} value={p.id}>
+                                      {p.name}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            <div className="space-y-1">
+                              <p className="text-xs text-muted-foreground">Period end</p>
+                              <Input
+                                type="date"
+                                className="w-40"
+                                value={periodEnd[row.school_id] ?? ""}
+                                onChange={(e) => setPeriodEnd((p) => ({ ...p, [row.school_id]: e.target.value }))}
+                              />
+                            </div>
+                            <Button
+                              size="sm"
+                              disabled={pending || !selectedPlan[row.school_id] || !periodEnd[row.school_id]}
+                              onClick={() =>
+                                run(() =>
+                                  activateSchoolSubscription(
+                                    row.school_id,
+                                    selectedPlan[row.school_id],
+                                    periodEnd[row.school_id],
+                                  ),
+                                )
+                              }
+                            >
+                              Activate
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="destructive"
+                              disabled={pending}
+                              onClick={() => run(() => suspendSchoolSubscription(row.school_id, "Suspended by platform admin."))}
+                            >
+                              Suspend
+                            </Button>
+                          </div>
 
-                      <div className="flex flex-wrap items-end gap-2">
-                        <div className="space-y-1">
-                          <p className="text-xs text-muted-foreground">Invoice period start</p>
-                          <Input
-                            type="date"
-                            className="w-40"
-                            value={invoicePeriod[row.school_id]?.start ?? ""}
-                            onChange={(e) =>
-                              setInvoicePeriod((p) => ({
-                                ...p,
-                                [row.school_id]: { start: e.target.value, end: p[row.school_id]?.end ?? "" },
-                              }))
-                            }
-                          />
-                        </div>
-                        <div className="space-y-1">
-                          <p className="text-xs text-muted-foreground">Invoice period end</p>
-                          <Input
-                            type="date"
-                            className="w-40"
-                            value={invoicePeriod[row.school_id]?.end ?? ""}
-                            onChange={(e) =>
-                              setInvoicePeriod((p) => ({
-                                ...p,
-                                [row.school_id]: { start: p[row.school_id]?.start ?? "", end: e.target.value },
-                              }))
-                            }
-                          />
-                        </div>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          disabled={pending || !invoicePeriod[row.school_id]?.start || !invoicePeriod[row.school_id]?.end}
-                          onClick={() =>
-                            run(() =>
-                              generateSchoolInvoice(
-                                row.school_id,
-                                invoicePeriod[row.school_id].start,
-                                invoicePeriod[row.school_id].end,
-                              ),
-                            )
-                          }
-                        >
-                          Generate invoice
-                        </Button>
-                      </div>
+                          <div className="flex flex-wrap items-end gap-2">
+                            <div className="space-y-1">
+                              <p className="text-xs text-muted-foreground">Invoice period start</p>
+                              <Input
+                                type="date"
+                                className="w-40"
+                                value={invoicePeriod[row.school_id]?.start ?? ""}
+                                onChange={(e) =>
+                                  setInvoicePeriod((p) => ({
+                                    ...p,
+                                    [row.school_id]: { start: e.target.value, end: p[row.school_id]?.end ?? "" },
+                                  }))
+                                }
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <p className="text-xs text-muted-foreground">Invoice period end</p>
+                              <Input
+                                type="date"
+                                className="w-40"
+                                value={invoicePeriod[row.school_id]?.end ?? ""}
+                                onChange={(e) =>
+                                  setInvoicePeriod((p) => ({
+                                    ...p,
+                                    [row.school_id]: { start: p[row.school_id]?.start ?? "", end: e.target.value },
+                                  }))
+                                }
+                              />
+                            </div>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              disabled={pending || !invoicePeriod[row.school_id]?.start || !invoicePeriod[row.school_id]?.end}
+                              onClick={() =>
+                                run(() =>
+                                  generateSchoolInvoice(
+                                    row.school_id,
+                                    invoicePeriod[row.school_id].start,
+                                    invoicePeriod[row.school_id].end,
+                                  ),
+                                )
+                              }
+                            >
+                              Generate invoice
+                            </Button>
+                          </div>
 
-                      <div>
-                        <p className="mb-2 text-sm font-medium">Invoices</p>
-                        <Table>
-                          <TableHeader>
-                            <TableRow>
-                              <TableHead>Period</TableHead>
-                              <TableHead>Amount (KES)</TableHead>
-                              <TableHead>Status</TableHead>
-                              <TableHead>Due</TableHead>
-                              <TableHead>Record payment</TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {row.invoices.length === 0 && (
-                              <TableRow>
-                                <TableCell colSpan={5} className="text-muted-foreground">
-                                  No invoices yet.
-                                </TableCell>
-                              </TableRow>
-                            )}
-                            {row.invoices.map((inv) => (
-                              <TableRow key={inv.id}>
-                                <TableCell>
-                                  {new Date(inv.period_start).toLocaleDateString()} –{" "}
-                                  {new Date(inv.period_end).toLocaleDateString()}
-                                </TableCell>
-                                <TableCell>{inv.amount_kes.toLocaleString()}</TableCell>
-                                <TableCell>
-                                  <StatusBadge
-                                    tone={inv.status === "paid" ? "success" : inv.status === "overdue" ? "danger" : "neutral"}
-                                    label={inv.status}
-                                  />
-                                </TableCell>
-                                <TableCell>{new Date(inv.due_at).toLocaleDateString()}</TableCell>
-                                <TableCell>
-                                  {inv.status !== "paid" && (
-                                    <div className="flex items-center gap-1">
-                                      <Input
-                                        placeholder="Reference"
-                                        className="h-8 w-28"
-                                        value={paymentRef[inv.id] ?? ""}
-                                        onChange={(e) => setPaymentRef((p) => ({ ...p, [inv.id]: e.target.value }))}
+                          <div className="panel">
+                            <header className="border-b border-border px-3 py-2">
+                              <h3 className="text-[0.75rem] font-semibold">Invoices</h3>
+                            </header>
+                            <table className="table-dense w-full">
+                              <thead className="bg-muted/70">
+                                <tr>
+                                  <th>Period</th>
+                                  <th className="text-right">Amount (KES)</th>
+                                  <th>Status</th>
+                                  <th>Due</th>
+                                  <th>Record payment</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {row.invoices.length === 0 && (
+                                  <tr>
+                                    <td colSpan={5} className="text-center text-muted-foreground">
+                                      No invoices yet.
+                                    </td>
+                                  </tr>
+                                )}
+                                {row.invoices.map((inv) => (
+                                  <tr key={inv.id}>
+                                    <td className="text-muted-foreground">
+                                      {new Date(inv.period_start).toLocaleDateString()} –{" "}
+                                      {new Date(inv.period_end).toLocaleDateString()}
+                                    </td>
+                                    <td className="text-right" data-numeric>
+                                      {inv.amount_kes.toLocaleString()}
+                                    </td>
+                                    <td>
+                                      <StatusBadge
+                                        tone={inv.status === "paid" ? "success" : inv.status === "overdue" ? "danger" : "neutral"}
+                                        label={inv.status}
                                       />
-                                      <Button
-                                        size="sm"
-                                        disabled={pending}
-                                        onClick={() => run(() => recordSchoolPayment(inv.id, paymentRef[inv.id] ?? ""))}
-                                      >
-                                        Mark paid
-                                      </Button>
-                                    </div>
-                                  )}
-                                </TableCell>
-                              </TableRow>
-                            ))}
-                          </TableBody>
-                        </Table>
-                      </div>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              )}
-            </>
-          ))}
-        </TableBody>
-      </Table>
+                                    </td>
+                                    <td className="text-muted-foreground">{new Date(inv.due_at).toLocaleDateString()}</td>
+                                    <td>
+                                      {inv.status !== "paid" && (
+                                        <div className="flex items-center gap-1">
+                                          <Input
+                                            placeholder="Reference"
+                                            className="h-8 w-28"
+                                            value={paymentRef[inv.id] ?? ""}
+                                            onChange={(e) => setPaymentRef((p) => ({ ...p, [inv.id]: e.target.value }))}
+                                          />
+                                          <Button
+                                            size="sm"
+                                            disabled={pending}
+                                            onClick={() => run(() => recordSchoolPayment(inv.id, paymentRef[inv.id] ?? ""))}
+                                          >
+                                            Mark paid
+                                          </Button>
+                                        </div>
+                                      )}
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
   );
 }
