@@ -170,26 +170,26 @@ export default async function PortalPage({ searchParams }: { searchParams: Promi
     <PortalShell schoolName={schoolName} userName={schoolUser.full_name}>
       <ChildSwitcher options={students} selectedId={selected.id} />
 
-      <div className="rounded-md border border-border p-4">
-        <p className="text-xs text-muted-foreground">Fee balance</p>
+      <div className="panel p-4">
+        <p className="label-eyebrow">Fee balance</p>
         {balance ? (
-          <p className={`text-lg font-semibold ${Number(balance.balance) > 0 ? "text-danger" : "text-success"}`}>
+          <p className={`mt-1 text-lg font-semibold ${Number(balance.balance) > 0 ? "text-danger" : "text-success"}`}>
             KES {Number(balance.balance).toLocaleString()}
             {Number(balance.balance) > 0 && " ⚠"}
           </p>
         ) : (
-          <p className="text-sm text-muted-foreground">No invoices yet.</p>
+          <p className="mt-1 text-sm text-muted-foreground">No invoices yet.</p>
         )}
       </div>
 
-      <div className="rounded-md border border-border p-4">
-        <p className="text-xs text-muted-foreground">Attendance this term</p>
-        <p className="text-lg font-semibold">{attendanceRate !== null ? `${attendanceRate}%` : "No records yet"}</p>
+      <div className="panel p-4">
+        <p className="label-eyebrow">Attendance this term</p>
+        <p className="mt-1 text-lg font-semibold">{attendanceRate !== null ? `${attendanceRate}%` : "No records yet"}</p>
       </div>
 
       {roleName === "student" && (
-        <div className="rounded-md border border-border p-4">
-          <p className="mb-2 text-xs text-muted-foreground">
+        <div className="panel p-4">
+          <p className="label-eyebrow mb-2">
             Today ({WEEKDAY_NAMES[new Date().getDay() === 0 ? 7 : new Date().getDay()]})
           </p>
           {todaysTimetable.length === 0 ? (
@@ -206,8 +206,8 @@ export default async function PortalPage({ searchParams }: { searchParams: Promi
         </div>
       )}
 
-      <div className="rounded-md border border-border p-4">
-        <p className="mb-1 text-xs text-muted-foreground">Latest result</p>
+      <div className="panel p-4">
+        <p className="label-eyebrow mb-1">Latest result</p>
         {rc ? (
           <div>
             <p className="text-sm font-medium">
@@ -221,27 +221,27 @@ export default async function PortalPage({ searchParams }: { searchParams: Promi
         )}
       </div>
 
-      <div className="rounded-md border border-border p-4">
-        <p className="mb-2 text-xs text-muted-foreground">Homework</p>
+      <div className="panel p-4">
+        <p className="label-eyebrow mb-2">Homework</p>
         <PortalHomeworkSection studentId={selected.id} assignments={assignments} />
       </div>
 
       {roleName === "parent" && (
-        <div className="rounded-md border border-border p-4">
-          <p className="mb-2 text-xs text-muted-foreground">Parent-teacher meetings</p>
+        <div className="panel p-4">
+          <p className="label-eyebrow mb-2">Parent-teacher meetings</p>
           <PortalPtMeetingsSection studentId={selected.id} slots={ptSlots} />
         </div>
       )}
 
-      <div className="rounded-md border border-border p-4">
-        <p className="mb-2 text-xs text-muted-foreground">Recent messages</p>
+      <div className="panel p-4">
+        <p className="label-eyebrow mb-2">Recent messages</p>
         <p className="text-sm text-muted-foreground">
           Messages will appear here once the school starts sending communications.
         </p>
       </div>
 
-      <div className="rounded-md border border-border p-4">
-        <p className="mb-2 text-xs font-medium">Notification preferences</p>
+      <div className="panel p-4">
+        <p className="label-eyebrow mb-2">Notification preferences</p>
         <NotificationPreferencesPanel initialRows={preferenceRows} />
       </div>
     </PortalShell>
