@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { StatusBadge } from "@/components/status-badge";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
@@ -224,9 +225,10 @@ export function PayrollSection({
                   <TableCell>{r.gross_salary.toLocaleString()}</TableCell>
                   <TableCell>{r.net_pay.toLocaleString()}</TableCell>
                   <TableCell>
-                    <Badge variant={r.status === "paid" ? "success" : r.status === "approved" ? "info" : "secondary"}>
-                      {r.status}
-                    </Badge>
+                    <StatusBadge
+                      tone={r.status === "paid" ? "success" : r.status === "approved" ? "info" : "neutral"}
+                      label={r.status}
+                    />
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-2">

@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Badge } from "@/components/ui/badge";
+import { StatusBadge } from "@/components/status-badge";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { generateReportCards, approveComment, writeComment, draftCommentWithAI } from "@/app/exams/report-cards/actions";
 
@@ -88,21 +88,21 @@ export function ReportCardList({
 
       {noneGenerated ? (
         canGenerate ? (
-          <div className="rounded-md border border-dashed border-border p-6 text-center">
+          <div className="panel border-dashed p-6 text-center">
             <p className="mb-3 text-sm text-muted-foreground">No report cards generated yet for this class.</p>
             <Button onClick={handleGenerate} disabled={pending}>
               {pending ? "Generating…" : "Generate for whole class"}
             </Button>
           </div>
         ) : (
-          <p className="rounded-md border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
+          <div className="panel border-dashed p-6 text-center text-sm text-muted-foreground">
             No report cards generated yet.
-          </p>
+          </div>
         )
       ) : (
         <div className="flex flex-col gap-4">
           {rows.map((r) => (
-            <div key={r.student_id} className="rounded-md border border-border p-4">
+            <div key={r.student_id} className="panel p-4">
               <div className="mb-2 flex items-center justify-between">
                 <p className="font-medium">{r.full_name}</p>
                 {r.average_score !== null && (
@@ -112,31 +112,33 @@ export function ReportCardList({
                 )}
               </div>
 
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Subject</TableHead>
-                    <TableHead>Mark</TableHead>
-                    <TableHead>Grade</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {r.marks.map((m) => (
-                    <TableRow key={m.subject_name}>
-                      <TableCell>{m.subject_name}</TableCell>
-                      <TableCell>{m.raw_score ?? "—"}</TableCell>
-                      <TableCell>{m.band_label ?? "—"}</TableCell>
+              <div className="overflow-x-auto rounded-md border border-border">
+                <Table className="table-dense">
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Subject</TableHead>
+                      <TableHead>Mark</TableHead>
+                      <TableHead>Grade</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {r.marks.map((m) => (
+                      <TableRow key={m.subject_name}>
+                        <TableCell>{m.subject_name}</TableCell>
+                        <TableCell>{m.raw_score ?? "—"}</TableCell>
+                        <TableCell>{m.band_label ?? "—"}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
 
               {r.report_card && (
                 <div className="mt-3">
                   {r.report_card.comment_source === "ai" ? (
                     <div className="rounded-md border border-info/30 bg-info/10 p-3">
                       <div className="mb-1 flex items-center gap-2">
-                        <Badge variant="info">AI-drafted comment — needs approval</Badge>
+                        <StatusBadge tone="info" label="AI-drafted comment — needs approval" />
                       </div>
                       <p className="text-sm">{r.report_card.comment}</p>
                       {canApprove && (
@@ -147,9 +149,10 @@ export function ReportCardList({
                     </div>
                   ) : r.report_card.comment_source === "teacher_approved" || r.report_card.comment_source === "teacher_written" ? (
                     <div className="rounded-md border border-success/30 bg-success/10 p-3">
-                      <Badge variant="success">
-                        {r.report_card.comment_source === "teacher_approved" ? "Approved" : "Teacher comment"}
-                      </Badge>
+                      <StatusBadge
+                        tone="success"
+                        label={r.report_card.comment_source === "teacher_approved" ? "Approved" : "Teacher comment"}
+                      />
                       <p className="mt-1 text-sm">{r.report_card.comment}</p>
                     </div>
                   ) : canApprove ? (

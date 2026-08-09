@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
+import { StatusBadge } from "@/components/status-badge";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
@@ -205,11 +206,12 @@ export function WaiversSection({
       )}
 
       {waivers.length === 0 ? (
-        <p className="rounded-md border border-dashed border-border p-10 text-center text-sm text-muted-foreground">
+        <div className="panel border-dashed p-10 text-center text-sm text-muted-foreground">
           No fee waivers granted yet.
-        </p>
+        </div>
       ) : (
-        <Table>
+        <div className="panel overflow-x-auto">
+          <Table className="table-dense">
           <TableHeader>
             <TableRow>
               <TableHead>Student</TableHead>
@@ -232,7 +234,7 @@ export function WaiversSection({
                 </TableCell>
                 <TableCell>{w.starts_term_name ?? "Any"}</TableCell>
                 <TableCell>
-                  <Badge variant={w.status === "active" ? "success" : "danger"}>{w.status}</Badge>
+                  <StatusBadge tone={w.status === "active" ? "success" : "danger"} label={w.status} />
                 </TableCell>
                 {canManage && (
                   <TableCell className="text-right">
@@ -247,6 +249,7 @@ export function WaiversSection({
             ))}
           </TableBody>
         </Table>
+        </div>
       )}
     </div>
   );

@@ -117,13 +117,13 @@ export default async function ReportCardsPage({
         </div>
 
         {examOptions.length === 0 ? (
-          <p className="rounded-md border border-dashed border-border p-10 text-center text-sm text-muted-foreground">
+          <div className="panel border-dashed p-10 text-center text-sm text-muted-foreground">
             No closed exams yet — report cards can only be generated once an exam is closed.
-          </p>
+          </div>
         ) : !selectedClassId ? (
-          <p className="rounded-md border border-dashed border-border p-10 text-center text-sm text-muted-foreground">
+          <div className="panel border-dashed p-10 text-center text-sm text-muted-foreground">
             This exam has no classes configured.
-          </p>
+          </div>
         ) : (
           <ReportCardList
             examId={selectedExamId as string}

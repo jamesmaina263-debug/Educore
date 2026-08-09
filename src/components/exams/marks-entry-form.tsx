@@ -60,9 +60,9 @@ export function MarksEntryForm({
 
   if (roster.length === 0) {
     return (
-      <p className="rounded-md border border-dashed border-border p-10 text-center text-sm text-muted-foreground">
+      <div className="panel border-dashed p-10 text-center text-sm text-muted-foreground">
         No active students in this class.
-      </p>
+      </div>
     );
   }
 
@@ -110,8 +110,12 @@ export function MarksEntryForm({
       {error && <p className="text-sm text-danger">{error}</p>}
 
       {unmarked.length > 0 && (
-        <div>
-          <Table>
+        <div className="panel">
+          <header className="border-b border-border px-4 py-2.5">
+            <h2 className="text-[0.8125rem] font-semibold">To enter · {unmarked.length} students</h2>
+          </header>
+          <div className="overflow-x-auto">
+            <Table className="table-dense">
             <TableHeader>
               <TableRow>
                 <TableHead>Student</TableHead>
@@ -157,8 +161,9 @@ export function MarksEntryForm({
               ))}
             </TableBody>
           </Table>
+          </div>
           {canEnter && examStatus === "open" && (
-            <div className="mt-3 flex justify-end">
+            <div className="flex justify-end border-t border-border px-4 py-2.5">
               <Button onClick={handleSaveAll} disabled={pending}>
                 {pending ? "Saving…" : `Save ${unmarked.length} marks`}
               </Button>
@@ -168,9 +173,12 @@ export function MarksEntryForm({
       )}
 
       {marked.length > 0 && (
-        <div>
-          <p className="mb-2 text-sm font-medium text-muted-foreground">Already entered</p>
-          <Table>
+        <div className="panel">
+          <header className="border-b border-border px-4 py-2.5">
+            <h2 className="text-[0.8125rem] font-semibold">Already entered · {marked.length} students</h2>
+          </header>
+          <div className="overflow-x-auto">
+            <Table className="table-dense">
             <TableHeader>
               <TableRow>
                 <TableHead>Student</TableHead>
@@ -207,6 +215,7 @@ export function MarksEntryForm({
               ))}
             </TableBody>
           </Table>
+          </div>
         </div>
       )}
 

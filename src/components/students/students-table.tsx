@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { type ColumnDef } from "@tanstack/react-table";
-import { Badge } from "@/components/ui/badge";
+import { StatusBadge } from "@/components/status-badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
@@ -38,7 +38,15 @@ const columns: ColumnDef<StudentRow>[] = [
       </div>
     ),
   },
-  { accessorKey: "admission_number", header: "Admission #" },
+  {
+    accessorKey: "admission_number",
+    header: "Admission #",
+    cell: ({ row }) => (
+      <span className="font-mono text-[0.8125rem] text-muted-foreground">
+        {row.original.admission_number}
+      </span>
+    ),
+  },
   {
     id: "class",
     header: "Class / Stream",
@@ -54,17 +62,13 @@ const columns: ColumnDef<StudentRow>[] = [
     header: "Status",
     cell: ({ row }) => {
       const status = row.getValue<string>("status");
-      const variant =
+      const tone =
         status === "active" || status === "enrolled"
           ? "success"
           : status === "withdrawn" || status === "transferred"
             ? "danger"
-            : "secondary";
-      return (
-        <Badge dot variant={variant}>
-          {status}
-        </Badge>
-      );
+            : "neutral";
+      return <StatusBadge tone={tone} label={status} />;
     },
   },
   {

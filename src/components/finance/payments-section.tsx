@@ -13,14 +13,15 @@ export interface PaymentListRow {
 export function PaymentsSection({ payments }: { payments: PaymentListRow[] }) {
   if (payments.length === 0) {
     return (
-      <p className="rounded-md border border-dashed border-border p-10 text-center text-sm text-muted-foreground">
+      <div className="panel border-dashed p-10 text-center text-sm text-muted-foreground">
         No payments recorded yet.
-      </p>
+      </div>
     );
   }
 
   return (
-    <Table>
+    <div className="panel overflow-x-auto">
+    <Table className="table-dense">
       <TableHeader>
         <TableRow>
           <TableHead>Student</TableHead>
@@ -44,5 +45,6 @@ export function PaymentsSection({ payments }: { payments: PaymentListRow[] }) {
         ))}
       </TableBody>
     </Table>
+    </div>
   );
 }

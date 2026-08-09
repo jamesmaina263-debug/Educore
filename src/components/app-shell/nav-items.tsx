@@ -19,6 +19,7 @@ import {
   BarChart3,
   NotebookPen,
   Users2,
+  Building2,
 } from "lucide-react";
 
 export interface NavItem {
@@ -47,6 +48,7 @@ export const navItems: NavItem[] = [
   { label: "Communication", href: "/communication", icon: MessageSquare },
   { label: "Trimora AI", href: "/ai", icon: Sparkles },
   { label: "Reports", href: "/reports", icon: BarChart3 },
+  { label: "Campuses", href: "/campuses", icon: Building2 },
   { label: "Settings", href: "/settings", icon: Settings },
 ];
 

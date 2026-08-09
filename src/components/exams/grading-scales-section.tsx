@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
+import { StatusBadge } from "@/components/status-badge";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
@@ -182,19 +183,20 @@ export function GradingScalesSection({
         </div>
 
         {scales.length === 0 ? (
-          <p className="rounded-md border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
+          <div className="panel border-dashed p-6 text-center text-sm text-muted-foreground">
             No grading scales yet. A numeric or CBC scale must be configured before marks can be entered.
-          </p>
+          </div>
         ) : (
           <div className="flex flex-col gap-4">
             {scales.map((scale) => (
-              <div key={scale.id} className="rounded-md border border-border p-4">
+              <div key={scale.id} className="panel p-4">
                 <div className="mb-2 flex items-center gap-2">
                   <p className="font-medium">{scale.name}</p>
-                  <Badge variant={scale.model_type === "cbc" ? "info" : "secondary"}>
-                    {scale.model_type === "cbc" ? "CBC" : "Numeric"}
-                  </Badge>
-                  {scale.is_default && <Badge variant="success">School default</Badge>}
+                  <StatusBadge
+                    tone={scale.model_type === "cbc" ? "info" : "neutral"}
+                    label={scale.model_type === "cbc" ? "CBC" : "Numeric"}
+                  />
+                  {scale.is_default && <StatusBadge tone="success" label="School default" />}
                 </div>
                 <div className="flex flex-wrap gap-2">
                   {scale.bands
@@ -219,43 +221,47 @@ export function GradingScalesSection({
             Leave a class on &quot;School default&quot; unless that grade uses a different model — CBC grades
             typically need their own competency scale.
           </p>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Class</TableHead>
-                <TableHead>Grading scale</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {classes.map((c) => (
-                <TableRow key={c.id}>
-                  <TableCell className="font-medium">{c.name}</TableCell>
-                  <TableCell>
-                    {canWrite ? (
-                      <Select
-                        value={c.grading_scale_id ?? "__default__"}
-                        onValueChange={(v) => handleClassScaleChange(c.id, v)}
-                      >
-                        <SelectTrigger className="w-56">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="__default__">School default</SelectItem>
-                          {scales.map((s) => (
-                            <SelectItem key={s.id} value={s.id}>
-                              {s.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    ) : (
-                      scales.find((s) => s.id === c.grading_scale_id)?.name ?? "School default"
-                    )}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+          <div className="panel">
+            <div className="overflow-x-auto">
+              <Table className="table-dense">
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Class</TableHead>
+                    <TableHead>Grading scale</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {classes.map((c) => (
+                    <TableRow key={c.id}>
+                      <TableCell className="font-medium">{c.name}</TableCell>
+                      <TableCell>
+                        {canWrite ? (
+                          <Select
+                            value={c.grading_scale_id ?? "__default__"}
+                            onValueChange={(v) => handleClassScaleChange(c.id, v)}
+                          >
+                            <SelectTrigger className="w-56">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="__default__">School default</SelectItem>
+                              {scales.map((s) => (
+                                <SelectItem key={s.id} value={s.id}>
+                                  {s.name}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        ) : (
+                          scales.find((s) => s.id === c.grading_scale_id)?.name ?? "School default"
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </div>
         </div>
       )}
     </div>

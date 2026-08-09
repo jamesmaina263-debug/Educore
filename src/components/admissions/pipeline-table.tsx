@@ -11,7 +11,7 @@ import {
   SelectContent,
   SelectItem,
 } from "@/components/ui/select";
-import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
+import { StatusBadge } from "@/components/status-badge";
 import {
   approveApplication,
   enrollApplication,
@@ -30,6 +30,10 @@ export interface ApplicantRow {
 export interface StreamOption {
   id: string;
   label: string; // "Grade 6 A"
+}
+
+function stageTone(status: ApplicantRow["status"]) {
+  return status === "enrolled" ? "success" : status === "approved" ? "info" : "warning";
 }
 
 export function PipelineTable({
@@ -55,99 +59,116 @@ export function PipelineTable({
     else router.refresh();
   }
 
-  if (rows.length === 0) {
-    return (
-      <p className="rounded-md border border-dashed border-border p-10 text-center text-sm text-muted-foreground">
-        Nothing in the admissions pipeline right now.
-      </p>
-    );
-  }
-
   return (
     <div className="flex flex-col gap-3">
       {error && <p className="text-sm text-danger">{error}</p>}
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Applicant</TableHead>
-            <TableHead>Admission #</TableHead>
-            <TableHead>Stage</TableHead>
-            <TableHead />
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {rows.map((r) => (
-            <TableRow key={r.id}>
-              <TableCell className="font-medium">
-                <Link href={`/students/${r.id}`} className="hover:underline">
-                  {r.full_name}
-                </Link>
-                {r.application_notes && (
-                  <p className="mt-0.5 text-xs font-normal text-muted-foreground">{r.application_notes}</p>
-                )}
-              </TableCell>
-              <TableCell>{r.admission_number}</TableCell>
-              <TableCell className="capitalize">{r.status}</TableCell>
-              <TableCell>
-                {!canReview ? null : r.status === "applied" ? (
-                  <div className="flex justify-end gap-2">
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      disabled={pendingId === r.id}
-                      onClick={() => run(r.id, () => rejectApplication(r.id))}
-                    >
-                      Reject
-                    </Button>
-                    <Button
-                      size="sm"
-                      disabled={pendingId === r.id}
-                      onClick={() => run(r.id, () => approveApplication(r.id))}
-                    >
-                      Approve
-                    </Button>
-                  </div>
-                ) : r.status === "approved" ? (
-                  <div className="flex justify-end gap-2">
-                    <Select
-                      value={streamChoice[r.id] ?? ""}
-                      onValueChange={(v) => setStreamChoice((s) => ({ ...s, [r.id]: v }))}
-                    >
-                      <SelectTrigger className="h-8 w-40">
-                        <SelectValue placeholder="Choose class" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {streams.map((s) => (
-                          <SelectItem key={s.id} value={s.id}>
-                            {s.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <Button
-                      size="sm"
-                      disabled={pendingId === r.id || !streamChoice[r.id]}
-                      onClick={() => run(r.id, () => enrollApplication(r.id, streamChoice[r.id]))}
-                    >
-                      Enroll
-                    </Button>
-                  </div>
-                ) : (
-                  <div className="flex justify-end">
-                    <Button
-                      size="sm"
-                      disabled={pendingId === r.id}
-                      onClick={() => run(r.id, () => activateEnrollment(r.id))}
-                    >
-                      Activate
-                    </Button>
-                  </div>
-                )}
-              </TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
+      <div className="panel">
+        <header className="flex items-center justify-between border-b border-border px-4 py-2.5">
+          <h2 className="text-[0.8125rem] font-semibold">Admissions pipeline</h2>
+          <span className="text-[0.6875rem] text-muted-foreground">
+            {rows.length} applicant{rows.length === 1 ? "" : "s"}
+          </span>
+        </header>
+        {rows.length === 0 ? (
+          <p className="p-10 text-center text-sm text-muted-foreground">Nothing in the admissions pipeline right now.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="table-dense w-full">
+              <thead className="bg-muted/70">
+                <tr>
+                  <th>Applicant</th>
+                  <th>Admission #</th>
+                  <th>Stage</th>
+                  <th className="text-right"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((r) => (
+                  <tr key={r.id}>
+                    <td className="font-medium">
+                      <Link href={`/students/${r.id}`} className="hover:underline">
+                        {r.full_name}
+                      </Link>
+                      {r.application_notes && (
+                        <p className="mt-0.5 text-[0.6875rem] font-normal text-muted-foreground">{r.application_notes}</p>
+                      )}
+                    </td>
+                    <td className="text-muted-foreground">{r.admission_number}</td>
+                    <td>
+                      <StatusBadge tone={stageTone(r.status)} label={r.status} />
+                    </td>
+                    <td className="text-right">
+                      {!canReview ? null : r.status === "applied" ? (
+                        <div className="flex justify-end gap-2">
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            disabled={pendingId === r.id}
+                            onClick={() => run(r.id, () => rejectApplication(r.id))}
+                          >
+                            Reject
+                          </Button>
+                          <Button
+                            size="sm"
+                            disabled={pendingId === r.id}
+                            onClick={() => run(r.id, () => approveApplication(r.id))}
+                          >
+                            Approve
+                          </Button>
+                        </div>
+                      ) : r.status === "approved" ? (
+                        streams.length === 0 ? (
+                          <div className="flex items-center justify-end gap-2 text-[0.8125rem] text-muted-foreground">
+                            <span>No streams set up yet.</span>
+                            <Link href="/academics" className="font-medium text-primary hover:underline">
+                              Add one in Academics
+                            </Link>
+                          </div>
+                        ) : (
+                          <div className="flex justify-end gap-2">
+                            <Select
+                              value={streamChoice[r.id] ?? ""}
+                              onValueChange={(v) => setStreamChoice((s) => ({ ...s, [r.id]: v }))}
+                            >
+                              <SelectTrigger className="h-8 w-40">
+                                <SelectValue placeholder="Choose stream" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {streams.map((s) => (
+                                  <SelectItem key={s.id} value={s.id}>
+                                    {s.label}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <Button
+                              size="sm"
+                              disabled={pendingId === r.id || !streamChoice[r.id]}
+                              onClick={() => run(r.id, () => enrollApplication(r.id, streamChoice[r.id]))}
+                            >
+                              Enroll
+                            </Button>
+                          </div>
+                        )
+                      ) : (
+                        <div className="flex justify-end">
+                          <Button
+                            size="sm"
+                            disabled={pendingId === r.id}
+                            onClick={() => run(r.id, () => activateEnrollment(r.id))}
+                          >
+                            Activate
+                          </Button>
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

@@ -108,7 +108,7 @@ export function RolloverSection({
 
       <div>
         <p className="mb-2 text-sm font-medium">Repeating students (optional)</p>
-        <div className="max-h-64 overflow-y-auto rounded-md border border-border">
+        <div className="panel max-h-64 overflow-y-auto">
           {students.length === 0 && (
             <p className="p-3 text-sm text-muted-foreground">No active students.</p>
           )}

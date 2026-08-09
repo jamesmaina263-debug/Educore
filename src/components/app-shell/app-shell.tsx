@@ -21,8 +21,8 @@ export function AppShell({
   return (
     <CommandPaletteProvider>
       <div className="flex h-screen overflow-hidden bg-background">
-        <aside className="hidden w-56 shrink-0 flex-col border-r border-border bg-surface lg:flex">
-          <div className="flex h-14 items-center border-b border-border px-4 text-sm font-semibold">
+        <aside className="hidden w-56 shrink-0 flex-col border-r border-sidebar-border bg-sidebar lg:flex">
+          <div className="flex h-14 items-center border-b border-sidebar-border px-4 text-sm font-semibold text-sidebar-foreground">
             EduCore
           </div>
           <SidebarNav />

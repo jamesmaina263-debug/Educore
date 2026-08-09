@@ -80,28 +80,28 @@ export function DataTable<TData, TValue>({
   const selectedRows = table.getSelectedRowModel().rows.map((r) => r.original);
 
   return (
-    <div className="flex flex-col gap-3">
-      <div className="flex items-center gap-2">
+    <div className="panel">
+      <div className="flex flex-wrap items-center gap-2 border-b border-border px-3 py-2">
         <Input
           value={globalFilter}
           onChange={(e) => setGlobalFilter(e.target.value)}
           placeholder={searchPlaceholder}
-          className="h-9 max-w-xs"
+          className="h-8 max-w-xs bg-background text-[0.8125rem]"
         />
         {selectedRows.length > 0 && renderBulkActions && (
           <div className="flex items-center gap-2 border-l border-border pl-2">
             {renderBulkActions(selectedRows)}
           </div>
         )}
-        <span className="ml-auto text-sm text-muted-foreground">
+        <span className="ml-auto text-[0.75rem] text-muted-foreground">
           {table.getFilteredRowModel().rows.length} result
           {table.getFilteredRowModel().rows.length === 1 ? "" : "s"}
         </span>
       </div>
 
-      <div className="max-h-[28rem] overflow-auto rounded-md border border-border">
-        <Table>
-          <TableHeader className="sticky top-0 z-10 bg-muted">
+      <div className="max-h-[28rem] overflow-auto">
+        <Table className="table-dense">
+          <TableHeader className="sticky top-0 z-10 bg-muted/70">
             {table.getHeaderGroups().map((headerGroup) => (
               <TableRow key={headerGroup.id} className="hover:bg-transparent">
                 {headerGroup.headers.map((header) => {
@@ -154,8 +154,8 @@ export function DataTable<TData, TValue>({
         </Table>
       </div>
 
-      <div className="flex items-center justify-between">
-        <span className="text-sm text-muted-foreground">
+      <div className="flex items-center justify-between border-t border-border px-3 py-2 text-[0.75rem] text-muted-foreground">
+        <span>
           Page {table.getState().pagination.pageIndex + 1} of{" "}
           {Math.max(table.getPageCount(), 1)}
         </span>

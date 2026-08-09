@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { StatusBadge } from "@/components/status-badge";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
@@ -327,7 +328,7 @@ export function TransportSection({
                   <TableCell>{a.route_name}</TableCell>
                   <TableCell>{a.pickup_point ?? "—"}</TableCell>
                   <TableCell>
-                    <Badge variant={a.status === "active" ? "success" : "secondary"}>{a.status}</Badge>
+                    <StatusBadge tone={a.status === "active" ? "success" : "neutral"} label={a.status} />
                   </TableCell>
                   <TableCell className="text-right">
                     {canWrite && a.status === "active" && (

@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { StatusBadge } from "@/components/status-badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { createFeeStructure, generateInvoicesAction } from "@/app/finance/actions";
@@ -179,19 +180,19 @@ export function FeeStructuresSection({
       </div>
 
       {structures.length === 0 ? (
-        <p className="rounded-md border border-dashed border-border p-10 text-center text-sm text-muted-foreground">
+        <div className="panel border-dashed p-10 text-center text-sm text-muted-foreground">
           No fee structure set for this term yet. Invoices can&apos;t be generated until one exists.
-        </p>
+        </div>
       ) : (
         <div className="flex flex-col gap-3">
           {structures.map((s) => (
-            <div key={s.id} className="rounded-md border border-border p-4">
+            <div key={s.id} className="panel p-4">
               <div className="mb-2 flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <p className="font-medium">{s.name}</p>
                   <Badge variant="secondary">{s.term_name}</Badge>
                   <Badge variant="outline">{s.class_name ?? "All grades"}</Badge>
-                  <Badge variant={s.boarding_type === "boarder" ? "info" : "outline"}>{s.boarding_type}</Badge>
+                  <StatusBadge tone={s.boarding_type === "boarder" ? "info" : "neutral"} label={s.boarding_type} />
                 </div>
                 <p className="text-sm font-medium">KES {s.total.toLocaleString()}</p>
               </div>

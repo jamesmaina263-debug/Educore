@@ -5,8 +5,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
-import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
+import { StatusBadge } from "@/components/status-badge";
 import {
   Dialog,
   DialogContent,
@@ -35,8 +34,8 @@ export interface TermRow {
   status: string;
 }
 
-function statusVariant(status: string) {
-  return status === "active" ? "success" : status === "closed" ? "secondary" : "secondary";
+function statusTone(status: string) {
+  return status === "active" ? "success" : "neutral";
 }
 
 export function YearsTermsSection({
@@ -95,98 +94,107 @@ export function YearsTermsSection({
     else router.refresh();
   }
 
+  const addYearDialog = canWrite && (
+    <Dialog open={yearDialogOpen} onOpenChange={setYearDialogOpen}>
+      <DialogTrigger asChild>
+        <Button size="sm" variant="outline">
+          Add year
+        </Button>
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>New academic year</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3">
+          <div className="space-y-1.5">
+            <Label>Name</Label>
+            <Input
+              placeholder="2026"
+              value={yearForm.name}
+              onChange={(e) => setYearForm({ ...yearForm, name: e.target.value })}
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label>Start date</Label>
+              <Input
+                type="date"
+                value={yearForm.start_date}
+                onChange={(e) => setYearForm({ ...yearForm, start_date: e.target.value })}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>End date</Label>
+              <Input
+                type="date"
+                value={yearForm.end_date}
+                onChange={(e) => setYearForm({ ...yearForm, end_date: e.target.value })}
+              />
+            </div>
+          </div>
+          {error && <p className="text-sm text-danger">{error}</p>}
+        </div>
+        <DialogFooter>
+          <Button onClick={handleCreateYear} disabled={pending}>
+            {pending ? "Creating…" : "Create year"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <div className="mb-2 flex items-center justify-between">
-          <h2 className="text-sm font-medium">Academic years</h2>
-          {canWrite && (
-            <Dialog open={yearDialogOpen} onOpenChange={setYearDialogOpen}>
-              <DialogTrigger asChild>
-                <Button size="sm" variant="outline">
-                  Add year
-                </Button>
-              </DialogTrigger>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>New academic year</DialogTitle>
-                </DialogHeader>
-                <div className="space-y-3">
-                  <div className="space-y-1.5">
-                    <Label>Name</Label>
-                    <Input
-                      placeholder="2026"
-                      value={yearForm.name}
-                      onChange={(e) => setYearForm({ ...yearForm, name: e.target.value })}
-                    />
-                  </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-1.5">
-                      <Label>Start date</Label>
-                      <Input
-                        type="date"
-                        value={yearForm.start_date}
-                        onChange={(e) => setYearForm({ ...yearForm, start_date: e.target.value })}
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label>End date</Label>
-                      <Input
-                        type="date"
-                        value={yearForm.end_date}
-                        onChange={(e) => setYearForm({ ...yearForm, end_date: e.target.value })}
-                      />
-                    </div>
-                  </div>
-                  {error && <p className="text-sm text-danger">{error}</p>}
-                </div>
-                <DialogFooter>
-                  <Button onClick={handleCreateYear} disabled={pending}>
-                    {pending ? "Creating…" : "Create year"}
-                  </Button>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
-          )}
-        </div>
-
         {years.length === 0 ? (
-          <p className="rounded-md border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
-            No academic years yet.
-          </p>
+          <div className="panel border-dashed p-6 text-center text-sm text-muted-foreground">
+            <p>No academic years yet.</p>
+            {canWrite && <div className="mt-3 flex justify-center">{addYearDialog}</div>}
+          </div>
         ) : (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>Start</TableHead>
-                <TableHead>End</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead />
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {years.map((y) => (
-                <TableRow key={y.id}>
-                  <TableCell className="font-medium">{y.name}</TableCell>
-                  <TableCell>{y.start_date}</TableCell>
-                  <TableCell>{y.end_date}</TableCell>
-                  <TableCell>
-                    <Badge dot variant={statusVariant(y.status)}>
-                      {y.status}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    {canWrite && y.status !== "active" && (
-                      <Button size="sm" variant="ghost" disabled={pending} onClick={() => handleActivateYear(y.id)}>
-                        Set active
-                      </Button>
-                    )}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+          <div className="panel">
+            <header className="flex items-center justify-between border-b border-border px-4 py-2.5">
+              <h2 className="text-[0.8125rem] font-semibold">Academic years</h2>
+              <div className="flex items-center gap-3">
+                <span className="text-[0.6875rem] text-muted-foreground">
+                  {years.length} year{years.length === 1 ? "" : "s"}
+                </span>
+                {addYearDialog}
+              </div>
+            </header>
+            <div className="overflow-x-auto">
+              <table className="table-dense w-full">
+                <thead className="bg-muted/70">
+                  <tr>
+                    <th>Name</th>
+                    <th>Start</th>
+                    <th>End</th>
+                    <th>Status</th>
+                    <th />
+                  </tr>
+                </thead>
+                <tbody>
+                  {years.map((y) => (
+                    <tr key={y.id}>
+                      <td className="font-medium">{y.name}</td>
+                      <td className="text-muted-foreground">{y.start_date}</td>
+                      <td className="text-muted-foreground">{y.end_date}</td>
+                      <td>
+                        <StatusBadge tone={statusTone(y.status)} label={y.status} />
+                      </td>
+                      <td className="text-right">
+                        {canWrite && y.status !== "active" && (
+                          <Button size="sm" variant="ghost" disabled={pending} onClick={() => handleActivateYear(y.id)}>
+                            Set active
+                          </Button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
         )}
       </div>
 
@@ -199,7 +207,7 @@ export function YearsTermsSection({
             {years.map((y) => {
               const yearTerms = terms.filter((t) => t.academic_year_id === y.id);
               return (
-                <div key={y.id} className="rounded-md border border-border p-4">
+                <div key={y.id} className="panel p-4">
                   <div className="mb-2 flex items-center justify-between">
                     <p className="text-sm font-medium">{y.name}</p>
                     {canWrite && (
@@ -278,9 +286,7 @@ export function YearsTermsSection({
                             {t.name} · {t.start_date} – {t.end_date}
                           </span>
                           <span className="flex items-center gap-2">
-                            <Badge dot variant={statusVariant(t.status)}>
-                              {t.status}
-                            </Badge>
+                            <StatusBadge tone={statusTone(t.status)} label={t.status} />
                             {canWrite && t.status !== "active" && (
                               <Button
                                 size="sm"

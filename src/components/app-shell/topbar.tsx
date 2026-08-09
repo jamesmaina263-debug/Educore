@@ -39,9 +39,9 @@ export function Topbar({
             <span className="sr-only">Open navigation</span>
           </Button>
         </SheetTrigger>
-        <SheetContent side="left" className="p-0">
-          <SheetHeader className="border-b border-border p-4">
-            <SheetTitle>EduCore</SheetTitle>
+        <SheetContent side="left" className="bg-sidebar p-0">
+          <SheetHeader className="border-b border-sidebar-border p-4">
+            <SheetTitle className="text-sidebar-foreground">EduCore</SheetTitle>
           </SheetHeader>
           <SidebarNav />
         </SheetContent>

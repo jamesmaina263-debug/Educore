@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { askTrimoraAI } from "@/app/ai/actions";
@@ -53,15 +52,15 @@ export function AskAIPanel({ initialHistory }: { initialHistory: AIQueryLogRow[]
 
   return (
     <div className="flex flex-col gap-4">
-      <Card>
-        <CardHeader>
-          <CardTitle>Ask Trimora AI</CardTitle>
-          <CardDescription>
+      <div className="panel max-w-2xl">
+        <header className="border-b border-border px-4 py-2.5">
+          <h2 className="text-[0.8125rem] font-semibold">Ask Trimora AI</h2>
+          <p className="mt-0.5 text-[0.75rem] text-muted-foreground">
             Answers a fixed set of school-wide questions today — enrollment, attendance, fee
             collection, at-risk students, exam averages. It won&apos;t guess beyond that.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-3">
+          </p>
+        </header>
+        <div className="flex flex-col gap-3 p-4">
           <Textarea
             placeholder="e.g. How many students are at risk right now?"
             value={question}
@@ -84,41 +83,43 @@ export function AskAIPanel({ initialHistory }: { initialHistory: AIQueryLogRow[]
               </Button>
             ))}
           </div>
-          {error && <p className="text-sm text-destructive">{error}</p>}
+          {error && <p className="text-sm text-danger">{error}</p>}
           {answer && (
             <div className="rounded-md border border-border bg-muted/40 p-3 text-sm">{answer}</div>
           )}
-        </CardContent>
-        <CardFooter>
-          <Button
-            onClick={() => ask(question)}
-            disabled={isPending || question.trim().length === 0}
-          >
-            {isPending ? "Thinking…" : "Ask"}
-          </Button>
-        </CardFooter>
-      </Card>
+          <div>
+            <Button onClick={() => ask(question)} disabled={isPending || question.trim().length === 0}>
+              {isPending ? "Thinking…" : "Ask"}
+            </Button>
+          </div>
+        </div>
+      </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Recent questions</CardTitle>
-          <CardDescription>Every question asked and its answer is logged for this school.</CardDescription>
-        </CardHeader>
-        <CardContent>
+      <div className="panel max-w-2xl">
+        <header className="flex items-center justify-between border-b border-border px-4 py-2.5">
+          <div>
+            <h2 className="text-[0.8125rem] font-semibold">Recent questions</h2>
+            <p className="mt-0.5 text-[0.75rem] text-muted-foreground">Every question asked and its answer is logged for this school.</p>
+          </div>
+          <span className="text-[0.6875rem] text-muted-foreground">
+            {history.length} question{history.length === 1 ? "" : "s"}
+          </span>
+        </header>
+        <div className="p-4">
           {history.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No questions asked yet.</p>
+            <p className="py-6 text-center text-sm text-muted-foreground">No questions asked yet.</p>
           ) : (
-            <ul className="flex flex-col gap-3">
+            <ul className="-my-1 divide-y divide-border">
               {history.map((h) => (
-                <li key={h.id} className="border-b border-border pb-2 last:border-0 last:pb-0">
-                  <p className="text-sm font-medium">{h.question_text}</p>
-                  <p className="text-sm text-muted-foreground">{h.answer_text ?? "—"}</p>
+                <li key={h.id} className="py-2.5">
+                  <p className="text-[0.8125rem] font-medium">{h.question_text}</p>
+                  <p className="text-[0.75rem] text-muted-foreground">{h.answer_text ?? "—"}</p>
                 </li>
               ))}
             </ul>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </div>
     </div>
   );
 }

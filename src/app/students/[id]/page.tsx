@@ -2,7 +2,7 @@ import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { logout } from "@/app/login/actions";
 import { AppShell } from "@/components/app-shell/app-shell";
-import { Badge } from "@/components/ui/badge";
+import { StatusBadge } from "@/components/status-badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { GuardiansTab, type GuardianRow } from "./guardians-tab";
@@ -114,13 +114,11 @@ export default async function StudentProfilePage({
               {student.upi_number ? ` · UPI ${student.upi_number}` : ""}
             </p>
           </div>
-          <Badge
-            dot
-            variant={student.status === "active" || student.status === "enrolled" ? "success" : "secondary"}
+          <StatusBadge
+            tone={student.status === "active" || student.status === "enrolled" ? "success" : "neutral"}
+            label={student.status}
             className="ml-auto"
-          >
-            {student.status}
-          </Badge>
+          />
           <Button asChild variant="outline" size="sm">
             <Link href={`/students/${id}/id-card`} target="_blank">
               Print ID card

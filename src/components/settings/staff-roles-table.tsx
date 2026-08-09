@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
+import { StatusBadge } from "@/components/status-badge";
 import {
   Select,
   SelectTrigger,
@@ -31,8 +31,8 @@ export interface RoleOption {
   display_name: string;
 }
 
-function statusVariant(status: string) {
-  return status === "active" ? "success" : status === "suspended" ? "danger" : "secondary";
+function statusTone(status: string) {
+  return status === "active" ? "success" : status === "suspended" ? "danger" : "neutral";
 }
 
 export function StaffRolesTable({
@@ -81,58 +81,82 @@ export function StaffRolesTable({
   return (
     <div className="flex flex-col gap-3">
       {error && <p className="text-sm text-danger">{error}</p>}
-      <Table>
+      <div className="panel">
+        <div className="flex items-center justify-between border-b border-border px-3 py-2">
+          <h2 className="text-[0.8125rem] font-semibold">Staff accounts</h2>
+          <span className="text-[0.75rem] text-muted-foreground">Role assignment</span>
+        </div>
+        <div className="overflow-x-auto">
+      <Table className="table-dense">
         <TableHeader>
           <TableRow>
-            <TableHead>Name</TableHead>
-            <TableHead>Email</TableHead>
+            <TableHead>User</TableHead>
             <TableHead>Role</TableHead>
             <TableHead>Status</TableHead>
             <TableHead />
           </TableRow>
         </TableHeader>
         <TableBody>
-          {rows.map((r) => (
-            <TableRow key={r.id}>
-              <TableCell className="font-medium">{r.full_name}</TableCell>
-              <TableCell>{r.email ?? "—"}</TableCell>
-              <TableCell>
-                {canManage ? (
-                  <Select
-                    value={r.role_id}
-                    onValueChange={(v) => v !== r.role_id && setPendingRoleChange({ row: r, newRoleId: v })}
-                  >
-                    <SelectTrigger className="h-8 w-40">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {roles.map((role) => (
-                        <SelectItem key={role.id} value={role.id}>
-                          {role.display_name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                ) : (
-                  r.role_display_name
-                )}
-              </TableCell>
-              <TableCell>
-                <Badge dot variant={statusVariant(r.status)}>
-                  {r.status}
-                </Badge>
-              </TableCell>
-              <TableCell>
-                {canManage && (
-                  <Button size="sm" variant="ghost" onClick={() => setPendingDeactivate(r)}>
-                    {r.status === "active" ? "Deactivate" : "Reactivate"}
-                  </Button>
-                )}
-              </TableCell>
-            </TableRow>
-          ))}
+          {rows.map((r) => {
+            const initials = r.full_name
+              .split(" ")
+              .filter(Boolean)
+              .slice(0, 2)
+              .map((p) => p[0]?.toUpperCase())
+              .join("");
+            return (
+              <TableRow key={r.id}>
+                <TableCell>
+                  <div className="flex items-center gap-2">
+                    <span className="grid size-7 shrink-0 place-items-center rounded-full bg-secondary text-[0.6875rem] font-semibold text-secondary-foreground">
+                      {initials}
+                    </span>
+                    <span className="min-w-0 leading-tight">
+                      <span className="block truncate font-medium">{r.full_name}</span>
+                      <span className="block truncate text-[0.75rem] text-muted-foreground">
+                        {r.email ?? "—"}
+                      </span>
+                    </span>
+                  </div>
+                </TableCell>
+                <TableCell>
+                  {canManage ? (
+                    <Select
+                      value={r.role_id}
+                      onValueChange={(v) => v !== r.role_id && setPendingRoleChange({ row: r, newRoleId: v })}
+                    >
+                      <SelectTrigger className="h-8 w-40">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {roles.map((role) => (
+                          <SelectItem key={role.id} value={role.id}>
+                            {role.display_name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    r.role_display_name
+                  )}
+                </TableCell>
+                <TableCell>
+                  <StatusBadge tone={statusTone(r.status)} label={r.status} />
+                </TableCell>
+                <TableCell>
+                  {canManage && (
+                    <Button size="sm" variant="ghost" onClick={() => setPendingDeactivate(r)}>
+                      {r.status === "active" ? "Deactivate" : "Reactivate"}
+                    </Button>
+                  )}
+                </TableCell>
+              </TableRow>
+            );
+          })}
         </TableBody>
       </Table>
+        </div>
+      </div>
 
       <Dialog open={pendingRoleChange !== null} onOpenChange={(open) => !open && setPendingRoleChange(null)}>
         <DialogContent>

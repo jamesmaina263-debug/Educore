@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Badge } from "@/components/ui/badge";
+import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { cancelOwnSubscription } from "@/app/settings/billing-actions";
@@ -25,8 +25,8 @@ export type BillingData = {
   invoices: BillingInvoice[];
 };
 
-const STATUS_TONE: Record<string, "default" | "success" | "warning" | "danger"> = {
-  trialing: "default",
+const STATUS_TONE: Record<string, "neutral" | "success" | "warning" | "danger"> = {
+  trialing: "neutral",
   active: "success",
   past_due: "warning",
   suspended: "danger",
@@ -49,16 +49,17 @@ export function BillingPanel({ data }: { data: BillingData }) {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex items-center gap-3 rounded-md border border-border p-4">
+      <div className="panel flex items-center gap-3 p-4">
         <div className="flex-1">
           <p className="text-sm text-muted-foreground">Plan</p>
           <p className="font-medium">{data.plan_name ?? "No plan assigned"}</p>
         </div>
         <div className="flex-1">
           <p className="text-sm text-muted-foreground">Status</p>
-          <Badge variant={data.status ? STATUS_TONE[data.status] ?? "default" : "default"}>
-            {data.status ?? "unknown"}
-          </Badge>
+          <StatusBadge
+            tone={data.status ? STATUS_TONE[data.status] ?? "neutral" : "neutral"}
+            label={data.status ?? "unknown"}
+          />
         </div>
         {data.status === "trialing" && data.trial_ends_at && (
           <div className="flex-1">
@@ -101,9 +102,12 @@ export function BillingPanel({ data }: { data: BillingData }) {
         </div>
       )}
 
-      <div>
-        <p className="mb-2 text-sm font-medium">Invoice history</p>
-        <Table>
+      <div className="panel">
+        <header className="border-b border-border px-4 py-2.5">
+          <h2 className="text-[0.8125rem] font-semibold">Invoice history</h2>
+        </header>
+        <div className="overflow-x-auto">
+          <Table className="table-dense">
           <TableHeader>
             <TableRow>
               <TableHead>Period</TableHead>
@@ -130,15 +134,17 @@ export function BillingPanel({ data }: { data: BillingData }) {
                 <TableCell>{inv.student_count}</TableCell>
                 <TableCell>{inv.amount_kes.toLocaleString()}</TableCell>
                 <TableCell>
-                  <Badge variant={inv.status === "paid" ? "success" : inv.status === "overdue" ? "danger" : "default"}>
-                    {inv.status}
-                  </Badge>
+                  <StatusBadge
+                    tone={inv.status === "paid" ? "success" : inv.status === "overdue" ? "danger" : "neutral"}
+                    label={inv.status}
+                  />
                 </TableCell>
                 <TableCell>{new Date(inv.due_at).toLocaleDateString()}</TableCell>
               </TableRow>
             ))}
           </TableBody>
         </Table>
+        </div>
       </div>
     </div>
   );

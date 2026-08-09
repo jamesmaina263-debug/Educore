@@ -68,9 +68,9 @@ export function ClassesStreamsSection({
 
   if (!activeYearId) {
     return (
-      <p className="rounded-md border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
+      <div className="panel border-dashed p-6 text-center text-sm text-muted-foreground">
         Set an active academic year first, on the Years &amp; Terms tab.
-      </p>
+      </div>
     );
   }
 
@@ -153,9 +153,9 @@ export function ClassesStreamsSection({
       </div>
 
       {classes.length === 0 ? (
-        <p className="rounded-md border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
+        <div className="panel border-dashed p-6 text-center text-sm text-muted-foreground">
           No classes yet for this academic year.
-        </p>
+        </div>
       ) : (
         <div className="flex flex-col gap-4">
           {classes
@@ -164,7 +164,7 @@ export function ClassesStreamsSection({
             .map((c) => {
               const classStreams = streams.filter((s) => s.class_id === c.id);
               return (
-                <div key={c.id} className="rounded-md border border-border p-4">
+                <div key={c.id} className="panel p-4">
                   <div className="mb-2 flex items-center justify-between">
                     <p className="text-sm font-medium">{c.name}</p>
                     {canWrite && (

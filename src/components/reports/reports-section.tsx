@@ -1,5 +1,5 @@
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { StatusBadge } from "@/components/status-badge";
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@/components/ui/table";
 
 export interface EnrollmentMonth {
@@ -173,9 +173,7 @@ export function AtRiskTable({ rows }: { rows: AtRiskRow[] }) {
                   </TableCell>
                   <TableCell className="flex flex-wrap gap-1">
                     {r.risk_reasons.map((reason) => (
-                      <Badge key={reason} variant="warning">
-                        {reason.replaceAll("_", " ")}
-                      </Badge>
+                      <StatusBadge key={reason} tone="warning" label={reason.replaceAll("_", " ")} />
                     ))}
                   </TableCell>
                 </TableRow>
