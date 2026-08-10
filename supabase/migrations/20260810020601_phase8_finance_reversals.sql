@@ -118,8 +118,12 @@ grant execute on function reverse_payment(uuid, numeric, text) to authenticated;
 -- credit_balance: money received (net of reversals) that hasn't been applied to any invoice —
 -- overpayment credit that stays attached to the account (brief §4.7 item 12), never lost, and
 -- computed on read like every other balance figure here (never hand-edited).
-drop view if exists v_student_balances;
-create view v_student_balances
+-- create or replace (not drop+create): v_at_risk_students (an earlier phase) depends on this
+-- view, and a bare DROP fails on that dependency. CREATE OR REPLACE is safe here because every
+-- existing column (student_id, school_id, stream_id, total_invoiced, total_discounted,
+-- total_paid, balance) keeps its exact name, position, and type — credit_balance is only ever
+-- appended at the end, which Postgres allows without touching dependent views.
+create or replace view v_student_balances
 with (security_invoker = true) as
 select
   st.id as student_id,
