@@ -20,6 +20,7 @@ import {
   NotebookPen,
   Users2,
   Building2,
+  HeartPulse,
 } from "lucide-react";
 
 export interface NavItem {
@@ -42,6 +43,7 @@ export const navItems: NavItem[] = [
   { label: "Library", href: "/library", icon: Library },
   { label: "Transport", href: "/transport", icon: Bus },
   { label: "Boarding", href: "/boarding", icon: BedDouble },
+  { label: "Health", href: "/health", icon: HeartPulse },
   { label: "Inventory", href: "/inventory", icon: Package },
   { label: "Performance", href: "/performance", icon: TrendingUp },
   { label: "PT Meetings", href: "/pt-meetings", icon: Users2 },
