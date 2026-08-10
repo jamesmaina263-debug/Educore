@@ -59,3 +59,38 @@ export async function setNotificationPreference(
 
   return { success: true };
 }
+
+export interface InAppNotification {
+  id: string;
+  body: string;
+  subject: string | null;
+  created_at: string;
+  read_at: string | null;
+}
+
+export async function getMyInAppNotifications(): Promise<
+  { error: string } | { success: true; notifications: InAppNotification[] }
+> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "Not signed in." };
+
+  const { data, error } = await supabase
+    .from("notification_logs")
+    .select("id, body, subject, created_at, read_at")
+    .eq("channel", "in_app")
+    .order("created_at", { ascending: false })
+    .limit(20);
+  if (error) return { error: error.message };
+
+  return { success: true, notifications: (data ?? []) as InAppNotification[] };
+}
+
+export async function markNotificationReadAction(id: string): Promise<{ error: string } | { success: true }> {
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("mark_notification_read", { p_notification_id: id });
+  if (error) return { error: error.message };
+  return { success: true };
+}

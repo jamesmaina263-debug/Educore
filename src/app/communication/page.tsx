@@ -41,7 +41,7 @@ export default async function CommunicationPage() {
     supabase.from("communication_templates").select("id, name, category, body, channel").order("created_at", { ascending: false }),
     supabase
       .from("notification_logs")
-      .select("id, channel, recipient_phone, recipient_email, subject, body, status, provider_response, created_at, students(first_name, last_name)")
+      .select("id, channel, recipient_phone, recipient_email, subject, body, status, provider_response, read_at, created_at, students(first_name, last_name)")
       .order("created_at", { ascending: false })
       .limit(200),
     supabase
@@ -78,6 +78,7 @@ export default async function CommunicationPage() {
       body: l.body,
       status: l.status as LogRow["status"],
       provider_response: l.provider_response,
+      read_at: l.read_at,
       created_at: l.created_at,
     };
   });

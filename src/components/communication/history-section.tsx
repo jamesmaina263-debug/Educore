@@ -8,7 +8,7 @@ import { dispatchPending } from "@/app/communication/actions";
 
 export interface LogRow {
   id: string;
-  channel: "sms" | "email" | "whatsapp";
+  channel: "sms" | "email" | "whatsapp" | "in_app";
   recipient_phone: string | null;
   recipient_email: string | null;
   subject: string | null;
@@ -16,10 +16,11 @@ export interface LogRow {
   body: string;
   status: "queued" | "sent" | "failed" | "delivered";
   provider_response: string | null;
+  read_at: string | null;
   created_at: string;
 }
 
-const CHANNEL_LABELS: Record<LogRow["channel"], string> = { sms: "SMS", email: "Email", whatsapp: "WhatsApp" };
+const CHANNEL_LABELS: Record<LogRow["channel"], string> = { sms: "SMS", email: "Email", whatsapp: "WhatsApp", in_app: "In-app" };
 
 export function HistorySection({ logs }: { logs: LogRow[] }) {
   const router = useRouter();
@@ -71,6 +72,7 @@ export function HistorySection({ logs }: { logs: LogRow[] }) {
                   <th>Student</th>
                   <th>Message</th>
                   <th>Status</th>
+                  <th>Read</th>
                   <th>Sent</th>
                 </tr>
               </thead>
@@ -80,7 +82,9 @@ export function HistorySection({ logs }: { logs: LogRow[] }) {
                     <td>
                       <StatusBadge tone="neutral" label={CHANNEL_LABELS[l.channel]} />
                     </td>
-                    <td className="text-muted-foreground">{l.channel === "email" ? l.recipient_email : l.recipient_phone}</td>
+                    <td className="text-muted-foreground">
+                      {l.channel === "email" ? l.recipient_email : l.channel === "in_app" ? "—" : l.recipient_phone}
+                    </td>
                     <td>{l.student_name ?? "—"}</td>
                     <td className="max-w-xs truncate" title={l.subject ? `${l.subject}\n\n${l.body}` : l.body}>
                       {l.subject ? `${l.subject}: ` : ""}
@@ -92,6 +96,9 @@ export function HistorySection({ logs }: { logs: LogRow[] }) {
                         label={l.status}
                         title={l.provider_response ?? undefined}
                       />
+                    </td>
+                    <td className="text-muted-foreground">
+                      {l.channel === "in_app" ? (l.read_at ? <StatusBadge tone="success" label="Read" /> : <StatusBadge tone="neutral" label="Unread" />) : "—"}
                     </td>
                     <td className="text-muted-foreground">{new Date(l.created_at).toLocaleString()}</td>
                   </tr>

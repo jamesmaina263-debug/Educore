@@ -13,7 +13,7 @@ export interface TemplateOption {
   id: string;
   name: string;
   body: string;
-  channel: "sms" | "email" | "whatsapp";
+  channel: "sms" | "email" | "whatsapp" | "in_app";
 }
 
 export interface RosterEntry {
@@ -30,6 +30,7 @@ const CHANNELS = [
   { value: "sms", label: "SMS" },
   { value: "email", label: "Email" },
   { value: "whatsapp", label: "WhatsApp" },
+  { value: "in_app", label: "In-app" },
 ] as const;
 
 export function ComposeSection({
@@ -55,7 +56,7 @@ export function ComposeSection({
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<{ sent: number; failed: number; total: number } | null>(null);
 
-  const contactField = channel === "email" ? "guardian_email" : "guardian_phone";
+  const contactField = channel === "email" ? "guardian_email" : channel === "in_app" ? "guardian_school_user_id" : "guardian_phone";
   const withContact = roster.filter((r) => r[contactField]);
   const scoped =
     scope === "all" ? withContact : scope === "class" ? withContact.filter((r) => r.class_id === classId) : withContact.filter((r) => r.student_id === studentId);
@@ -85,7 +86,7 @@ export function ComposeSection({
     setError(null);
     setResult(null);
     const recipients: Recipient[] = scoped.map((r) => ({
-      ...(channel === "email" ? { email: r.guardian_email as string } : { phone: r.guardian_phone as string }),
+      ...(channel === "email" ? { email: r.guardian_email as string } : channel !== "in_app" ? { phone: r.guardian_phone as string } : {}),
       student_id: r.student_id,
       recipient_type: "guardian",
       school_user_id: r.guardian_school_user_id ?? undefined,
@@ -222,7 +223,7 @@ export function ComposeSection({
           <div className="flex items-center justify-between text-[0.75rem] text-muted-foreground">
             <span>
               {scoped.length} recipient{scoped.length !== 1 && "s"}
-              {skippedNoContact > 0 && ` (${skippedNoContact} skipped — no ${channel === "email" ? "email" : "phone"} on file)`}
+              {skippedNoContact > 0 && ` (${skippedNoContact} skipped — no ${channel === "email" ? "email" : channel === "in_app" ? "linked account" : "phone"} on file)`}
             </span>
             {channel === "sms" && (
               <span>{previewRendered.length} chars — {segments} segment{segments !== 1 && "s"}</span>

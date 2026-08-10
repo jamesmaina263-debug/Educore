@@ -15,7 +15,7 @@ export async function createTemplateAction(input: {
   name: string;
   category: "fee_reminder" | "absence_alert" | "result_published" | "announcement" | "other";
   body: string;
-  channel: "sms" | "email" | "whatsapp";
+  channel: "sms" | "email" | "whatsapp" | "in_app";
 }): Promise<ActionResult> {
   const supabase = await createClient();
   try {
@@ -25,6 +25,22 @@ export async function createTemplateAction(input: {
   } catch (e) {
     return { error: e instanceof Error ? e.message : "Could not create the template." };
   }
+  revalidatePath("/communication");
+  return { success: true };
+}
+
+export async function updateTemplateAction(
+  id: string,
+  input: {
+    name: string;
+    category: "fee_reminder" | "absence_alert" | "result_published" | "announcement" | "other";
+    body: string;
+    channel: "sms" | "email" | "whatsapp" | "in_app";
+  },
+): Promise<ActionResult> {
+  const supabase = await createClient();
+  const { error } = await supabase.from("communication_templates").update(input).eq("id", id);
+  if (error) return { error: error.message };
   revalidatePath("/communication");
   return { success: true };
 }
@@ -50,7 +66,7 @@ export async function composeAndSendAction(input: {
   recipients: Recipient[];
   template_id?: string;
   body?: string;
-  channel: "sms" | "email" | "whatsapp";
+  channel: "sms" | "email" | "whatsapp" | "in_app";
   subject?: string;
 }): Promise<{ error: string } | { success: true; sent: number; failed: number; total: number }> {
   const supabase = await createClient();
@@ -64,6 +80,14 @@ export async function composeAndSendAction(input: {
   });
   if (queueError) return { error: queueError.message };
   if (!queuedCount) return { error: "No recipients to send to." };
+
+  // In-app messages deliver immediately at insert time (queue_communication marks them
+  // 'delivered', not 'queued') — there's no external provider step, so there's nothing
+  // for the dispatch Edge Function to do. Skip it entirely for that channel.
+  if (input.channel === "in_app") {
+    revalidatePath("/communication");
+    return { success: true, sent: queuedCount, failed: 0, total: queuedCount };
+  }
 
   return dispatchPending();
 }
