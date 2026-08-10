@@ -66,6 +66,7 @@ export default async function ReportsPage() {
         supabase
           .from("student_attendance")
           .select("attendance_date, status")
+          .eq("session", "class")
           .gte("attendance_date", isoDate(new Date(new Date().getTime() - 6 * 24 * 60 * 60 * 1000))),
       ]);
 

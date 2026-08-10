@@ -79,7 +79,8 @@ export default async function AttendancePage({
         .from("student_attendance")
         .select("id, student_id, status")
         .eq("stream_id", selectedStreamId)
-        .eq("attendance_date", attendanceDate),
+        .eq("attendance_date", attendanceDate)
+        .eq("session", "class"),
     ]);
 
     const studentIds = (students ?? []).map((s) => s.id);
@@ -89,6 +90,7 @@ export default async function AttendancePage({
         .from("student_attendance")
         .select("student_id, status")
         .in("student_id", studentIds)
+        .eq("session", "class")
         .gte("attendance_date", activeTerm.start_date)
         .lte("attendance_date", activeTerm.end_date);
 

@@ -131,6 +131,7 @@ export default async function PortalPage({ searchParams }: { searchParams: Promi
       .from("student_attendance")
       .select("status")
       .eq("student_id", selected.id)
+      .eq("session", "class")
       .gte("attendance_date", activeTerm.start_date)
       .lte("attendance_date", activeTerm.end_date);
     if (attendanceRows && attendanceRows.length > 0) {

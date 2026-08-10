@@ -101,6 +101,7 @@ export default async function StudentProfilePage({
       .from("student_attendance")
       .select("status")
       .eq("student_id", id)
+      .eq("session", "class")
       .gte("attendance_date", ninetyDaysAgo.toISOString().slice(0, 10)),
     supabase.from("v_student_balances").select("balance").eq("student_id", id).maybeSingle(),
     supabase

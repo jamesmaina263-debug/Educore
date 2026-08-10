@@ -141,7 +141,8 @@ async function runIntent(
       const { data } = await supabase
         .from("student_attendance")
         .select("status")
-        .eq("attendance_date", today);
+        .eq("attendance_date", today)
+        .eq("session", "class");
       const total = data?.length ?? 0;
       const present = (data ?? []).filter((r) => r.status === "present").length;
       if (total === 0) return "No attendance has been marked for today yet.";

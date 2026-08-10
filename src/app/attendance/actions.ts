@@ -33,8 +33,10 @@ export async function submitAttendance(input: {
     marked_by: me?.id ?? null,
   }));
 
-  // First-time marking only — the unique(stream_id, student_id, attendance_date)
-  // constraint stops this from silently overwriting an already-marked day.
+  // First-time marking only — the unique(stream_id, student_id, attendance_date, session)
+  // constraint stops this from silently overwriting an already-marked day. This route
+  // always writes session='class' (the column default); Boarding roll call writes
+  // session='boarding_am'/'boarding_pm' via its own action, so the two never collide.
   // Corrections go through editAttendanceRecord, which requires a reason.
   const { error } = await supabase.from("student_attendance").insert(rows);
   if (error) return { error: error.message };

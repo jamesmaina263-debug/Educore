@@ -41,7 +41,7 @@ export const navItems: NavItem[] = [
   { label: "Payroll", href: "/payroll", icon: Banknote },
   { label: "Library", href: "/library", icon: Library },
   { label: "Transport", href: "/transport", icon: Bus },
-  { label: "Hostel", href: "/hostel", icon: BedDouble },
+  { label: "Boarding", href: "/boarding", icon: BedDouble },
   { label: "Inventory", href: "/inventory", icon: Package },
   { label: "Performance", href: "/performance", icon: TrendingUp },
   { label: "PT Meetings", href: "/pt-meetings", icon: Users2 },

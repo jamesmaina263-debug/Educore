@@ -129,7 +129,8 @@ export default async function DashboardPage() {
     const { data: todaysAttendance } = await supabase
       .from("student_attendance")
       .select("student_id, stream_id, status")
-      .eq("attendance_date", today);
+      .eq("attendance_date", today)
+      .eq("session", "class");
 
     const rosterSource = canSeeStudents
       ? students
