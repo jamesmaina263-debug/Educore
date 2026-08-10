@@ -7,10 +7,12 @@ import {
   FeeCollectionCard,
   AttendanceTrendCard,
   AtRiskTable,
+  TransportCapacityCard,
   type EnrollmentMonth,
   type FeeForecast,
   type AtRiskRow,
   type AttendanceTrendDay,
+  type TransportRouteCapacityRow,
 } from "@/components/reports/reports-section";
 
 function monthLabel(d: Date) {
@@ -44,13 +46,14 @@ export default async function ReportsPage() {
   let feeForecast: FeeForecast | null = null;
   let atRiskRows: AtRiskRow[] = [];
   let attendanceDays: AttendanceTrendDay[] = [];
+  let transportRoutes: TransportRouteCapacityRow[] = [];
 
   if (canSeeReports) {
     const sixMonthsAgo = new Date();
     sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 5);
     sixMonthsAgo.setDate(1);
 
-    const [{ data: admissionRows }, { data: forecastRows }, { data: riskRows }, { data: attendanceRows }] =
+    const [{ data: admissionRows }, { data: forecastRows }, { data: riskRows }, { data: attendanceRows }, { data: transportRows }] =
       await Promise.all([
         supabase.from("students").select("admission_date").gte("admission_date", isoDate(sixMonthsAgo)),
         supabase
@@ -67,6 +70,7 @@ export default async function ReportsPage() {
           .from("student_attendance")
           .select("attendance_date, status")
           .gte("attendance_date", isoDate(new Date(new Date().getTime() - 6 * 24 * 60 * 60 * 1000))),
+        supabase.from("v_transport_route_capacity").select("route_id, route_name, capacity, allocated, available").order("route_name"),
       ]);
 
     // Bucket admissions by month, oldest to newest, 6-month window.
@@ -111,6 +115,14 @@ export default async function ReportsPage() {
       if (row.status === "present") bucket.present += 1;
     }
     attendanceDays = Array.from(dayBuckets.entries()).map(([date, v]) => ({ date, ...v }));
+
+    transportRoutes = (transportRows ?? []).map((r) => ({
+      route_id: r.route_id,
+      route_name: r.route_name,
+      capacity: r.capacity,
+      allocated: r.allocated,
+      available: r.available,
+    }));
   }
 
   return (
@@ -139,6 +151,7 @@ export default async function ReportsPage() {
               <EnrollmentTrendCard months={enrollmentMonths} />
               <FeeCollectionCard forecast={feeForecast} />
               <AttendanceTrendCard days={attendanceDays} />
+              <TransportCapacityCard routes={transportRoutes} />
             </div>
             <AtRiskTable rows={atRiskRows} />
             <p className="text-xs text-muted-foreground">

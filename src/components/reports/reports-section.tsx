@@ -31,6 +31,14 @@ export interface AttendanceTrendDay {
   total: number;
 }
 
+export interface TransportRouteCapacityRow {
+  route_id: string;
+  route_name: string;
+  capacity: number;
+  allocated: number;
+  available: number;
+}
+
 function Panel({ title, meta, children }: { title: string; meta: string; children: React.ReactNode }) {
   return (
     <div className="panel">
@@ -173,5 +181,43 @@ export function AtRiskTable({ rows }: { rows: AtRiskRow[] }) {
         </div>
       )}
     </div>
+  );
+}
+
+export function TransportCapacityCard({ routes }: { routes: TransportRouteCapacityRow[] }) {
+  return (
+    <Panel title="Transport capacity" meta="Live route allocation — read by Admissions when assigning transport">
+      {routes.length === 0 ? (
+        <p className="text-sm text-muted-foreground">No routes configured yet.</p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="table-dense w-full">
+            <thead className="bg-muted/70">
+              <tr>
+                <th>Route</th>
+                <th>Capacity</th>
+              </tr>
+            </thead>
+            <tbody>
+              {routes.map((r) => (
+                <tr key={r.route_id}>
+                  <td className="font-medium">{r.route_name}</td>
+                  <td>
+                    {r.capacity > 0 ? (
+                      <StatusBadge
+                        tone={r.available <= 0 ? "warning" : "success"}
+                        label={`${r.allocated}/${r.capacity} — ${r.available} free`}
+                      />
+                    ) : (
+                      <StatusBadge tone="neutral" label="Not configured" />
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </Panel>
   );
 }
