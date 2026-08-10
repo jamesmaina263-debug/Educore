@@ -96,6 +96,7 @@ export default async function StudentProfilePage({
     { data: boardingRow },
     { data: transportRow },
     { data: latestReportCard },
+    { data: financialAccount },
   ] = await Promise.all([
     supabase
       .from("student_attendance")
@@ -103,7 +104,7 @@ export default async function StudentProfilePage({
       .eq("student_id", id)
       .eq("session", "class")
       .gte("attendance_date", ninetyDaysAgo.toISOString().slice(0, 10)),
-    supabase.from("v_student_balances").select("balance").eq("student_id", id).maybeSingle(),
+    supabase.from("v_student_balances").select("balance, credit_balance").eq("student_id", id).maybeSingle(),
     supabase
       .from("hostel_allocations")
       .select("hostel_rooms(room_number, block)")
@@ -123,6 +124,7 @@ export default async function StudentProfilePage({
       .order("generated_at", { ascending: false })
       .limit(1)
       .maybeSingle(),
+    supabase.from("student_financial_accounts").select("payment_reference").eq("student_id", id).maybeSingle(),
   ]);
 
   const attendanceTotal = attendanceRows?.length ?? 0;
@@ -226,7 +228,9 @@ export default async function StudentProfilePage({
                 <p className={`mt-1 text-lg font-semibold ${(balanceRow?.balance ?? 0) > 0 ? "text-danger" : "text-success"}`}>
                   {balanceRow ? `KES ${Number(balanceRow.balance).toLocaleString()}` : "—"}
                 </p>
-                <p className="text-xs text-muted-foreground">From Finance</p>
+                <p className="text-xs text-muted-foreground">
+                  {financialAccount ? `Ref. ${financialAccount.payment_reference}` : "From Finance"}
+                </p>
               </div>
 
               <div className="panel p-4">

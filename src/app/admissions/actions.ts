@@ -33,7 +33,22 @@ export async function enrollApplication(studentId: string, streamId: string): Pr
 }
 
 export async function activateEnrollment(studentId: string): Promise<ActionResult> {
-  return transition(studentId, "active");
+  const result = await transition(studentId, "active");
+  if ("error" in result) return result;
+
+  // Finance hook (brief §4.16.9 / Phase 8 item 16): creates the Student Financial Account
+  // (payment reference) and, if an active term + matching fee structure exist, the invoice —
+  // without the Admissions Officer leaving this workflow. Idempotent (create_or_get_...), so a
+  // repeat activation never duplicates the account or invoice. Deliberately non-fatal: a missing
+  // fee structure is a Finance configuration gap, not a reason to block enrollment.
+  const supabase = await createClient();
+  const { error: financeError } = await supabase.rpc("finance_on_student_enrolled", { p_student_id: studentId });
+  if (financeError) {
+    console.error("finance_on_student_enrolled failed for", studentId, financeError.message);
+  }
+  revalidatePath("/finance");
+
+  return { success: true };
 }
 
 export async function rejectApplication(studentId: string): Promise<ActionResult> {

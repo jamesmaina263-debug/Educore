@@ -7,6 +7,7 @@ import { FeeStructuresSection, type FeeStructureRow } from "@/components/finance
 import { InvoicesSection, type InvoiceListRow } from "@/components/finance/invoices-section";
 import { BalancesSection, type BalanceRow } from "@/components/finance/balances-section";
 import { PaymentsSection, type PaymentListRow } from "@/components/finance/payments-section";
+import { UnallocatedPaymentsSection, type UnallocatedPaymentRow } from "@/components/finance/unallocated-payments-section";
 import { DiscountsSection, type DiscountRow, type InvoiceOption } from "@/components/finance/discounts-section";
 import { ExpensesSection, type ExpenseRow } from "@/components/finance/expenses-section";
 import { WaiversSection, type FeeWaiverRow, type StudentOption, type TermOption } from "@/components/finance/waivers-section";
@@ -49,23 +50,26 @@ export default async function FinancePage() {
     );
   }
 
-  const [{ data: years }, { data: classes }, { data: structures }, { data: feeItems }, { data: invoices }, { data: payments }, { data: discounts }, { data: expenses }, { data: balances }, { data: allocations }, { data: waivers }, { data: activeStudents }] =
+  const [{ data: years }, { data: classes }, { data: structures }, { data: feeItems }, { data: invoices }, { data: payments }, { data: discounts }, { data: expenses }, { data: balances }, { data: allocations }, { data: waivers }, { data: activeStudents }, { data: accounts }, { data: receipts }, { data: reversals }] =
     await Promise.all([
       supabase.from("academic_years").select("id, status").eq("status", "active"),
       supabase.from("classes").select("id, name").order("level_order"),
-      supabase.from("fee_structures").select("id, name, term_id, class_id, boarding_type, is_active, terms(name), classes(name)").order("created_at", { ascending: false }),
+      supabase.from("fee_structures").select("id, name, term_id, class_id, boarding_type, fee_category, is_active, terms(name), classes(name)").order("created_at", { ascending: false }),
       supabase.from("fee_items").select("fee_structure_id, name, amount"),
-      supabase.from("invoices").select("id, student_id, total_amount, status, created_at, term_id, students(first_name, last_name, current_class_id), terms(name)").order("created_at", { ascending: false }),
-      supabase.from("payments").select("id, student_id, method, amount, reference, recorded_at, students(first_name, last_name)").order("recorded_at", { ascending: false }),
+      supabase.from("invoices").select("id, student_id, total_amount, status, created_at, term_id, students(first_name, last_name, current_class_id, admission_number), terms(name)").order("created_at", { ascending: false }),
+      supabase.from("payments").select("id, student_id, method, amount, reference, purpose, notes, status, phone_number, recorded_at, students(first_name, last_name)").order("recorded_at", { ascending: false }),
       supabase.from("discounts").select("id, invoice_id, amount, reason, status, students(first_name, last_name)").order("created_at", { ascending: false }),
       supabase.from("expenses").select("id, category, vendor, amount, description, status").order("created_at", { ascending: false }),
-      supabase.from("v_student_balances").select("student_id, total_invoiced, total_discounted, total_paid, balance, stream_id"),
+      supabase.from("v_student_balances").select("student_id, total_invoiced, total_discounted, total_paid, balance, credit_balance, stream_id"),
       supabase.from("payment_allocations").select("invoice_id, amount_allocated"),
       supabase
         .from("fee_waivers")
         .select("id, name, waiver_type, discount_kind, discount_value, status, students(first_name, last_name), starts_term:terms!fee_waivers_starts_term_id_fkey(name)")
         .order("created_at", { ascending: false }),
       supabase.from("students").select("id, first_name, last_name").eq("status", "active").order("first_name"),
+      supabase.from("student_financial_accounts").select("student_id, payment_reference"),
+      supabase.from("receipts").select("payment_id, receipt_number"),
+      supabase.from("payment_reversals").select("payment_id, amount"),
     ]);
 
   const activeYearId = years?.[0]?.id ?? "";
@@ -88,6 +92,7 @@ export default async function FinancePage() {
       class_id: s.class_id,
       class_name: (s.classes as unknown as { name: string } | null)?.name ?? null,
       boarding_type: s.boarding_type as "day" | "boarder",
+      fee_category: s.fee_category as "core" | "transport",
       is_active: s.is_active,
       total: items.reduce((sum, i) => sum + Number(i.amount), 0),
       items: items.map((i) => ({ name: i.name, amount: Number(i.amount) })),
@@ -127,17 +132,42 @@ export default async function FinancePage() {
       return { id: inv.id, student_id: inv.student_id, student_name: st ? `${st.first_name} ${st.last_name}` : "", total_amount: Number(inv.total_amount) };
     });
 
-  const paymentRows: PaymentListRow[] = (payments ?? []).map((p) => {
-    const st = p.students as unknown as { first_name: string; last_name: string } | null;
-    return {
+  const receiptByPayment = new Map((receipts ?? []).map((r) => [r.payment_id, r.receipt_number]));
+  const reversedByPayment = new Map<string, number>();
+  for (const r of reversals ?? []) {
+    reversedByPayment.set(r.payment_id, (reversedByPayment.get(r.payment_id) ?? 0) + Number(r.amount));
+  }
+
+  const paymentRows: PaymentListRow[] = (payments ?? [])
+    .filter((p) => p.status !== "unallocated")
+    .map((p) => {
+      const st = p.students as unknown as { first_name: string; last_name: string } | null;
+      return {
+        id: p.id,
+        student_name: st ? `${st.first_name} ${st.last_name}` : "",
+        method: p.method as PaymentListRow["method"],
+        amount: Number(p.amount),
+        reference: p.reference,
+        purpose: p.purpose,
+        status: p.status as PaymentListRow["status"],
+        receipt_number: receiptByPayment.get(p.id) ?? null,
+        reversed_total: reversedByPayment.get(p.id) ?? 0,
+        recorded_at: p.recorded_at,
+      };
+    });
+
+  const unallocatedRows: UnallocatedPaymentRow[] = (payments ?? [])
+    .filter((p) => p.status === "unallocated")
+    .map((p) => ({
       id: p.id,
-      student_name: st ? `${st.first_name} ${st.last_name}` : "",
-      method: p.method as "mpesa" | "cash" | "bank" | "cheque",
+      method: p.method as UnallocatedPaymentRow["method"],
       amount: Number(p.amount),
       reference: p.reference,
+      phone_number: p.phone_number,
+      purpose: p.purpose,
+      notes: p.notes,
       recorded_at: p.recorded_at,
-    };
-  });
+    }));
 
   const discountRows: DiscountRow[] = (discounts ?? []).map((d) => {
     const st = d.students as unknown as { first_name: string; last_name: string } | null;
@@ -183,22 +213,32 @@ export default async function FinancePage() {
 
   const termOptions: TermOption[] = (terms ?? []).map((t) => ({ id: t.id, name: t.name }));
 
-  const studentNameByStreamMap = new Map<string, { name: string; class_name: string }>();
+  const studentNameByStreamMap = new Map<string, { name: string; class_name: string; admission_number: string }>();
   for (const inv of invoices ?? []) {
-    const st = inv.students as unknown as { first_name: string; last_name: string; current_class_id: string } | null;
-    if (st) studentNameByStreamMap.set(inv.student_id, { name: `${st.first_name} ${st.last_name}`, class_name: classNameByStream.get(st.current_class_id) ?? "" });
+    const st = inv.students as unknown as { first_name: string; last_name: string; current_class_id: string; admission_number: string } | null;
+    if (st)
+      studentNameByStreamMap.set(inv.student_id, {
+        name: `${st.first_name} ${st.last_name}`,
+        class_name: classNameByStream.get(st.current_class_id) ?? "",
+        admission_number: st.admission_number,
+      });
   }
+
+  const referenceByStudent = new Map((accounts ?? []).map((a) => [a.student_id, a.payment_reference]));
 
   const balanceRows: BalanceRow[] = (balances ?? [])
     .filter((b) => Number(b.total_invoiced) > 0)
     .map((b) => ({
       student_id: b.student_id,
       full_name: studentNameByStreamMap.get(b.student_id)?.name ?? "",
+      admission_number: studentNameByStreamMap.get(b.student_id)?.admission_number ?? "",
+      payment_reference: referenceByStudent.get(b.student_id) ?? null,
       class_name: classNameByStream.get(b.stream_id ?? "") ?? "",
       total_invoiced: Number(b.total_invoiced),
       total_discounted: Number(b.total_discounted),
       total_paid: Number(b.total_paid),
       balance: Number(b.balance),
+      credit_balance: Number(b.credit_balance),
     }));
 
   const activeTerm = (terms ?? []).find((t) => t.status === "active") ?? null;
@@ -253,10 +293,13 @@ export default async function FinancePage() {
 
         <Tabs defaultValue="balances">
           <TabsList>
-            <TabsTrigger value="balances">Balances</TabsTrigger>
+            <TabsTrigger value="balances">Student Accounts</TabsTrigger>
             <TabsTrigger value="fee-structures">Fee Structures</TabsTrigger>
             <TabsTrigger value="invoices">Invoices</TabsTrigger>
             <TabsTrigger value="payments">Payments</TabsTrigger>
+            <TabsTrigger value="unallocated">
+              Unallocated{unallocatedRows.length > 0 ? ` (${unallocatedRows.length})` : ""}
+            </TabsTrigger>
             <TabsTrigger value="discounts">Discounts</TabsTrigger>
             <TabsTrigger value="waivers">Waivers</TabsTrigger>
             <TabsTrigger value="expenses">Expenses</TabsTrigger>
@@ -281,7 +324,11 @@ export default async function FinancePage() {
           </TabsContent>
 
           <TabsContent value="payments">
-            <PaymentsSection payments={paymentRows} />
+            <PaymentsSection payments={paymentRows} canReverse={canWrite === true} />
+          </TabsContent>
+
+          <TabsContent value="unallocated">
+            <UnallocatedPaymentsSection payments={unallocatedRows} canWrite={canWrite === true} />
           </TabsContent>
 
           <TabsContent value="discounts">

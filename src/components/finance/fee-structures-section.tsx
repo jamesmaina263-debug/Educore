@@ -19,6 +19,7 @@ export interface FeeStructureRow {
   class_id: string | null;
   class_name: string | null;
   boarding_type: "day" | "boarder";
+  fee_category: "core" | "transport";
   is_active: boolean;
   total: number;
   items: { name: string; amount: number }[];
@@ -47,6 +48,7 @@ export function FeeStructuresSection({
   const [termId, setTermId] = useState(terms[0]?.id ?? "");
   const [classId, setClassId] = useState<string>("__all__");
   const [boardingType, setBoardingType] = useState<"day" | "boarder">("day");
+  const [feeCategory, setFeeCategory] = useState<"core" | "transport">("core");
   const [items, setItems] = useState<ItemDraft[]>([{ name: "Tuition", amount: "" }]);
 
   async function handleCreate() {
@@ -57,6 +59,7 @@ export function FeeStructuresSection({
       term_id: termId,
       class_id: classId === "__all__" ? null : classId,
       boarding_type: boardingType,
+      fee_category: feeCategory,
       name,
       items: items.filter((i) => i.name.trim() && i.amount).map((i) => ({ name: i.name, amount: Number(i.amount) })),
     });
@@ -132,6 +135,20 @@ export function FeeStructuresSection({
                     </Select>
                   </div>
                   <div className="space-y-1.5">
+                    <Label>Category</Label>
+                    <Select value={feeCategory} onValueChange={(v) => setFeeCategory(v as "core" | "transport")}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="core">Core (tuition/boarding)</SelectItem>
+                        <SelectItem value="transport">Transport add-on</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                {feeCategory === "core" && (
+                  <div className="space-y-1.5">
                     <Label>Boarding</Label>
                     <Select value={boardingType} onValueChange={(v) => setBoardingType(v as "day" | "boarder")}>
                       <SelectTrigger>
@@ -143,7 +160,13 @@ export function FeeStructuresSection({
                       </SelectContent>
                     </Select>
                   </div>
-                </div>
+                )}
+                {feeCategory === "transport" && (
+                  <p className="text-xs text-muted-foreground">
+                    Transport structures merge their items into a boarding/day student&apos;s single termly invoice
+                    automatically, only for students with an active Transport assignment. No separate invoice is created.
+                  </p>
+                )}
 
                 <div className="space-y-2">
                   <Label>Fee items</Label>
@@ -192,7 +215,11 @@ export function FeeStructuresSection({
                   <p className="font-medium">{s.name}</p>
                   <Badge variant="secondary">{s.term_name}</Badge>
                   <Badge variant="outline">{s.class_name ?? "All grades"}</Badge>
-                  <StatusBadge tone={s.boarding_type === "boarder" ? "info" : "neutral"} label={s.boarding_type} />
+                  {s.fee_category === "core" ? (
+                    <StatusBadge tone={s.boarding_type === "boarder" ? "info" : "neutral"} label={s.boarding_type} />
+                  ) : (
+                    <StatusBadge tone="warning" label="transport add-on" />
+                  )}
                 </div>
                 <p className="text-sm font-medium">KES {s.total.toLocaleString()}</p>
               </div>

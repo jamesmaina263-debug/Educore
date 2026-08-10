@@ -67,8 +67,8 @@ export default async function PortalPage({ searchParams }: { searchParams: Promi
   const prefsResult = await getMyNotificationPreferences();
   const preferenceRows = "success" in prefsResult ? prefsResult.rows : [];
 
-  const [{ data: balance }, { data: activeTerm }, { data: latestReportCard }] = await Promise.all([
-    supabase.from("v_student_balances").select("balance, total_invoiced").eq("student_id", selected.id).maybeSingle(),
+  const [{ data: balance }, { data: activeTerm }, { data: latestReportCard }, { data: account }, { data: recentPayments }] = await Promise.all([
+    supabase.from("v_student_balances").select("balance, total_invoiced, credit_balance").eq("student_id", selected.id).maybeSingle(),
     supabase.from("terms").select("id, start_date, end_date").eq("status", "active").maybeSingle(),
     supabase
       .from("report_cards")
@@ -78,6 +78,13 @@ export default async function PortalPage({ searchParams }: { searchParams: Promi
       .order("generated_at", { ascending: false })
       .limit(1)
       .maybeSingle(),
+    supabase.from("student_financial_accounts").select("payment_reference").eq("student_id", selected.id).maybeSingle(),
+    supabase
+      .from("payments")
+      .select("id, method, amount, status, recorded_at, receipts(receipt_number)")
+      .eq("student_id", selected.id)
+      .order("recorded_at", { ascending: false })
+      .limit(5),
   ]);
 
   const { data: assignmentRows } = await supabase
@@ -180,6 +187,38 @@ export default async function PortalPage({ searchParams }: { searchParams: Promi
           </p>
         ) : (
           <p className="mt-1 text-sm text-muted-foreground">No invoices yet.</p>
+        )}
+        {balance && Number(balance.credit_balance) > 0 && (
+          <p className="mt-1 text-sm text-success">Credit on account: KES {Number(balance.credit_balance).toLocaleString()}</p>
+        )}
+        {account && (
+          <p className="mt-2 text-xs text-muted-foreground">
+            Payment reference: <span className="font-mono font-medium text-foreground">{account.payment_reference}</span>
+            <br />Quote this reference (not the student&apos;s name) when paying via M-Pesa, bank, or in person, so the school can match your payment automatically.
+          </p>
+        )}
+        {(recentPayments ?? []).length > 0 && (
+          <div className="mt-3 border-t border-border pt-3">
+            <p className="mb-1 text-xs font-medium text-muted-foreground">Recent payments</p>
+            <ul className="flex flex-col gap-1 text-sm">
+              {(recentPayments ?? []).map((p) => {
+                const receipt = p.receipts as unknown as { receipt_number: string } | { receipt_number: string }[] | null;
+                const receiptNumber = Array.isArray(receipt) ? receipt[0]?.receipt_number : receipt?.receipt_number;
+                return (
+                  <li key={p.id} className="flex items-center justify-between">
+                    <span>
+                      {new Date(p.recorded_at).toLocaleDateString()} · {p.method}
+                      {p.status === "reversed" && <span className="ml-1 text-danger">(reversed)</span>}
+                    </span>
+                    <span className="font-medium">
+                      KES {Number(p.amount).toLocaleString()}
+                      {receiptNumber && <span className="ml-1 font-mono text-xs text-muted-foreground">{receiptNumber}</span>}
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
         )}
       </div>
 

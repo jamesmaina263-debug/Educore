@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
@@ -13,22 +14,41 @@ import { recordPaymentAction } from "@/app/finance/actions";
 export interface BalanceRow {
   student_id: string;
   full_name: string;
+  admission_number: string;
+  payment_reference: string | null;
   class_name: string;
   total_invoiced: number;
   total_discounted: number;
   total_paid: number;
   balance: number;
+  credit_balance: number;
 }
+
+type Method = "mpesa" | "cash" | "bank" | "cheque" | "card" | "other";
 
 export function BalancesSection({ rows, canWrite }: { rows: BalanceRow[]; canWrite: boolean }) {
   const router = useRouter();
+  const [query, setQuery] = useState("");
   const [target, setTarget] = useState<BalanceRow | null>(null);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [amount, setAmount] = useState("");
-  const [method, setMethod] = useState<"mpesa" | "cash" | "bank" | "cheque">("mpesa");
+  const [method, setMethod] = useState<Method>("mpesa");
   const [reference, setReference] = useState("");
   const [phone, setPhone] = useState("");
+  const [purpose, setPurpose] = useState("");
+  const [notes, setNotes] = useState("");
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return rows;
+    return rows.filter(
+      (r) =>
+        r.full_name.toLowerCase().includes(q) ||
+        r.admission_number.toLowerCase().includes(q) ||
+        (r.payment_reference ?? "").toLowerCase().includes(q),
+    );
+  }, [rows, query]);
 
   async function handleRecord() {
     if (!target) return;
@@ -40,6 +60,8 @@ export function BalancesSection({ rows, canWrite }: { rows: BalanceRow[]; canWri
       amount: Number(amount),
       reference: reference || undefined,
       phone_number: phone || undefined,
+      purpose: purpose || undefined,
+      notes: notes || undefined,
     });
     setPending(false);
     if ("error" in result) return setError(result.error);
@@ -47,42 +69,60 @@ export function BalancesSection({ rows, canWrite }: { rows: BalanceRow[]; canWri
     setAmount("");
     setReference("");
     setPhone("");
+    setPurpose("");
+    setNotes("");
     router.refresh();
   }
 
   if (rows.length === 0) {
     return (
       <div className="panel border-dashed p-10 text-center text-sm text-muted-foreground">
-        No invoices generated yet — balances appear once invoices exist.
+        No invoices generated yet — student accounts appear once invoices exist.
       </div>
     );
   }
 
   return (
     <div className="flex flex-col gap-4">
+      <Input
+        placeholder="Search by name, admission number, or payment reference…"
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        className="max-w-sm"
+      />
+
       <div className="panel overflow-x-auto">
         <Table className="table-dense">
         <TableHeader>
           <TableRow>
             <TableHead>Student</TableHead>
+            <TableHead>Payment ref.</TableHead>
             <TableHead>Class</TableHead>
             <TableHead>Invoiced</TableHead>
             <TableHead>Discounted</TableHead>
             <TableHead>Paid</TableHead>
             <TableHead>Balance</TableHead>
+            <TableHead>Credit</TableHead>
             {canWrite && <TableHead className="text-right">Actions</TableHead>}
           </TableRow>
         </TableHeader>
         <TableBody>
-          {rows.map((r) => (
+          {filtered.map((r) => (
             <TableRow key={r.student_id}>
-              <TableCell className="font-medium">{r.full_name}</TableCell>
+              <TableCell className="font-medium">
+                {r.full_name}
+                <span className="block text-xs text-muted-foreground">{r.admission_number}</span>
+              </TableCell>
+              <TableCell className="font-mono text-xs">{r.payment_reference ?? "—"}</TableCell>
               <TableCell>{r.class_name}</TableCell>
               <TableCell data-numeric>{r.total_invoiced.toLocaleString()}</TableCell>
               <TableCell data-numeric>{r.total_discounted.toLocaleString()}</TableCell>
               <TableCell data-numeric>{r.total_paid.toLocaleString()}</TableCell>
               <TableCell className={r.balance > 0 ? "font-medium text-danger" : "text-success"} data-numeric>
                 {r.balance.toLocaleString()}
+              </TableCell>
+              <TableCell className={r.credit_balance > 0 ? "font-medium text-success" : "text-muted-foreground"} data-numeric>
+                {r.credit_balance.toLocaleString()}
               </TableCell>
               {canWrite && (
                 <TableCell className="text-right">
@@ -104,7 +144,9 @@ export function BalancesSection({ rows, canWrite }: { rows: BalanceRow[]; canWri
           </DialogHeader>
           <div className="space-y-3">
             <p className="text-sm text-muted-foreground">
-              Outstanding balance: KES {target?.balance.toLocaleString()}. Applies to the oldest outstanding invoice first.
+              Payment ref. {target?.payment_reference ?? "—"} · Outstanding: KES {target?.balance.toLocaleString()}
+              {target && target.credit_balance > 0 ? ` · Credit available: KES ${target.credit_balance.toLocaleString()}` : ""}.
+              Applies to the oldest outstanding invoice first; any remainder is kept as credit.
             </p>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
@@ -113,7 +155,7 @@ export function BalancesSection({ rows, canWrite }: { rows: BalanceRow[]; canWri
               </div>
               <div className="space-y-1.5">
                 <Label>Method</Label>
-                <Select value={method} onValueChange={(v) => setMethod(v as typeof method)}>
+                <Select value={method} onValueChange={(v) => setMethod(v as Method)}>
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
@@ -122,6 +164,8 @@ export function BalancesSection({ rows, canWrite }: { rows: BalanceRow[]; canWri
                     <SelectItem value="cash">Cash</SelectItem>
                     <SelectItem value="bank">Bank</SelectItem>
                     <SelectItem value="cheque">Cheque</SelectItem>
+                    <SelectItem value="card">Card</SelectItem>
+                    <SelectItem value="other">Other</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -139,10 +183,18 @@ export function BalancesSection({ rows, canWrite }: { rows: BalanceRow[]; canWri
               </div>
             ) : (
               <div className="space-y-1.5">
-                <Label>Reference</Label>
-                <Input placeholder="Cheque / transaction number" value={reference} onChange={(e) => setReference(e.target.value)} />
+                <Label>External reference (optional)</Label>
+                <Input placeholder="Cheque / transaction / bank slip number" value={reference} onChange={(e) => setReference(e.target.value)} />
               </div>
             )}
+            <div className="space-y-1.5">
+              <Label>Purpose (optional)</Label>
+              <Input placeholder="e.g. Term 2 fees" value={purpose} onChange={(e) => setPurpose(e.target.value)} />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Notes (optional)</Label>
+              <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} />
+            </div>
             {error && <p className="text-sm text-danger">{error}</p>}
           </div>
           <DialogFooter>
