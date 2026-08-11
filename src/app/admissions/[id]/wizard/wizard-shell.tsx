@@ -4,6 +4,11 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { saveWizardStep, discardDraft } from "./actions";
+import {
+  AdmissionDetailsStep, StudentStep, GuardianStep, DocumentsStep, AcademicsStep,
+  BoardingStep, TransportStep, HealthStep, FinanceStep,
+} from "./step-forms";
+import type { WizardStepData } from "./wizard-data";
 
 export interface WizardStep {
   id: string;
@@ -11,7 +16,7 @@ export interface WizardStep {
   /** Whether this step applies to this particular admission — the dynamic skip logic
    *  (Brief 4.16.9: "must be dynamic, skipping irrelevant steps"). */
   applicable: boolean;
-  /** Phase 11 builds only the shell; each step's real form is Phase 12's job. */
+  /** Fallback note for steps that don't yet have a real form (Review/Complete — Phase 13). */
   note: string;
 }
 
@@ -20,11 +25,13 @@ export function WizardShell({
   applicantLabel,
   steps,
   initialStep,
+  data,
 }: {
   applicationId: string;
   applicantLabel: string;
   steps: WizardStep[];
   initialStep: number;
+  data: WizardStepData;
 }) {
   const router = useRouter();
   const applicableSteps = steps.filter((s) => s.applicable);
@@ -102,8 +109,41 @@ export function WizardShell({
         <p className="label-eyebrow">
           {applicantLabel} · Step {currentIndex + 1}
         </p>
-        <h2 className="mt-1 text-lg font-semibold">{current.label}</h2>
-        <p className="mt-3 max-w-prose text-sm text-muted-foreground">{current.note}</p>
+        <div className="mt-3">
+          {current.id === "admission_details" && (
+            <AdmissionDetailsStep applicationId={applicationId} academicYears={data.academicYears} terms={data.terms} initial={data.application} />
+          )}
+          {current.id === "student" && (
+            <StudentStep applicationId={applicationId} applicantSummary={data.application} resultingStudentId={data.resultingStudentId} />
+          )}
+          {current.id === "guardian" && (
+            <GuardianStep applicationId={applicationId} resultingStudentId={data.resultingStudentId} />
+          )}
+          {current.id === "documents" && (
+            <DocumentsStep applicationId={applicationId} requirements={data.documentRequirements} documents={data.documents} />
+          )}
+          {current.id === "academics" && (
+            <AcademicsStep applicationId={applicationId} streamOptions={data.streamOptions} currentStreamId={data.currentStreamId} />
+          )}
+          {current.id === "boarding" && (
+            <BoardingStep applicationId={applicationId} houseOptions={data.houseOptions} currentBedId={data.currentBedId} />
+          )}
+          {current.id === "transport" && (
+            <TransportStep applicationId={applicationId} routeOptions={data.routeOptions} vehicleOptions={data.vehicleOptions} hasAssignment={data.hasTransportAssignment} />
+          )}
+          {current.id === "health" && (
+            <HealthStep applicationId={applicationId} initial={data.medicalRecord} canWrite={data.canWriteMedical} />
+          )}
+          {current.id === "finance" && (
+            <FinanceStep applicationId={applicationId} hasStudentAndTerm={!!data.resultingStudentId && !!data.application.term_id} initial={data.financeDecision} />
+          )}
+          {(current.id === "review" || current.id === "complete") && (
+            <div>
+              <h2 className="text-lg font-semibold">{current.label}</h2>
+              <p className="mt-3 max-w-prose text-sm text-muted-foreground">{current.note}</p>
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="flex items-center justify-between">

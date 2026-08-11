@@ -5,6 +5,7 @@ import { logout } from "@/app/login/actions";
 import { AppShell } from "@/components/app-shell/app-shell";
 import { Button } from "@/components/ui/button";
 import { WizardShell, type WizardStep } from "./wizard-shell";
+import { loadWizardStepData } from "./wizard-data";
 
 // Both entry points converge here (Brief 4.16.1): a walk-in draft, or an online application the
 // officer has already Accepted (status = admission_pending) or Conditionally Accepted. Anything
@@ -28,12 +29,14 @@ export default async function AdmissionWizardPage({ params }: { params: Promise<
 
   const { data: application } = await supabase
     .from("applications")
-    .select("id, application_number, status, first_name, last_name, boarding_preference, transport_required, wizard_current_step")
+    .select("id, school_id, application_number, status, first_name, last_name, boarding_preference, transport_required, wizard_current_step")
     .eq("id", id)
     .maybeSingle();
 
   if (!application) notFound();
   if (!ENTERABLE_STATUSES.includes(application.status)) redirect(`/admissions/${id}`);
+
+  const wizardData = await loadWizardStepData(supabase, application.id, application.school_id);
 
   const roleName = (schoolUser?.roles as unknown as { display_name: string } | null)?.display_name;
   const schoolName = (schoolUser?.schools as unknown as { name: string } | null)?.name;
@@ -48,17 +51,17 @@ export default async function AdmissionWizardPage({ params }: { params: Promise<
   // set shows Boarding rather than guessing — the officer will set it once they reach Admission
   // Details / Academic Placement, and can revisit.
   const steps: WizardStep[] = [
-    { id: "admission_details", label: "Admission Details", applicable: true, note: "Admission type, academic year, term, campus, and intended class. Built in Phase 12." },
-    { id: "student", label: "Student", applicable: true, note: "Student biodata, shown for verification against the original application, plus duplicate-student detection. Built in Phase 12." },
-    { id: "guardian", label: "Guardian", applicable: true, note: "Search and link an existing guardian, or create a new one. Built in Phase 12." },
-    { id: "documents", label: "Documents", applicable: true, note: "Documents already submitted online, plus upload/verify/reject for anything missing. Built in Phase 12." },
-    { id: "academics", label: "Academic Placement", applicable: true, note: "Class and stream placement with live capacity from Academics. Built in Phase 12." },
-    { id: "boarding", label: "Boarding", applicable: application.boarding_preference !== "day", note: "Boarding house, dormitory, room, and bed with live availability from Boarding. Built in Phase 12." },
-    { id: "transport", label: "Transport", applicable: application.transport_required !== false, note: "Route, pickup point, and vehicle with live capacity from Transport. Built in Phase 12." },
-    { id: "health", label: "Health", applicable: true, note: "Initial health profile only — blood group, allergies, known conditions. Built in Phase 12." },
-    { id: "finance", label: "Finance", applicable: true, note: "Applicable charges from fee configuration, with an option to record an initial payment. Built in Phase 12." },
-    { id: "review", label: "Final Review", applicable: true, note: "Editable summary of every step before committing. Built in Phase 12." },
-    { id: "complete", label: "Complete", applicable: true, note: "Complete Enrollment — creates the student record and every linked module record in one transaction. Built in Phase 12." },
+    { id: "admission_details", label: "Admission Details", applicable: true, note: "" },
+    { id: "student", label: "Student", applicable: true, note: "" },
+    { id: "guardian", label: "Guardian", applicable: true, note: "" },
+    { id: "documents", label: "Documents", applicable: true, note: "" },
+    { id: "academics", label: "Academic Placement", applicable: true, note: "" },
+    { id: "boarding", label: "Boarding", applicable: application.boarding_preference !== "day", note: "" },
+    { id: "transport", label: "Transport", applicable: application.transport_required !== false, note: "" },
+    { id: "health", label: "Health", applicable: true, note: "" },
+    { id: "finance", label: "Finance", applicable: true, note: "" },
+    { id: "review", label: "Final Review", applicable: true, note: "Editable summary of every step before committing, plus the admission checklist. Built in Phase 13." },
+    { id: "complete", label: "Complete", applicable: true, note: "Complete Enrollment — validates the checklist and finalizes the Student record, Finance invoice, and admission history in one safe, idempotent commit. Built in Phase 13." },
   ];
 
   return (
@@ -84,6 +87,7 @@ export default async function AdmissionWizardPage({ params }: { params: Promise<
         applicantLabel={applicantLabel}
         steps={steps}
         initialStep={application.wizard_current_step ?? 0}
+        data={wizardData}
       />
     </AppShell>
   );

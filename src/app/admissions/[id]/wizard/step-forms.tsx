@@ -1,0 +1,883 @@
+"use client";
+
+import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
+import {
+  updateAdmissionDetails,
+  checkForDuplicateStudents,
+  createOrLinkStudent,
+  searchGuardians,
+  linkGuardianToApplication,
+  verifyDocumentAction,
+  rejectDocumentAction,
+  uploadDocumentAsStaff,
+  setAcademicPlacement,
+  allocateBoardingForApplication,
+  removeBoardingForApplication,
+  assignTransportForApplication,
+  removeTransportForApplication,
+  saveHealthProfileForApplication,
+  getFeePreview,
+  saveFinanceDecision,
+  type DuplicateCandidate,
+  type GuardianSearchResult,
+  type FeeChargeLine,
+} from "./actions";
+
+// Shared shell every step form renders inside, matching the wizard panel's existing look.
+function StepPanel({ title, hint, children }: { title: string; hint?: string; children: React.ReactNode }) {
+  return (
+    <div className="space-y-3">
+      <div>
+        <h3 className="text-sm font-semibold">{title}</h3>
+        {hint && <p className="mt-0.5 text-xs text-muted-foreground">{hint}</p>}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function ErrorText({ error }: { error: string | null }) {
+  if (!error) return null;
+  return <p className="rounded-md border border-danger/25 bg-destructive-subtle px-3 py-2 text-sm text-danger">{error}</p>;
+}
+
+function SuccessDot() {
+  return <span className="inline-block h-1.5 w-1.5 rounded-full bg-success" aria-hidden />;
+}
+
+// ============================================================================
+// Step 1 — Admission Details
+// ============================================================================
+
+export interface AcademicYearOption { id: string; name: string; status: string }
+export interface TermOption { id: string; academic_year_id: string; name: string; term_number: number; status: string }
+export interface StreamOption { id: string; label: string; class_id: string; capacity: number | null; occupied: number }
+
+export function AdmissionDetailsStep({
+  applicationId,
+  academicYears,
+  terms,
+  initial,
+}: {
+  applicationId: string;
+  academicYears: AcademicYearOption[];
+  terms: TermOption[];
+  initial: {
+    admission_type: string;
+    academic_year_id: string | null;
+    term_id: string | null;
+    boarding_preference: string | null;
+    transport_required: boolean;
+    previous_school: string | null;
+    previous_class: string | null;
+  };
+}) {
+  const router = useRouter();
+  const [form, setForm] = useState(initial);
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
+
+  const termsForYear = terms.filter((t) => t.academic_year_id === form.academic_year_id);
+
+  function save() {
+    setError(null);
+    setSaved(false);
+    startTransition(async () => {
+      const result = await updateAdmissionDetails(applicationId, {
+        admission_type: form.admission_type as "new" | "transfer" | "re_admission",
+        academic_year_id: form.academic_year_id,
+        term_id: form.term_id,
+        intended_class_id: null,
+        boarding_preference: (form.boarding_preference as "day" | "boarding" | null) ?? null,
+        transport_required: form.transport_required,
+        previous_school: form.previous_school ?? undefined,
+        previous_class: form.previous_class ?? undefined,
+      });
+      if ("error" in result) { setError(result.error); return; }
+      setSaved(true);
+      router.refresh();
+    });
+  }
+
+  return (
+    <StepPanel title="Admission Details" hint="Admission type, academic year, term, and day/boarding + transport preference — these drive which later steps apply.">
+      <div className="grid grid-cols-2 gap-3">
+        <div className="space-y-1.5">
+          <Label>Admission type</Label>
+          <Select value={form.admission_type} onValueChange={(v) => setForm({ ...form, admission_type: v })}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="new">New</SelectItem>
+              <SelectItem value="transfer">Transfer</SelectItem>
+              <SelectItem value="re_admission">Re-admission</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1.5">
+          <Label>Academic year</Label>
+          <Select value={form.academic_year_id ?? ""} onValueChange={(v) => setForm({ ...form, academic_year_id: v, term_id: null })}>
+            <SelectTrigger><SelectValue placeholder="Select year" /></SelectTrigger>
+            <SelectContent>
+              {academicYears.map((y) => <SelectItem key={y.id} value={y.id}>{y.name}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1.5">
+          <Label>Term</Label>
+          <Select value={form.term_id ?? ""} onValueChange={(v) => setForm({ ...form, term_id: v })} disabled={!form.academic_year_id}>
+            <SelectTrigger><SelectValue placeholder="Select term" /></SelectTrigger>
+            <SelectContent>
+              {termsForYear.map((t) => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1.5">
+          <Label>Day or boarding</Label>
+          <Select value={form.boarding_preference ?? ""} onValueChange={(v) => setForm({ ...form, boarding_preference: v })}>
+            <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="day">Day</SelectItem>
+              <SelectItem value="boarding">Boarding</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="previous_school">Previous school</Label>
+          <Input id="previous_school" value={form.previous_school ?? ""} onChange={(e) => setForm({ ...form, previous_school: e.target.value })} />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="previous_class">Previous class</Label>
+          <Input id="previous_class" value={form.previous_class ?? ""} onChange={(e) => setForm({ ...form, previous_class: e.target.value })} />
+        </div>
+      </div>
+      <div className="flex items-center gap-2">
+        <Checkbox id="transport_required" checked={form.transport_required} onCheckedChange={(c) => setForm({ ...form, transport_required: c === true })} />
+        <Label htmlFor="transport_required" className="font-normal">Requires school transport</Label>
+      </div>
+      <ErrorText error={error} />
+      <div className="flex items-center gap-2">
+        <Button size="sm" onClick={save} disabled={pending}>{pending ? "Saving…" : "Save"}</Button>
+        {saved && !pending && <span className="flex items-center gap-1.5 text-xs text-success"><SuccessDot />Saved</span>}
+      </div>
+    </StepPanel>
+  );
+}
+
+// ============================================================================
+// Step 2 — Student Biodata + Duplicate Detection
+// ============================================================================
+
+export function StudentStep({
+  applicationId,
+  applicantSummary,
+  resultingStudentId,
+}: {
+  applicationId: string;
+  applicantSummary: { first_name: string; last_name: string; date_of_birth: string; gender: string };
+  resultingStudentId: string | null;
+}) {
+  const router = useRouter();
+  const [admissionNumber, setAdmissionNumber] = useState("");
+  const [candidates, setCandidates] = useState<DuplicateCandidate[] | null>(null);
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+
+  function runDuplicateCheck() {
+    setError(null);
+    startTransition(async () => {
+      const result = await checkForDuplicateStudents(applicationId);
+      if ("error" in result) { setError(result.error); return; }
+      setCandidates(result.candidates);
+    });
+  }
+
+  function createNew(overrideDuplicate: boolean) {
+    if (!admissionNumber.trim()) { setError("Enter an admission number."); return; }
+    setError(null);
+    startTransition(async () => {
+      const result = await createOrLinkStudent(applicationId, { admission_number: admissionNumber.trim(), override_duplicate: overrideDuplicate });
+      if ("error" in result) { setError(result.error); return; }
+      router.refresh();
+    });
+  }
+
+  function linkExisting(studentId: string) {
+    setError(null);
+    startTransition(async () => {
+      const result = await createOrLinkStudent(applicationId, { admission_number: "", override_duplicate: true, link_existing_student_id: studentId });
+      if ("error" in result) { setError(result.error); return; }
+      router.refresh();
+    });
+  }
+
+  if (resultingStudentId) {
+    return (
+      <StepPanel title="Student">
+        <p className="flex items-center gap-1.5 text-sm text-success"><SuccessDot />Student record linked ({applicantSummary.first_name} {applicantSummary.last_name}).</p>
+      </StepPanel>
+    );
+  }
+
+  return (
+    <StepPanel title="Student" hint="Verify the applicant's details, check for a possible existing student, then create the master Student record.">
+      <dl className="grid grid-cols-2 gap-3 text-sm">
+        <div><dt className="text-muted-foreground">Name</dt><dd>{applicantSummary.first_name} {applicantSummary.last_name}</dd></div>
+        <div><dt className="text-muted-foreground">Date of birth</dt><dd>{applicantSummary.date_of_birth}</dd></div>
+        <div><dt className="text-muted-foreground">Gender</dt><dd className="capitalize">{applicantSummary.gender}</dd></div>
+      </dl>
+
+      {candidates === null ? (
+        <Button size="sm" variant="outline" onClick={runDuplicateCheck} disabled={pending}>
+          {pending ? "Checking…" : "Check for existing student"}
+        </Button>
+      ) : candidates.length > 0 ? (
+        <div className="rounded-md border border-warning/25 bg-warning-subtle p-3">
+          <p className="mb-2 text-sm font-medium text-warning">Possible existing student found</p>
+          <ul className="space-y-2">
+            {candidates.map((c) => (
+              <li key={c.id} className="flex items-center justify-between rounded-md border border-border bg-surface px-2.5 py-1.5 text-sm">
+                <span>{c.first_name} {c.last_name} · {c.admission_number} · {c.date_of_birth} <span className="text-muted-foreground">({c.reason})</span></span>
+                <Button size="sm" variant="outline" onClick={() => linkExisting(c.id)} disabled={pending}>Link this student</Button>
+              </li>
+            ))}
+          </ul>
+          <div className="mt-3 flex items-end gap-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="admission_number">Admission number (new student)</Label>
+              <Input id="admission_number" value={admissionNumber} onChange={(e) => setAdmissionNumber(e.target.value)} className="w-48" />
+            </div>
+            <Button size="sm" variant="destructive" onClick={() => createNew(true)} disabled={pending}>
+              None of these — create new student
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <div className="flex items-end gap-2">
+          <p className="text-sm text-muted-foreground">No matching students found.</p>
+        </div>
+      )}
+
+      {candidates !== null && candidates.length === 0 && (
+        <div className="flex items-end gap-2">
+          <div className="space-y-1.5">
+            <Label htmlFor="admission_number2">Admission number</Label>
+            <Input id="admission_number2" value={admissionNumber} onChange={(e) => setAdmissionNumber(e.target.value)} className="w-48" />
+          </div>
+          <Button size="sm" onClick={() => createNew(false)} disabled={pending}>{pending ? "Creating…" : "Create student record"}</Button>
+        </div>
+      )}
+      <ErrorText error={error} />
+    </StepPanel>
+  );
+}
+
+// ============================================================================
+// Step 3 — Guardian
+// ============================================================================
+
+export function GuardianStep({ applicationId, resultingStudentId }: { applicationId: string; resultingStudentId: string | null }) {
+  const router = useRouter();
+  const [mode, setMode] = useState<"search" | "new">("search");
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<GuardianSearchResult[]>([]);
+  const [relationship, setRelationship] = useState<"mother" | "father" | "guardian" | "other">("mother");
+  const [newGuardian, setNewGuardian] = useState({ full_name: "", phone: "", email: "" });
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+  const [linked, setLinked] = useState(false);
+
+  function runSearch(q: string) {
+    setQuery(q);
+    startTransition(async () => {
+      const result = await searchGuardians(q);
+      if ("success" in result) setResults(result.results);
+    });
+  }
+
+  function link(guardianId?: string) {
+    if (!resultingStudentId) { setError("Complete the Student step first."); return; }
+    setError(null);
+    startTransition(async () => {
+      const result = await linkGuardianToApplication(applicationId, {
+        mode: guardianId ? "existing" : "new",
+        guardian_id: guardianId,
+        new_guardian: guardianId ? undefined : newGuardian,
+        relationship,
+        primary_contact: true,
+      });
+      if ("error" in result) { setError(result.error); return; }
+      setLinked(true);
+      router.refresh();
+    });
+  }
+
+  return (
+    <StepPanel title="Guardian" hint="Search for an existing guardian and link them, or create a new one.">
+      <div className="flex gap-1.5">
+        <Button size="sm" variant={mode === "search" ? "default" : "outline"} onClick={() => setMode("search")}>Search existing</Button>
+        <Button size="sm" variant={mode === "new" ? "default" : "outline"} onClick={() => setMode("new")}>New guardian</Button>
+      </div>
+
+      <div className="space-y-1.5">
+        <Label>Relationship to student</Label>
+        <Select value={relationship} onValueChange={(v) => setRelationship(v as typeof relationship)}>
+          <SelectTrigger className="w-48"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="mother">Mother</SelectItem>
+            <SelectItem value="father">Father</SelectItem>
+            <SelectItem value="guardian">Guardian</SelectItem>
+            <SelectItem value="other">Other</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      {mode === "search" ? (
+        <div className="space-y-2">
+          <Input placeholder="Search by name or phone" value={query} onChange={(e) => runSearch(e.target.value)} />
+          {results.length > 0 && (
+            <ul className="space-y-1.5">
+              {results.map((g) => (
+                <li key={g.id} className="flex items-center justify-between rounded-md border border-border px-2.5 py-1.5 text-sm">
+                  <span>{g.full_name} · {g.phone}</span>
+                  <Button size="sm" variant="outline" onClick={() => link(g.id)} disabled={pending}>Link</Button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-1.5">
+            <Label htmlFor="g_name">Full name</Label>
+            <Input id="g_name" value={newGuardian.full_name} onChange={(e) => setNewGuardian({ ...newGuardian, full_name: e.target.value })} />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="g_phone">Phone</Label>
+            <Input id="g_phone" value={newGuardian.phone} onChange={(e) => setNewGuardian({ ...newGuardian, phone: e.target.value })} />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="g_email">Email (optional)</Label>
+            <Input id="g_email" value={newGuardian.email} onChange={(e) => setNewGuardian({ ...newGuardian, email: e.target.value })} />
+          </div>
+          <div className="flex items-end">
+            <Button size="sm" onClick={() => link(undefined)} disabled={pending || !newGuardian.full_name || !newGuardian.phone}>
+              {pending ? "Linking…" : "Create and link"}
+            </Button>
+          </div>
+        </div>
+      )}
+      <ErrorText error={error} />
+      {linked && <p className="flex items-center gap-1.5 text-xs text-success"><SuccessDot />Guardian linked</p>}
+    </StepPanel>
+  );
+}
+
+// ============================================================================
+// Step 4 — Documents
+// ============================================================================
+
+export interface DocumentRequirement { category: string; label: string; required: boolean }
+export interface ApplicationDocument { id: string; category: string; file_name: string; verification_status: string; verification_comment: string | null }
+
+export function DocumentsStep({
+  applicationId,
+  requirements,
+  documents,
+}: {
+  applicationId: string;
+  requirements: DocumentRequirement[];
+  documents: ApplicationDocument[];
+}) {
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+  const [rejectingId, setRejectingId] = useState<string | null>(null);
+  const [rejectComment, setRejectComment] = useState("");
+  const docByCategory = new Map(documents.map((d) => [d.category, d]));
+
+  function upload(category: string, file: File) {
+    setError(null);
+    const formData = new FormData();
+    formData.append("file", file);
+    startTransition(async () => {
+      const result = await uploadDocumentAsStaff(applicationId, category, formData);
+      if ("error" in result) { setError(result.error); return; }
+      router.refresh();
+    });
+  }
+
+  function verify(documentId: string) {
+    setError(null);
+    startTransition(async () => {
+      const result = await verifyDocumentAction(documentId);
+      if ("error" in result) { setError(result.error); return; }
+      router.refresh();
+    });
+  }
+
+  function reject(documentId: string) {
+    if (!rejectComment.trim()) { setError("Explain why this document is being rejected."); return; }
+    setError(null);
+    startTransition(async () => {
+      const result = await rejectDocumentAction(documentId, rejectComment);
+      if ("error" in result) { setError(result.error); return; }
+      setRejectingId(null);
+      setRejectComment("");
+      router.refresh();
+    });
+  }
+
+  return (
+    <StepPanel title="Documents" hint="Documents already submitted online appear pre-filled — upload, verify, or reject anything missing.">
+      <ul className="space-y-2">
+        {requirements.map((req) => {
+          const doc = docByCategory.get(req.category);
+          return (
+            <li key={req.category} className="rounded-md border border-border p-2.5">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium">
+                  {req.label} {req.required && <span className="text-danger">*</span>}
+                </span>
+                {doc ? (
+                  <span className={`text-xs ${doc.verification_status === "verified" ? "text-success" : doc.verification_status === "rejected" ? "text-danger" : "text-muted-foreground"}`}>
+                    {doc.file_name} — {doc.verification_status}
+                  </span>
+                ) : (
+                  <span className="text-xs text-muted-foreground">Not submitted</span>
+                )}
+              </div>
+              <div className="mt-2 flex items-center gap-2">
+                <Input type="file" accept=".pdf,.jpg,.jpeg,.png" className="h-8 max-w-64 text-xs"
+                  onChange={(e) => { const f = e.target.files?.[0]; if (f) upload(req.category, f); }} />
+                {doc && doc.verification_status !== "verified" && (
+                  <Button size="sm" variant="outline" onClick={() => verify(doc.id)} disabled={pending}>Verify</Button>
+                )}
+                {doc && doc.verification_status !== "rejected" && (
+                  <Button size="sm" variant="ghost" onClick={() => setRejectingId(doc.id)} disabled={pending}>Reject</Button>
+                )}
+              </div>
+              {rejectingId === doc?.id && (
+                <div className="mt-2 flex items-center gap-2">
+                  <Input placeholder="Reason for rejection" value={rejectComment} onChange={(e) => setRejectComment(e.target.value)} className="h-8" />
+                  <Button size="sm" variant="destructive" onClick={() => reject(doc!.id)} disabled={pending}>Confirm reject</Button>
+                </div>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+      <ErrorText error={error} />
+    </StepPanel>
+  );
+}
+
+// ============================================================================
+// Step 5 — Academic Placement
+// ============================================================================
+
+export function AcademicsStep({
+  applicationId,
+  streamOptions,
+  currentStreamId,
+}: {
+  applicationId: string;
+  streamOptions: StreamOption[];
+  currentStreamId: string | null;
+}) {
+  const router = useRouter();
+  const [selected, setSelected] = useState(currentStreamId ?? "");
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+
+  function save() {
+    if (!selected) { setError("Select a class/stream."); return; }
+    setError(null);
+    startTransition(async () => {
+      const result = await setAcademicPlacement(applicationId, selected);
+      if ("error" in result) { setError(result.error); return; }
+      router.refresh();
+    });
+  }
+
+  return (
+    <StepPanel title="Academic Placement" hint="Live capacity from Academics — full streams are shown but disabled.">
+      <div className="space-y-1.5">
+        <Label>Class / stream</Label>
+        <Select value={selected} onValueChange={setSelected}>
+          <SelectTrigger className="w-72"><SelectValue placeholder="Select a stream" /></SelectTrigger>
+          <SelectContent>
+            {streamOptions.map((s) => {
+              const full = s.capacity != null && s.occupied >= s.capacity;
+              return (
+                <SelectItem key={s.id} value={s.id} disabled={full}>
+                  {s.label} — {s.occupied}/{s.capacity ?? "∞"}{full ? " (full)" : ""}
+                </SelectItem>
+              );
+            })}
+          </SelectContent>
+        </Select>
+      </div>
+      <ErrorText error={error} />
+      <Button size="sm" onClick={save} disabled={pending}>{pending ? "Saving…" : "Save placement"}</Button>
+    </StepPanel>
+  );
+}
+
+// ============================================================================
+// Step 6 — Boarding
+// ============================================================================
+
+export interface BedOption { id: string; bed_number: string; available: boolean; status: string }
+export interface RoomOption { id: string; room_number: string; gender: string; beds: BedOption[] }
+export interface DormOption { id: string; name: string; gender: string; rooms: RoomOption[] }
+export interface HouseOption { id: string; name: string; gender: string; dormitories: DormOption[] }
+
+export function BoardingStep({
+  applicationId,
+  houseOptions,
+  currentBedId,
+}: {
+  applicationId: string;
+  houseOptions: HouseOption[];
+  currentBedId: string | null;
+}) {
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+
+  function allocate(bedId: string) {
+    setError(null);
+    startTransition(async () => {
+      const result = await allocateBoardingForApplication(applicationId, bedId);
+      if ("error" in result) { setError(result.error); return; }
+      router.refresh();
+    });
+  }
+
+  function remove() {
+    setError(null);
+    startTransition(async () => {
+      const result = await removeBoardingForApplication(applicationId);
+      if ("error" in result) { setError(result.error); return; }
+      router.refresh();
+    });
+  }
+
+  if (currentBedId) {
+    return (
+      <StepPanel title="Boarding">
+        <p className="flex items-center gap-1.5 text-sm text-success"><SuccessDot />Bed allocated.</p>
+        <Button size="sm" variant="outline" onClick={remove} disabled={pending}>Remove allocation</Button>
+        <ErrorText error={error} />
+      </StepPanel>
+    );
+  }
+
+  return (
+    <StepPanel title="Boarding" hint="Live bed availability, written to the Boarding module the moment you allocate.">
+      <div className="max-h-80 space-y-3 overflow-y-auto">
+        {houseOptions.map((h) => (
+          <div key={h.id}>
+            <p className="text-xs font-medium text-muted-foreground">{h.name} ({h.gender})</p>
+            {h.dormitories.map((d) => (
+              <div key={d.id} className="mt-1 pl-2">
+                <p className="text-xs">{d.name}</p>
+                <div className="flex flex-wrap gap-1.5 pl-2 pt-1">
+                  {d.rooms.flatMap((r) => r.beds.map((b) => (
+                    <button
+                      key={b.id}
+                      type="button"
+                      disabled={!b.available || pending}
+                      onClick={() => allocate(b.id)}
+                      className={`rounded border px-2 py-1 text-xs ${b.available ? "border-border hover:border-primary" : "border-border bg-muted text-muted-foreground opacity-50"}`}
+                      title={`Room ${r.room_number}`}
+                    >
+                      {r.room_number}-{b.bed_number}
+                    </button>
+                  )))}
+                </div>
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
+      <ErrorText error={error} />
+    </StepPanel>
+  );
+}
+
+// ============================================================================
+// Step 7 — Transport
+// ============================================================================
+
+export interface RouteOption { id: string; name: string; fee_amount: number | null; stops: { id: string; name: string }[] }
+export interface VehicleOption { id: string; label: string; capacity: number | null }
+
+export function TransportStep({
+  applicationId,
+  routeOptions,
+  vehicleOptions,
+  hasAssignment,
+}: {
+  applicationId: string;
+  routeOptions: RouteOption[];
+  vehicleOptions: VehicleOption[];
+  hasAssignment: boolean;
+}) {
+  const router = useRouter();
+  const [routeId, setRouteId] = useState("");
+  const [vehicleId, setVehicleId] = useState("");
+  const [pickupPoint, setPickupPoint] = useState("");
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+
+  const stops = routeOptions.find((r) => r.id === routeId)?.stops ?? [];
+
+  function assign() {
+    if (!routeId) { setError("Select a route."); return; }
+    setError(null);
+    startTransition(async () => {
+      const result = await assignTransportForApplication(applicationId, { route_id: routeId, vehicle_id: vehicleId || undefined, pickup_point: pickupPoint || undefined });
+      if ("error" in result) { setError(result.error); return; }
+      router.refresh();
+    });
+  }
+
+  function remove() {
+    setError(null);
+    startTransition(async () => {
+      const result = await removeTransportForApplication(applicationId);
+      if ("error" in result) { setError(result.error); return; }
+      router.refresh();
+    });
+  }
+
+  if (hasAssignment) {
+    return (
+      <StepPanel title="Transport">
+        <p className="flex items-center gap-1.5 text-sm text-success"><SuccessDot />Transport assigned.</p>
+        <Button size="sm" variant="outline" onClick={remove} disabled={pending}>Remove assignment</Button>
+        <ErrorText error={error} />
+      </StepPanel>
+    );
+  }
+
+  return (
+    <StepPanel title="Transport" hint="Live route capacity, written to the Transport module the moment you assign.">
+      <div className="grid grid-cols-2 gap-3">
+        <div className="space-y-1.5">
+          <Label>Route</Label>
+          <Select value={routeId} onValueChange={(v) => { setRouteId(v); setPickupPoint(""); }}>
+            <SelectTrigger><SelectValue placeholder="Select route" /></SelectTrigger>
+            <SelectContent>{routeOptions.map((r) => <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>)}</SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1.5">
+          <Label>Pickup point</Label>
+          <Select value={pickupPoint} onValueChange={setPickupPoint} disabled={!routeId}>
+            <SelectTrigger><SelectValue placeholder="Select stop" /></SelectTrigger>
+            <SelectContent>{stops.map((s) => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}</SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1.5">
+          <Label>Vehicle (optional)</Label>
+          <Select value={vehicleId} onValueChange={setVehicleId}>
+            <SelectTrigger><SelectValue placeholder="Select vehicle" /></SelectTrigger>
+            <SelectContent>{vehicleOptions.map((v) => <SelectItem key={v.id} value={v.id}>{v.label}</SelectItem>)}</SelectContent>
+          </Select>
+        </div>
+      </div>
+      <ErrorText error={error} />
+      <Button size="sm" onClick={assign} disabled={pending}>{pending ? "Assigning…" : "Assign transport"}</Button>
+    </StepPanel>
+  );
+}
+
+// ============================================================================
+// Step 8 — Health
+// ============================================================================
+
+export function HealthStep({
+  applicationId,
+  initial,
+  canWrite,
+}: {
+  applicationId: string;
+  initial: { blood_group: string | null; allergies: string | null; conditions: string | null; emergency_contact_name: string | null; emergency_contact_phone: string | null; notes: string | null };
+  canWrite: boolean;
+}) {
+  const router = useRouter();
+  const [form, setForm] = useState(initial);
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
+
+  function save() {
+    setError(null);
+    setSaved(false);
+    startTransition(async () => {
+      const result = await saveHealthProfileForApplication(applicationId, {
+        blood_group: form.blood_group ?? undefined,
+        allergies: form.allergies ?? undefined,
+        conditions: form.conditions ?? undefined,
+        emergency_contact_name: form.emergency_contact_name ?? undefined,
+        emergency_contact_phone: form.emergency_contact_phone ?? undefined,
+        notes: form.notes ?? undefined,
+      });
+      if ("error" in result) { setError(result.error); return; }
+      setSaved(true);
+      router.refresh();
+    });
+  }
+
+  if (!canWrite) {
+    return (
+      <StepPanel title="Health">
+        <p className="text-sm text-muted-foreground">
+          You don&apos;t have medical-record permissions. A nurse or authorized staff member should complete this step — you can move on and come back later.
+        </p>
+      </StepPanel>
+    );
+  }
+
+  return (
+    <StepPanel title="Health" hint="Initial profile only — full medical detail is managed by the Health module, not here.">
+      <div className="grid grid-cols-2 gap-3">
+        <div className="space-y-1.5">
+          <Label htmlFor="blood_group">Blood group</Label>
+          <Input id="blood_group" value={form.blood_group ?? ""} onChange={(e) => setForm({ ...form, blood_group: e.target.value })} />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="emergency_contact_phone">Emergency contact phone</Label>
+          <Input id="emergency_contact_phone" value={form.emergency_contact_phone ?? ""} onChange={(e) => setForm({ ...form, emergency_contact_phone: e.target.value })} />
+        </div>
+      </div>
+      <div className="space-y-1.5">
+        <Label htmlFor="emergency_contact_name">Emergency contact name</Label>
+        <Input id="emergency_contact_name" value={form.emergency_contact_name ?? ""} onChange={(e) => setForm({ ...form, emergency_contact_name: e.target.value })} />
+      </div>
+      <div className="space-y-1.5">
+        <Label htmlFor="allergies">Allergies</Label>
+        <Textarea id="allergies" value={form.allergies ?? ""} onChange={(e) => setForm({ ...form, allergies: e.target.value })} />
+      </div>
+      <div className="space-y-1.5">
+        <Label htmlFor="conditions">Known conditions</Label>
+        <Textarea id="conditions" value={form.conditions ?? ""} onChange={(e) => setForm({ ...form, conditions: e.target.value })} />
+      </div>
+      <div className="space-y-1.5">
+        <Label htmlFor="notes">Special medical requirements</Label>
+        <Textarea id="notes" value={form.notes ?? ""} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
+      </div>
+      <ErrorText error={error} />
+      <div className="flex items-center gap-2">
+        <Button size="sm" onClick={save} disabled={pending}>{pending ? "Saving…" : "Save"}</Button>
+        {saved && !pending && <span className="flex items-center gap-1.5 text-xs text-success"><SuccessDot />Saved</span>}
+      </div>
+    </StepPanel>
+  );
+}
+
+// ============================================================================
+// Step 9 — Finance
+// ============================================================================
+
+export function FinanceStep({
+  applicationId,
+  hasStudentAndTerm,
+  initial,
+}: {
+  applicationId: string;
+  hasStudentAndTerm: boolean;
+  initial: { initial_payment_amount: number | null; initial_payment_method: string | null };
+}) {
+  const [charges, setCharges] = useState<FeeChargeLine[] | null>(null);
+  const [total, setTotal] = useState(0);
+  const [amount, setAmount] = useState(initial.initial_payment_amount?.toString() ?? "");
+  const [method, setMethod] = useState(initial.initial_payment_method ?? "");
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
+
+  function loadPreview() {
+    setError(null);
+    startTransition(async () => {
+      const result = await getFeePreview(applicationId);
+      if ("error" in result) { setError(result.error); return; }
+      setCharges(result.charges);
+      setTotal(result.total);
+    });
+  }
+
+  function save() {
+    setError(null);
+    setSaved(false);
+    startTransition(async () => {
+      const result = await saveFinanceDecision(applicationId, {
+        initial_payment_amount: amount ? Number(amount) : null,
+        initial_payment_method: (method || null) as "cash" | "mpesa" | "bank" | "cheque" | null,
+      });
+      if ("error" in result) { setError(result.error); return; }
+      setSaved(true);
+    });
+  }
+
+  if (!hasStudentAndTerm) {
+    return (
+      <StepPanel title="Finance">
+        <p className="text-sm text-muted-foreground">Complete the Student and Admission Details steps first to preview applicable charges.</p>
+      </StepPanel>
+    );
+  }
+
+  return (
+    <StepPanel title="Finance" hint="Charges resolved from the same fee configuration Finance uses for invoicing — no invoice is created until enrollment completes.">
+      {charges === null ? (
+        <Button size="sm" variant="outline" onClick={loadPreview} disabled={pending}>{pending ? "Loading…" : "Load charges"}</Button>
+      ) : (
+        <div className="rounded-md border border-border">
+          <table className="table-dense w-full">
+            <tbody>
+              {charges.map((c, i) => (
+                <tr key={i}><td>{c.item_name}</td><td className="text-right">KES {Number(c.amount).toLocaleString()}</td></tr>
+              ))}
+              <tr className="font-semibold"><td>Total</td><td className="text-right">KES {total.toLocaleString()}</td></tr>
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      <div className="grid grid-cols-2 gap-3">
+        <div className="space-y-1.5">
+          <Label htmlFor="initial_payment">Record initial payment (optional)</Label>
+          <Input id="initial_payment" type="number" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="Amount, KES" />
+        </div>
+        <div className="space-y-1.5">
+          <Label>Method</Label>
+          <Select value={method} onValueChange={setMethod}>
+            <SelectTrigger><SelectValue placeholder="Select method" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="cash">Cash</SelectItem>
+              <SelectItem value="mpesa">M-Pesa</SelectItem>
+              <SelectItem value="bank">Bank</SelectItem>
+              <SelectItem value="cheque">Cheque</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+      <p className="text-xs text-muted-foreground">Leave blank to skip payment for now — the invoice and any payment are recorded when enrollment is completed.</p>
+      <ErrorText error={error} />
+      <div className="flex items-center gap-2">
+        <Button size="sm" onClick={save} disabled={pending}>{pending ? "Saving…" : "Save"}</Button>
+        {saved && !pending && <span className="flex items-center gap-1.5 text-xs text-success"><SuccessDot />Saved</span>}
+      </div>
+    </StepPanel>
+  );
+}
