@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import type { Recipient } from "@/app/communication/actions";
 
 type ActionResult = { error: string } | { success: true };
 
@@ -503,4 +504,73 @@ export async function saveFinanceDecision(
   if (error) return { error: error.message };
   revalidatePath(`/admissions/${applicationId}/wizard`);
   return { success: true };
+}
+
+// ============================================================================
+// Phase 13 — Checklist, Final Review, Complete Enrollment (Brief 4.16.10–4.16.13)
+// ============================================================================
+
+export interface ChecklistItem { item: string; message: string }
+
+export async function getAdmissionChecklist(applicationId: string): Promise<{ error: string } | { success: true; missing: ChecklistItem[] }> {
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("check_admission_checklist", { p_application_id: applicationId });
+  if (error) return { error: error.message };
+  return { success: true, missing: (data ?? []) as ChecklistItem[] };
+}
+
+export interface EnrollmentResult {
+  student_id: string;
+  admission_number: string;
+  invoice_id: string | null;
+  payment_reference: string | null;
+  total_amount: number | null;
+}
+
+// Single call into the transactional SQL function (Brief 4.16.12) — the DB either commits every
+// step or none of them. Idempotent: re-calling after success (double-click, slow connection)
+// returns the same recorded result instead of erroring or duplicating anything.
+export async function completeEnrollmentAction(applicationId: string): Promise<{ error: string } | { success: true; result: EnrollmentResult }> {
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("complete_enrollment", { p_application_id: applicationId }).single();
+  if (error) return { error: error.message };
+
+  // Best-effort "trigger configured communication" (Brief 4.16.11 step 15) — dispatch goes
+  // through an Edge Function the SQL function can't call directly, so this happens here, and
+  // never fails the enrollment itself: the completion screen's own "Send Parent Confirmation"
+  // action covers this if no template is configured or the send fails.
+  try {
+    const { data: application } = await supabase.from("applications").select("school_id, guardian_id").eq("id", applicationId).maybeSingle();
+    if (application?.guardian_id) {
+      const { data: template } = await supabase
+        .from("communication_templates")
+        .select("id, channel")
+        .eq("school_id", application.school_id)
+        .ilike("category", "%admission%")
+        .limit(1)
+        .maybeSingle();
+      if (template) {
+        const { composeAndSendAction } = await import("@/app/communication/actions");
+        const { data: guardian } = await supabase.from("school_users").select("phone, email").eq("id", application.guardian_id).maybeSingle();
+        const { data: app2 } = await supabase.from("applications").select("resulting_student_id, first_name, last_name").eq("id", applicationId).maybeSingle();
+        const recipient: Recipient = {
+          phone: guardian?.phone ?? undefined,
+          email: guardian?.email ?? undefined,
+          student_id: app2?.resulting_student_id ?? null,
+          recipient_type: "guardian",
+          school_user_id: application.guardian_id,
+          values: { first_name: app2?.first_name ?? "", last_name: app2?.last_name ?? "" },
+        };
+        await composeAndSendAction({ recipients: [recipient], template_id: template.id, channel: template.channel });
+      }
+    }
+  } catch {
+    // Non-blocking — enrollment already succeeded.
+  }
+
+  revalidatePath(`/admissions/${applicationId}/wizard`);
+  revalidatePath(`/admissions/${applicationId}`);
+  revalidatePath("/admissions");
+  revalidatePath("/students");
+  return { success: true, result: data as EnrollmentResult };
 }

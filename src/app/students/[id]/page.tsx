@@ -42,6 +42,14 @@ export default async function StudentProfilePage({
 
   if (!student) notFound();
 
+  // Traceability (Brief 4.16.13): the only link back is applications.resulting_student_id, set
+  // once by Complete Enrollment (Phase 13) — never duplicated onto the student row itself.
+  const { data: originatingApplication } = await supabase
+    .from("applications")
+    .select("application_number")
+    .eq("resulting_student_id", id)
+    .maybeSingle();
+
   const { data: guardianLinks } = await supabase
     .from("student_guardians")
     .select("id, relationship, primary_contact, school_users(full_name, phone)")
@@ -169,6 +177,9 @@ export default async function StudentProfilePage({
               {student.admission_number}
               {student.upi_number ? ` · UPI ${student.upi_number}` : ""}
             </p>
+            {originatingApplication && (
+              <p className="text-xs text-muted-foreground">Originated from Application {originatingApplication.application_number}</p>
+            )}
           </div>
           <StatusBadge
             tone={student.status === "active" || student.status === "enrolled" ? "success" : "neutral"}

@@ -6,9 +6,11 @@ import { Button } from "@/components/ui/button";
 import { saveWizardStep, discardDraft } from "./actions";
 import {
   AdmissionDetailsStep, StudentStep, GuardianStep, DocumentsStep, AcademicsStep,
-  BoardingStep, TransportStep, HealthStep, FinanceStep,
+  BoardingStep, TransportStep, HealthStep, FinanceStep, ReviewStep, CompleteStep,
+  type ReviewSummary,
 } from "./step-forms";
 import type { WizardStepData } from "./wizard-data";
+import type { EnrollmentResult } from "./actions";
 
 export interface WizardStep {
   id: string;
@@ -44,6 +46,43 @@ export function WizardShell({
   const isFirst = currentIndex === 0;
   const isLast = currentIndex === applicableSteps.length - 1;
   const progressPct = Math.round(((currentIndex + 1) / applicableSteps.length) * 100);
+  const [enrolled, setEnrolled] = useState<EnrollmentResult | null>(data.enrollmentResult);
+
+  function navigateToStepId(stepId: string) {
+    const idx = applicableSteps.findIndex((s) => s.id === stepId);
+    if (idx >= 0) goTo(idx);
+  }
+
+  const bedLabel = (() => {
+    if (!data.currentBedId) return null;
+    for (const h of data.houseOptions) {
+      for (const d of h.dormitories) {
+        for (const r of d.rooms) {
+          const bed = r.beds.find((b) => b.id === data.currentBedId);
+          if (bed) return `${h.name} / ${d.name} / Room ${r.room_number} / Bed ${bed.bed_number}`;
+        }
+      }
+    }
+    return null;
+  })();
+
+  const verifiedCount = data.documents.filter((d) => d.verification_status === "verified").length;
+  const requiredCount = data.documentRequirements.filter((r) => r.required).length;
+
+  const reviewSummary: ReviewSummary = {
+    admissionType: data.application.admission_type,
+    academicYearLabel: data.academicYears.find((y) => y.id === data.application.academic_year_id)?.name ?? null,
+    termLabel: data.terms.find((t) => t.id === data.application.term_id)?.name ?? null,
+    studentName: `${data.application.first_name} ${data.application.last_name}`,
+    admissionNumber: data.admissionNumber,
+    guardianName: data.guardian?.full_name ?? null,
+    guardianRelationship: data.guardian?.relationship ?? null,
+    documentsSummary: data.documentRequirements.length > 0 ? `${verifiedCount}/${requiredCount} required documents verified` : "No document checklist configured",
+    streamLabel: data.streamOptions.find((s) => s.id === data.currentStreamId)?.label ?? null,
+    boardingLabel: bedLabel,
+    transportLabel: data.hasTransportAssignment ? "Assigned" : null,
+    financeTotal: null,
+  };
 
   function goTo(index: number) {
     setError(null);
@@ -137,32 +176,39 @@ export function WizardShell({
           {current.id === "finance" && (
             <FinanceStep applicationId={applicationId} hasStudentAndTerm={!!data.resultingStudentId && !!data.application.term_id} initial={data.financeDecision} />
           )}
-          {(current.id === "review" || current.id === "complete") && (
-            <div>
-              <h2 className="text-lg font-semibold">{current.label}</h2>
-              <p className="mt-3 max-w-prose text-sm text-muted-foreground">{current.note}</p>
-            </div>
+          {(current.id === "review") && (
+            <ReviewStep applicationId={applicationId} summary={reviewSummary} onNavigateToStep={navigateToStepId} />
+          )}
+          {(current.id === "complete") && (
+            <CompleteStep
+              applicationId={applicationId}
+              applicantName={`${data.application.first_name} ${data.application.last_name}`}
+              alreadyEnrolled={enrolled}
+              onCompleted={setEnrolled}
+            />
           )}
         </div>
       </div>
 
-      <div className="flex items-center justify-between">
-        <Button type="button" variant="ghost" size="sm" disabled={pending} onClick={handleDiscard}>
-          Discard draft
-        </Button>
-        <div className="flex gap-2">
-          <Button type="button" variant="outline" disabled={pending || isFirst} onClick={() => goTo(currentIndex - 1)}>
-            Back
+      {current.id !== "complete" && (
+        <div className="flex items-center justify-between">
+          <Button type="button" variant="ghost" size="sm" disabled={pending} onClick={handleDiscard}>
+            Discard draft
           </Button>
-          <Button
-            type="button"
-            disabled={pending}
-            onClick={() => (isLast ? router.push("/admissions") : goTo(currentIndex + 1))}
-          >
-            {isLast ? "Save and exit" : "Next"}
-          </Button>
+          <div className="flex gap-2">
+            <Button type="button" variant="outline" disabled={pending || isFirst} onClick={() => goTo(currentIndex - 1)}>
+              Back
+            </Button>
+            <Button
+              type="button"
+              disabled={pending}
+              onClick={() => (isLast ? router.push("/admissions") : goTo(currentIndex + 1))}
+            >
+              {isLast ? "Save and exit" : "Next"}
+            </Button>
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }

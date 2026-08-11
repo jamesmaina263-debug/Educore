@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
+import Link from "next/link";
 import {
   updateAdmissionDetails,
   checkForDuplicateStudents,
@@ -25,9 +26,13 @@ import {
   saveHealthProfileForApplication,
   getFeePreview,
   saveFinanceDecision,
+  getAdmissionChecklist,
+  completeEnrollmentAction,
   type DuplicateCandidate,
   type GuardianSearchResult,
   type FeeChargeLine,
+  type ChecklistItem,
+  type EnrollmentResult,
 } from "./actions";
 
 // Shared shell every step form renders inside, matching the wizard panel's existing look.
@@ -877,6 +882,172 @@ export function FinanceStep({
       <div className="flex items-center gap-2">
         <Button size="sm" onClick={save} disabled={pending}>{pending ? "Saving…" : "Save"}</Button>
         {saved && !pending && <span className="flex items-center gap-1.5 text-xs text-success"><SuccessDot />Saved</span>}
+      </div>
+    </StepPanel>
+  );
+}
+
+// ============================================================================
+// Step 10 — Final Review (Brief 4.16.10, 4.16.13)
+// ============================================================================
+
+const CHECKLIST_STEP_BY_ITEM: Record<string, string> = {
+  student: "student",
+  guardian: "guardian",
+  documents: "documents",
+  academics: "academics",
+  finance: "finance",
+  boarding: "boarding",
+  transport: "transport",
+};
+
+export interface ReviewSummary {
+  admissionType: string;
+  academicYearLabel: string | null;
+  termLabel: string | null;
+  studentName: string;
+  admissionNumber: string | null;
+  guardianName: string | null;
+  guardianRelationship: string | null;
+  documentsSummary: string;
+  streamLabel: string | null;
+  boardingLabel: string | null;
+  transportLabel: string | null;
+  financeTotal: number | null;
+}
+
+// "Editable inline" (Brief 4.16.13) is delivered by letting every section jump straight back to
+// its own step — which already has the full, live form — rather than re-implementing every field
+// a third time on this screen; fixing something here means one click, not a re-typed duplicate.
+export function ReviewStep({ applicationId, summary, onNavigateToStep }: { applicationId: string; summary: ReviewSummary; onNavigateToStep: (stepId: string) => void }) {
+  const [missing, setMissing] = useState<ChecklistItem[] | null>(null);
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+
+  function loadChecklist() {
+    setError(null);
+    startTransition(async () => {
+      const result = await getAdmissionChecklist(applicationId);
+      if ("error" in result) { setError(result.error); return; }
+      setMissing(result.missing);
+    });
+  }
+
+  const rows: { label: string; value: string; stepId: string }[] = [
+    { label: "Admission type", value: summary.admissionType, stepId: "admission_details" },
+    { label: "Academic year / term", value: `${summary.academicYearLabel ?? "—"} / ${summary.termLabel ?? "—"}`, stepId: "admission_details" },
+    { label: "Student", value: `${summary.studentName}${summary.admissionNumber ? ` · ${summary.admissionNumber}` : ""}`, stepId: "student" },
+    { label: "Guardian", value: summary.guardianName ? `${summary.guardianName} (${summary.guardianRelationship ?? "—"})` : "Not linked", stepId: "guardian" },
+    { label: "Documents", value: summary.documentsSummary, stepId: "documents" },
+    { label: "Class / stream", value: summary.streamLabel ?? "Not placed", stepId: "academics" },
+    { label: "Boarding", value: summary.boardingLabel ?? "Day / not applicable", stepId: "boarding" },
+    { label: "Transport", value: summary.transportLabel ?? "Not applicable", stepId: "transport" },
+    { label: "Finance", value: summary.financeTotal != null ? `KES ${summary.financeTotal.toLocaleString()} charged this term` : "Not previewed", stepId: "finance" },
+  ];
+
+  return (
+    <StepPanel title="Final Review" hint="Review every step before completing enrollment. Click any row to jump back and fix it.">
+      <ul className="divide-y divide-border rounded-md border border-border">
+        {rows.map((r) => (
+          <li key={r.label} className="flex items-center justify-between px-3 py-2 text-sm">
+            <div>
+              <p className="text-xs text-muted-foreground">{r.label}</p>
+              <p>{r.value}</p>
+            </div>
+            <Button size="sm" variant="ghost" onClick={() => onNavigateToStep(r.stepId)}>Edit</Button>
+          </li>
+        ))}
+      </ul>
+
+      {missing === null ? (
+        <Button size="sm" variant="outline" onClick={loadChecklist} disabled={pending}>{pending ? "Checking…" : "Run readiness check"}</Button>
+      ) : missing.length === 0 ? (
+        <p className="flex items-center gap-1.5 text-sm text-success"><SuccessDot />Everything required is in place — ready to complete enrollment.</p>
+      ) : (
+        <div className="rounded-md border border-danger/25 bg-destructive-subtle p-3">
+          <p className="mb-1.5 text-sm font-medium text-danger">Not ready to complete</p>
+          <ul className="space-y-1">
+            {missing.map((m) => (
+              <li key={m.item} className="flex items-center justify-between text-sm">
+                <span>{m.message}</span>
+                <Button size="sm" variant="ghost" onClick={() => onNavigateToStep(CHECKLIST_STEP_BY_ITEM[m.item] ?? "student")}>Fix</Button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      <ErrorText error={error} />
+    </StepPanel>
+  );
+}
+
+// ============================================================================
+// Step 11 — Complete Enrollment + Completion Screen (Brief 4.16.11–4.16.13)
+// ============================================================================
+
+export function CompleteStep({
+  applicationId,
+  applicantName,
+  alreadyEnrolled,
+  onCompleted,
+}: {
+  applicationId: string;
+  applicantName: string;
+  alreadyEnrolled: EnrollmentResult | null;
+  onCompleted: (result: EnrollmentResult) => void;
+}) {
+  const [result, setResult] = useState<EnrollmentResult | null>(alreadyEnrolled);
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+  const [sent, setSent] = useState(false);
+
+  function complete() {
+    setError(null);
+    startTransition(async () => {
+      const outcome = await completeEnrollmentAction(applicationId);
+      if ("error" in outcome) { setError(outcome.error); return; }
+      setResult(outcome.result);
+      onCompleted(outcome.result);
+    });
+  }
+
+  function sendConfirmation() {
+    startTransition(async () => {
+      const outcome = await completeEnrollmentAction(applicationId); // idempotent — also re-triggers the best-effort send
+      if (!("error" in outcome)) setSent(true);
+    });
+  }
+
+  if (!result) {
+    return (
+      <StepPanel title="Complete Enrollment" hint="This creates the enrollment record in a single, safe step — clicking twice never creates duplicates.">
+        <p className="text-sm">Ready to enroll <span className="font-medium">{applicantName}</span>.</p>
+        <ErrorText error={error} />
+        <Button onClick={complete} disabled={pending}>{pending ? "Completing…" : "Complete Enrollment"}</Button>
+      </StepPanel>
+    );
+  }
+
+  return (
+    <StepPanel title="Enrollment Complete">
+      <div className="rounded-md border border-success/25 bg-success-subtle p-4">
+        <p className="flex items-center gap-1.5 text-sm font-medium text-success"><SuccessDot />{applicantName} is now enrolled.</p>
+        <dl className="mt-3 grid grid-cols-2 gap-2 text-sm">
+          <div><dt className="text-xs text-muted-foreground">Admission number</dt><dd>{result.admission_number}</dd></div>
+          {result.total_amount != null && <div><dt className="text-xs text-muted-foreground">Fee balance</dt><dd>KES {Number(result.total_amount).toLocaleString()}</dd></div>}
+          {result.payment_reference && <div><dt className="text-xs text-muted-foreground">Payment reference</dt><dd>{result.payment_reference}</dd></div>}
+        </dl>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        <Button asChild size="sm"><Link href={`/students/${result.student_id}`}>View Student</Link></Button>
+        <Button asChild size="sm" variant="outline"><Link href={`/students/${result.student_id}/id-card`}>Print Student Details</Link></Button>
+        {result.invoice_id && (
+          <Button asChild size="sm" variant="outline"><Link href="/finance">View Fee Statement</Link></Button>
+        )}
+        <Button size="sm" variant="outline" onClick={sendConfirmation} disabled={pending}>
+          {sent ? "Sent" : pending ? "Sending…" : "Send Parent Confirmation"}
+        </Button>
+        <Button asChild size="sm" variant="outline"><Link href="/admissions">Start New Admission</Link></Button>
       </div>
     </StepPanel>
   );

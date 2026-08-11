@@ -27,12 +27,16 @@ export default async function AdmissionReviewPage({ params }: { params: Promise<
   const { data: application } = await supabase
     .from("applications")
     .select(
-      "id, school_id, application_number, status, application_source, admission_type, first_name, last_name, other_names, date_of_birth, gender, nationality, id_number, previous_school, previous_class, special_needs_info, notes, guardian_id, guardian_relationship, boarding_preference, transport_required, interview_date, interviewer_id, assessment_date, assessment_type, assessment_subject, assessment_score, assessment_comments, decision_by, decision_at, decision_notes, submitted_at, created_at, access_token, school_users!applications_guardian_id_fkey(full_name, phone, email)",
+      "id, school_id, application_number, status, application_source, admission_type, first_name, last_name, other_names, date_of_birth, gender, nationality, id_number, previous_school, previous_class, special_needs_info, notes, guardian_id, guardian_relationship, boarding_preference, transport_required, interview_date, interviewer_id, assessment_date, assessment_type, assessment_subject, assessment_score, assessment_comments, decision_by, decision_at, decision_notes, submitted_at, created_at, access_token, resulting_student_id, school_users!applications_guardian_id_fkey(full_name, phone, email)",
     )
     .eq("id", id)
     .maybeSingle();
 
   if (!application) notFound();
+
+  const { data: enrolledStudent } = application.resulting_student_id
+    ? await supabase.from("students").select("admission_number").eq("id", application.resulting_student_id).maybeSingle()
+    : { data: null };
 
   const [{ data: requirementRows }, { data: documentRows }] = await Promise.all([
     supabase.from("application_document_requirements").select("category, label, required, display_order").eq("school_id", application.school_id).order("display_order"),
@@ -94,6 +98,7 @@ export default async function AdmissionReviewPage({ params }: { params: Promise<
     decision_notes: application.decision_notes,
     submitted_at: application.submitted_at,
     created_at: application.created_at,
+    enrolled_student_admission_number: enrolledStudent?.admission_number ?? null,
     access_token: application.access_token,
   };
 

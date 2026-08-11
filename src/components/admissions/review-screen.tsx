@@ -53,6 +53,7 @@ export interface ApplicationDetail {
   decision_notes: string | null;
   submitted_at: string | null;
   created_at: string;
+  enrolled_student_admission_number: string | null;
   access_token: string;
 }
 
@@ -157,6 +158,9 @@ export function ReviewScreen({
               {application.last_name}
             </h1>
             <p className="font-mono text-[0.75rem] text-muted-foreground">{application.application_number}</p>
+            {application.status === "enrolled" && application.enrolled_student_admission_number && (
+              <p className="text-xs text-success">Enrolled as Student {application.enrolled_student_admission_number}</p>
+            )}
           </div>
           <div className="flex items-center gap-2">
             <StatusBadge tone={decided ? "success" : "info"} label={STATUS_LABELS[application.status] ?? application.status} />
