@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -376,6 +377,11 @@ export function ReviewScreen({
             {application.status === "conditionally_accepted" && canWrite && (
               <Button size="sm" variant="outline" className="mt-3" disabled={pending} onClick={() => run(() => markConditionsMetAction(application.id))}>
                 Conditions met — move to Admission Pending
+              </Button>
+            )}
+            {(application.status === "admission_pending" || application.status === "conditionally_accepted") && canWrite && (
+              <Button size="sm" className="mt-3 ml-2" asChild>
+                <Link href={`/admissions/${application.id}/wizard`}>Continue Admission</Link>
               </Button>
             )}
           </div>
