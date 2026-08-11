@@ -14,7 +14,19 @@ import {
 } from "@/components/ui/select";
 import { submitApplication, applyInitialState } from "./actions";
 
-export function ApplicationForm({ schoolSlug }: { schoolSlug: string }) {
+export interface DocumentRequirement {
+  category: string;
+  label: string;
+  required: boolean;
+}
+
+export function ApplicationForm({
+  schoolSlug,
+  documentRequirements,
+}: {
+  schoolSlug: string;
+  documentRequirements: DocumentRequirement[];
+}) {
   const [state, formAction, pending] = useActionState(submitApplication, applyInitialState);
   const [formLoadedAt] = useState(() => Date.now());
   const [gender, setGender] = useState<"male" | "female" | "">("");
@@ -22,18 +34,26 @@ export function ApplicationForm({ schoolSlug }: { schoolSlug: string }) {
 
   if (state.success) {
     return (
-      <div className="space-y-2 text-center">
+      <div className="space-y-3 text-center">
         <p className="text-base font-semibold text-success">Application received</p>
         <p className="text-sm text-muted-foreground">
-          Your reference is <span className="font-mono font-medium">{state.admissionNumber}</span>. The
+          Your reference is <span className="font-mono font-medium">{state.applicationNumber}</span>. The
           school will review your application and get in touch on the phone number you provided.
         </p>
+        {state.accessToken && (
+          <div className="rounded-md border border-dashed border-border p-3 text-left">
+            <p className="text-[0.8125rem] font-medium">Check your status or add documents later</p>
+            <p className="mt-1 break-all text-[0.75rem] text-muted-foreground">
+              {`${typeof window !== "undefined" ? window.location.origin : ""}/apply/${schoolSlug}/status/${state.accessToken}`}
+            </p>
+          </div>
+        )}
       </div>
     );
   }
 
   return (
-    <form action={formAction} className="space-y-4">
+    <form action={formAction} className="space-y-4" encType="multipart/form-data">
       <input type="hidden" name="school_slug" value={schoolSlug} />
       <input type="hidden" name="form_loaded_at" value={formLoadedAt} />
       {/* Honeypot — hidden from real users via CSS, left unfilled by them; bots that fill every
@@ -79,10 +99,10 @@ export function ApplicationForm({ schoolSlug }: { schoolSlug: string }) {
           </div>
         </div>
         <div className="mt-3 space-y-1.5">
-          <Label htmlFor="application_notes">Grade applying for / notes (optional)</Label>
+          <Label htmlFor="notes">Grade applying for / notes (optional)</Label>
           <Textarea
-            id="application_notes"
-            name="application_notes"
+            id="notes"
+            name="notes"
             rows={2}
             placeholder="e.g. Applying for Grade 4, transferring from..."
           />
@@ -119,6 +139,25 @@ export function ApplicationForm({ schoolSlug }: { schoolSlug: string }) {
           <input type="hidden" name="relationship" value={relationship} />
         </div>
       </div>
+
+      {documentRequirements.length > 0 && (
+        <div>
+          <h2 className="mb-2 text-sm font-medium">Documents</h2>
+          <p className="mb-2 text-[0.75rem] text-muted-foreground">
+            You can also add these later using the link on your confirmation screen.
+          </p>
+          <div className="space-y-3">
+            {documentRequirements.map((req) => (
+              <div key={req.category} className="space-y-1.5">
+                <Label htmlFor={`document_${req.category}`}>
+                  {req.label} {req.required ? <span className="text-danger">*</span> : <span className="text-muted-foreground">(optional)</span>}
+                </Label>
+                <Input id={`document_${req.category}`} name={`document_${req.category}`} type="file" accept=".pdf,.jpg,.jpeg,.png" />
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {state.error && (
         <p role="alert" className="text-sm text-danger">

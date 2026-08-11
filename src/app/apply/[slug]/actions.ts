@@ -2,18 +2,14 @@
 
 import { createAdminClient } from "@/lib/supabase/admin";
 
-export type ApplyState = { error: string | null; success?: boolean; admissionNumber?: string };
+export type ApplyState = {
+  error: string | null;
+  success?: boolean;
+  applicationNumber?: string;
+  accessToken?: string;
+};
 
 const initialState: ApplyState = { error: null };
-
-function generateTempAdmissionNumber() {
-  // Not a real admission number — the school assigns one during Admissions review, same as
-  // every applicant. This is just a stable reference the applicant can quote when they call the
-  // school office to check status.
-  const stamp = Date.now().toString(36).toUpperCase();
-  const rand = Math.random().toString(36).slice(2, 6).toUpperCase();
-  return `APP-${stamp}-${rand}`;
-}
 
 export async function submitApplication(
   _prev: ApplyState,
@@ -25,7 +21,7 @@ export async function submitApplication(
   // input do. Reject silently-successful (don't tip off the bot) rather than with a visible error.
   const honeypot = String(formData.get("website") ?? "").trim();
   if (honeypot) {
-    return { error: null, success: true, admissionNumber: "—" };
+    return { error: null, success: true, applicationNumber: "—", accessToken: "" };
   }
 
   // Minimum-fill-time check: a human takes at least a few seconds to fill this form; a scripted
@@ -40,7 +36,7 @@ export async function submitApplication(
   const otherNames = String(formData.get("other_names") ?? "").trim();
   const dateOfBirth = String(formData.get("date_of_birth") ?? "").trim();
   const gender = String(formData.get("gender") ?? "").trim();
-  const applicationNotes = String(formData.get("application_notes") ?? "").trim();
+  const notes = String(formData.get("notes") ?? "").trim();
 
   const guardianPhone = String(formData.get("guardian_phone") ?? "").trim();
   const guardianName = String(formData.get("guardian_name") ?? "").trim();
@@ -67,7 +63,7 @@ export async function submitApplication(
 
   const { data: school, error: schoolError } = await admin
     .from("schools")
-    .select("id, status")
+    .select("id, name, status")
     .eq("slug", slug)
     .maybeSingle();
   if (schoolError || !school) {
@@ -79,19 +75,18 @@ export async function submitApplication(
 
   // Basic duplicate-submission guard: same guardian phone + same student name applied in the
   // last 24 hours. Not a hard uniqueness constraint (a real family could legitimately reapply
-  // after being rejected), just a speed bump against accidental double-submits and simple bots.
+  // after being rejected/withdrawn), just a speed bump against accidental double-submits and bots.
   const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-  const { data: recentDuplicate } = await admin
-    .from("students")
-    .select("id, student_guardians(school_users(phone))")
+  const { data: recentDuplicates } = await admin
+    .from("applications")
+    .select("id, guardian_id, school_users!applications_guardian_id_fkey(phone)")
     .eq("school_id", school.id)
     .eq("first_name", firstName)
     .eq("last_name", lastName)
-    .eq("status", "applied")
     .gte("created_at", since);
-  const alreadyApplied = (recentDuplicate ?? []).some((s) => {
-    const guardians = (s.student_guardians ?? []) as unknown as { school_users: { phone: string | null } | null }[];
-    return guardians.some((g) => g.school_users?.phone === guardianPhone);
+  const alreadyApplied = (recentDuplicates ?? []).some((a) => {
+    const guardian = a.school_users as unknown as { phone: string | null } | null;
+    return guardian?.phone === guardianPhone;
   });
   if (alreadyApplied) {
     return {
@@ -99,9 +94,9 @@ export async function submitApplication(
     };
   }
 
-  // Find-or-create the guardian identity, admin-client version of lib/guardians.ts's
-  // findOrCreateGuardian — that helper relies on auth_school_id() (the caller's own session),
-  // which doesn't exist here since nobody is signed in yet.
+  // Find-or-create the guardian identity — admin-client version of lib/guardians.ts's
+  // findOrCreateGuardian (that helper relies on auth_school_id(), which doesn't exist here since
+  // nobody is signed in yet).
   let guardianId: string;
   const { data: existingGuardian } = await admin
     .from("school_users")
@@ -137,37 +132,94 @@ export async function submitApplication(
     guardianId = createdGuardian.id as string;
   }
 
-  const { data: student, error: studentError } = await admin
-    .from("students")
+  const { data: applicationNumber, error: numberError } = await admin.rpc("generate_application_number", {
+    p_school_id: school.id,
+  });
+  if (numberError || !applicationNumber) {
+    return { error: "Could not generate an application number. Please try again." };
+  }
+
+  const { data: application, error: applicationError } = await admin
+    .from("applications")
     .insert({
       school_id: school.id,
-      admission_number: generateTempAdmissionNumber(),
+      application_number: applicationNumber,
+      status: "submitted",
+      application_source: "online",
+      admission_type: "new",
       first_name: firstName,
       last_name: lastName,
       other_names: otherNames || null,
       date_of_birth: dateOfBirth,
       gender,
-      application_notes: applicationNotes || null,
+      notes: notes || null,
+      guardian_id: guardianId,
+      guardian_relationship: ["mother", "father", "guardian", "other"].includes(relationship)
+        ? relationship
+        : "guardian",
+      submitted_at: new Date().toISOString(),
     })
-    .select("id, admission_number")
+    .select("id, application_number, access_token")
     .single();
-  if (studentError || !student) {
-    return { error: studentError?.message ?? "Could not submit your application. Please try again." };
+  if (applicationError || !application) {
+    return { error: applicationError?.message ?? "Could not submit your application. Please try again." };
   }
 
-  const { error: linkError } = await admin.from("student_guardians").insert({
-    student_id: student.id,
-    guardian_user_id: guardianId,
-    relationship: ["mother", "father", "guardian", "other"].includes(relationship) ? relationship : "guardian",
-    primary_contact: true,
+  // Document uploads — configurable per school (application_document_requirements). Best-effort:
+  // a failed upload doesn't fail the whole application, since the applicant can add it later from
+  // their status/upload link, and the reviewer can request it explicitly if missing.
+  const { data: requirements } = await admin
+    .from("application_document_requirements")
+    .select("category")
+    .eq("school_id", school.id);
+
+  for (const req of requirements ?? []) {
+    const file = formData.get(`document_${req.category}`);
+    if (!(file instanceof File) || file.size === 0) continue;
+
+    const path = `${school.id}/${application.id}/${req.category}-${Date.now()}-${file.name}`;
+    const { error: uploadError } = await admin.storage.from("application-documents").upload(path, file);
+    if (uploadError) continue;
+
+    await admin.from("documents").insert({
+      school_id: school.id,
+      application_id: application.id,
+      category: req.category,
+      file_name: file.name,
+      storage_path: path,
+      uploaded_by: guardianId,
+    });
+  }
+
+  // Confirmation notification (test checklist: "Submit an online application -> confirmation
+  // notification received"). No authenticated session here, so queue_communication (which checks
+  // auth_has_permission against the caller) can't be used — insert directly, same as any other
+  // system-initiated notification, then best-effort trigger dispatch immediately rather than
+  // waiting for a staff member to next open Communication.
+  const confirmationBody = `Hi ${guardianName}, we've received ${firstName} ${lastName}'s application to ${school.name} (Ref: ${application.application_number}). We'll be in touch. Track status: `;
+  await admin.from("notification_logs").insert({
+    school_id: school.id,
+    recipient_phone: guardianPhone,
+    recipient_school_user_id: guardianId,
+    recipient_type: "guardian",
+    channel: "sms",
+    body: confirmationBody,
+    status: "queued",
+    segments: Math.max(1, Math.ceil(confirmationBody.length / 160)),
   });
-  if (linkError) {
-    // Best-effort rollback so a half-created application doesn't sit in the pipeline silently.
-    await admin.from("students").delete().eq("id", student.id);
-    return { error: linkError.message };
+  try {
+    await admin.functions.invoke("send-communication");
+  } catch {
+    // Best-effort — the row stays 'queued' and gets swept the next time a staff member opens
+    // Communication, same fallback path the absence-alert trigger already relies on.
   }
 
-  return { error: null, success: true, admissionNumber: student.admission_number };
+  return {
+    error: null,
+    success: true,
+    applicationNumber: application.application_number,
+    accessToken: application.access_token,
+  };
 }
 
 export { initialState as applyInitialState };

@@ -5,52 +5,182 @@ import { createClient } from "@/lib/supabase/server";
 
 type ActionResult = { error: string } | { success: true };
 
-async function transition(studentId: string, status: string): Promise<ActionResult> {
+async function currentSchoolUser(supabase: Awaited<ReturnType<typeof createClient>>) {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return null;
+  const { data } = await supabase.from("school_users").select("id").eq("auth_user_id", user.id).maybeSingle();
+  return data?.id ?? null;
+}
+
+export async function markUnderReviewAction(applicationId: string): Promise<ActionResult> {
   const supabase = await createClient();
-  const { error } = await supabase.from("students").update({ status }).eq("id", studentId);
+  const { error } = await supabase
+    .from("applications")
+    .update({ status: "under_review" })
+    .eq("id", applicationId)
+    .eq("status", "submitted"); // only advance from submitted — don't clobber a further-along status
   if (error) return { error: error.message };
   revalidatePath("/admissions");
-  revalidatePath("/students");
-  revalidatePath(`/students/${studentId}`);
+  revalidatePath(`/admissions/${applicationId}`);
   return { success: true };
 }
 
-export async function approveApplication(studentId: string): Promise<ActionResult> {
-  return transition(studentId, "approved");
+export async function verifyDocumentAction(documentId: string): Promise<ActionResult> {
+  const supabase = await createClient();
+  const me = await currentSchoolUser(supabase);
+  if (!me) return { error: "Not signed in." };
+
+  const { error } = await supabase
+    .from("documents")
+    .update({ verification_status: "verified", verification_comment: null, verified_by: me, verified_at: new Date().toISOString() })
+    .eq("id", documentId);
+  if (error) return { error: error.message };
+  revalidatePath("/admissions", "layout");
+  return { success: true };
 }
 
-export async function enrollApplication(studentId: string, streamId: string): Promise<ActionResult> {
+export async function rejectDocumentAction(documentId: string, comment: string): Promise<ActionResult> {
+  if (!comment.trim()) return { error: "Please explain why the document is being rejected." };
   const supabase = await createClient();
-  // Assign the class/stream first, then transition — the trigger doesn't require
-  // current_class_id to be set, but a student with nowhere to sit isn't really
-  // "enrolled" in any useful sense, so we do both together.
-  const { error: assignError } = await supabase
-    .from("students")
-    .update({ current_class_id: streamId })
-    .eq("id", studentId);
-  if (assignError) return { error: assignError.message };
-  return transition(studentId, "enrolled");
+  const me = await currentSchoolUser(supabase);
+  if (!me) return { error: "Not signed in." };
+
+  const { error } = await supabase
+    .from("documents")
+    .update({ verification_status: "rejected", verification_comment: comment.trim(), verified_by: me, verified_at: new Date().toISOString() })
+    .eq("id", documentId);
+  if (error) return { error: error.message };
+  revalidatePath("/admissions", "layout");
+  return { success: true };
 }
 
-export async function activateEnrollment(studentId: string): Promise<ActionResult> {
-  const result = await transition(studentId, "active");
-  if ("error" in result) return result;
-
-  // Finance hook (brief §4.16.9 / Phase 8 item 16): creates the Student Financial Account
-  // (payment reference) and, if an active term + matching fee structure exist, the invoice —
-  // without the Admissions Officer leaving this workflow. Idempotent (create_or_get_...), so a
-  // repeat activation never duplicates the account or invoice. Deliberately non-fatal: a missing
-  // fee structure is a Finance configuration gap, not a reason to block enrollment.
+export async function requestDocumentAction(applicationId: string, categoryLabel: string): Promise<ActionResult> {
   const supabase = await createClient();
-  const { error: financeError } = await supabase.rpc("finance_on_student_enrolled", { p_student_id: studentId });
-  if (financeError) {
-    console.error("finance_on_student_enrolled failed for", studentId, financeError.message);
+
+  const { data: application } = await supabase
+    .from("applications")
+    .select("application_number, first_name, last_name, school_id, guardian_id, school_users!applications_guardian_id_fkey(phone, full_name)")
+    .eq("id", applicationId)
+    .maybeSingle();
+  if (!application) return { error: "Application not found." };
+
+  const { error } = await supabase.from("applications").update({ status: "documents_required" }).eq("id", applicationId);
+  if (error) return { error: error.message };
+
+  const guardian = application.school_users as unknown as { phone: string | null; full_name: string } | null;
+  if (guardian?.phone) {
+    const { error: notifyError } = await supabase.rpc("queue_communication", {
+      p_recipients: [{ phone: guardian.phone, values: {} }],
+      p_body: `Hi ${guardian.full_name}, we need "${categoryLabel}" for ${application.first_name} ${application.last_name}'s application (Ref: ${application.application_number}). Please upload it using your status link.`,
+      p_channel: "sms",
+    });
+    // Non-fatal — the status change is what matters most; the notification is best-effort.
+    if (notifyError) console.error("requestDocumentAction notify failed:", notifyError.message);
   }
-  revalidatePath("/finance");
 
+  revalidatePath("/admissions", "layout");
   return { success: true };
 }
 
-export async function rejectApplication(studentId: string): Promise<ActionResult> {
-  return transition(studentId, "withdrawn");
+export async function scheduleInterviewAction(applicationId: string, interviewDate: string): Promise<ActionResult> {
+  const supabase = await createClient();
+  const me = await currentSchoolUser(supabase);
+  if (!me) return { error: "Not signed in." };
+
+  const { error } = await supabase
+    .from("applications")
+    .update({ status: "interview_scheduled", interview_date: interviewDate, interviewer_id: me })
+    .eq("id", applicationId);
+  if (error) return { error: error.message };
+  revalidatePath("/admissions", "layout");
+  return { success: true };
+}
+
+export async function recordAssessmentAction(
+  applicationId: string,
+  input: { assessment_type: string; assessment_subject: string; assessment_score: number | null; assessment_comments: string },
+): Promise<ActionResult> {
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("applications")
+    .update({
+      status: "under_review",
+      assessment_date: new Date().toISOString().slice(0, 10),
+      assessment_type: input.assessment_type || null,
+      assessment_subject: input.assessment_subject || null,
+      assessment_score: input.assessment_score,
+      assessment_comments: input.assessment_comments || null,
+    })
+    .eq("id", applicationId);
+  if (error) return { error: error.message };
+  revalidatePath("/admissions", "layout");
+  return { success: true };
+}
+
+const DECISION_STATUS = {
+  accept: "admission_pending",
+  conditionally_accept: "conditionally_accepted",
+  waitlist: "waitlisted",
+  reject: "rejected",
+} as const;
+
+export async function decideApplicationAction(
+  applicationId: string,
+  decision: keyof typeof DECISION_STATUS,
+  notes: string,
+): Promise<ActionResult> {
+  const supabase = await createClient();
+  const me = await currentSchoolUser(supabase);
+  if (!me) return { error: "Not signed in." };
+
+  const { data: application } = await supabase
+    .from("applications")
+    .select("application_number, first_name, last_name, guardian_id, school_users!applications_guardian_id_fkey(phone, full_name)")
+    .eq("id", applicationId)
+    .maybeSingle();
+  if (!application) return { error: "Application not found." };
+
+  const { error } = await supabase
+    .from("applications")
+    .update({
+      status: DECISION_STATUS[decision],
+      decision_by: me,
+      decision_at: new Date().toISOString(),
+      decision_notes: notes.trim() || null,
+    })
+    .eq("id", applicationId);
+  if (error) return { error: error.message };
+
+  const guardian = application.school_users as unknown as { phone: string | null; full_name: string } | null;
+  const DECISION_MESSAGE: Record<keyof typeof DECISION_STATUS, string> = {
+    accept: `Congratulations! ${application.first_name} ${application.last_name}'s application (Ref: ${application.application_number}) has been accepted. The school will be in touch about next steps.`,
+    conditionally_accept: `${application.first_name} ${application.last_name}'s application (Ref: ${application.application_number}) has been conditionally accepted. The school will explain the conditions.`,
+    waitlist: `${application.first_name} ${application.last_name}'s application (Ref: ${application.application_number}) has been waitlisted. We'll contact you if a place becomes available.`,
+    reject: `We regret to inform you that ${application.first_name} ${application.last_name}'s application (Ref: ${application.application_number}) was not successful this time.`,
+  };
+  if (guardian?.phone) {
+    const { error: notifyError } = await supabase.rpc("queue_communication", {
+      p_recipients: [{ phone: guardian.phone, values: {} }],
+      p_body: DECISION_MESSAGE[decision],
+      p_channel: "sms",
+    });
+    if (notifyError) console.error("decideApplicationAction notify failed:", notifyError.message);
+  }
+
+  revalidatePath("/admissions", "layout");
+  return { success: true };
+}
+
+export async function markConditionsMetAction(applicationId: string): Promise<ActionResult> {
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("applications")
+    .update({ status: "admission_pending" })
+    .eq("id", applicationId)
+    .eq("status", "conditionally_accepted");
+  if (error) return { error: error.message };
+  revalidatePath("/admissions", "layout");
+  return { success: true };
 }

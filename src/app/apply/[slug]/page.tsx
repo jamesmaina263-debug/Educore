@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { ApplicationForm } from "./application-form";
+import { ApplicationForm, type DocumentRequirement } from "./application-form";
 
 export default async function ApplyPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
@@ -22,6 +22,16 @@ export default async function ApplyPage({ params }: { params: Promise<{ slug: st
 
   const notAccepting = school.status === "suspended" || school.status === "cancelled";
 
+  let documentRequirements: DocumentRequirement[] = [];
+  if (!notAccepting) {
+    const { data: requirements } = await admin
+      .from("application_document_requirements")
+      .select("category, label, required")
+      .eq("school_id", school.id)
+      .order("display_order");
+    documentRequirements = requirements ?? [];
+  }
+
   return (
     <div className="flex min-h-screen justify-center bg-background px-4 py-10">
       <div className="w-full max-w-lg space-y-4">
@@ -42,7 +52,7 @@ export default async function ApplyPage({ params }: { params: Promise<{ slug: st
           </div>
         ) : (
           <div className="rounded-md border border-border bg-surface p-6">
-            <ApplicationForm schoolSlug={school.slug} />
+            <ApplicationForm schoolSlug={school.slug} documentRequirements={documentRequirements} />
           </div>
         )}
       </div>
