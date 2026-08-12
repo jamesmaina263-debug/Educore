@@ -14,10 +14,12 @@ export interface AIQueryLogRow {
 }
 
 const SAMPLE_QUESTIONS = [
-  "How many students are enrolled?",
-  "What's our fee collection rate this term?",
-  "How many students are at risk right now?",
-  "What was the attendance rate today?",
+  "How many students are absent today?",
+  "How many beds are available?",
+  "Which students are in sick bay?",
+  "Which inventory items are low in stock?",
+  "Which classes are performing below average?",
+  "Give me a summary of the school today.",
 ];
 
 export function AskAIPanel({ initialHistory }: { initialHistory: AIQueryLogRow[] }) {
@@ -57,7 +59,8 @@ export function AskAIPanel({ initialHistory }: { initialHistory: AIQueryLogRow[]
           <h2 className="text-[0.8125rem] font-semibold">Ask Trimora AI</h2>
           <p className="mt-0.5 text-[0.75rem] text-muted-foreground">
             Answers a fixed set of school-wide questions today — enrollment, attendance, fee
-            collection, at-risk students, exam averages. It won&apos;t guess beyond that.
+            collection, exam performance, boarding, health, and inventory. Only shows what your
+            role already has access to, and won&apos;t guess beyond the fixed list.
           </p>
         </header>
         <div className="flex flex-col gap-3 p-4">

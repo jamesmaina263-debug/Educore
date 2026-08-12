@@ -13,7 +13,10 @@ export interface CampusSummaryRow {
   active_students: number;
   fee_collection_rate: number;
   attendance_rate_today: number;
+  outstanding_balance: number;
 }
+
+const kes = (n: number) => `KES ${Math.round(n).toLocaleString()}`;
 
 export function CampusSummaryTable({ rows }: { rows: CampusSummaryRow[] }) {
   if (rows.length === 0) {
@@ -29,6 +32,7 @@ export function CampusSummaryTable({ rows }: { rows: CampusSummaryRow[] }) {
             <TableHead>Active students</TableHead>
             <TableHead>Fee collection rate</TableHead>
             <TableHead>Attendance today</TableHead>
+            <TableHead>Outstanding balance</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -38,6 +42,7 @@ export function CampusSummaryTable({ rows }: { rows: CampusSummaryRow[] }) {
               <TableCell>{row.active_students}</TableCell>
               <TableCell>{row.fee_collection_rate}%</TableCell>
               <TableCell>{row.attendance_rate_today}%</TableCell>
+              <TableCell>{kes(row.outstanding_balance)}</TableCell>
             </TableRow>
           ))}
         </TableBody>

@@ -66,6 +66,12 @@ export default async function DashboardPage() {
     { data: canMarkAny },
     { data: canSeeFinance },
     { data: canRecordPayment },
+    { data: canSeeBoarding },
+    { data: canSeeHealth },
+    { data: canSeeInventory },
+    { data: canSeeTransport },
+    { data: canSeeDiscipline },
+    { data: canSeeStaff },
   ] = await Promise.all([
     supabase
       .from("school_users")
@@ -77,6 +83,12 @@ export default async function DashboardPage() {
     supabase.rpc("auth_has_permission", { p_permission_key: "attendance.mark_any" }),
     supabase.rpc("auth_has_permission", { p_permission_key: "finance.read" }),
     supabase.rpc("auth_has_permission", { p_permission_key: "finance.write" }),
+    supabase.rpc("auth_has_permission", { p_permission_key: "hostel.read_any" }),
+    supabase.rpc("auth_has_permission", { p_permission_key: "health.read_any" }),
+    supabase.rpc("auth_has_permission", { p_permission_key: "inventory.read_any" }),
+    supabase.rpc("auth_has_permission", { p_permission_key: "transport.read_any" }),
+    supabase.rpc("auth_has_permission", { p_permission_key: "discipline.read_any" }),
+    supabase.rpc("auth_has_permission", { p_permission_key: "staff.manage" }),
   ]);
   void canMarkAny;
 
@@ -236,6 +248,81 @@ export default async function DashboardPage() {
     }
   }
 
+  // --- Boarding occupancy (beds available, dormitories at/over capacity) ---
+  let bedsAvailable = 0;
+  let bedsTotal = 0;
+  let dormsAtCapacity = 0;
+  if (canSeeBoarding) {
+    const [{ data: bedRows }, { data: activeBoardingAllocs }, { data: dormitories }, { data: rooms }] = await Promise.all([
+      supabase.from("beds").select("id, status"),
+      supabase.from("hostel_allocations").select("bed_id, hostel_room_id").eq("status", "active"),
+      supabase.from("dormitories").select("id, capacity"),
+      supabase.from("hostel_rooms").select("id, dormitory_id"),
+    ]);
+    bedsTotal = (bedRows ?? []).length;
+    const occupiedBedIds = new Set((activeBoardingAllocs ?? []).map((a) => a.bed_id).filter(Boolean));
+    bedsAvailable = (bedRows ?? []).filter((b) => b.status === "available" && !occupiedBedIds.has(b.id)).length;
+
+    const roomToDorm = new Map((rooms ?? []).map((r) => [r.id, r.dormitory_id]));
+    const occupiedByDorm = new Map<string, number>();
+    for (const a of activeBoardingAllocs ?? []) {
+      const dormId = roomToDorm.get(a.hostel_room_id);
+      if (!dormId) continue;
+      occupiedByDorm.set(dormId, (occupiedByDorm.get(dormId) ?? 0) + 1);
+    }
+    dormsAtCapacity = (dormitories ?? []).filter(
+      (d) => d.capacity != null && (occupiedByDorm.get(d.id) ?? 0) >= d.capacity,
+    ).length;
+  }
+
+  // --- Health (students currently in sick bay) ---
+  let sickBayCount = 0;
+  if (canSeeHealth) {
+    const { count } = await supabase
+      .from("sick_bay_visits")
+      .select("id", { count: "exact", head: true })
+      .is("check_out_at", null);
+    sickBayCount = count ?? 0;
+  }
+
+  // --- Inventory (items at/below reorder level) ---
+  let lowStockCount = 0;
+  if (canSeeInventory) {
+    const { data } = await supabase.from("inventory_items").select("quantity, reorder_level").not("reorder_level", "is", null);
+    lowStockCount = (data ?? []).filter((i) => i.reorder_level !== null && i.quantity <= i.reorder_level).length;
+  }
+
+  // --- Transport (fleet + routes at/over capacity) ---
+  let transportVehicleCount = 0;
+  let routesFull = 0;
+  if (canSeeTransport) {
+    const [{ count: vehicleCount }, { data: routeCapacity }] = await Promise.all([
+      supabase.from("transport_vehicles").select("id", { count: "exact", head: true }),
+      supabase.from("v_transport_route_capacity").select("available"),
+    ]);
+    transportVehicleCount = vehicleCount ?? 0;
+    routesFull = (routeCapacity ?? []).filter((r) => Number(r.available) <= 0).length;
+  }
+
+  // --- Discipline (open cases — Phase 15 built the case workflow this KPI needed) ---
+  let disciplineOpenCases = 0;
+  if (canSeeDiscipline) {
+    const { count } = await supabase
+      .from("discipline_cases")
+      .select("id", { count: "exact", head: true })
+      .in("status", ["open", "investigating", "pending_action"]);
+    disciplineOpenCases = count ?? 0;
+  }
+
+  // --- Staff attendance today ---
+  let staffPresentToday = 0;
+  let staffMarkedToday = 0;
+  if (canSeeStaff) {
+    const { data } = await supabase.from("staff_attendance").select("status").eq("attendance_date", today);
+    staffMarkedToday = data?.length ?? 0;
+    staffPresentToday = (data ?? []).filter((r) => r.status === "present").length;
+  }
+
   const collectedPct = invoicedThisTerm > 0 ? Math.round((collected / invoicedThisTerm) * 1000) / 10 : 0;
 
   const metrics = [
@@ -291,7 +378,78 @@ export default async function DashboardPage() {
         tone: "warning" as const,
         badge: "Pending",
       },
+    canSeeBoarding &&
+      dormsAtCapacity > 0 && {
+        label: `${dormsAtCapacity} dormitor${dormsAtCapacity === 1 ? "y is" : "ies are"} at or over capacity`,
+        owner: "Boarding wardens",
+        tone: "warning" as const,
+        badge: "At capacity",
+      },
+    canSeeHealth &&
+      sickBayCount > 0 && {
+        label: `${sickBayCount} student${sickBayCount === 1 ? "" : "s"} currently in sick bay`,
+        owner: "School nurse",
+        tone: "info" as const,
+        badge: "In sick bay",
+      },
+    canSeeInventory &&
+      lowStockCount > 0 && {
+        label: `${lowStockCount} inventory item${lowStockCount === 1 ? "" : "s"} at or below reorder level`,
+        owner: "Inventory office",
+        tone: "warning" as const,
+        badge: "Low stock",
+      },
+    canSeeTransport &&
+      routesFull > 0 && {
+        label: `${routesFull} transport route${routesFull === 1 ? "" : "s"} full (no seats available)`,
+        owner: "Transport office",
+        tone: "info" as const,
+        badge: "Full",
+      },
+    canSeeDiscipline &&
+      disciplineOpenCases > 0 && {
+        label: `${disciplineOpenCases} open disciplinary case${disciplineOpenCases === 1 ? "" : "s"}`,
+        owner: "Discipline & Welfare office",
+        tone: "warning" as const,
+        badge: "Open",
+      },
   ].filter(Boolean) as { label: string; owner: string; tone: "danger" | "warning" | "info"; badge: string }[];
+
+  const operations = [
+    canSeeBoarding &&
+      bedsTotal > 0 && {
+        label: "Boarding beds available",
+        value: `${bedsAvailable} / ${bedsTotal}`,
+        note: dormsAtCapacity > 0 ? `${dormsAtCapacity} dormitory at capacity` : "no dormitory at capacity",
+      },
+    canSeeHealth && {
+      label: "Sick bay right now",
+      value: String(sickBayCount),
+      note: sickBayCount > 0 ? "students checked in" : "no active visits",
+    },
+    canSeeInventory && {
+      label: "Inventory alerts",
+      value: String(lowStockCount),
+      note: lowStockCount > 0 ? "items at/below reorder level" : "stock levels healthy",
+    },
+    canSeeTransport &&
+      transportVehicleCount > 0 && {
+        label: "Transport fleet",
+        value: String(transportVehicleCount),
+        note: routesFull > 0 ? `${routesFull} route${routesFull === 1 ? "" : "s"} full` : "routes have capacity",
+      },
+    canSeeStaff &&
+      staffMarkedToday > 0 && {
+        label: "Staff attendance today",
+        value: `${Math.round((100 * staffPresentToday) / staffMarkedToday)}%`,
+        note: `${staffPresentToday} of ${staffMarkedToday} marked present`,
+      },
+    canSeeDiscipline && {
+      label: "Open discipline cases",
+      value: String(disciplineOpenCases),
+      note: disciplineOpenCases > 0 ? "open/investigating/pending action" : "no open cases",
+    },
+  ].filter(Boolean) as { label: string; value: string; note: string }[];
 
   return (
     <AppShell
@@ -341,6 +499,23 @@ export default async function DashboardPage() {
                 </p>
               </div>
             ))}
+          </div>
+        )}
+
+        {operations.length > 0 && (
+          <div className="panel px-4 py-3">
+            <p className="label-eyebrow mb-2">Operations</p>
+            <div className="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-3 lg:grid-cols-6">
+              {operations.map((op) => (
+                <div key={op.label}>
+                  <p className="text-[0.6875rem] text-muted-foreground">{op.label}</p>
+                  <p className="text-base font-semibold tracking-tight" data-numeric>
+                    {op.value}
+                  </p>
+                  <p className="text-[0.6875rem] text-muted-foreground">{op.note}</p>
+                </div>
+              ))}
+            </div>
           </div>
         )}
 

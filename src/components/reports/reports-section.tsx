@@ -23,6 +23,7 @@ export interface AtRiskRow {
   overdue_balance: number | null;
   risk_score: number;
   risk_reasons: string[];
+  current_class_id?: string | null;
 }
 
 export interface AttendanceTrendDay {

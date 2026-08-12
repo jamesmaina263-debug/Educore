@@ -12,6 +12,7 @@ import { NotificationPreferencesPanel } from "@/components/notifications/prefere
 import { getMyNotificationPreferences } from "@/app/notifications/actions";
 import { ApiKeysPanel, type ApiKeyRow } from "@/components/settings/api-keys-panel";
 import { issueSchoolApiKey, revokeSchoolApiKey } from "@/app/settings/actions";
+import { AuditLogPanel } from "@/components/settings/audit-log-panel";
 
 export default async function SettingsPage({
   searchParams,
@@ -32,6 +33,7 @@ export default async function SettingsPage({
     { data: canManageStaff },
     { data: canReadBilling },
     { data: canManageApiKeys },
+    { data: canReadAudit },
   ] = await Promise.all([
     supabase
       .from("school_users")
@@ -44,6 +46,7 @@ export default async function SettingsPage({
     supabase.rpc("auth_has_permission", { p_permission_key: "staff.manage" }),
     supabase.rpc("auth_has_permission", { p_permission_key: "billing.read" }),
     supabase.rpc("auth_has_permission", { p_permission_key: "api.manage" }),
+    supabase.rpc("auth_has_permission", { p_permission_key: "audit.read" }),
   ]);
 
   const roleName = (schoolUser?.roles as unknown as { display_name: string } | null)?.display_name;
@@ -185,6 +188,7 @@ export default async function SettingsPage({
             {billingData && <TabsTrigger value="billing">Billing</TabsTrigger>}
             <TabsTrigger value="notifications">Notifications</TabsTrigger>
             {canManageApiKeys === true && <TabsTrigger value="api-keys">API Keys</TabsTrigger>}
+            {canReadAudit === true && <TabsTrigger value="audit">Audit Log</TabsTrigger>}
           </TabsList>
 
           <TabsContent value="general">
@@ -232,6 +236,12 @@ export default async function SettingsPage({
                 issueAction={issueSchoolApiKey}
                 revokeAction={revokeSchoolApiKey}
               />
+            </TabsContent>
+          )}
+
+          {canReadAudit === true && (
+            <TabsContent value="audit">
+              <AuditLogPanel />
             </TabsContent>
           )}
         </Tabs>
