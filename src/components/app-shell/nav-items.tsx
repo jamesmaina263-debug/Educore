@@ -21,6 +21,7 @@ import {
   Users2,
   Building2,
   HeartPulse,
+  ShieldAlert,
 } from "lucide-react";
 
 export interface NavItem {
@@ -37,6 +38,7 @@ export const navItems: NavItem[] = [
   { label: "Attendance", href: "/attendance", icon: CalendarCheck },
   { label: "Exams", href: "/exams", icon: FileText },
   { label: "Homework", href: "/homework", icon: NotebookPen },
+  { label: "Discipline & Welfare", href: "/discipline", icon: ShieldAlert },
   { label: "Staff", href: "/staff", icon: Users },
   { label: "Finance", href: "/finance", icon: Wallet },
   { label: "Payroll", href: "/payroll", icon: Banknote },
