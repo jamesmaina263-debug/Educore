@@ -2,14 +2,12 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
-import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@/components/ui/table";
 import {
   Dialog,
   DialogTrigger,
@@ -199,31 +197,31 @@ export function DisciplineWelfareSection({
         </div>
       )}
 
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm text-muted-foreground">Open Cases</CardTitle>
-          </CardHeader>
-          <CardContent className="text-2xl font-semibold">{stats.openCases}</CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm text-muted-foreground">Incidents (7 days)</CardTitle>
-          </CardHeader>
-          <CardContent className="text-2xl font-semibold">{stats.recentIncidents}</CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm text-muted-foreground">Pending Follow-ups</CardTitle>
-          </CardHeader>
-          <CardContent className="text-2xl font-semibold">{stats.pendingFollowUps}</CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm text-muted-foreground">Needs Attention</CardTitle>
-          </CardHeader>
-          <CardContent className="text-2xl font-semibold text-destructive">{stats.seriousCases}</CardContent>
-        </Card>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="panel px-4 py-3">
+          <p className="label-eyebrow">Open Cases</p>
+          <p className="mt-1.5 text-2xl font-semibold tracking-tight" data-numeric>
+            {stats.openCases}
+          </p>
+        </div>
+        <div className="panel px-4 py-3">
+          <p className="label-eyebrow">Incidents (7 days)</p>
+          <p className="mt-1.5 text-2xl font-semibold tracking-tight" data-numeric>
+            {stats.recentIncidents}
+          </p>
+        </div>
+        <div className="panel px-4 py-3">
+          <p className="label-eyebrow">Pending Follow-ups</p>
+          <p className="mt-1.5 text-2xl font-semibold tracking-tight" data-numeric>
+            {stats.pendingFollowUps}
+          </p>
+        </div>
+        <div className="panel px-4 py-3">
+          <p className="label-eyebrow">Needs Attention</p>
+          <p className="mt-1.5 text-2xl font-semibold tracking-tight text-destructive" data-numeric>
+            {stats.seriousCases}
+          </p>
+        </div>
       </div>
 
       <Tabs defaultValue="incidents">
@@ -305,39 +303,46 @@ export function DisciplineWelfareSection({
               </Dialog>
             </div>
           )}
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Date</TableHead>
-                <TableHead>Student</TableHead>
-                <TableHead>Type</TableHead>
-                <TableHead>Severity</TableHead>
-                <TableHead>Description</TableHead>
-                <TableHead>Location</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {incidents.length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={6} className="text-center text-muted-foreground">
-                    No incidents recorded yet.
-                  </TableCell>
-                </TableRow>
-              )}
-              {incidents.map((i) => (
-                <TableRow key={i.id}>
-                  <TableCell>{i.incident_date}</TableCell>
-                  <TableCell>{i.student.name}</TableCell>
-                  <TableCell>{i.incident_type ?? "—"}</TableCell>
-                  <TableCell>
-                    <StatusBadge tone={CATEGORY_TONE[i.category]} label={i.category} />
-                  </TableCell>
-                  <TableCell className="max-w-xs truncate">{i.description}</TableCell>
-                  <TableCell>{i.location ?? "—"}</TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+          <div className="panel">
+            <header className="flex items-center justify-between gap-2 border-b border-border px-4 py-2.5">
+              <h2 className="text-[0.8125rem] font-semibold">Incidents · {incidents.length}</h2>
+            </header>
+            <div className="overflow-x-auto">
+              <table className="table-dense w-full">
+                <thead className="bg-muted/70">
+                  <tr>
+                    <th>Date</th>
+                    <th>Student</th>
+                    <th>Type</th>
+                    <th>Severity</th>
+                    <th>Description</th>
+                    <th>Location</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {incidents.length === 0 && (
+                    <tr>
+                      <td colSpan={6} className="text-center text-muted-foreground">
+                        No incidents recorded yet.
+                      </td>
+                    </tr>
+                  )}
+                  {incidents.map((i) => (
+                    <tr key={i.id}>
+                      <td>{i.incident_date}</td>
+                      <td className="font-medium">{i.student.name}</td>
+                      <td className="text-muted-foreground">{i.incident_type ?? "—"}</td>
+                      <td>
+                        <StatusBadge tone={CATEGORY_TONE[i.category]} label={i.category} />
+                      </td>
+                      <td className="max-w-xs truncate">{i.description}</td>
+                      <td className="text-muted-foreground">{i.location ?? "—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
         </TabsContent>
 
         {/* ---------------- Cases ---------------- */}
@@ -444,21 +449,21 @@ export function DisciplineWelfareSection({
           <div className="flex flex-col gap-3">
             {cases.length === 0 && <p className="text-sm text-muted-foreground">No cases opened yet.</p>}
             {cases.map((c) => (
-              <Card key={c.id}>
-                <CardHeader className="flex flex-row items-start justify-between gap-2 pb-2">
+              <div key={c.id} className="rounded-md border border-border p-3">
+                <div className="flex flex-row items-start justify-between gap-2">
                   <div>
-                    <CardTitle className="text-base">{c.title}</CardTitle>
+                    <p className="text-sm font-semibold">{c.title}</p>
                     <p className="text-sm text-muted-foreground">{c.student.name}</p>
                   </div>
                   <StatusBadge tone={CASE_STATUS_TONE[c.status]} label={c.status.replace("_", " ")} />
-                </CardHeader>
-                <CardContent className="flex flex-col gap-2 text-sm">
+                </div>
+                <div className="mt-2 flex flex-col gap-2 text-sm">
                   {c.investigation_notes && <p><span className="font-medium">Investigation: </span>{c.investigation_notes}</p>}
                   {c.follow_up_notes && <p><span className="font-medium">Follow-up: </span>{c.follow_up_notes}</p>}
                   {c.resolution && <p><span className="font-medium">Resolution: </span>{c.resolution}</p>}
                   {permissions.canManageCases && c.status !== "closed" && (
                     <form
-                      className="flex flex-col gap-2 border-t pt-2"
+                      className="flex flex-col gap-2 border-t border-border pt-2"
                       action={(fd) => runAction(updateCaseAction, fd)}
                     >
                       <input type="hidden" name="case_id" value={c.id} />
@@ -484,8 +489,8 @@ export function DisciplineWelfareSection({
                       <Textarea name="resolution" placeholder="Resolution" defaultValue={c.resolution ?? ""} />
                     </form>
                   )}
-                </CardContent>
-              </Card>
+                </div>
+              </div>
             ))}
           </div>
         </TabsContent>
@@ -539,20 +544,20 @@ export function DisciplineWelfareSection({
           <div className="flex flex-col gap-3">
             {welfare.length === 0 && <p className="text-sm text-muted-foreground">No welfare concerns on record.</p>}
             {welfare.map((w) => (
-              <Card key={w.id}>
-                <CardHeader className="flex flex-row items-start justify-between gap-2 pb-2">
+              <div key={w.id} className="rounded-md border border-border p-3">
+                <div className="flex flex-row items-start justify-between gap-2">
                   <div>
-                    <CardTitle className="text-base">{w.concern_type}</CardTitle>
+                    <p className="text-sm font-semibold">{w.concern_type}</p>
                     <p className="text-sm text-muted-foreground">{w.student.name}</p>
                   </div>
                   <StatusBadge tone={WELFARE_STATUS_TONE[w.status]} label={w.status.replace("_", " ")} />
-                </CardHeader>
-                <CardContent className="flex flex-col gap-2 text-sm">
+                </div>
+                <div className="mt-2 flex flex-col gap-2 text-sm">
                   <p>{w.description}</p>
                   {w.counselling_referral && <p className="text-muted-foreground">Referred for counselling{w.referred_to ? ` — ${w.referred_to}` : ""}.</p>}
                   {w.follow_up_notes && <p><span className="font-medium">Follow-up: </span>{w.follow_up_notes}</p>}
                   {permissions.canWelfareReadAny && w.status !== "resolved" && (
-                    <form className="flex gap-2 border-t pt-2" action={(fd) => runAction(updateWelfareConcernAction, fd)}>
+                    <form className="flex gap-2 border-t border-border pt-2" action={(fd) => runAction(updateWelfareConcernAction, fd)}>
                       <input type="hidden" name="concern_id" value={w.id} />
                       <Select name="status" defaultValue={w.status}>
                         <SelectTrigger className="w-40">
@@ -570,8 +575,8 @@ export function DisciplineWelfareSection({
                       </Button>
                     </form>
                   )}
-                </CardContent>
-              </Card>
+                </div>
+              </div>
             ))}
           </div>
         </TabsContent>
@@ -634,15 +639,15 @@ export function DisciplineWelfareSection({
             <div className="flex flex-col gap-3">
               {safeguarding.length === 0 && <p className="text-sm text-muted-foreground">No safeguarding reports on record.</p>}
               {safeguarding.map((s) => (
-                <Card key={s.id} className="border-destructive/25">
-                  <CardHeader className="flex flex-row items-start justify-between gap-2 pb-2">
+                <div key={s.id} className="rounded-md border border-destructive/25 p-3">
+                  <div className="flex flex-row items-start justify-between gap-2">
                     <div>
-                      <CardTitle className="text-base capitalize">{s.report_type.replace("_", " ")}</CardTitle>
+                      <p className="text-sm font-semibold capitalize">{s.report_type.replace("_", " ")}</p>
                       <p className="text-sm text-muted-foreground">{s.student.name}</p>
                     </div>
                     <StatusBadge tone={SAFEGUARDING_STATUS_TONE[s.status]} label={s.status} />
-                  </CardHeader>
-                  <CardContent className="flex flex-col gap-2 text-sm">
+                  </div>
+                  <div className="mt-2 flex flex-col gap-2 text-sm">
                     <p>{s.description}</p>
                     {s.follow_up_notes && <p><span className="font-medium">Follow-up: </span>{s.follow_up_notes}</p>}
                     {permissions.canSafeguardingWrite && s.status !== "closed" && (
@@ -680,8 +685,8 @@ export function DisciplineWelfareSection({
                         <Textarea name="follow_up_notes" placeholder="Follow-up notes" defaultValue={s.follow_up_notes ?? ""} />
                       </form>
                     )}
-                  </CardContent>
-                </Card>
+                  </div>
+                </div>
               ))}
             </div>
           </TabsContent>
