@@ -66,3 +66,328 @@ export async function recordStockMovementAction(input: {
   revalidatePath("/inventory");
   return { success: true };
 }
+
+async function currentSchoolUser() {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { supabase, schoolUser: null };
+  const { data: schoolUser } = await supabase
+    .from("school_users")
+    .select("id, school_id")
+    .eq("auth_user_id", user.id)
+    .maybeSingle();
+  return { supabase, schoolUser };
+}
+
+// ---------------------------------------------------------------------------
+// Assets
+// ---------------------------------------------------------------------------
+export async function createAssetAction(formData: FormData): Promise<ActionResult> {
+  const { supabase, schoolUser } = await currentSchoolUser();
+  if (!schoolUser) return { error: "Could not resolve your account." };
+
+  const name = String(formData.get("name") ?? "").trim();
+  const category = String(formData.get("category") ?? "").trim();
+  const assetTag = String(formData.get("asset_tag") ?? "").trim();
+  const serialNumber = String(formData.get("serial_number") ?? "").trim();
+  const location = String(formData.get("location") ?? "").trim();
+  const purchaseDate = String(formData.get("purchase_date") ?? "") || null;
+  const purchaseValue = String(formData.get("purchase_value") ?? "") || null;
+  if (!name) return { error: "Asset name is required." };
+
+  const { error } = await supabase.from("assets").insert({
+    school_id: schoolUser.school_id,
+    name,
+    category: category || null,
+    asset_tag: assetTag || null,
+    serial_number: serialNumber || null,
+    location: location || null,
+    purchase_date: purchaseDate,
+    purchase_value: purchaseValue,
+  });
+  if (error) return { error: error.message };
+  revalidatePath("/inventory");
+  return { success: true };
+}
+
+export async function updateAssetStatusAction(formData: FormData): Promise<ActionResult> {
+  const { supabase, schoolUser } = await currentSchoolUser();
+  if (!schoolUser) return { error: "Could not resolve your account." };
+
+  const assetId = String(formData.get("asset_id") ?? "");
+  const status = String(formData.get("status") ?? "");
+  const condition = String(formData.get("condition") ?? "");
+  if (!assetId || !status) return { error: "Missing asset or status." };
+
+  const { error } = await supabase
+    .from("assets")
+    .update({ status, condition: condition || undefined, updated_at: new Date().toISOString() })
+    .eq("id", assetId);
+  if (error) return { error: error.message };
+  revalidatePath("/inventory");
+  return { success: true };
+}
+
+export async function requestAssetMaintenanceAction(formData: FormData): Promise<ActionResult> {
+  const { supabase, schoolUser } = await currentSchoolUser();
+  if (!schoolUser) return { error: "Could not resolve your account." };
+
+  const assetId = String(formData.get("asset_id") ?? "");
+  const description = String(formData.get("description") ?? "").trim();
+  if (!assetId || !description) return { error: "Asset and description are required." };
+
+  const { error } = await supabase.from("asset_maintenance_records").insert({
+    school_id: schoolUser.school_id,
+    asset_id: assetId,
+    description,
+    requested_by: schoolUser.id,
+  });
+  if (error) return { error: error.message };
+
+  await supabase.from("assets").update({ status: "under_maintenance", updated_at: new Date().toISOString() }).eq("id", assetId);
+
+  revalidatePath("/inventory");
+  return { success: true };
+}
+
+export async function completeAssetMaintenanceAction(formData: FormData): Promise<ActionResult> {
+  const { supabase, schoolUser } = await currentSchoolUser();
+  if (!schoolUser) return { error: "Could not resolve your account." };
+
+  const recordId = String(formData.get("record_id") ?? "");
+  const assetId = String(formData.get("asset_id") ?? "");
+  const cost = String(formData.get("cost") ?? "") || null;
+  const notes = String(formData.get("notes") ?? "").trim();
+  if (!recordId) return { error: "Missing maintenance record." };
+
+  const { error } = await supabase
+    .from("asset_maintenance_records")
+    .update({ status: "completed", completed_date: new Date().toISOString().slice(0, 10), cost, notes: notes || null, updated_at: new Date().toISOString() })
+    .eq("id", recordId);
+  if (error) return { error: error.message };
+
+  if (assetId) {
+    await supabase.from("assets").update({ status: "in_use", updated_at: new Date().toISOString() }).eq("id", assetId);
+  }
+
+  revalidatePath("/inventory");
+  return { success: true };
+}
+
+// ---------------------------------------------------------------------------
+// Suppliers
+// ---------------------------------------------------------------------------
+export async function createSupplierAction(formData: FormData): Promise<ActionResult> {
+  const { supabase, schoolUser } = await currentSchoolUser();
+  if (!schoolUser) return { error: "Could not resolve your account." };
+
+  const name = String(formData.get("name") ?? "").trim();
+  const contactPerson = String(formData.get("contact_person") ?? "").trim();
+  const phone = String(formData.get("phone") ?? "").trim();
+  const email = String(formData.get("email") ?? "").trim();
+  const category = String(formData.get("category") ?? "").trim();
+  if (!name) return { error: "Supplier name is required." };
+
+  const { error } = await supabase.from("suppliers").insert({
+    school_id: schoolUser.school_id,
+    name,
+    contact_person: contactPerson || null,
+    phone: phone || null,
+    email: email || null,
+    category: category || null,
+  });
+  if (error) return { error: error.message };
+  revalidatePath("/inventory");
+  return { success: true };
+}
+
+// ---------------------------------------------------------------------------
+// Procurement: Requisition -> Purchase Order -> Goods Received -> Supplier Invoice
+// ---------------------------------------------------------------------------
+export async function createRequisitionAction(formData: FormData): Promise<ActionResult> {
+  const { supabase, schoolUser } = await currentSchoolUser();
+  if (!schoolUser) return { error: "Could not resolve your account." };
+
+  const purpose = String(formData.get("purpose") ?? "").trim();
+  const itemDescription = String(formData.get("item_description") ?? "").trim();
+  const quantity = String(formData.get("quantity") ?? "");
+  const estimatedCost = String(formData.get("estimated_unit_cost") ?? "") || null;
+  if (!purpose || !itemDescription || !quantity) return { error: "Purpose, item, and quantity are required." };
+
+  const { data: requisition, error } = await supabase
+    .from("purchase_requisitions")
+    .insert({ school_id: schoolUser.school_id, purpose, status: "submitted", requested_by: schoolUser.id })
+    .select("id")
+    .single();
+  if (error) return { error: error.message };
+
+  if (requisition) {
+    await supabase.from("purchase_requisition_items").insert({
+      requisition_id: requisition.id,
+      school_id: schoolUser.school_id,
+      item_description: itemDescription,
+      quantity,
+      estimated_unit_cost: estimatedCost,
+    });
+  }
+
+  revalidatePath("/inventory");
+  return { success: true };
+}
+
+export async function decideRequisitionAction(formData: FormData): Promise<ActionResult> {
+  const { supabase, schoolUser } = await currentSchoolUser();
+  if (!schoolUser) return { error: "Could not resolve your account." };
+
+  const requisitionId = String(formData.get("requisition_id") ?? "");
+  const decision = String(formData.get("decision") ?? "");
+  if (!requisitionId || !["approved", "rejected"].includes(decision)) return { error: "Missing requisition or decision." };
+
+  const { error } = await supabase
+    .from("purchase_requisitions")
+    .update({ status: decision, approved_by: schoolUser.id, approved_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+    .eq("id", requisitionId);
+  if (error) return { error: error.message };
+  revalidatePath("/inventory");
+  return { success: true };
+}
+
+export async function createPurchaseOrderAction(formData: FormData): Promise<ActionResult> {
+  const { supabase, schoolUser } = await currentSchoolUser();
+  if (!schoolUser) return { error: "Could not resolve your account." };
+
+  const requisitionId = String(formData.get("requisition_id") ?? "") || null;
+  const supplierId = String(formData.get("supplier_id") ?? "");
+  const poNumber = String(formData.get("po_number") ?? "").trim();
+  const itemDescription = String(formData.get("item_description") ?? "").trim();
+  const quantity = String(formData.get("quantity") ?? "");
+  const unitCost = String(formData.get("unit_cost") ?? "");
+  const expectedDate = String(formData.get("expected_date") ?? "") || null;
+  if (!supplierId || !poNumber || !itemDescription || !quantity || !unitCost) {
+    return { error: "Supplier, PO number, item, quantity, and unit cost are required." };
+  }
+
+  const { data: po, error } = await supabase
+    .from("purchase_orders")
+    .insert({
+      school_id: schoolUser.school_id,
+      requisition_id: requisitionId,
+      supplier_id: supplierId,
+      po_number: poNumber,
+      status: "sent",
+      expected_date: expectedDate,
+      created_by: schoolUser.id,
+    })
+    .select("id")
+    .single();
+  if (error) return { error: error.message };
+
+  if (po) {
+    await supabase.from("purchase_order_items").insert({
+      po_id: po.id,
+      school_id: schoolUser.school_id,
+      item_description: itemDescription,
+      quantity,
+      unit_cost: unitCost,
+    });
+    if (requisitionId) {
+      await supabase.from("purchase_requisitions").update({ status: "converted", updated_at: new Date().toISOString() }).eq("id", requisitionId);
+    }
+  }
+
+  revalidatePath("/inventory");
+  return { success: true };
+}
+
+export async function receiveGoodsAction(formData: FormData): Promise<ActionResult> {
+  const { supabase, schoolUser } = await currentSchoolUser();
+  if (!schoolUser) return { error: "Could not resolve your account." };
+
+  const poId = String(formData.get("po_id") ?? "");
+  const poItemId = String(formData.get("po_item_id") ?? "");
+  const quantityReceived = String(formData.get("quantity_received") ?? "");
+  const conditionNotes = String(formData.get("condition_notes") ?? "").trim();
+  if (!poId || !poItemId || !quantityReceived) return { error: "Missing PO, item, or quantity." };
+
+  const { data: grn, error } = await supabase
+    .from("goods_received_notes")
+    .insert({ school_id: schoolUser.school_id, po_id: poId, received_by: schoolUser.id })
+    .select("id")
+    .single();
+  if (error) return { error: error.message };
+
+  if (grn) {
+    await supabase.from("goods_received_items").insert({
+      grn_id: grn.id,
+      school_id: schoolUser.school_id,
+      po_item_id: poItemId,
+      quantity_received: quantityReceived,
+      condition_notes: conditionNotes || null,
+    });
+
+    const { data: poItem } = await supabase
+      .from("purchase_order_items")
+      .select("quantity, quantity_received")
+      .eq("id", poItemId)
+      .maybeSingle();
+    if (poItem) {
+      const newReceived = Number(poItem.quantity_received) + Number(quantityReceived);
+      await supabase.from("purchase_order_items").update({ quantity_received: newReceived }).eq("id", poItemId);
+      const fullyReceived = newReceived >= Number(poItem.quantity);
+      await supabase
+        .from("purchase_orders")
+        .update({ status: fullyReceived ? "received" : "partially_received", updated_at: new Date().toISOString() })
+        .eq("id", poId);
+    }
+  }
+
+  revalidatePath("/inventory");
+  return { success: true };
+}
+
+// ---------------------------------------------------------------------------
+// Supplier Invoices — document/reference only; the payment itself is recorded
+// in Finance's own expenses flow, never duplicated here.
+// ---------------------------------------------------------------------------
+export async function createSupplierInvoiceAction(formData: FormData): Promise<ActionResult> {
+  const { supabase, schoolUser } = await currentSchoolUser();
+  if (!schoolUser) return { error: "Could not resolve your account." };
+
+  const supplierId = String(formData.get("supplier_id") ?? "");
+  const poId = String(formData.get("po_id") ?? "") || null;
+  const invoiceNumber = String(formData.get("invoice_number") ?? "").trim();
+  const invoiceDate = String(formData.get("invoice_date") ?? "");
+  const amount = String(formData.get("amount") ?? "");
+  if (!supplierId || !invoiceNumber || !invoiceDate || !amount) {
+    return { error: "Supplier, invoice number, date, and amount are required." };
+  }
+
+  const { error } = await supabase.from("supplier_invoices").insert({
+    school_id: schoolUser.school_id,
+    supplier_id: supplierId,
+    po_id: poId,
+    invoice_number: invoiceNumber,
+    invoice_date: invoiceDate,
+    amount,
+  });
+  if (error) return { error: error.message };
+  revalidatePath("/inventory");
+  return { success: true };
+}
+
+export async function markSupplierInvoicePaidAction(formData: FormData): Promise<ActionResult> {
+  const { supabase } = await currentSchoolUser();
+  const invoiceId = String(formData.get("invoice_id") ?? "");
+  if (!invoiceId) return { error: "Missing invoice." };
+
+  const { error } = await supabase
+    .from("supplier_invoices")
+    .update({ status: "paid", updated_at: new Date().toISOString() })
+    .eq("id", invoiceId);
+  if (error) return { error: error.message };
+  revalidatePath("/inventory");
+  return { success: true };
+}
+

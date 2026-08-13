@@ -1,0 +1,17 @@
+-- Fix found while building Phase 15's Inventory & Procurement (its trg_audit_* triggers
+-- depend on public.audit_row_change()): Phase 17's own migration file
+-- (supabase/migrations/20260812150000_phase17_audit_logging_system_wide.sql) was, like Phase 14
+-- before it, never actually applied to the live database despite being committed. Confirmed via
+-- audit_row_change() not existing and zero trg_audit_* triggers present anywhere.
+--
+-- Applied that file's exact, unmodified content directly against Supabase in this session --
+-- again, the bug was in deployment, not content. This migration is a marker/record of that;
+-- see 20260812150000_phase17_audit_logging_system_wide.sql for the actual DDL, which is
+-- identical to what now runs live.
+--
+-- Pattern now confirmed twice (Phase 14, Phase 17): whatever mechanism produces these commits
+-- is not running `supabase db push` (or equivalent) against the live project after committing
+-- migration files. Every phase from here on should independently verify its own dependencies
+-- actually exist live rather than trusting the repo's migration history -- this file's presence
+-- is not proof of deployment.
+select 1;
