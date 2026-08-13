@@ -2,7 +2,16 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { logout } from "@/app/login/actions";
 import { AppShell } from "@/components/app-shell/app-shell";
-import { LibrarySection, type LibraryItemRow, type LoanRow, type StudentOption } from "@/components/library/library-section";
+import {
+  LibrarySection,
+  type LibraryItemRow,
+  type LoanRow,
+  type StudentOption,
+  type StaffOption,
+  type ShelfOption,
+  type ReservationRow,
+  type FineRow,
+} from "@/components/library/library-section";
 
 export default async function LibraryPage() {
   const supabase = await createClient();
@@ -20,16 +29,68 @@ export default async function LibraryPage() {
   const roleName = (schoolUser?.roles as unknown as { display_name: string } | null)?.display_name;
   const schoolName = (schoolUser?.schools as unknown as { name: string } | null)?.name;
 
-  const { data: itemRows } = await supabase.from("library_items").select("*").order("title");
+  const { data: itemRows } = await supabase.from("library_items").select("*, library_shelves(name)").order("title");
   const { data: loanRows } = await supabase
     .from("library_loans")
-    .select("id, library_item_id, student_id, borrowed_at, due_date, returned_at, status, library_items(title), students(first_name, last_name)")
+    .select(
+      "id, library_item_id, student_id, staff_id, borrowed_at, due_date, returned_at, status, library_items(title), students(first_name, last_name), school_users!library_loans_staff_id_fkey(full_name)",
+    )
     .order("borrowed_at", { ascending: false });
 
   let studentOptions: StudentOption[] = [];
+  let staffOptions: StaffOption[] = [];
+  let shelfOptions: ShelfOption[] = [];
+  let reservations: ReservationRow[] = [];
+  let fines: FineRow[] = [];
+
   if (canWrite) {
-    const { data: students } = await supabase.from("students").select("id, first_name, last_name, admission_number").eq("status", "active").order("first_name");
+    const [{ data: students }, { data: staff }, { data: shelves }, { data: reservationRows }, { data: fineRows }] = await Promise.all([
+      supabase.from("students").select("id, first_name, last_name, admission_number").eq("status", "active").order("first_name"),
+      supabase.from("school_users").select("id, full_name, roles!inner(name)").eq("status", "active").not("roles.name", "in", "(parent,student,super_admin)"),
+      supabase.from("library_shelves").select("id, name, location").order("name"),
+      supabase
+        .from("library_reservations")
+        .select("id, library_item_id, status, reserved_at, library_items(title), students(first_name, last_name), school_users!library_reservations_staff_id_fkey(full_name)")
+        .in("status", ["pending", "ready"])
+        .order("reserved_at"),
+      supabase
+        .from("library_fines")
+        .select("id, loan_id, amount, reason, status, created_at, library_loans(library_items(title), students(first_name, last_name), school_users!library_loans_staff_id_fkey(full_name))")
+        .order("created_at", { ascending: false }),
+    ]);
     studentOptions = (students ?? []).map((s) => ({ id: s.id, name: `${s.first_name} ${s.last_name} (${s.admission_number})` }));
+    staffOptions = (staff ?? []).map((s) => ({ id: s.id, name: s.full_name }));
+    shelfOptions = (shelves ?? []).map((s) => ({ id: s.id, name: s.name, location: s.location }));
+    reservations = (reservationRows ?? []).map((r) => {
+      const st = r.students as unknown as { first_name: string; last_name: string } | null;
+      const staffMember = r.school_users as unknown as { full_name: string } | null;
+      return {
+        id: r.id,
+        item_title: (r.library_items as unknown as { title: string } | null)?.title ?? "Unknown",
+        library_item_id: r.library_item_id,
+        borrower_name: st ? `${st.first_name} ${st.last_name}` : staffMember?.full_name ?? "Unknown",
+        status: r.status as ReservationRow["status"],
+        reserved_at: r.reserved_at,
+      };
+    });
+    fines = (fineRows ?? []).map((f) => {
+      const loan = f.library_loans as unknown as {
+        library_items: { title: string } | null;
+        students: { first_name: string; last_name: string } | null;
+        school_users: { full_name: string } | null;
+      } | null;
+      const st = loan?.students;
+      return {
+        id: f.id,
+        loan_id: f.loan_id,
+        item_title: loan?.library_items?.title ?? "Unknown",
+        borrower_name: st ? `${st.first_name} ${st.last_name}` : loan?.school_users?.full_name ?? "Unknown",
+        amount: Number(f.amount),
+        reason: f.reason,
+        status: f.status as FineRow["status"],
+        created_at: f.created_at,
+      };
+    });
   }
 
   const items: LibraryItemRow[] = (itemRows ?? []).map((i) => ({
@@ -39,20 +100,23 @@ export default async function LibraryPage() {
     category: i.category,
     total_copies: i.total_copies,
     available_copies: i.available_copies,
+    shelf_name: (i.library_shelves as unknown as { name: string } | null)?.name ?? null,
   }));
 
-  const loans: LoanRow[] = (loanRows ?? []).map((l) => ({
-    id: l.id,
-    item_title: (l.library_items as unknown as { title: string } | null)?.title ?? "Unknown",
-    student_name: (() => {
-      const s = l.students as unknown as { first_name: string; last_name: string } | null;
-      return s ? `${s.first_name} ${s.last_name}` : "Unknown";
-    })(),
-    borrowed_at: l.borrowed_at,
-    due_date: l.due_date,
-    returned_at: l.returned_at,
-    status: l.status as "borrowed" | "returned" | "lost",
-  }));
+  const loans: LoanRow[] = (loanRows ?? []).map((l) => {
+    const st = l.students as unknown as { first_name: string; last_name: string } | null;
+    const staffMember = l.school_users as unknown as { full_name: string } | null;
+    return {
+      id: l.id,
+      library_item_id: l.library_item_id,
+      item_title: (l.library_items as unknown as { title: string } | null)?.title ?? "Unknown",
+      borrower_name: st ? `${st.first_name} ${st.last_name}` : staffMember?.full_name ?? "Unknown",
+      borrowed_at: l.borrowed_at,
+      due_date: l.due_date,
+      returned_at: l.returned_at,
+      status: l.status as LoanRow["status"],
+    };
+  });
 
   return (
     <AppShell
@@ -65,10 +129,19 @@ export default async function LibraryPage() {
         <div>
           <h1 className="text-lg font-semibold">Library</h1>
           <p className="text-sm text-muted-foreground">
-            {canReadAny ? "Catalogue and loans across the school." : "Your borrowed items."}
+            {canReadAny ? "Catalogue, loans, reservations and fines across the school." : "Your borrowed items."}
           </p>
         </div>
-        <LibrarySection items={items} loans={loans} studentOptions={studentOptions} canWrite={canWrite === true} />
+        <LibrarySection
+          items={items}
+          loans={loans}
+          studentOptions={studentOptions}
+          staffOptions={staffOptions}
+          shelfOptions={shelfOptions}
+          reservations={reservations}
+          fines={fines}
+          canWrite={canWrite === true}
+        />
       </div>
     </AppShell>
   );
