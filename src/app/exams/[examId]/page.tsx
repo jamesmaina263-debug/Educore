@@ -5,6 +5,8 @@ import { createClient } from "@/lib/supabase/server";
 import { logout } from "@/app/login/actions";
 import { AppShell } from "@/components/app-shell/app-shell";
 import { StatusBadge } from "@/components/status-badge";
+import { ExamScheduleSection, type ExamScheduleRow, type SubjectClassOption } from "@/components/exams/exam-schedule-section";
+import { ApproveMarksButton } from "@/components/exams/approve-marks-button";
 
 export default async function ExamProgressPage({ params }: { params: Promise<{ examId: string }> }) {
   const { examId } = await params;
@@ -61,9 +63,18 @@ export default async function ExamProgressPage({ params }: { params: Promise<{ e
   ]);
 
   const teacherIds = Array.from(new Set((slotRows ?? []).map((s) => s.teacher_id).filter(Boolean)));
-  const { data: teacherRows } = teacherIds.length
-    ? await supabase.from("school_users").select("id, full_name").in("id", teacherIds)
-    : { data: [] };
+  const [{ data: teacherRows }, { data: canWriteExams }, { data: canApproveAny }, { data: scheduleRows }, { data: approvalCounts }] =
+    await Promise.all([
+      teacherIds.length ? supabase.from("school_users").select("id, full_name").in("id", teacherIds) : Promise.resolve({ data: [] }),
+      supabase.rpc("auth_has_permission", { p_permission_key: "exams.write" }),
+      supabase.rpc("auth_has_permission", { p_permission_key: "marks.approve_any" }),
+      supabase
+        .from("exam_schedules")
+        .select("id, subject_id, class_id, exam_date, start_time, end_time, venue, subjects(name), classes(name)")
+        .eq("exam_id", examId)
+        .order("exam_date"),
+      supabase.from("marks").select("class_id, subject_id, status").eq("exam_id", examId),
+    ]);
   const teacherNameById = new Map((teacherRows ?? []).map((t) => [t.id, t.full_name]));
 
   // Roster size per class (sum of active students across its streams).
@@ -115,6 +126,35 @@ export default async function ExamProgressPage({ params }: { params: Promise<{ e
     };
   });
 
+  const approvalByKey = new Map<string, { submitted: number; approved: number }>();
+  for (const m of approvalCounts ?? []) {
+    const key = `${m.class_id}__${m.subject_id}`;
+    const counts = approvalByKey.get(key) ?? { submitted: 0, approved: 0 };
+    if (m.status === "approved") counts.approved += 1;
+    else counts.submitted += 1;
+    approvalByKey.set(key, counts);
+  }
+
+  const scheduleOptions: SubjectClassOption[] = (examSubjects ?? []).map((es) => ({
+    key: `${es.class_id}__${es.subject_id}`,
+    subject_id: es.subject_id,
+    subject_name: (es.subjects as unknown as { name: string } | null)?.name ?? "",
+    class_id: es.class_id,
+    class_name: classNameById.get(es.class_id) ?? "",
+  }));
+
+  const schedules: ExamScheduleRow[] = (scheduleRows ?? []).map((s) => ({
+    id: s.id,
+    subject_id: s.subject_id,
+    subject_name: (s.subjects as unknown as { name: string } | null)?.name ?? "",
+    class_id: s.class_id,
+    class_name: (s.classes as unknown as { name: string } | null)?.name ?? "",
+    exam_date: s.exam_date,
+    start_time: s.start_time,
+    end_time: s.end_time,
+    venue: s.venue,
+  }));
+
   return (
     <AppShell
       breadcrumbs={[
@@ -156,6 +196,7 @@ export default async function ExamProgressPage({ params }: { params: Promise<{ e
                     <th className="w-56">Progress</th>
                     <th className="text-right">Entered</th>
                     <th>Status</th>
+                    <th>Approval</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -206,6 +247,22 @@ export default async function ExamProgressPage({ params }: { params: Promise<{ e
                             />
                           )}
                         </td>
+                        <td>
+                          {(() => {
+                            const counts = approvalByKey.get(s.key) ?? { submitted: 0, approved: 0 };
+                            if (counts.submitted === 0 && counts.approved === 0) return <span className="text-muted-foreground">—</span>;
+                            return (
+                              <div className="flex items-center gap-2">
+                                <span className="text-[0.6875rem] text-muted-foreground" data-numeric>
+                                  {counts.approved} approved / {counts.submitted} pending
+                                </span>
+                                {canApproveAny === true && counts.submitted > 0 && (
+                                  <ApproveMarksButton examId={exam.id} classId={s.classId} subjectId={s.subjectId} />
+                                )}
+                              </div>
+                            );
+                          })()}
+                        </td>
                       </tr>
                     );
                   })}
@@ -214,6 +271,8 @@ export default async function ExamProgressPage({ params }: { params: Promise<{ e
             </div>
           )}
         </div>
+
+        <ExamScheduleSection examId={exam.id} schedules={schedules} options={scheduleOptions} canWrite={canWriteExams === true} />
       </div>
     </AppShell>
   );
