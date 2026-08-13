@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { logout } from "@/app/login/actions";
 import { AppShell } from "@/components/app-shell/app-shell";
-import { PayrollSection, type PayrollRow, type StaffOption } from "@/components/payroll/payroll-section";
+import { PayrollSection, type PayrollRow, type StaffOption, type SalaryStructureRow } from "@/components/payroll/payroll-section";
 
 export default async function PayrollPage() {
   const supabase = await createClient();
@@ -56,6 +56,27 @@ export default async function PayrollPage() {
     status: r.status as "draft" | "approved" | "paid",
   }));
 
+  let structures: SalaryStructureRow[] = [];
+  if (canReadAny) {
+    const { data: structureRows } = await supabase
+      .from("staff_salary_structures")
+      .select(
+        "id, staff_id, basic_salary, effective_from, school_users!staff_salary_structures_staff_id_fkey(full_name), salary_structure_allowances(id, name, amount), salary_structure_deductions(id, name, amount)",
+      )
+      .eq("active", true)
+      .order("effective_from", { ascending: false });
+
+    structures = (structureRows ?? []).map((s) => ({
+      id: s.id,
+      staff_id: s.staff_id,
+      staff_name: (s.school_users as unknown as { full_name: string } | null)?.full_name ?? "Unknown",
+      basic_salary: Number(s.basic_salary),
+      effective_from: s.effective_from,
+      allowances: (s.salary_structure_allowances as unknown as { id: string; name: string; amount: number }[]) ?? [],
+      deductions: (s.salary_structure_deductions as unknown as { id: string; name: string; amount: number }[]) ?? [],
+    }));
+  }
+
   return (
     <AppShell
       breadcrumbs={[{ label: schoolName ?? "EduCore", href: "/dashboard" }, { label: "Payroll" }]}
@@ -68,7 +89,7 @@ export default async function PayrollPage() {
           <h1 className="text-lg font-semibold">Payroll</h1>
           <p className="text-sm text-muted-foreground">
             {canReadAny
-              ? "Monthly payslips across your staff — NSSF, SHIF, Housing Levy and PAYE computed against current Kenyan statutory rates."
+              ? "Salary structures and monthly payslips across your staff — NSSF, SHIF, Housing Levy and PAYE computed against current Kenyan statutory rates."
               : "Your payslips — visible to you and school leadership only."}
           </p>
         </div>
@@ -76,9 +97,12 @@ export default async function PayrollPage() {
         <PayrollSection
           records={records}
           staffOptions={staffOptions}
+          structures={structures}
+          schoolName={schoolName ?? "EduCore"}
           canGenerate={canWrite === true}
           canApprove={canApprove === true}
           canMarkPaid={canWrite === true}
+          canManageStructures={canWrite === true}
         />
       </div>
     </AppShell>
