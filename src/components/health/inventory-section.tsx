@@ -96,7 +96,7 @@ export function InventorySection({
             </DialogHeader>
             <div className="space-y-3">
               <Input placeholder="Item name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <Input placeholder="Unit (e.g. tablets, ml)" value={form.unit} onChange={(e) => setForm({ ...form, unit: e.target.value })} />
                 <Input type="number" min={0} placeholder="Reorder level" value={form.reorder_level} onChange={(e) => setForm({ ...form, reorder_level: e.target.value })} />
               </div>

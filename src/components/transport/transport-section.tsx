@@ -379,7 +379,7 @@ export function TransportSection({
                       <Label>Driver licence number</Label>
                       <Input value={licenseNumber} onChange={(e) => setLicenseNumber(e.target.value)} />
                     </div>
-                    <div className="grid grid-cols-3 gap-3">
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                       <div className="space-y-1.5">
                         <Label>Licence expiry</Label>
                         <Input type="date" value={licenseExpiry} onChange={(e) => setLicenseExpiry(e.target.value)} />
@@ -493,7 +493,7 @@ export function TransportSection({
                     <Label>Stop name</Label>
                     <Input value={stopName} onChange={(e) => setStopName(e.target.value)} />
                   </div>
-                  <div className="grid grid-cols-3 gap-3">
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                     <div className="space-y-1.5">
                       <Label>Order</Label>
                       <Input type="number" value={stopSequence} onChange={(e) => setStopSequence(e.target.value)} />

@@ -252,7 +252,7 @@ export function DisciplineWelfareSection({
                       <Label>Student</Label>
                       <StudentPicker students={students} name="student_id" />
                     </div>
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                       <div className="flex flex-col gap-1.5">
                         <Label>Date</Label>
                         <Input type="date" name="incident_date" defaultValue={new Date().toISOString().slice(0, 10)} />
@@ -271,7 +271,7 @@ export function DisciplineWelfareSection({
                         </Select>
                       </div>
                     </div>
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                       <div className="flex flex-col gap-1.5">
                         <Label>Type</Label>
                         <Input name="incident_type" placeholder="e.g. fighting, tardiness" />
@@ -382,7 +382,7 @@ export function DisciplineWelfareSection({
                         </SelectContent>
                       </Select>
                     </div>
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                       <div className="flex flex-col gap-1.5">
                         <Label>Start date</Label>
                         <Input type="date" name="start_date" />

@@ -120,7 +120,7 @@ export function ComposeSection({
           <h2 className="text-[0.8125rem] font-semibold">Compose message</h2>
         </header>
         <div className="flex flex-col gap-4 p-4">
-          <div className="grid grid-cols-4 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <div className="space-y-1.5">
               <Label>Channel</Label>
               <Select value={channel} onValueChange={(v) => setChannel(v as typeof channel)}>

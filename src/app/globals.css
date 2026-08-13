@@ -274,6 +274,11 @@
 }
 
 @utility table-dense {
+  /* Phase 18 note: this class always uses white-space: nowrap on cells, which will overflow
+     the viewport width on narrow screens for any table with more than a handful of columns.
+     Every usage of table-dense in the app is wrapped in a `<div className="overflow-x-auto">`
+     (or an ancestor with `overflow-auto`) so the table scrolls within its own bounded panel
+     instead of the whole page scrolling sideways — keep that convention for any new table. */
   font-size: 0.8125rem;
   & th {
     height: 2rem;

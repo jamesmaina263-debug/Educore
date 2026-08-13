@@ -155,7 +155,7 @@ export function InvoicesSection({ invoices, canWrite }: { invoices: InvoiceListR
             <p className="text-sm text-muted-foreground">
               Applies to {target?.student_name}&apos;s oldest outstanding invoice first, not only {target ? invoiceRef(target.id) : ""}.
             </p>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div className="space-y-1.5">
                 <Label>Amount</Label>
                 <Input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} />
@@ -176,7 +176,7 @@ export function InvoicesSection({ invoices, canWrite }: { invoices: InvoiceListR
               </div>
             </div>
             {method === "mpesa" ? (
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div className="space-y-1.5">
                   <Label>M-Pesa reference (from confirmation SMS)</Label>
                   <Input placeholder="QWE123XYZ" value={reference} onChange={(e) => setReference(e.target.value)} />

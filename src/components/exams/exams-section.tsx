@@ -144,7 +144,7 @@ export function ExamsSection({
                 <DialogTitle>New exam</DialogTitle>
               </DialogHeader>
               <div className="space-y-4">
-                <div className="grid grid-cols-3 gap-3">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                   <div className="space-y-1.5 col-span-2">
                     <Label>Name</Label>
                     <Input placeholder="Mid-Term CAT 1" value={name} onChange={(e) => setName(e.target.value)} />

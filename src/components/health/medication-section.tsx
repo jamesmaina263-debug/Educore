@@ -100,7 +100,7 @@ export function MedicationSection({
                   ))}
                 </SelectContent>
               </Select>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <Input placeholder="Medication name" value={form.medication_name} onChange={(e) => setForm({ ...form, medication_name: e.target.value })} />
                 <Input placeholder="Dosage (e.g. 5ml)" value={form.dosage} onChange={(e) => setForm({ ...form, dosage: e.target.value })} />
               </div>

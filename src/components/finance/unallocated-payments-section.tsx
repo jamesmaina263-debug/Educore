@@ -156,7 +156,7 @@ export function UnallocatedPaymentsSection({ payments, canWrite }: { payments: U
             <DialogTitle>Record unallocated payment</DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div className="space-y-1.5">
                 <Label>Amount</Label>
                 <Input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} />
@@ -178,7 +178,7 @@ export function UnallocatedPaymentsSection({ payments, canWrite }: { payments: U
                 </Select>
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div className="space-y-1.5">
                 <Label>External reference (optional)</Label>
                 <Input value={reference} onChange={(e) => setReference(e.target.value)} />

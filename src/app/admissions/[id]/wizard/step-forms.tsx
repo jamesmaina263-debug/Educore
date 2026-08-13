@@ -114,7 +114,7 @@ export function AdmissionDetailsStep({
 
   return (
     <StepPanel title="Admission Details" hint="Admission type, academic year, term, and day/boarding + transport preference — these drive which later steps apply.">
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div className="space-y-1.5">
           <Label>Admission type</Label>
           <Select value={form.admission_type} onValueChange={(v) => setForm({ ...form, admission_type: v })}>
@@ -233,7 +233,7 @@ export function StudentStep({
 
   return (
     <StepPanel title="Student" hint="Verify the applicant's details, check for a possible existing student, then create the master Student record.">
-      <dl className="grid grid-cols-2 gap-3 text-sm">
+      <dl className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
         <div><dt className="text-muted-foreground">Name</dt><dd>{applicantSummary.first_name} {applicantSummary.last_name}</dd></div>
         <div><dt className="text-muted-foreground">Date of birth</dt><dd>{applicantSummary.date_of_birth}</dd></div>
         <div><dt className="text-muted-foreground">Gender</dt><dd className="capitalize">{applicantSummary.gender}</dd></div>
@@ -359,7 +359,7 @@ export function GuardianStep({ applicationId, resultingStudentId }: { applicatio
           )}
         </div>
       ) : (
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div className="space-y-1.5">
             <Label htmlFor="g_name">Full name</Label>
             <Input id="g_name" value={newGuardian.full_name} onChange={(e) => setNewGuardian({ ...newGuardian, full_name: e.target.value })} />
@@ -677,7 +677,7 @@ export function TransportStep({
 
   return (
     <StepPanel title="Transport" hint="Live route capacity, written to the Transport module the moment you assign.">
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div className="space-y-1.5">
           <Label>Route</Label>
           <Select value={routeId} onValueChange={(v) => { setRouteId(v); setPickupPoint(""); }}>
@@ -755,7 +755,7 @@ export function HealthStep({
 
   return (
     <StepPanel title="Health" hint="Initial profile only — full medical detail is managed by the Health module, not here.">
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div className="space-y-1.5">
           <Label htmlFor="blood_group">Blood group</Label>
           <Input id="blood_group" value={form.blood_group ?? ""} onChange={(e) => setForm({ ...form, blood_group: e.target.value })} />
@@ -847,7 +847,7 @@ export function FinanceStep({
       {charges === null ? (
         <Button size="sm" variant="outline" onClick={loadPreview} disabled={pending}>{pending ? "Loading…" : "Load charges"}</Button>
       ) : (
-        <div className="rounded-md border border-border">
+        <div className="overflow-x-auto rounded-md border border-border">
           <table className="table-dense w-full">
             <tbody>
               {charges.map((c, i) => (
@@ -859,7 +859,7 @@ export function FinanceStep({
         </div>
       )}
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div className="space-y-1.5">
           <Label htmlFor="initial_payment">Record initial payment (optional)</Label>
           <Input id="initial_payment" type="number" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="Amount, KES" />
@@ -1032,7 +1032,7 @@ export function CompleteStep({
     <StepPanel title="Enrollment Complete">
       <div className="rounded-md border border-success/25 bg-success-subtle p-4">
         <p className="flex items-center gap-1.5 text-sm font-medium text-success"><SuccessDot />{applicantName} is now enrolled.</p>
-        <dl className="mt-3 grid grid-cols-2 gap-2 text-sm">
+        <dl className="mt-3 grid grid-cols-1 gap-2 text-sm sm:grid-cols-2">
           <div><dt className="text-xs text-muted-foreground">Admission number</dt><dd>{result.admission_number}</dd></div>
           {result.total_amount != null && <div><dt className="text-xs text-muted-foreground">Fee balance</dt><dd>KES {Number(result.total_amount).toLocaleString()}</dd></div>}
           {result.payment_reference && <div><dt className="text-xs text-muted-foreground">Payment reference</dt><dd>{result.payment_reference}</dd></div>}

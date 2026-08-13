@@ -209,7 +209,8 @@ export function TimetableSection({
           No streams available. Create a class and stream first.
         </div>
       ) : (
-        <div className="grid grid-cols-5 gap-3">
+        <div className="overflow-x-auto">
+          <div className="grid min-w-[40rem] grid-cols-5 gap-3">
           {DAYS.map((d) => {
             const daySlots = streamSlots
               .filter((s) => s.day_of_week === d.value)
@@ -244,6 +245,7 @@ export function TimetableSection({
               </div>
             );
           })}
+          </div>
         </div>
       )}
     </div>

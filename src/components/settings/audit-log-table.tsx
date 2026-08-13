@@ -31,9 +31,9 @@ export function AuditLogTable({ rows }: { rows: AuditLogRow[] }) {
 
   return (
     <div className="panel">
-      <header className="flex items-center justify-between border-b border-border px-4 py-2.5">
+      <header className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-2.5">
         <p className="text-sm font-medium">Audit log</p>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           <p className="text-xs text-muted-foreground">
             {filtered.length} of {rows.length} recent events
           </p>
@@ -55,28 +55,30 @@ export function AuditLogTable({ rows }: { rows: AuditLogRow[] }) {
       {filtered.length === 0 ? (
         <p className="px-4 py-6 text-sm text-muted-foreground">No audited changes match this filter yet.</p>
       ) : (
-        <table className="table-dense w-full">
-          <thead>
-            <tr>
-              <th className="text-left">When</th>
-              <th className="text-left">Who</th>
-              <th className="text-left">Action</th>
-              <th className="text-left">Table</th>
-              <th className="text-left">Reason</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.map((r) => (
-              <tr key={r.id}>
-                <td>{new Date(r.created_at).toLocaleString()}</td>
-                <td>{r.actor_name ?? "System"}</td>
-                <td className={ACTION_TONE[r.action] ?? ""}>{r.action}</td>
-                <td>{r.table_name}</td>
-                <td className="text-muted-foreground">{r.reason ?? "—"}</td>
+        <div className="overflow-x-auto">
+          <table className="table-dense w-full">
+            <thead>
+              <tr>
+                <th className="text-left">When</th>
+                <th className="text-left">Who</th>
+                <th className="text-left">Action</th>
+                <th className="text-left">Table</th>
+                <th className="text-left">Reason</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {filtered.map((r) => (
+                <tr key={r.id}>
+                  <td>{new Date(r.created_at).toLocaleString()}</td>
+                  <td>{r.actor_name ?? "System"}</td>
+                  <td className={ACTION_TONE[r.action] ?? ""}>{r.action}</td>
+                  <td>{r.table_name}</td>
+                  <td className="text-muted-foreground">{r.reason ?? "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
       <p className="px-4 py-2 text-xs text-muted-foreground">
         Covers student records, fees/invoices, payments, boarding allocations, medical records,

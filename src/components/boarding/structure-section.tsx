@@ -212,7 +212,7 @@ export function StructureSection({
                 <Label>Description (optional)</Label>
                 <Textarea value={houseForm.description} onChange={(e) => setHouseForm({ ...houseForm, description: e.target.value })} />
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div className="space-y-1.5">
                   <Label>Gender</Label>
                   <GenderSelect value={houseForm.gender} onChange={(g) => setHouseForm({ ...houseForm, gender: g })} />
@@ -222,7 +222,7 @@ export function StructureSection({
                   <Input type="number" min={0} value={houseForm.capacity} onChange={(e) => setHouseForm({ ...houseForm, capacity: e.target.value })} />
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div className="space-y-1.5">
                   <Label>House master/mistress</Label>
                   <StaffSelect staff={staff} value={houseForm.master_id} onChange={(v) => setHouseForm({ ...houseForm, master_id: v })} placeholder="Unassigned" />
@@ -282,7 +282,7 @@ export function StructureSection({
                         <Label>Name</Label>
                         <Input value={dormForm.name} onChange={(e) => setDormForm({ ...dormForm, name: e.target.value })} />
                       </div>
-                      <div className="grid grid-cols-2 gap-3">
+                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                         <div className="space-y-1.5">
                           <Label>Gender</Label>
                           <GenderSelect value={dormForm.gender} onChange={(g) => setDormForm({ ...dormForm, gender: g })} />
@@ -292,7 +292,7 @@ export function StructureSection({
                           <Input type="number" min={0} value={dormForm.capacity} onChange={(e) => setDormForm({ ...dormForm, capacity: e.target.value })} />
                         </div>
                       </div>
-                      <div className="grid grid-cols-2 gap-3">
+                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                         <div className="space-y-1.5">
                           <Label>Dormitory master/mistress</Label>
                           <StaffSelect staff={staff} value={dormForm.master_id} onChange={(v) => setDormForm({ ...dormForm, master_id: v })} placeholder="Unassigned" />
@@ -345,7 +345,7 @@ export function StructureSection({
                               <DialogTitle>New room in {dorm.name}</DialogTitle>
                             </DialogHeader>
                             <div className="space-y-3">
-                              <div className="grid grid-cols-2 gap-3">
+                              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                                 <div className="space-y-1.5">
                                   <Label>Room number</Label>
                                   <Input value={roomForm.room_number} onChange={(e) => setRoomForm({ ...roomForm, room_number: e.target.value })} />
