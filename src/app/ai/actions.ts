@@ -2,7 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 
-// Phase 4, Item 1: Natural-language analytics ("Ask Trimora AI").
+// Phase 4, Item 1: Natural-language analytics ("Ask Educore AI").
 //
 // Deliberately NOT text-to-SQL. Gemini's only job is to classify the question into one of a
 // fixed, small set of pre-defined intents below — it never sees the database schema and never
@@ -12,7 +12,7 @@ import { createClient } from "@/lib/supabase/server";
 // invented. This mirrors the report-cards AI feature's rule: AI never reaches the user un-grounded.
 //
 // Phase 16 addition: every intent now declares the permission key(s) that actually govern its
-// underlying data (mirroring the real RLS policy on those tables/views), and askTrimoraAI checks
+// underlying data (mirroring the real RLS policy on those tables/views), and askEducoreAI checks
 // them explicitly before running the query. Previously only the page-level `ai.read` gate was
 // checked; because the underlying views use `security_invoker`, a caller lacking (e.g.) finance.read
 // would silently get a confident-looking "KES 0" instead of a refusal — technically no row ever
@@ -128,7 +128,7 @@ const PERMISSION_LABEL: Record<PermissionKey, string> = {
   "inventory.read_any": "inventory",
 };
 
-export async function askTrimoraAI(question: string): Promise<AskAIResult> {
+export async function askEducoreAI(question: string): Promise<AskAIResult> {
   const trimmed = question.trim();
   if (!trimmed) return { error: "Ask a question first." };
 
@@ -139,7 +139,7 @@ export async function askTrimoraAI(question: string): Promise<AskAIResult> {
   if (!user) return { error: "Not signed in." };
 
   const { data: canAskAI } = await supabase.rpc("auth_has_permission", { p_permission_key: "ai.read" });
-  if (!canAskAI) return { error: "You don't have access to Trimora AI." };
+  if (!canAskAI) return { error: "You don't have access to Educore AI." };
 
   const { data: schoolUser } = await supabase
     .from("school_users")
@@ -150,7 +150,7 @@ export async function askTrimoraAI(question: string): Promise<AskAIResult> {
 
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
-    return { error: "Trimora AI isn't configured yet — GEMINI_API_KEY is missing from the server environment." };
+    return { error: "Educore AI isn't configured yet — GEMINI_API_KEY is missing from the server environment." };
   }
 
   const intent = await classifyIntent(trimmed);

@@ -50,7 +50,7 @@ export const navItems: NavItem[] = [
   { label: "Performance", href: "/performance", icon: TrendingUp },
   { label: "PT Meetings", href: "/pt-meetings", icon: Users2 },
   { label: "Communication", href: "/communication", icon: MessageSquare },
-  { label: "Trimora AI", href: "/ai", icon: Sparkles },
+  { label: "Educore AI", href: "/ai", icon: Sparkles },
   { label: "Reports", href: "/reports", icon: BarChart3 },
   { label: "Campuses", href: "/campuses", icon: Building2 },
   { label: "Settings", href: "/settings", icon: Settings },

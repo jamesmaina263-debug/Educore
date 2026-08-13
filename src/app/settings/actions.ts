@@ -14,6 +14,7 @@ export async function updateBranding(input: {
   motto?: string;
   logo_url?: string;
   primary_color?: string;
+  kra_pin?: string;
 }): Promise<ActionResult> {
   const supabase = await createClient();
   const { data: schoolId, error: schoolIdError } = await supabase.rpc("auth_school_id");
@@ -27,6 +28,7 @@ export async function updateBranding(input: {
       motto: input.motto || null,
       logo_url: input.logo_url || null,
       primary_color: input.primary_color || null,
+      kra_pin: input.kra_pin || null,
     })
     .eq("id", schoolId);
   if (error) return { error: error.message };

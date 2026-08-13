@@ -9,7 +9,7 @@ import { StatusBadge } from "@/components/status-badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
-import { generatePayrollAction, approvePayrollAction, markPayrollPaidAction, saveSalaryStructureAction } from "@/app/payroll/actions";
+import { generatePayrollAction, approvePayrollAction, markPayrollPaidAction, saveSalaryStructureAction, updateStaffStatutoryNumbersAction } from "@/app/payroll/actions";
 
 const MONTHS = [
   "January", "February", "March", "April", "May", "June",
@@ -20,6 +20,10 @@ export interface PayrollRow {
   id: string;
   teacher_id: string;
   staff_name: string;
+  staff_number: string | null;
+  staff_kra_pin: string | null;
+  staff_nssf_number: string | null;
+  staff_shif_number: string | null;
   period_year: number;
   period_month: number;
   gross_salary: number;
@@ -29,6 +33,8 @@ export interface PayrollRow {
   taxable_income: number;
   paye: number;
   other_deductions: number;
+  allowances_breakdown: { name: string; amount: number }[];
+  deductions_breakdown: { name: string; amount: number }[];
   net_pay: number;
   status: "draft" | "approved" | "paid";
 }
@@ -42,6 +48,10 @@ export interface SalaryStructureRow {
   id: string;
   staff_id: string;
   staff_name: string;
+  staff_number: string | null;
+  staff_kra_pin: string | null;
+  staff_nssf_number: string | null;
+  staff_shif_number: string | null;
   basic_salary: number;
   effective_from: string;
   allowances: { id: string; name: string; amount: number }[];
@@ -51,41 +61,110 @@ export interface SalaryStructureRow {
 const currentYear = new Date().getFullYear();
 const YEAR_OPTIONS = [currentYear - 1, currentYear, currentYear + 1];
 
-async function downloadPayslip(schoolName: string, r: PayrollRow) {
+async function downloadPayslip(schoolName: string, employerKraPin: string | null, r: PayrollRow) {
   const { jsPDF } = await import("jspdf");
+  const autoTable = (await import("jspdf-autotable")).default;
   const doc = new jsPDF();
   let y = 16;
+
   doc.setFontSize(14);
   doc.text(schoolName, 14, y);
   y += 6;
+  if (employerKraPin) {
+    doc.setFontSize(9);
+    doc.setTextColor(90);
+    doc.text(`Employer KRA PIN: ${employerKraPin}`, 14, y);
+    doc.setTextColor(0);
+    y += 6;
+  }
   doc.setFontSize(11);
   doc.text(`Payslip — ${MONTHS[r.period_month - 1]} ${r.period_year}`, 14, y);
   y += 8;
-  doc.setFontSize(9);
-  doc.setTextColor(90);
-  doc.text(`Employee: ${r.staff_name}`, 14, y);
-  y += 10;
-  doc.setTextColor(0);
 
-  const rows: [string, string][] = [
-    ["Gross Salary", r.gross_salary.toLocaleString()],
+  // Employee identity block — every field the brief calls "standard" that we actually have
+  // data for. Fields the person never set (staff number, their own KRA PIN, NSSF/SHIF
+  // numbers) are simply omitted rather than printed as blank/placeholder lines.
+  doc.setFontSize(9);
+  const identityLines: string[] = [`Employee: ${r.staff_name}`];
+  if (r.staff_number) identityLines.push(`Staff No: ${r.staff_number}`);
+  if (r.staff_kra_pin) identityLines.push(`KRA PIN: ${r.staff_kra_pin}`);
+  if (r.staff_nssf_number) identityLines.push(`NSSF No: ${r.staff_nssf_number}`);
+  if (r.staff_shif_number) identityLines.push(`SHIF No: ${r.staff_shif_number}`);
+  doc.setTextColor(60);
+  for (const line of identityLines) {
+    doc.text(line, 14, y);
+    y += 5;
+  }
+  doc.setTextColor(0);
+  y += 3;
+
+  const basicSalary = r.gross_salary - r.allowances_breakdown.reduce((sum, a) => sum + a.amount, 0);
+
+  const earningsRows: [string, string][] = [["Basic Salary", basicSalary.toLocaleString()]];
+  for (const a of r.allowances_breakdown) {
+    earningsRows.push([a.name, a.amount.toLocaleString()]);
+  }
+  earningsRows.push(["Gross Pay", r.gross_salary.toLocaleString()]);
+
+  autoTable(doc, {
+    startY: y,
+    head: [["Earnings", "Amount (KES)"]],
+    body: earningsRows,
+    theme: "grid",
+    styles: { fontSize: 9 },
+    headStyles: { fillColor: [30, 41, 59] },
+    columnStyles: { 1: { halign: "right" } },
+    didParseCell: (data) => {
+      if (data.section === "body" && (data.row.raw as string[])[0] === "Gross Pay") {
+        data.cell.styles.fontStyle = "bold";
+      }
+    },
+  });
+  y = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 4;
+
+  doc.setFontSize(8);
+  doc.setTextColor(90);
+  doc.text(`Taxable Pay: KES ${r.taxable_income.toLocaleString()}`, 14, y);
+  doc.setTextColor(0);
+  y += 6;
+
+  const deductionRows: [string, string][] = [
     ["NSSF (Employee)", r.nssf_employee.toLocaleString()],
     ["SHIF", r.shif.toLocaleString()],
     ["Affordable Housing Levy", r.ahl.toLocaleString()],
-    ["Taxable Income", r.taxable_income.toLocaleString()],
     ["PAYE", r.paye.toLocaleString()],
-    ["Other Deductions", r.other_deductions.toLocaleString()],
-    ["Net Pay", r.net_pay.toLocaleString()],
   ];
-  doc.setFontSize(10);
-  for (const [label, value] of rows) {
-    doc.text(label, 14, y);
-    doc.text(value, 140, y, { align: "right" });
-    y += 7;
+  for (const d of r.deductions_breakdown) {
+    deductionRows.push([d.name, d.amount.toLocaleString()]);
   }
+  const totalDeductions = r.nssf_employee + r.shif + r.ahl + r.paye + r.other_deductions;
+  deductionRows.push(["Total Deductions", totalDeductions.toLocaleString()]);
+
+  autoTable(doc, {
+    startY: y,
+    head: [["Deductions", "Amount (KES)"]],
+    body: deductionRows,
+    theme: "grid",
+    styles: { fontSize: 9 },
+    headStyles: { fillColor: [30, 41, 59] },
+    columnStyles: { 1: { halign: "right" } },
+    didParseCell: (data) => {
+      if (data.section === "body" && (data.row.raw as string[])[0] === "Total Deductions") {
+        data.cell.styles.fontStyle = "bold";
+      }
+    },
+  });
+  y = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 8;
+
+  doc.setFontSize(11);
+  doc.setFont("helvetica", "bold");
+  doc.text(`Net Pay: KES ${r.net_pay.toLocaleString()}`, 14, y);
+  doc.setFont("helvetica", "normal");
+  y += 8;
+
   doc.setFontSize(8);
   doc.setTextColor(140);
-  doc.text("Computed against the Kenyan statutory rate in effect for this period.", 14, y + 6);
+  doc.text("Computed against the Kenyan statutory rate in effect for this period.", 14, y);
 
   doc.save(`payslip-${r.staff_name.replace(/\s+/g, "-").toLowerCase()}-${r.period_year}-${String(r.period_month).padStart(2, "0")}.pdf`);
 }
@@ -95,6 +174,7 @@ export function PayrollSection({
   staffOptions,
   structures,
   schoolName,
+  employerKraPin,
   canGenerate,
   canApprove,
   canMarkPaid,
@@ -104,6 +184,7 @@ export function PayrollSection({
   staffOptions: StaffOption[];
   structures: SalaryStructureRow[];
   schoolName: string;
+  employerKraPin: string | null;
   canGenerate: boolean;
   canApprove: boolean;
   canMarkPaid: boolean;
@@ -127,6 +208,10 @@ export function PayrollSection({
   const [basicSalary, setBasicSalary] = useState("");
   const [allowances, setAllowances] = useState<{ name: string; amount: string }[]>([]);
   const [deductions, setDeductions] = useState<{ name: string; amount: string }[]>([]);
+  const [staffKraPin, setStaffKraPin] = useState("");
+  const [staffNssfNumber, setStaffNssfNumber] = useState("");
+  const [staffShifNumber, setStaffShifNumber] = useState("");
+  const [staffNumber, setStaffNumber] = useState("");
 
   function applyStructureToGenerateForm(staffId: string) {
     setTeacherId(staffId);
@@ -145,6 +230,7 @@ export function PayrollSection({
   async function handleGenerate() {
     setPending(true);
     setError(null);
+    const structure = structures.find((s) => s.staff_id === teacherId);
     const result = await generatePayrollAction({
       teacher_id: teacherId,
       period_year: Number(periodYear),
@@ -152,6 +238,19 @@ export function PayrollSection({
       gross_salary: Number(grossSalary),
       other_deductions: otherDeductions ? Number(otherDeductions) : 0,
       other_deductions_note: otherDeductionsNote || undefined,
+      // Only attach the itemized breakdown when the totals still match what's on the
+      // structure -- if the person hand-edited gross salary or other deductions in this
+      // dialog after picking a staff member, the breakdown would no longer add up to the
+      // figures actually being submitted, so it's safer to leave the payslip un-itemized
+      // for that one run than to print a breakdown that doesn't reconcile.
+      allowances_breakdown:
+        structure && Number(grossSalary) === structure.basic_salary + structure.allowances.reduce((s, a) => s + a.amount, 0)
+          ? structure.allowances.map((a) => ({ name: a.name, amount: a.amount }))
+          : undefined,
+      deductions_breakdown:
+        structure && Number(otherDeductions || 0) === structure.deductions.reduce((s, d) => s + d.amount, 0)
+          ? structure.deductions.map((d) => ({ name: d.name, amount: d.amount }))
+          : undefined,
     });
     setPending(false);
     if ("error" in result) return setError(result.error);
@@ -185,11 +284,19 @@ export function PayrollSection({
       setBasicSalary(String(existing.basic_salary));
       setAllowances(existing.allowances.map((a) => ({ name: a.name, amount: String(a.amount) })));
       setDeductions(existing.deductions.map((d) => ({ name: d.name, amount: String(d.amount) })));
+      setStaffKraPin(existing.staff_kra_pin ?? "");
+      setStaffNssfNumber(existing.staff_nssf_number ?? "");
+      setStaffShifNumber(existing.staff_shif_number ?? "");
+      setStaffNumber(existing.staff_number ?? "");
     } else {
       setStructureStaffId("");
       setBasicSalary("");
       setAllowances([]);
       setDeductions([]);
+      setStaffKraPin("");
+      setStaffNssfNumber("");
+      setStaffShifNumber("");
+      setStaffNumber("");
     }
     setStructureOpen(true);
   }
@@ -203,8 +310,27 @@ export function PayrollSection({
       allowances: allowances.filter((a) => a.name && a.amount).map((a) => ({ name: a.name, amount: Number(a.amount) })),
       deductions: deductions.filter((d) => d.name && d.amount).map((d) => ({ name: d.name, amount: Number(d.amount) })),
     });
+    if ("error" in result) {
+      setPending(false);
+      return setError(result.error);
+    }
+    // Statutory numbers are a separate RPC (payroll.write, not staff.manage -- see the
+    // migration) so a failure here shouldn't be silently swallowed, but also shouldn't be
+    // conflated with the salary structure itself having failed to save above.
+    if (staffKraPin || staffNssfNumber || staffShifNumber || staffNumber) {
+      const idResult = await updateStaffStatutoryNumbersAction({
+        staff_id: structureStaffId,
+        kra_pin: staffKraPin,
+        nssf_number: staffNssfNumber,
+        shif_number: staffShifNumber,
+        staff_number: staffNumber,
+      });
+      if ("error" in idResult) {
+        setPending(false);
+        return setError(`Salary structure saved, but statutory numbers failed: ${idResult.error}`);
+      }
+    }
     setPending(false);
-    if ("error" in result) return setError(result.error);
     setStructureOpen(false);
     router.refresh();
   }
@@ -383,7 +509,7 @@ export function PayrollSection({
                               <Button size="sm" variant="ghost" onClick={() => setExpandedId(expandedId === r.id ? null : r.id)}>
                                 {expandedId === r.id ? "Hide" : "Breakdown"}
                               </Button>
-                              <Button size="sm" variant="ghost" onClick={() => downloadPayslip(schoolName, r)}>
+                              <Button size="sm" variant="ghost" onClick={() => downloadPayslip(schoolName, employerKraPin, r)}>
                                 Payslip
                               </Button>
                               {canApprove && r.status === "draft" && (
@@ -480,6 +606,28 @@ export function PayrollSection({
                         <Label>Basic Salary (KES)</Label>
                         <Input type="number" value={basicSalary} onChange={(e) => setBasicSalary(e.target.value)} />
                       </div>
+
+                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                        <div className="space-y-1.5">
+                          <Label>Staff No.</Label>
+                          <Input value={staffNumber} onChange={(e) => setStaffNumber(e.target.value)} placeholder="Optional" />
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label>KRA PIN</Label>
+                          <Input value={staffKraPin} onChange={(e) => setStaffKraPin(e.target.value)} placeholder="Optional" />
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label>NSSF No.</Label>
+                          <Input value={staffNssfNumber} onChange={(e) => setStaffNssfNumber(e.target.value)} placeholder="Optional" />
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label>SHIF No.</Label>
+                          <Input value={staffShifNumber} onChange={(e) => setStaffShifNumber(e.target.value)} placeholder="Optional" />
+                        </div>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Staff number and statutory numbers print on this person&apos;s payslip when set. Leave any blank to omit that line.
+                      </p>
 
                       <div className="space-y-1.5">
                         <div className="flex items-center justify-between">

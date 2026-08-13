@@ -18,6 +18,7 @@ export interface TermOption {
 export interface GeneralSettingsData {
   name: string;
   email: string;
+  kra_pin: string;
   academic_year_id: string | null;
   academic_year_name: string | null;
   terms: TermOption[];
@@ -46,6 +47,7 @@ export function GeneralSettingsPanel({ initial, canWrite }: { initial: GeneralSe
   const router = useRouter();
   const [name, setName] = useState(initial.name);
   const [email, setEmail] = useState(initial.email);
+  const [kraPin, setKraPin] = useState(initial.kra_pin);
   const [termId, setTermId] = useState(initial.terms.find((t) => t.status === "active")?.id ?? "");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -53,11 +55,12 @@ export function GeneralSettingsPanel({ initial, canWrite }: { initial: GeneralSe
 
   const selectedTerm = initial.terms.find((t) => t.id === termId) ?? null;
   const initialTermId = initial.terms.find((t) => t.status === "active")?.id ?? "";
-  const dirty = name !== initial.name || email !== initial.email || termId !== initialTermId;
+  const dirty = name !== initial.name || email !== initial.email || kraPin !== initial.kra_pin || termId !== initialTermId;
 
   function handleCancel() {
     setName(initial.name);
     setEmail(initial.email);
+    setKraPin(initial.kra_pin);
     setTermId(initialTermId);
     setError(null);
     setSaved(false);
@@ -68,8 +71,8 @@ export function GeneralSettingsPanel({ initial, canWrite }: { initial: GeneralSe
     setError(null);
     setSaved(false);
 
-    if (name !== initial.name || email !== initial.email) {
-      const result = await updateBranding({ name, email });
+    if (name !== initial.name || email !== initial.email || kraPin !== initial.kra_pin) {
+      const result = await updateBranding({ name, email, kra_pin: kraPin });
       if ("error" in result) {
         setPending(false);
         return setError(result.error);
@@ -117,6 +120,9 @@ export function GeneralSettingsPanel({ initial, canWrite }: { initial: GeneralSe
               onChange={(e) => setEmail(e.target.value)}
               disabled={!canWrite}
             />
+          </Field>
+          <Field label="KRA PIN" hint="Employer PIN, printed on staff payslips.">
+            <input className={inputClass} value={kraPin} onChange={(e) => setKraPin(e.target.value)} disabled={!canWrite} />
           </Field>
         </section>
 

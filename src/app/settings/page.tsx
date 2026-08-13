@@ -38,7 +38,7 @@ export default async function SettingsPage({
     supabase
       .from("school_users")
       .select(
-        "id, full_name, roles(display_name), schools(id, name, email, motto, logo_url, primary_color, school_group_id)"
+        "id, full_name, roles(display_name), schools(id, name, email, motto, logo_url, primary_color, school_group_id, kra_pin)"
       )
       .eq("auth_user_id", user.id)
       .maybeSingle(),
@@ -58,6 +58,7 @@ export default async function SettingsPage({
     motto: string | null;
     logo_url: string | null;
     primary_color: string | null;
+    kra_pin: string | null;
   } | null;
 
   const [{ data: staffRows }, { data: roleRows }] = await Promise.all([
@@ -152,6 +153,7 @@ export default async function SettingsPage({
   const generalData: GeneralSettingsData = {
     name: school?.name ?? "",
     email: school?.email ?? "",
+    kra_pin: school?.kra_pin ?? "",
     academic_year_id: activeYear?.id ?? null,
     academic_year_name: activeYear?.name ?? null,
     terms: (yearTerms ?? []).map((t) => ({

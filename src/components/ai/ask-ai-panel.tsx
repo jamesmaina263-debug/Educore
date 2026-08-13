@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
-import { askTrimoraAI } from "@/app/ai/actions";
+import { askEducoreAI } from "@/app/ai/actions";
 
 export interface AIQueryLogRow {
   id: string;
@@ -33,7 +33,7 @@ export function AskAIPanel({ initialHistory }: { initialHistory: AIQueryLogRow[]
     setError(null);
     setAnswer(null);
     startTransition(async () => {
-      const result = await askTrimoraAI(q);
+      const result = await askEducoreAI(q);
       if (result.error) {
         setError(result.error);
       } else if (result.answer) {
@@ -56,7 +56,7 @@ export function AskAIPanel({ initialHistory }: { initialHistory: AIQueryLogRow[]
     <div className="flex flex-col gap-4">
       <div className="panel max-w-2xl">
         <header className="border-b border-border px-4 py-2.5">
-          <h2 className="text-[0.8125rem] font-semibold">Ask Trimora AI</h2>
+          <h2 className="text-[0.8125rem] font-semibold">Ask Educore AI</h2>
           <p className="mt-0.5 text-[0.75rem] text-muted-foreground">
             Answers a fixed set of school-wide questions today — enrollment, attendance, fee
             collection, exam performance, boarding, health, and inventory. Only shows what your

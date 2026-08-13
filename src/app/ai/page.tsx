@@ -35,14 +35,14 @@ export default async function AIPage() {
 
   return (
     <AppShell
-      breadcrumbs={[{ label: schoolName ?? "EduCore", href: "/dashboard" }, { label: "Trimora AI" }]}
+      breadcrumbs={[{ label: schoolName ?? "EduCore", href: "/dashboard" }, { label: "Educore AI" }]}
       userName={schoolUser?.full_name ?? user.email ?? "Account"}
       userRole={roleName}
       onSignOut={logout}
     >
       <div className="flex flex-col gap-6">
         <div>
-          <h1 className="text-lg font-semibold">Trimora AI</h1>
+          <h1 className="text-lg font-semibold">Educore AI</h1>
           <p className="text-sm text-muted-foreground">
             {schoolName ? `${schoolName} — ` : ""}
             ask a question, get a grounded answer
@@ -51,7 +51,7 @@ export default async function AIPage() {
 
         {!canAskAI ? (
           <p className="text-sm text-muted-foreground">
-            Trimora AI is available to the School Owner and Principal.
+            Educore AI is available to the School Owner and Principal.
           </p>
         ) : (
           <AskAIPanel initialHistory={history} />
