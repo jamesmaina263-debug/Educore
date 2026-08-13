@@ -286,3 +286,68 @@ export async function editMark(input: {
   revalidatePath("/exams");
   return { success: true };
 }
+
+// ---------------------------------------------------------------------------
+// Exam timetable
+// ---------------------------------------------------------------------------
+export async function saveExamSchedule(input: {
+  exam_id: string;
+  subject_id: string;
+  class_id: string;
+  exam_date: string;
+  start_time?: string;
+  end_time?: string;
+  venue?: string;
+}): Promise<ActionResult> {
+  const supabase = await createClient();
+  try {
+    const school_id = await schoolId(supabase);
+    const { error } = await supabase.from("exam_schedules").insert({
+      school_id,
+      exam_id: input.exam_id,
+      subject_id: input.subject_id,
+      class_id: input.class_id,
+      exam_date: input.exam_date,
+      start_time: input.start_time || null,
+      end_time: input.end_time || null,
+      venue: input.venue || null,
+    });
+    if (error) return { error: error.message };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Could not save the exam schedule." };
+  }
+  revalidatePath("/exams");
+  return { success: true };
+}
+
+export async function deleteExamSchedule(id: string): Promise<ActionResult> {
+  const supabase = await createClient();
+  const { error } = await supabase.from("exam_schedules").delete().eq("id", id);
+  if (error) return { error: error.message };
+  revalidatePath("/exams");
+  return { success: true };
+}
+
+// ---------------------------------------------------------------------------
+// Marks approval -- bulk-approves every submitted mark for a class+subject in
+// one exam. RLS (marks.approve for the class teacher's own class, or
+// marks.approve_any) is the real gate; this is a convenience bulk update.
+// ---------------------------------------------------------------------------
+export async function approveMarks(input: { exam_id: string; class_id: string; subject_id: string }): Promise<ActionResult> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  const { data: schoolUser } = await supabase.from("school_users").select("id").eq("auth_user_id", user?.id ?? "").maybeSingle();
+
+  const { error } = await supabase
+    .from("marks")
+    .update({ status: "approved", approved_by: schoolUser?.id ?? null, approved_at: new Date().toISOString() })
+    .eq("exam_id", input.exam_id)
+    .eq("class_id", input.class_id)
+    .eq("subject_id", input.subject_id)
+    .eq("status", "submitted");
+  if (error) return { error: error.message };
+  revalidatePath("/exams");
+  return { success: true };
+}
