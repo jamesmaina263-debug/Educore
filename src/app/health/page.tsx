@@ -11,7 +11,7 @@ import { ReferralsSection, type ReferralRow } from "@/components/health/referral
 import { EmergenciesSection, type EmergencyRow } from "@/components/health/emergencies-section";
 import { InventorySection, type MedicalItemRow } from "@/components/health/inventory-section";
 import { ReportsSection, type HealthReportsData } from "@/components/health/reports-section";
-import type { StudentOption } from "@/components/health/student-picker";
+import type { StudentOption, GuardianOption } from "@/components/health/student-picker";
 
 function fullName(row: { first_name: string; last_name: string } | null) {
   return row ? `${row.first_name} ${row.last_name}` : "Unknown";
@@ -57,11 +57,12 @@ export default async function HealthPage({ searchParams }: { searchParams: Promi
     { data: referralRows },
     { data: emergencyRows },
     { data: medicalCategory },
+    { data: guardianRows },
   ] = await Promise.all([
     supabase.from("students").select("id, first_name, last_name").eq("status", "active").order("first_name"),
     supabase
       .from("sick_bay_visits")
-      .select("id, check_in_at, reason, symptoms, temperature_c, check_out_at, outcome, students(first_name, last_name)")
+      .select("id, student_id, check_in_at, reason, symptoms, temperature_c, check_out_at, outcome, students(first_name, last_name)")
       .order("check_in_at", { ascending: false }),
     supabase
       .from("medication_administrations")
@@ -76,9 +77,21 @@ export default async function HealthPage({ searchParams }: { searchParams: Promi
       .select("id, incident_at, description, severity, action_taken, hospital_name, guardian_notified, students(first_name, last_name)")
       .order("incident_at", { ascending: false }),
     supabase.from("inventory_categories").select("id").eq("name", "Medical Supplies").maybeSingle(),
+    supabase
+      .from("student_guardians")
+      .select("student_id, primary_contact, relationship, school_users(id, full_name, phone)"),
   ]);
 
   const studentOptions: StudentOption[] = (students ?? []).map((s) => ({ id: s.id, name: `${s.first_name} ${s.last_name}` }));
+
+  const guardiansByStudent = new Map<string, GuardianOption[]>();
+  for (const g of guardianRows ?? []) {
+    const su = g.school_users as unknown as { id: string; full_name: string; phone: string | null } | null;
+    if (!su || !su.phone) continue; // no phone on file — nothing to notify, leave out of the picker entirely
+    const list = guardiansByStudent.get(g.student_id) ?? [];
+    list.push({ id: su.id, name: su.full_name, relationship: g.relationship, primary_contact: g.primary_contact });
+    guardiansByStudent.set(g.student_id, list);
+  }
 
   const { data: medicalItemRows } = medicalCategory
     ? await supabase
@@ -93,6 +106,7 @@ export default async function HealthPage({ searchParams }: { searchParams: Promi
 
   const sickBayTableRows: SickBayVisitRow[] = (sickBayRows ?? []).map((v) => ({
     id: v.id,
+    student_id: v.student_id,
     student_name: fullName(v.students as unknown as { first_name: string; last_name: string }),
     check_in_at: v.check_in_at,
     reason: v.reason,
@@ -101,6 +115,7 @@ export default async function HealthPage({ searchParams }: { searchParams: Promi
     check_out_at: v.check_out_at,
     outcome: v.outcome,
     is_open: v.check_out_at === null,
+    guardians: guardiansByStudent.get(v.student_id) ?? [],
   }));
 
   const medicationTableRows: MedicationRow[] = (medicationRows ?? []).map((m) => ({

@@ -2,17 +2,20 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { checkInStudent, checkOutStudent } from "@/app/health/actions";
+import { checkInStudent, checkOutStudent, sendHealthAlertAction } from "@/app/health/actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { StatusBadge } from "@/components/status-badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
-import type { StudentOption } from "./student-picker";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
+import type { StudentOption, GuardianOption } from "./student-picker";
 
 export interface SickBayVisitRow {
   id: string;
+  student_id: string;
   student_name: string;
   check_in_at: string;
   reason: string;
@@ -21,6 +24,7 @@ export interface SickBayVisitRow {
   check_out_at: string | null;
   outcome: string | null;
   is_open: boolean;
+  guardians: GuardianOption[];
 }
 
 type Outcome = "returned_to_class" | "sent_home" | "referred" | "collected_by_guardian";
@@ -43,6 +47,41 @@ export function SickBaySection({
 
   const [checkInForm, setCheckInForm] = useState({ student_id: "", reason: "", symptoms: "", temperature_c: "" });
   const [checkOutForm, setCheckOutForm] = useState<{ outcome: Outcome; notes: string }>({ outcome: "returned_to_class", notes: "" });
+
+  const [notifyFor, setNotifyFor] = useState<SickBayVisitRow | null>(null);
+  const [notifyGuardianIds, setNotifyGuardianIds] = useState<string[]>([]);
+  const [notifyBody, setNotifyBody] = useState("");
+  const [notifySent, setNotifySent] = useState<number | null>(null);
+
+  function defaultAlertMessage(v: SickBayVisitRow) {
+    const base = `${v.student_name} visited the school sick bay today (${v.reason}).`;
+    if (v.check_out_at && v.outcome) {
+      return `${base} Outcome: ${v.outcome.replace(/_/g, " ")}.`;
+    }
+    return `${base} They are currently being looked after and we will update you further if needed.`;
+  }
+
+  function openNotify(v: SickBayVisitRow) {
+    setNotifyFor(v);
+    setNotifyGuardianIds(v.guardians.filter((g) => g.primary_contact).map((g) => g.id));
+    setNotifyBody(defaultAlertMessage(v));
+    setNotifySent(null);
+    setError(null);
+  }
+
+  async function submitNotify() {
+    if (!notifyFor) return;
+    setPending(true);
+    setError(null);
+    const result = await sendHealthAlertAction({
+      student_id: notifyFor.student_id,
+      guardian_user_ids: notifyGuardianIds,
+      body: notifyBody,
+    });
+    setPending(false);
+    if ("error" in result) return setError(result.error);
+    setNotifySent(result.sent);
+  }
 
   async function submitCheckIn() {
     setPending(true);
@@ -146,29 +185,34 @@ export function SickBaySection({
                 </td>
                 {canWrite && (
                   <td>
-                    {v.is_open &&
-                      (checkOutFor === v.id ? (
-                        <div className="flex items-center gap-1">
-                          <Select value={checkOutForm.outcome} onValueChange={(o: Outcome) => setCheckOutForm({ ...checkOutForm, outcome: o })}>
-                            <SelectTrigger className="h-8 w-40">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="returned_to_class">Returned to class</SelectItem>
-                              <SelectItem value="sent_home">Sent home</SelectItem>
-                              <SelectItem value="referred">Referred</SelectItem>
-                              <SelectItem value="collected_by_guardian">Collected by guardian</SelectItem>
-                            </SelectContent>
-                          </Select>
-                          <Button size="sm" onClick={() => submitCheckOut(v.id)} disabled={pending}>
-                            Confirm
+                    <div className="flex items-center gap-1">
+                      {v.is_open &&
+                        (checkOutFor === v.id ? (
+                          <div className="flex items-center gap-1">
+                            <Select value={checkOutForm.outcome} onValueChange={(o: Outcome) => setCheckOutForm({ ...checkOutForm, outcome: o })}>
+                              <SelectTrigger className="h-8 w-40">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="returned_to_class">Returned to class</SelectItem>
+                                <SelectItem value="sent_home">Sent home</SelectItem>
+                                <SelectItem value="referred">Referred</SelectItem>
+                                <SelectItem value="collected_by_guardian">Collected by guardian</SelectItem>
+                              </SelectContent>
+                            </Select>
+                            <Button size="sm" onClick={() => submitCheckOut(v.id)} disabled={pending}>
+                              Confirm
+                            </Button>
+                          </div>
+                        ) : (
+                          <Button size="sm" variant="ghost" onClick={() => setCheckOutFor(v.id)}>
+                            Check out
                           </Button>
-                        </div>
-                      ) : (
-                        <Button size="sm" variant="ghost" onClick={() => setCheckOutFor(v.id)}>
-                          Check out
-                        </Button>
-                      ))}
+                        ))}
+                      <Button size="sm" variant="ghost" onClick={() => openNotify(v)} disabled={v.guardians.length === 0}>
+                        Notify guardian
+                      </Button>
+                    </div>
                   </td>
                 )}
               </tr>
@@ -183,6 +227,52 @@ export function SickBaySection({
           </tbody>
         </table>
       </div>
+
+      <Dialog open={notifyFor !== null} onOpenChange={(open) => !open && setNotifyFor(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Notify guardian — {notifyFor?.student_name}</DialogTitle>
+          </DialogHeader>
+          {notifyFor && (
+            <div className="space-y-3">
+              <div className="space-y-1.5">
+                <Label className="label-eyebrow">Send to</Label>
+                {notifyFor.guardians.map((g) => (
+                  <label key={g.id} className="flex items-center gap-2 text-sm">
+                    <Checkbox
+                      checked={notifyGuardianIds.includes(g.id)}
+                      onCheckedChange={(checked) =>
+                        setNotifyGuardianIds((prev) => (checked ? [...prev, g.id] : prev.filter((id) => id !== g.id)))
+                      }
+                    />
+                    {g.name} ({g.relationship}{g.primary_contact ? ", primary contact" : ""})
+                  </label>
+                ))}
+              </div>
+              <div className="space-y-1.5">
+                <Label className="label-eyebrow">Message</Label>
+                <Textarea value={notifyBody} onChange={(e) => setNotifyBody(e.target.value)} rows={4} />
+              </div>
+              {notifySent !== null ? (
+                <p className="text-sm text-success">Sent to {notifySent} guardian{notifySent === 1 ? "" : "s"}.</p>
+              ) : (
+                error && <p className="text-sm text-danger">{error}</p>
+              )}
+            </div>
+          )}
+          <DialogFooter>
+            {notifySent !== null ? (
+              <Button variant="outline" onClick={() => setNotifyFor(null)}>
+                Close
+              </Button>
+            ) : (
+              <Button onClick={submitNotify} disabled={pending || notifyGuardianIds.length === 0 || !notifyBody.trim()}>
+                {pending ? "Sending…" : "Send"}
+              </Button>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

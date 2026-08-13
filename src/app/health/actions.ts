@@ -231,3 +231,37 @@ export async function adjustMedicalStock(
   revalidatePath("/health");
   return result;
 }
+
+// ---------- Guardian notification ----------
+
+// Queues via a health-scoped RPC (health.write, not communication.write -- see the migration
+// for why), then dispatches immediately through the same send-communication Edge Function
+// Communication itself uses -- no second delivery pipeline.
+export async function sendHealthAlertAction(input: {
+  student_id: string;
+  guardian_user_ids: string[];
+  body: string;
+}): Promise<{ error: string } | { success: true; sent: number }> {
+  const supabase = await createClient();
+
+  const { data: queuedCount, error: queueError } = await supabase.rpc("queue_health_alert", {
+    p_student_id: input.student_id,
+    p_guardian_user_ids: input.guardian_user_ids,
+    p_body: input.body,
+  });
+  if (queueError) return { error: queueError.message };
+  if (!queuedCount) return { error: "None of the selected guardians have a phone number on file." };
+
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  if (!session) return { error: "Not signed in." };
+
+  const { data, error } = await supabase.functions.invoke("send-communication", {
+    headers: { Authorization: `Bearer ${session.access_token}` },
+  });
+  if (error) return { error: error.message };
+
+  revalidatePath("/health");
+  return { success: true, sent: data.sent };
+}
