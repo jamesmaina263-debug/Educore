@@ -1,0 +1,14 @@
+-- Fix found while syncing before Phase 15 (6/6) Attendance: a 4th instance of the same
+-- "committed to repo, never applied to live DB" bug (see notes on Phase 14 and Phase 17 fixes
+-- earlier this session). supabase/migrations/20260813150000_rectify_payslip_standard_fields.sql
+-- was committed and payroll-section.tsx was already updated to expect its new columns, but
+-- allowances_breakdown/deductions_breakdown/kra_pin/nssf_number/shif_number/staff_number did not
+-- exist live -- this one was live-breaking, not just incomplete.
+--
+-- Applied that file's exact, unmodified content directly against Supabase in this session. See
+-- 20260813150000_rectify_payslip_standard_fields.sql for the full DDL, now identical to what
+-- runs live. Confirmed via information_schema that both new payroll_records columns now exist,
+-- and confirmed the security advisor shows no new warnings beyond the pre-existing, accepted
+-- "SECURITY DEFINER exposed to authenticated" pattern already present on every RPC in this
+-- codebase (each gates itself internally via auth_has_permission()).
+select 1;
