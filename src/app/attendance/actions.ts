@@ -52,7 +52,47 @@ export async function editAttendanceRecord(
 ): Promise<ActionResult> {
   if (!edit_reason.trim()) return { error: "A reason is required to edit an already-marked day." };
   const supabase = await createClient();
-  const { error } = await supabase.from("student_attendance").update({ status, edit_reason }).eq("id", id);
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  const { data: me } = await supabase.from("school_users").select("id").eq("auth_user_id", user?.id ?? "").maybeSingle();
+
+  // The correction itself takes effect immediately (unchanged behaviour) --
+  // but is now also flagged for after-the-fact review by an authority
+  // (attendance.approve_correction), giving oversight over every retroactive
+  // change to attendance history without blocking the class teacher's
+  // day-to-day ability to fix a mistake.
+  const { error } = await supabase
+    .from("student_attendance")
+    .update({
+      status,
+      edit_reason,
+      correction_status: "pending",
+      requested_status: status,
+      correction_reason: edit_reason,
+      requested_by: me?.id ?? null,
+    })
+    .eq("id", id);
+  if (error) return { error: error.message };
+  revalidatePath("/attendance");
+  return { success: true };
+}
+
+// ---------------------------------------------------------------------------
+// After-the-fact review of a correction already applied via editAttendanceRecord.
+// ---------------------------------------------------------------------------
+export async function reviewAttendanceCorrection(id: string, decision: "approved" | "rejected"): Promise<ActionResult> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  const { data: me } = await supabase.from("school_users").select("id").eq("auth_user_id", user?.id ?? "").maybeSingle();
+
+  const { error } = await supabase
+    .from("student_attendance")
+    .update({ correction_status: decision, reviewed_by: me?.id ?? null, reviewed_at: new Date().toISOString() })
+    .eq("id", id)
+    .eq("correction_status", "pending");
   if (error) return { error: error.message };
   revalidatePath("/attendance");
   return { success: true };

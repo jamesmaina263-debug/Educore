@@ -152,7 +152,15 @@ export function RegisterForm({
                     <td className="font-mono text-[0.75rem] text-muted-foreground">{r.admission_number}</td>
                     <td className="font-medium">{r.full_name}</td>
                     <td className="text-right" data-numeric>
-                      {r.term_attendance_rate === null ? "—" : `${r.term_attendance_rate}%`}
+                      {r.term_attendance_rate === null ? (
+                        "—"
+                      ) : r.term_attendance_rate < 80 ? (
+                        <StatusBadge tone="danger" label={`${r.term_attendance_rate}%`} />
+                      ) : r.term_attendance_rate < 90 ? (
+                        <StatusBadge tone="warning" label={`${r.term_attendance_rate}%`} />
+                      ) : (
+                        `${r.term_attendance_rate}%`
+                      )}
                     </td>
                     <td>
                       <div

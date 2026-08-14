@@ -4,6 +4,7 @@ import { logout } from "@/app/login/actions";
 import { AppShell } from "@/components/app-shell/app-shell";
 import { RegisterForm, type RosterRow } from "@/components/attendance/register-form";
 import { StreamPicker } from "@/components/attendance/stream-picker";
+import { PendingCorrectionsPanel, type PendingCorrectionRow } from "@/components/attendance/pending-corrections-panel";
 
 function todayISO() {
   return new Date().toISOString().slice(0, 10);
@@ -32,7 +33,7 @@ export default async function AttendancePage({
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const [{ data: schoolUser }, { data: canMarkAny }, { data: canMark }] = await Promise.all([
+  const [{ data: schoolUser }, { data: canMarkAny }, { data: canMark }, { data: canApproveCorrection }] = await Promise.all([
     supabase
       .from("school_users")
       .select("id, full_name, roles(display_name), schools(name)")
@@ -40,6 +41,7 @@ export default async function AttendancePage({
       .maybeSingle(),
     supabase.rpc("auth_has_permission", { p_permission_key: "attendance.mark_any" }),
     supabase.rpc("auth_has_permission", { p_permission_key: "attendance.mark" }),
+    supabase.rpc("auth_has_permission", { p_permission_key: "attendance.approve_correction" }),
   ]);
 
   const roleName = (schoolUser?.roles as unknown as { display_name: string } | null)?.display_name;
@@ -132,6 +134,27 @@ export default async function AttendancePage({
           ? "Fully submitted"
           : `Partially submitted (${submittedCount} of ${roster.length})`;
 
+  let pendingCorrections: PendingCorrectionRow[] = [];
+  if (canApproveCorrection) {
+    const { data: correctionRows } = await supabase
+      .from("student_attendance")
+      .select("id, attendance_date, requested_status, correction_reason, students(first_name, last_name), school_users!student_attendance_requested_by_fkey(full_name)")
+      .eq("correction_status", "pending")
+      .order("attendance_date", { ascending: false })
+      .limit(50);
+    pendingCorrections = (correctionRows ?? []).map((c) => {
+      const st = c.students as unknown as { first_name: string; last_name: string } | null;
+      return {
+        id: c.id,
+        student_name: st ? `${st.first_name} ${st.last_name}` : "Unknown",
+        attendance_date: c.attendance_date,
+        requested_status: c.requested_status ?? "—",
+        correction_reason: c.correction_reason ?? "",
+        requested_by_name: (c.school_users as unknown as { full_name: string } | null)?.full_name ?? null,
+      };
+    });
+  }
+
   return (
     <AppShell
       breadcrumbs={[
@@ -164,6 +187,8 @@ export default async function AttendancePage({
         ) : (
           <RegisterForm streamId={selectedStreamId} attendanceDate={attendanceDate} roster={roster} canMark={!!canMark} />
         )}
+
+        {canApproveCorrection && <PendingCorrectionsPanel corrections={pendingCorrections} />}
       </div>
     </AppShell>
   );
