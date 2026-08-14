@@ -9,7 +9,7 @@ import { SickBaySection, type SickBayVisitRow } from "@/components/health/sick-b
 import { MedicationSection, type MedicationRow, type MedicalInventoryOption } from "@/components/health/medication-section";
 import { ReferralsSection, type ReferralRow } from "@/components/health/referrals-section";
 import { EmergenciesSection, type EmergencyRow } from "@/components/health/emergencies-section";
-import { InventorySection, type MedicalItemRow } from "@/components/health/inventory-section";
+import { InventorySection, type MedicalItemRow, type PendingTransferRow } from "@/components/health/inventory-section";
 import { ReportsSection, type HealthReportsData } from "@/components/health/reports-section";
 import type { StudentOption, GuardianOption } from "@/components/health/student-picker";
 
@@ -96,13 +96,32 @@ export default async function HealthPage({ searchParams }: { searchParams: Promi
   const { data: medicalItemRows } = medicalCategory
     ? await supabase
         .from("inventory_items")
-        .select("id, name, unit, quantity, reorder_level, expiry_date")
+        .select("id, name, unit, reorder_level, expiry_date, health_inventory_stock(quantity)")
         .eq("category_id", medicalCategory.id)
         .order("name")
     : { data: [] };
 
-  const medicalItems: MedicalItemRow[] = medicalItemRows ?? [];
+  const medicalItems: MedicalItemRow[] = (medicalItemRows ?? []).map((i) => {
+    const stock = i.health_inventory_stock as unknown as { quantity: number }[] | { quantity: number } | null;
+    const quantity = Array.isArray(stock) ? (stock[0]?.quantity ?? 0) : (stock?.quantity ?? 0);
+    return { id: i.id, name: i.name, unit: i.unit, quantity, reorder_level: i.reorder_level, expiry_date: i.expiry_date };
+  });
   const inventoryOptions: MedicalInventoryOption[] = medicalItems.filter((i) => i.quantity > 0).map((i) => ({ id: i.id, name: i.name, quantity: i.quantity }));
+
+  const { data: pendingTransferRows } = medicalCategory
+    ? await supabase
+        .from("inventory_transfers")
+        .select("id, item_id, quantity_requested, initiated_at, inventory_items(name, unit, category_id)")
+        .eq("status", "pending")
+        .order("initiated_at", { ascending: true })
+    : { data: [] };
+
+  const pendingTransfers: PendingTransferRow[] = (pendingTransferRows ?? [])
+    .filter((t) => (t.inventory_items as unknown as { category_id: string } | null)?.category_id === medicalCategory?.id)
+    .map((t) => {
+      const item = t.inventory_items as unknown as { name: string; unit: string } | null;
+      return { id: t.id, item_name: item?.name ?? "Unknown", unit: item?.unit ?? "", quantity_requested: t.quantity_requested, initiated_at: t.initiated_at };
+    });
 
   const sickBayTableRows: SickBayVisitRow[] = (sickBayRows ?? []).map((v) => ({
     id: v.id,
@@ -252,7 +271,7 @@ export default async function HealthPage({ searchParams }: { searchParams: Promi
             <EmergenciesSection emergencies={emergencyTableRows} studentOptions={studentOptions} canWrite={canWrite} />
           </TabsContent>
           <TabsContent value="inventory">
-            <InventorySection items={medicalItems} medicalCategoryId={medicalCategory?.id ?? null} canWrite={canWrite} />
+            <InventorySection items={medicalItems} medicalCategoryId={medicalCategory?.id ?? null} pendingTransfers={pendingTransfers} canWrite={canWrite} />
           </TabsContent>
           <TabsContent value="reports">
             <ReportsSection data={reportsData} />

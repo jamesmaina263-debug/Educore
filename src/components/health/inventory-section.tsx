@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { addMedicalInventoryItem, adjustMedicalStock } from "@/app/health/actions";
+import { addMedicalInventoryItem, issueMedicalStock, acceptTransferAction, rejectTransferAction } from "@/app/health/actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { StatusBadge } from "@/components/status-badge";
@@ -17,13 +17,23 @@ export interface MedicalItemRow {
   expiry_date: string | null;
 }
 
+export interface PendingTransferRow {
+  id: string;
+  item_name: string;
+  unit: string;
+  quantity_requested: number;
+  initiated_at: string;
+}
+
 export function InventorySection({
   items,
   medicalCategoryId,
+  pendingTransfers,
   canWrite,
 }: {
   items: MedicalItemRow[];
   medicalCategoryId: string | null;
+  pendingTransfers: PendingTransferRow[];
   canWrite: boolean;
 }) {
   const router = useRouter();
@@ -33,6 +43,10 @@ export function InventorySection({
   const [adjustingId, setAdjustingId] = useState<string | null>(null);
   const [adjustQty, setAdjustQty] = useState("");
   const [form, setForm] = useState({ name: "", unit: "pieces", reorder_level: "", expiry_date: "" });
+  const [decidingId, setDecidingId] = useState<string | null>(null);
+  const [confirmQty, setConfirmQty] = useState("");
+  const [rejectReason, setRejectReason] = useState("");
+  const [rejectingId, setRejectingId] = useState<string | null>(null);
 
   const today = new Date().toISOString().slice(0, 10);
   const thirtyDaysOut = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
@@ -58,11 +72,11 @@ export function InventorySection({
     router.refresh();
   }
 
-  async function adjust(itemId: string, direction: "in" | "out") {
+  async function issue(itemId: string) {
     const qty = Number(adjustQty);
     if (!qty || qty <= 0) return;
     setPending(true);
-    const result = await adjustMedicalStock(itemId, direction, qty);
+    const result = await issueMedicalStock(itemId, qty);
     setPending(false);
     if ("error" in result) {
       setError(result.error);
@@ -73,15 +87,115 @@ export function InventorySection({
     router.refresh();
   }
 
+  async function accept(transferId: string) {
+    const qty = Number(confirmQty);
+    if (!qty || qty <= 0) return;
+    setPending(true);
+    setError(null);
+    const result = await acceptTransferAction(transferId, qty);
+    setPending(false);
+    if ("error" in result) return setError(result.error);
+    setDecidingId(null);
+    setConfirmQty("");
+    router.refresh();
+  }
+
+  async function reject(transferId: string) {
+    if (!rejectReason.trim()) return;
+    setPending(true);
+    setError(null);
+    const result = await rejectTransferAction(transferId, rejectReason);
+    setPending(false);
+    if ("error" in result) return setError(result.error);
+    setRejectingId(null);
+    setRejectReason("");
+    router.refresh();
+  }
+
   return (
     <div className="flex flex-col gap-4">
       <p className="text-sm text-muted-foreground">
-        Managed through the shared Inventory module, filtered to the &ldquo;Medical Supplies&rdquo; category — full stock history is on the{" "}
+        Your own stock, separate from Main Store — it only grows when you accept a transfer
+        below. Full stock history (including Main Store&apos;s own) is on the{" "}
         <a href="/inventory" className="underline">
           Inventory
         </a>{" "}
         page.
       </p>
+
+      {canWrite && pendingTransfers.length > 0 && (
+        <div className="panel">
+          <header className="flex items-center justify-between border-b border-border px-4 py-2.5">
+            <p className="text-sm font-medium">Incoming transfers</p>
+            <span className="text-[0.6875rem] text-muted-foreground">
+              {pendingTransfers.length} pending
+            </span>
+          </header>
+          <div className="divide-y divide-border">
+            {pendingTransfers.map((t) => (
+              <div key={t.id} className="flex flex-wrap items-center justify-between gap-2 px-4 py-3">
+                <div>
+                  <p className="text-sm font-medium">
+                    {t.item_name} — {t.quantity_requested} {t.unit} requested
+                  </p>
+                  <p className="text-xs text-muted-foreground">Sent {new Date(t.initiated_at).toLocaleDateString()}</p>
+                </div>
+                {decidingId === t.id ? (
+                  <div className="flex items-center gap-1">
+                    <Input
+                      className="h-8 w-20"
+                      type="number"
+                      min={1}
+                      placeholder="Qty received"
+                      value={confirmQty}
+                      onChange={(e) => setConfirmQty(e.target.value)}
+                    />
+                    <Button size="sm" onClick={() => accept(t.id)} disabled={pending}>
+                      Confirm
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={() => setDecidingId(null)}>
+                      Cancel
+                    </Button>
+                  </div>
+                ) : rejectingId === t.id ? (
+                  <div className="flex items-center gap-1">
+                    <Input
+                      className="h-8 w-40"
+                      placeholder="Reason"
+                      value={rejectReason}
+                      onChange={(e) => setRejectReason(e.target.value)}
+                    />
+                    <Button size="sm" variant="destructive" onClick={() => reject(t.id)} disabled={pending}>
+                      Confirm reject
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={() => setRejectingId(null)}>
+                      Cancel
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-1">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        setDecidingId(t.id);
+                        setConfirmQty(String(t.quantity_requested));
+                      }}
+                    >
+                      Accept
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={() => setRejectingId(t.id)}>
+                      Reject
+                    </Button>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {error && <p className="text-sm text-danger">{error}</p>}
 
       {canWrite && (
         <Dialog open={open} onOpenChange={setOpen}>
@@ -146,16 +260,13 @@ export function InventorySection({
                       {adjustingId === i.id ? (
                         <div className="flex items-center gap-1">
                           <Input className="h-8 w-16" type="number" min={1} value={adjustQty} onChange={(e) => setAdjustQty(e.target.value)} />
-                          <Button size="sm" variant="outline" onClick={() => adjust(i.id, "in")} disabled={pending}>
-                            +In
-                          </Button>
-                          <Button size="sm" variant="outline" onClick={() => adjust(i.id, "out")} disabled={pending}>
-                            -Out
+                          <Button size="sm" variant="outline" onClick={() => issue(i.id)} disabled={pending}>
+                            Issue
                           </Button>
                         </div>
                       ) : (
                         <Button size="sm" variant="ghost" onClick={() => setAdjustingId(i.id)}>
-                          Adjust stock
+                          Issue stock
                         </Button>
                       )}
                     </td>

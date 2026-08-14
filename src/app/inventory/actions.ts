@@ -67,6 +67,21 @@ export async function recordStockMovementAction(input: {
   return { success: true };
 }
 
+// ---------------------------------------------------------------------------
+// Health transfers -- Main Store initiates, the Nurse accepts/rejects (see
+// src/app/health/actions.ts for the other side of this). Stock only moves on accept.
+// ---------------------------------------------------------------------------
+export async function createTransferAction(input: { item_id: string; quantity: number }): Promise<ActionResult> {
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("create_inventory_transfer", {
+    p_item_id: input.item_id,
+    p_quantity: input.quantity,
+  });
+  if (error) return { error: error.message };
+  revalidatePath("/inventory");
+  return { success: true };
+}
+
 async function currentSchoolUser() {
   const supabase = await createClient();
   const {

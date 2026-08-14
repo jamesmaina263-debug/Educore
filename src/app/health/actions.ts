@@ -2,7 +2,6 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import { createInventoryItemAction, recordStockMovementAction } from "@/app/inventory/actions";
 
 type ActionResult = { error: string } | { success: true };
 
@@ -80,17 +79,15 @@ export async function administerMedication(input: {
   const me = await currentActor(supabase);
   if (!me) return { error: "Could not resolve your account." };
 
-  // If drawn from tracked medical inventory, deduct stock through the
-  // existing Inventory stock-movement path rather than a parallel one —
-  // this also gets us the audit trail in inventory_stock_movements for free.
+  // If drawn from tracked medical inventory, deduct from the Nurse's own stock pool (never
+  // Main Store's directly -- she only ever draws from what's already been transferred to her).
   if (input.inventory_item_id) {
-    const stockResult = await recordStockMovementAction({
-      item_id: input.inventory_item_id,
-      movement_type: "out",
-      quantity: 1,
-      reason: `Administered to student — ${input.medication_name}`,
+    const { error: stockError } = await supabase.rpc("issue_health_stock", {
+      p_item_id: input.inventory_item_id,
+      p_quantity: 1,
+      p_reason: `Administered to student — ${input.medication_name}`,
     });
-    if ("error" in stockResult) return { error: `Stock deduction failed: ${stockResult.error}` };
+    if (stockError) return { error: `Stock deduction failed: ${stockError.message}` };
   }
 
   const { error } = await supabase.from("medication_administrations").insert({
@@ -185,7 +182,9 @@ export async function logEmergency(input: {
   return { success: true };
 }
 
-// ---------- Medical inventory (thin wrapper over the existing Inventory module) ----------
+// ---------- Medical inventory ----------
+// Uses the Nurse-scoped RPCs (inventory.health.issue), not the shared Main Store path
+// (inventory.write, which the Nurse no longer holds -- see the migration).
 
 export async function addMedicalInventoryItem(input: {
   name: string;
@@ -194,42 +193,55 @@ export async function addMedicalInventoryItem(input: {
   expiry_date?: string;
   medicalCategoryId: string;
 }): Promise<ActionResult> {
-  const result = await createInventoryItemAction({
-    name: input.name,
-    unit: input.unit,
-    reorder_level: input.reorder_level,
-    category_id: input.medicalCategoryId,
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("create_health_inventory_item", {
+    p_name: input.name,
+    p_unit: input.unit,
+    p_reorder_level: input.reorder_level ?? null,
+    p_expiry_date: input.expiry_date ?? null,
+    p_category_id: input.medicalCategoryId,
   });
-  if ("error" in result) return result;
-
-  // createInventoryItemAction doesn't take expiry_date (not all inventory
-  // needs it) — set it directly here for the medical item just created.
-  if (input.expiry_date) {
-    const supabase = await createClient();
-    const me = await currentActor(supabase);
-    if (me) {
-      await supabase
-        .from("inventory_items")
-        .update({ expiry_date: input.expiry_date })
-        .eq("school_id", me.school_id)
-        .eq("category_id", input.medicalCategoryId)
-        .eq("name", input.name)
-        .is("expiry_date", null);
-    }
-  }
+  if (error) return { error: error.message };
   revalidatePath("/health");
   return { success: true };
 }
 
-export async function adjustMedicalStock(
-  itemId: string,
-  movementType: "in" | "out",
-  quantity: number,
-  reason?: string,
-): Promise<ActionResult> {
-  const result = await recordStockMovementAction({ item_id: itemId, movement_type: movementType, quantity, reason });
+// "in" is deliberately not supported here -- the Nurse's stock can only grow via an accepted
+// transfer from Main Store (acceptTransferAction below), never a direct addition.
+export async function issueMedicalStock(itemId: string, quantity: number, reason?: string): Promise<ActionResult> {
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("issue_health_stock", {
+    p_item_id: itemId,
+    p_quantity: quantity,
+    p_reason: reason || null,
+  });
+  if (error) return { error: error.message };
   revalidatePath("/health");
-  return result;
+  return { success: true };
+}
+
+export async function acceptTransferAction(transferId: string, quantityConfirmed: number): Promise<ActionResult> {
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("accept_inventory_transfer", {
+    p_transfer_id: transferId,
+    p_quantity_confirmed: quantityConfirmed,
+  });
+  if (error) return { error: error.message };
+  revalidatePath("/health");
+  revalidatePath("/inventory");
+  return { success: true };
+}
+
+export async function rejectTransferAction(transferId: string, reason: string): Promise<ActionResult> {
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("reject_inventory_transfer", {
+    p_transfer_id: transferId,
+    p_reason: reason,
+  });
+  if (error) return { error: error.message };
+  revalidatePath("/health");
+  revalidatePath("/inventory");
+  return { success: true };
 }
 
 // ---------- Guardian notification ----------

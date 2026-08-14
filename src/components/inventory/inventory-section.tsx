@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { StatusBadge } from "@/components/status-badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
-import { createInventoryItemAction, createCategoryAction, recordStockMovementAction } from "@/app/inventory/actions";
+import { createInventoryItemAction, createCategoryAction, recordStockMovementAction, createTransferAction } from "@/app/inventory/actions";
 
 export interface ItemRow {
   id: string;
@@ -35,15 +35,30 @@ export interface MovementRow {
   actor_name: string | null;
 }
 
+export interface TransferRow {
+  id: string;
+  item_name: string;
+  unit: string;
+  quantity_requested: number;
+  quantity_confirmed: number | null;
+  status: "pending" | "accepted" | "rejected";
+  initiated_at: string;
+  accepted_at: string | null;
+  rejected_at: string | null;
+  rejection_reason: string | null;
+}
+
 export function InventorySection({
   items,
   categories,
   movements,
+  transfers,
   canWrite,
 }: {
   items: ItemRow[];
   categories: CategoryOption[];
   movements: MovementRow[];
+  transfers: TransferRow[];
   canWrite: boolean;
 }) {
   const router = useRouter();
@@ -65,6 +80,10 @@ export function InventorySection({
   const [moveType, setMoveType] = useState<"in" | "out">("in");
   const [moveQuantity, setMoveQuantity] = useState("");
   const [moveReason, setMoveReason] = useState("");
+
+  const [transferOpen, setTransferOpen] = useState(false);
+  const [transferItemId, setTransferItemId] = useState("");
+  const [transferQuantity, setTransferQuantity] = useState("");
 
   async function handleCreateItem() {
     setPending(true);
@@ -113,6 +132,18 @@ export function InventorySection({
     setMoveItemId("");
     setMoveQuantity("");
     setMoveReason("");
+    router.refresh();
+  }
+
+  async function handleCreateTransfer() {
+    setPending(true);
+    setError(null);
+    const result = await createTransferAction({ item_id: transferItemId, quantity: Number(transferQuantity) });
+    setPending(false);
+    if ("error" in result) return setError(result.error);
+    setTransferOpen(false);
+    setTransferItemId("");
+    setTransferQuantity("");
     router.refresh();
   }
 
@@ -254,6 +285,48 @@ export function InventorySection({
               </DialogFooter>
             </DialogContent>
           </Dialog>
+
+          <Dialog open={transferOpen} onOpenChange={setTransferOpen}>
+            <DialogTrigger asChild>
+              <Button size="sm" variant="outline">
+                Transfer to Health
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Transfer stock to Health</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-3">
+                <div className="space-y-1.5">
+                  <Label>Item</Label>
+                  <Select value={transferItemId} onValueChange={setTransferItemId}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select item" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {items.map((i) => (
+                        <SelectItem key={i.id} value={i.id}>
+                          {i.name} ({i.quantity} {i.unit} in stock)
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Quantity</Label>
+                  <Input type="number" min={1} value={transferQuantity} onChange={(e) => setTransferQuantity(e.target.value)} />
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  This doesn&apos;t move stock yet — the Nurse confirms what she physically received before it leaves Main Store&apos;s count.
+                </p>
+              </div>
+              <DialogFooter>
+                <Button onClick={handleCreateTransfer} disabled={pending || !transferItemId || !transferQuantity}>
+                  {pending ? "Sending…" : "Send transfer"}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </div>
       )}
 
@@ -334,6 +407,50 @@ export function InventorySection({
                     <td data-numeric>{m.quantity}</td>
                     <td className="text-muted-foreground">{m.reason ?? "—"}</td>
                     <td className="text-muted-foreground">{m.actor_name ?? "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      <div className="panel">
+        <header className="flex items-center justify-between border-b border-border px-4 py-2.5">
+          <h2 className="text-[0.8125rem] font-semibold">Transfers to Health</h2>
+          <span className="text-[0.6875rem] text-muted-foreground">
+            {transfers.length} transfer{transfers.length === 1 ? "" : "s"}
+          </span>
+        </header>
+        {transfers.length === 0 ? (
+          <p className="p-10 text-center text-sm text-muted-foreground">No transfers to Health yet.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="table-dense w-full">
+              <thead className="bg-muted/70">
+                <tr>
+                  <th>Item</th>
+                  <th>Requested</th>
+                  <th>Confirmed</th>
+                  <th>Status</th>
+                  <th>Sent</th>
+                </tr>
+              </thead>
+              <tbody>
+                {transfers.map((t) => (
+                  <tr key={t.id}>
+                    <td className="font-medium">{t.item_name}</td>
+                    <td data-numeric>
+                      {t.quantity_requested} {t.unit}
+                    </td>
+                    <td data-numeric>{t.quantity_confirmed !== null ? `${t.quantity_confirmed} ${t.unit}` : "—"}</td>
+                    <td>
+                      <StatusBadge
+                        tone={t.status === "accepted" ? "success" : t.status === "rejected" ? "danger" : "neutral"}
+                        label={t.status === "rejected" && t.rejection_reason ? `Rejected: ${t.rejection_reason}` : t.status}
+                      />
+                    </td>
+                    <td className="text-muted-foreground">{new Date(t.initiated_at).toLocaleDateString()}</td>
                   </tr>
                 ))}
               </tbody>

@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { logout } from "@/app/login/actions";
 import { AppShell } from "@/components/app-shell/app-shell";
-import { InventorySection, type ItemRow, type MovementRow, type CategoryOption } from "@/components/inventory/inventory-section";
+import { InventorySection, type ItemRow, type MovementRow, type CategoryOption, type TransferRow } from "@/components/inventory/inventory-section";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
   AssetsPanel,
@@ -57,6 +57,7 @@ export default async function InventoryPage() {
     { data: requisitionRows },
     { data: poRows },
     { data: invoiceRows },
+    { data: transferRows },
   ] = await Promise.all([
     supabase.from("inventory_items").select("*, inventory_categories(name)").order("name"),
     supabase.from("inventory_categories").select("*").order("name"),
@@ -83,6 +84,11 @@ export default async function InventoryPage() {
       .from("supplier_invoices")
       .select("id, invoice_number, invoice_date, amount, status, suppliers(name)")
       .order("invoice_date", { ascending: false }),
+    supabase
+      .from("inventory_transfers")
+      .select("id, item_id, quantity_requested, quantity_confirmed, status, initiated_at, accepted_at, rejected_at, rejection_reason, inventory_items(name, unit)")
+      .order("initiated_at", { ascending: false })
+      .limit(50),
   ]);
 
   const items: ItemRow[] = (itemRows ?? []).map((i) => ({
@@ -162,6 +168,22 @@ export default async function InventoryPage() {
     supplier_name: (inv.suppliers as unknown as { name: string } | null)?.name ?? "Unknown",
   }));
 
+  const transfers: TransferRow[] = (transferRows ?? []).map((t) => {
+    const item = t.inventory_items as unknown as { name: string; unit: string } | null;
+    return {
+      id: t.id,
+      item_name: item?.name ?? "Unknown",
+      unit: item?.unit ?? "",
+      quantity_requested: t.quantity_requested,
+      quantity_confirmed: t.quantity_confirmed,
+      status: t.status as "pending" | "accepted" | "rejected",
+      initiated_at: t.initiated_at,
+      accepted_at: t.accepted_at,
+      rejected_at: t.rejected_at,
+      rejection_reason: t.rejection_reason,
+    };
+  });
+
   return (
     <AppShell
       breadcrumbs={[{ label: schoolName ?? "EduCore", href: "/dashboard" }, { label: "Inventory & Procurement" }]}
@@ -183,7 +205,7 @@ export default async function InventoryPage() {
             <TabsTrigger value="invoices">Supplier Invoices</TabsTrigger>
           </TabsList>
           <TabsContent value="stock">
-            <InventorySection items={items} categories={categories} movements={movements} canWrite={canWrite === true} />
+            <InventorySection items={items} categories={categories} movements={movements} transfers={transfers} canWrite={canWrite === true} />
           </TabsContent>
           <TabsContent value="assets">
             <AssetsPanel assets={assets} maintenance={maintenance} canWrite={canWrite === true} />
