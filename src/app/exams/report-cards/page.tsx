@@ -4,6 +4,7 @@ import { logout } from "@/app/login/actions";
 import { AppShell } from "@/components/app-shell/app-shell";
 import { ReportCardPicker } from "@/components/exams/report-card-picker";
 import { ReportCardList, type ReportCardRow } from "@/components/exams/report-card-list";
+import { TableExportMenu } from "@/components/shared/table-export-menu";
 
 export default async function ReportCardsPage({
   searchParams,
@@ -93,6 +94,22 @@ export default async function ReportCardsPage({
     });
   }
 
+  // Union of subjects across the class, alphabetical, so every student's row has the same
+  // columns in the same order regardless of which subjects they individually have marks for.
+  const subjectNames = Array.from(new Set(rows.flatMap((r) => r.marks.map((m) => m.subject_name)))).sort();
+  const markSheetRows = rows.map((r) => {
+    const scoreBySubject = new Map(r.marks.map((m) => [m.subject_name, m.raw_score]));
+    const row: Record<string, string | number> = { Student: r.full_name };
+    for (const subject of subjectNames) {
+      row[subject] = scoreBySubject.get(subject) ?? "";
+    }
+    row["Average"] = r.average_score ?? "";
+    row["Rank"] = r.rank_in_stream ?? "";
+    return row;
+  });
+  const selectedClassName = classOptions.find((c) => c.id === selectedClassId)?.name ?? "";
+  const selectedExamName = examOptions.find((e) => e.id === selectedExamId)?.name ?? "";
+
   return (
     <AppShell
       breadcrumbs={[{ label: schoolName ?? "EduCore", href: "/dashboard" }, { label: "Exams", href: "/exams" }, { label: "Report Cards" }]}
@@ -106,14 +123,24 @@ export default async function ReportCardsPage({
             <h1 className="text-lg font-semibold">Report Cards</h1>
             <p className="text-sm text-muted-foreground">Generated from closed exams only</p>
           </div>
-          {examOptions.length > 0 && (
-            <ReportCardPicker
-              examOptions={examOptions}
-              classOptions={classOptions}
-              selectedExamId={selectedExamId}
-              selectedClassId={selectedClassId}
-            />
-          )}
+          <div className="flex items-center gap-2">
+            {rows.length > 0 && (
+              <TableExportMenu
+                filenameStub={`${schoolName ?? "educore"}-${selectedClassName}-mark-sheet`}
+                title="Class Mark Sheet"
+                subtitle={[schoolName, selectedExamName, selectedClassName].filter(Boolean).join(" · ")}
+                rows={markSheetRows}
+              />
+            )}
+            {examOptions.length > 0 && (
+              <ReportCardPicker
+                examOptions={examOptions}
+                classOptions={classOptions}
+                selectedExamId={selectedExamId}
+                selectedClassId={selectedClassId}
+              />
+            )}
+          </div>
         </div>
 
         {examOptions.length === 0 ? (

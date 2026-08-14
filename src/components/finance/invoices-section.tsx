@@ -10,6 +10,7 @@ import { StatusBadge } from "@/components/status-badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from "@/components/ui/dropdown-menu";
+import { TableExportMenu } from "@/components/shared/table-export-menu";
 import { recordPaymentAction } from "@/app/finance/actions";
 
 export interface InvoiceListRow {
@@ -31,7 +32,15 @@ function invoiceTone(status: InvoiceListRow["status"]) {
   return status === "paid" ? "success" : status === "partially_paid" ? "warning" : "neutral";
 }
 
-export function InvoicesSection({ invoices, canWrite }: { invoices: InvoiceListRow[]; canWrite: boolean }) {
+export function InvoicesSection({
+  invoices,
+  canWrite,
+  schoolName,
+}: {
+  invoices: InvoiceListRow[];
+  canWrite: boolean;
+  schoolName: string;
+}) {
   const router = useRouter();
   const [target, setTarget] = useState<InvoiceListRow | null>(null);
   const [pending, setPending] = useState(false);
@@ -73,10 +82,27 @@ export function InvoicesSection({ invoices, canWrite }: { invoices: InvoiceListR
     <>
       <div className="panel">
         <header className="flex items-center justify-between border-b border-border px-4 py-2.5">
-          <h2 className="text-[0.8125rem] font-semibold">Invoice register</h2>
-          <span className="text-[0.6875rem] text-muted-foreground">
-            {invoices.length} invoice{invoices.length === 1 ? "" : "s"}
-          </span>
+          <div className="flex items-center gap-3">
+            <h2 className="text-[0.8125rem] font-semibold">Invoice register</h2>
+            <span className="text-[0.6875rem] text-muted-foreground">
+              {invoices.length} invoice{invoices.length === 1 ? "" : "s"}
+            </span>
+          </div>
+          <TableExportMenu
+            filenameStub={`${schoolName}-invoice-register`}
+            title="Invoice Register"
+            subtitle={schoolName}
+            rows={invoices.map((inv) => ({
+              Reference: invoiceRef(inv.id),
+              Student: inv.student_name,
+              Class: inv.class_name,
+              Issued: inv.created_at,
+              "Amount (KES)": inv.total_amount,
+              "Paid (KES)": inv.paid,
+              "Balance (KES)": inv.total_amount - inv.paid - inv.discounted,
+              Status: inv.status,
+            }))}
+          />
         </header>
         <div className="overflow-x-auto">
           <table className="table-dense w-full">

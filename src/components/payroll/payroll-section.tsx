@@ -10,6 +10,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { generatePayrollAction, approvePayrollAction, markPayrollPaidAction, saveSalaryStructureAction, updateStaffStatutoryNumbersAction } from "@/app/payroll/actions";
+import { TableExportMenu } from "@/components/shared/table-export-menu";
 
 const MONTHS = [
   "January", "February", "March", "April", "May", "June",
@@ -378,7 +379,26 @@ export function PayrollSection({
                   {records.length} payslip{records.length === 1 ? "" : "s"}
                 </span>
               </div>
-              {canGenerate && (
+              <div className="flex items-center gap-2">
+                <TableExportMenu
+                  filenameStub={`${schoolName}-payroll-register`}
+                  title="Payroll Register"
+                  subtitle={schoolName}
+                  rows={records.map((r) => ({
+                    "Staff": r.staff_name,
+                    "Staff No.": r.staff_number ?? "",
+                    Period: `${MONTHS[r.period_month - 1]} ${r.period_year}`,
+                    "Gross Salary": r.gross_salary,
+                    NSSF: r.nssf_employee,
+                    SHIF: r.shif,
+                    "Housing Levy": r.ahl,
+                    PAYE: r.paye,
+                    "Other Deductions": r.other_deductions,
+                    "Net Pay": r.net_pay,
+                    Status: r.status,
+                  }))}
+                />
+                {canGenerate && (
                 <Dialog open={open} onOpenChange={setOpen}>
                   <DialogTrigger asChild>
                     <Button size="sm" variant="outline">
@@ -466,7 +486,8 @@ export function PayrollSection({
                     </DialogFooter>
                   </DialogContent>
                 </Dialog>
-              )}
+                )}
+              </div>
             </header>
 
             {records.length === 0 ? (

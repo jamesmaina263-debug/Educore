@@ -320,7 +320,7 @@ export default async function FinancePage() {
           </TabsContent>
 
           <TabsContent value="invoices">
-            <InvoicesSection invoices={invoiceRows} canWrite={canWrite === true} />
+            <InvoicesSection invoices={invoiceRows} canWrite={canWrite === true} schoolName={school?.name ?? "EduCore"} />
           </TabsContent>
 
           <TabsContent value="payments">
