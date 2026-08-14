@@ -468,7 +468,7 @@ export default async function DashboardPage() {
             </p>
           </div>
           {canRecordPayment && (
-            <Link href="/finance">
+            <Link href="/finance/payments">
               <Button size="sm">
                 <Plus className="size-4" aria-hidden /> Record payment
               </Button>
@@ -624,7 +624,7 @@ export default async function DashboardPage() {
             </Link>
           )}
           {canSeeFinance && (
-            <Link href="/finance" className="panel-interactive flex items-center gap-3 px-4 py-3">
+            <Link href="/finance/student-accounts" className="panel-interactive flex items-center gap-3 px-4 py-3">
               <span className="grid size-8 place-items-center rounded-md bg-primary-subtle text-primary">
                 <Wallet className="size-4" aria-hidden />
               </span>

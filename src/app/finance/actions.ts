@@ -49,7 +49,7 @@ export async function createFeeStructure(input: {
   } catch (e) {
     return { error: e instanceof Error ? e.message : "Could not create the fee structure." };
   }
-  revalidatePath("/finance");
+  revalidatePath("/finance", "layout");
   return { success: true };
 }
 
@@ -57,7 +57,7 @@ export async function generateInvoicesAction(termId: string, classId: string | n
   const supabase = await createClient();
   const { data, error } = await supabase.rpc("generate_invoices", { p_term_id: termId, p_class_id: classId });
   if (error) return { error: error.message };
-  revalidatePath("/finance");
+  revalidatePath("/finance", "layout");
   return { success: true, count: data as number };
 }
 
@@ -68,7 +68,7 @@ export async function createInvoiceForStudentAction(studentId: string, termId: s
   const supabase = await createClient();
   const { error } = await supabase.rpc("create_or_get_invoice_for_student", { p_student_id: studentId, p_term_id: termId });
   if (error) return { error: error.message };
-  revalidatePath("/finance");
+  revalidatePath("/finance", "layout");
   return { success: true };
 }
 
@@ -100,7 +100,7 @@ export async function recordPaymentAction(input: {
     p_notes: input.notes ?? null,
   });
   if (error) return { error: error.message };
-  revalidatePath("/finance");
+  revalidatePath("/finance", "layout");
   return { success: true };
 }
 
@@ -124,7 +124,7 @@ export async function recordUnallocatedPaymentAction(input: {
     p_notes: input.notes ?? null,
   });
   if (error) return { error: error.message };
-  revalidatePath("/finance");
+  revalidatePath("/finance", "layout");
   return { success: true };
 }
 
@@ -140,7 +140,7 @@ export async function allocateUnallocatedPaymentAction(input: {
     p_allocations: input.allocations ?? null,
   });
   if (error) return { error: error.message };
-  revalidatePath("/finance");
+  revalidatePath("/finance", "layout");
   return { success: true };
 }
 
@@ -156,7 +156,7 @@ export async function reversePaymentAction(input: {
     p_reason: input.reason,
   });
   if (error) return { error: error.message };
-  revalidatePath("/finance");
+  revalidatePath("/finance", "layout");
   return { success: true };
 }
 
@@ -217,7 +217,7 @@ export async function requestDiscountAction(input: {
     p_reason: input.reason,
   });
   if (error) return { error: error.message };
-  revalidatePath("/finance");
+  revalidatePath("/finance", "layout");
   return { success: true };
 }
 
@@ -225,7 +225,7 @@ export async function approveDiscountAction(discountId: string): Promise<ActionR
   const supabase = await createClient();
   const { error } = await supabase.rpc("approve_discount", { p_discount_id: discountId });
   if (error) return { error: error.message };
-  revalidatePath("/finance");
+  revalidatePath("/finance", "layout");
   return { success: true };
 }
 
@@ -233,7 +233,7 @@ export async function rejectDiscountAction(discountId: string): Promise<ActionRe
   const supabase = await createClient();
   const { error } = await supabase.rpc("reject_discount", { p_discount_id: discountId });
   if (error) return { error: error.message };
-  revalidatePath("/finance");
+  revalidatePath("/finance", "layout");
   return { success: true };
 }
 
@@ -263,7 +263,7 @@ export async function createFeeWaiverAction(input: {
     p_notes: input.notes ?? null,
   });
   if (error) return { error: error.message };
-  revalidatePath("/finance");
+  revalidatePath("/finance", "layout");
   return { success: true };
 }
 
@@ -271,7 +271,7 @@ export async function revokeFeeWaiverAction(waiverId: string): Promise<ActionRes
   const supabase = await createClient();
   const { error } = await supabase.rpc("revoke_fee_waiver", { p_waiver_id: waiverId });
   if (error) return { error: error.message };
-  revalidatePath("/finance");
+  revalidatePath("/finance", "layout");
   return { success: true };
 }
 
@@ -295,7 +295,7 @@ export async function raiseExpenseAction(input: {
     p_receipt_url: input.receipt_url ?? null,
   });
   if (error) return { error: error.message };
-  revalidatePath("/finance");
+  revalidatePath("/finance", "layout");
   return { success: true };
 }
 
@@ -303,7 +303,7 @@ export async function approveExpenseAction(expenseId: string): Promise<ActionRes
   const supabase = await createClient();
   const { error } = await supabase.rpc("approve_expense", { p_expense_id: expenseId });
   if (error) return { error: error.message };
-  revalidatePath("/finance");
+  revalidatePath("/finance", "layout");
   return { success: true };
 }
 
@@ -311,6 +311,6 @@ export async function rejectExpenseAction(expenseId: string): Promise<ActionResu
   const supabase = await createClient();
   const { error } = await supabase.rpc("reject_expense", { p_expense_id: expenseId });
   if (error) return { error: error.message };
-  revalidatePath("/finance");
+  revalidatePath("/finance", "layout");
   return { success: true };
 }
