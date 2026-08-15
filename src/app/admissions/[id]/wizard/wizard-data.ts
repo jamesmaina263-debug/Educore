@@ -34,6 +34,7 @@ export interface WizardStepData {
   canWriteMedical: boolean;
   guardian: { full_name: string; relationship: string } | null;
   financeDecision: { initial_payment_amount: number | null; initial_payment_method: string | null };
+  canWriteFinance: boolean;
   status: string;
   enrollmentResult: { student_id: string; admission_number: string; invoice_id: string | null; payment_reference: string | null; total_amount: number | null } | null;
 }
@@ -44,6 +45,7 @@ export async function loadWizardStepData(supabase: SupabaseClient, applicationId
   const [
     { data: application },
     { data: canWriteMedical },
+    { data: canWriteFinance },
     { data: requirements },
     { data: documents },
   ] = await Promise.all([
@@ -55,6 +57,7 @@ export async function loadWizardStepData(supabase: SupabaseClient, applicationId
       .eq("id", applicationId)
       .single(),
     supabase.rpc("auth_has_permission", { p_permission_key: "students.medical.write" }),
+    supabase.rpc("auth_has_permission", { p_permission_key: "finance.write" }),
     supabase.from("application_document_requirements").select("category, label, required").eq("school_id", schoolId).order("display_order"),
     supabase.from("documents").select("id, category, file_name, verification_status, verification_comment").eq("application_id", applicationId),
   ]);
@@ -139,6 +142,7 @@ export async function loadWizardStepData(supabase: SupabaseClient, applicationId
       initial_payment_amount: application?.initial_payment_amount ?? null,
       initial_payment_method: application?.initial_payment_method ?? null,
     },
+    canWriteFinance: canWriteFinance === true,
     status: application?.status ?? "draft",
     enrollmentResult,
   };

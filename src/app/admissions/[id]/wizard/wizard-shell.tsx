@@ -174,7 +174,7 @@ export function WizardShell({
             <HealthStep applicationId={applicationId} initial={data.medicalRecord} canWrite={data.canWriteMedical} />
           )}
           {current.id === "finance" && (
-            <FinanceStep applicationId={applicationId} hasStudentAndTerm={!!data.resultingStudentId && !!data.application.term_id} initial={data.financeDecision} />
+            <FinanceStep applicationId={applicationId} hasStudentAndTerm={!!data.resultingStudentId && !!data.application.term_id} canWrite={data.canWriteFinance} initial={data.financeDecision} />
           )}
           {(current.id === "review") && (
             <ReviewStep applicationId={applicationId} summary={reviewSummary} onNavigateToStep={navigateToStepId} />

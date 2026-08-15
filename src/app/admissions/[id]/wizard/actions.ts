@@ -528,6 +528,10 @@ export async function saveFinanceDecision(
   input: { initial_payment_amount: number | null; initial_payment_method: "cash" | "mpesa" | "bank" | "cheque" | null },
 ): Promise<ActionResult> {
   const supabase = await createClient();
+
+  const canWrite = await supabase.rpc("auth_has_permission", { p_permission_key: "finance.write" });
+  if (canWrite.data !== true) return { error: "You don't have permission to record financial information. A Bursar or authorized Finance staff member can complete this step." };
+
   const { error } = await supabase
     .from("applications")
     .update({ initial_payment_amount: input.initial_payment_amount, initial_payment_method: input.initial_payment_method })

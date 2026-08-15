@@ -866,10 +866,12 @@ export function HealthStep({
 export function FinanceStep({
   applicationId,
   hasStudentAndTerm,
+  canWrite,
   initial,
 }: {
   applicationId: string;
   hasStudentAndTerm: boolean;
+  canWrite: boolean;
   initial: { initial_payment_amount: number | null; initial_payment_method: string | null };
 }) {
   const [charges, setCharges] = useState<FeeChargeLine[] | null>(null);
@@ -907,6 +909,16 @@ export function FinanceStep({
     return (
       <StepPanel title="Finance">
         <p className="text-sm text-muted-foreground">Complete the Student and Admission Details steps first to preview applicable charges.</p>
+      </StepPanel>
+    );
+  }
+
+  if (!canWrite) {
+    return (
+      <StepPanel title="Finance">
+        <p className="text-sm text-muted-foreground">
+          You don&apos;t have finance permissions. A Bursar or authorized Finance staff member should complete this step — you can move on and come back later.
+        </p>
       </StepPanel>
     );
   }
