@@ -2,7 +2,15 @@ import type { NextConfig } from "next";
 import { withSentryConfig } from "@sentry/nextjs";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  experimental: {
+    serverActions: {
+      // Default is 1MB, which real admission-document uploads (scanned birth
+      // certificates, photos) routinely exceed — was causing a hard 413 on
+      // the public /apply/[slug] form. Raised to accommodate genuine document
+      // attachments while still bounding request size.
+      bodySizeLimit: "10mb",
+    },
+  },
 };
 
 export default withSentryConfig(nextConfig, {
