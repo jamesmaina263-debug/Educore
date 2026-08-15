@@ -6,6 +6,7 @@ export interface WizardStepData {
   application: {
     first_name: string;
     last_name: string;
+    other_names: string | null;
     date_of_birth: string;
     gender: string;
     admission_type: string;
@@ -49,7 +50,7 @@ export async function loadWizardStepData(supabase: SupabaseClient, applicationId
     supabase
       .from("applications")
       .select(
-        "first_name, last_name, date_of_birth, gender, admission_type, academic_year_id, term_id, boarding_preference, transport_required, previous_school, previous_class, resulting_student_id, initial_payment_amount, initial_payment_method, status",
+        "first_name, last_name, other_names, date_of_birth, gender, admission_type, academic_year_id, term_id, boarding_preference, transport_required, previous_school, previous_class, resulting_student_id, initial_payment_amount, initial_payment_method, status",
       )
       .eq("id", applicationId)
       .single(),
@@ -107,6 +108,7 @@ export async function loadWizardStepData(supabase: SupabaseClient, applicationId
     application: {
       first_name: application?.first_name ?? "",
       last_name: application?.last_name ?? "",
+      other_names: application?.other_names ?? null,
       date_of_birth: application?.date_of_birth ?? "",
       gender: application?.gender ?? "",
       admission_type: application?.admission_type ?? "new",

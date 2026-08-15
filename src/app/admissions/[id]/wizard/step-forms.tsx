@@ -11,6 +11,7 @@ import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@
 import Link from "next/link";
 import {
   updateAdmissionDetails,
+  updateApplicantIdentity,
   checkForDuplicateStudents,
   createOrLinkStudent,
   searchGuardians,
@@ -186,7 +187,7 @@ export function StudentStep({
   resultingStudentId,
 }: {
   applicationId: string;
-  applicantSummary: { first_name: string; last_name: string; date_of_birth: string; gender: string };
+  applicantSummary: { first_name: string; last_name: string; other_names?: string | null; date_of_birth: string; gender: string };
   resultingStudentId: string | null;
 }) {
   const router = useRouter();
@@ -194,6 +195,36 @@ export function StudentStep({
   const [candidates, setCandidates] = useState<DuplicateCandidate[] | null>(null);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+
+  const hasIdentity = Boolean(applicantSummary.first_name && applicantSummary.last_name && applicantSummary.date_of_birth && applicantSummary.gender);
+  const [editingIdentity, setEditingIdentity] = useState(!hasIdentity);
+  const [identity, setIdentity] = useState({
+    first_name: applicantSummary.first_name ?? "",
+    last_name: applicantSummary.last_name ?? "",
+    other_names: applicantSummary.other_names ?? "",
+    date_of_birth: applicantSummary.date_of_birth ?? "",
+    gender: applicantSummary.gender ?? "",
+  });
+
+  function saveIdentity() {
+    if (!identity.first_name.trim() || !identity.last_name.trim() || !identity.date_of_birth || !identity.gender) {
+      setError("Name, date of birth, and gender are all required.");
+      return;
+    }
+    setError(null);
+    startTransition(async () => {
+      const result = await updateApplicantIdentity(applicationId, {
+        first_name: identity.first_name,
+        last_name: identity.last_name,
+        other_names: identity.other_names,
+        date_of_birth: identity.date_of_birth,
+        gender: identity.gender as "male" | "female",
+      });
+      if ("error" in result) { setError(result.error); return; }
+      setEditingIdentity(false);
+      router.refresh();
+    });
+  }
 
   function runDuplicateCheck() {
     setError(null);
@@ -231,6 +262,43 @@ export function StudentStep({
     );
   }
 
+  if (editingIdentity) {
+    return (
+      <StepPanel title="Student" hint="Enter the applicant's name, date of birth, and gender — these identify the student and are used to check for an existing record.">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div className="space-y-1.5">
+            <Label htmlFor="first_name">First name</Label>
+            <Input id="first_name" value={identity.first_name} onChange={(e) => setIdentity({ ...identity, first_name: e.target.value })} />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="last_name">Last name</Label>
+            <Input id="last_name" value={identity.last_name} onChange={(e) => setIdentity({ ...identity, last_name: e.target.value })} />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="other_names">Other names (optional)</Label>
+            <Input id="other_names" value={identity.other_names} onChange={(e) => setIdentity({ ...identity, other_names: e.target.value })} />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="date_of_birth">Date of birth</Label>
+            <Input id="date_of_birth" type="date" value={identity.date_of_birth} onChange={(e) => setIdentity({ ...identity, date_of_birth: e.target.value })} />
+          </div>
+          <div className="space-y-1.5">
+            <Label>Gender</Label>
+            <Select value={identity.gender} onValueChange={(v) => setIdentity({ ...identity, gender: v })}>
+              <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="male">Male</SelectItem>
+                <SelectItem value="female">Female</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+        <ErrorText error={error} />
+        <Button size="sm" onClick={saveIdentity} disabled={pending}>{pending ? "Saving…" : "Save"}</Button>
+      </StepPanel>
+    );
+  }
+
   return (
     <StepPanel title="Student" hint="Verify the applicant's details, check for a possible existing student, then create the master Student record.">
       <dl className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
@@ -238,6 +306,7 @@ export function StudentStep({
         <div><dt className="text-muted-foreground">Date of birth</dt><dd>{applicantSummary.date_of_birth}</dd></div>
         <div><dt className="text-muted-foreground">Gender</dt><dd className="capitalize">{applicantSummary.gender}</dd></div>
       </dl>
+      <Button size="sm" variant="ghost" onClick={() => setEditingIdentity(true)}>Edit details</Button>
 
       {candidates === null ? (
         <Button size="sm" variant="outline" onClick={runDuplicateCheck} disabled={pending}>

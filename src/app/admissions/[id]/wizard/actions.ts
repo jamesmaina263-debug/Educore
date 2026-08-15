@@ -87,6 +87,37 @@ export async function updateAdmissionDetails(applicationId: string, input: Admis
 
 // ---------- Step 2: Student Biodata + Duplicate Detection ----------
 
+export interface ApplicantIdentityInput {
+  first_name: string;
+  last_name: string;
+  other_names?: string;
+  date_of_birth: string;
+  gender: "male" | "female";
+}
+
+// Walk-in admissions (Brief 4.16.1 Entry Point B) start from a bare `applications` row with no
+// name/DOB/gender — unlike online applications, where a parent already filled those in on the
+// public form. This lets the officer set them at Step 2 before duplicate-checking / creating the
+// student record. Online-sourced applications can also use this to correct a typo before the
+// student record is created.
+export async function updateApplicantIdentity(applicationId: string, input: ApplicantIdentityInput): Promise<ActionResult> {
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("applications")
+    .update({
+      first_name: input.first_name.trim(),
+      last_name: input.last_name.trim(),
+      other_names: input.other_names?.trim() || null,
+      date_of_birth: input.date_of_birth,
+      gender: input.gender,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", applicationId);
+  if (error) return { error: error.message };
+  revalidatePath(`/admissions/${applicationId}/wizard`);
+  return { success: true };
+}
+
 export interface DuplicateCandidate {
   id: string;
   admission_number: string;
