@@ -9,8 +9,6 @@ export type ApplyState = {
   accessToken?: string;
 };
 
-const initialState: ApplyState = { error: null };
-
 export async function submitApplication(
   _prev: ApplyState,
   formData: FormData,
@@ -221,5 +219,3 @@ export async function submitApplication(
     accessToken: application.access_token,
   };
 }
-
-export { initialState as applyInitialState };

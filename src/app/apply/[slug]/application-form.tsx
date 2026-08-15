@@ -12,13 +12,15 @@ import {
   SelectContent,
   SelectItem,
 } from "@/components/ui/select";
-import { submitApplication, applyInitialState } from "./actions";
+import { submitApplication, type ApplyState } from "./actions";
 
 export interface DocumentRequirement {
   category: string;
   label: string;
   required: boolean;
 }
+
+const applyInitialState: ApplyState = { error: null };
 
 export function ApplicationForm({
   schoolSlug,
