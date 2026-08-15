@@ -31,7 +31,7 @@ export async function createInventoryItemAction(input: {
     category_id: input.category_id || null,
   });
   if (error) return { error: error.message };
-  revalidatePath("/inventory");
+  revalidatePath("/inventory", "layout");
   return { success: true };
 }
 
@@ -45,7 +45,7 @@ export async function createCategoryAction(name: string): Promise<ActionResult> 
 
   const { error } = await supabase.from("inventory_categories").insert({ school_id: schoolUser.school_id, name });
   if (error) return { error: error.message };
-  revalidatePath("/inventory");
+  revalidatePath("/inventory", "layout");
   return { success: true };
 }
 
@@ -63,7 +63,7 @@ export async function recordStockMovementAction(input: {
     p_reason: input.reason || null,
   });
   if (error) return { error: error.message };
-  revalidatePath("/inventory");
+  revalidatePath("/inventory", "layout");
   return { success: true };
 }
 
@@ -78,7 +78,7 @@ export async function createTransferAction(input: { item_id: string; quantity: n
     p_quantity: input.quantity,
   });
   if (error) return { error: error.message };
-  revalidatePath("/inventory");
+  revalidatePath("/inventory", "layout");
   return { success: true };
 }
 
@@ -123,7 +123,7 @@ export async function createAssetAction(formData: FormData): Promise<ActionResul
     purchase_value: purchaseValue,
   });
   if (error) return { error: error.message };
-  revalidatePath("/inventory");
+  revalidatePath("/inventory", "layout");
   return { success: true };
 }
 
@@ -141,7 +141,7 @@ export async function updateAssetStatusAction(formData: FormData): Promise<Actio
     .update({ status, condition: condition || undefined, updated_at: new Date().toISOString() })
     .eq("id", assetId);
   if (error) return { error: error.message };
-  revalidatePath("/inventory");
+  revalidatePath("/inventory", "layout");
   return { success: true };
 }
 
@@ -163,7 +163,7 @@ export async function requestAssetMaintenanceAction(formData: FormData): Promise
 
   await supabase.from("assets").update({ status: "under_maintenance", updated_at: new Date().toISOString() }).eq("id", assetId);
 
-  revalidatePath("/inventory");
+  revalidatePath("/inventory", "layout");
   return { success: true };
 }
 
@@ -187,7 +187,7 @@ export async function completeAssetMaintenanceAction(formData: FormData): Promis
     await supabase.from("assets").update({ status: "in_use", updated_at: new Date().toISOString() }).eq("id", assetId);
   }
 
-  revalidatePath("/inventory");
+  revalidatePath("/inventory", "layout");
   return { success: true };
 }
 
@@ -214,7 +214,7 @@ export async function createSupplierAction(formData: FormData): Promise<ActionRe
     category: category || null,
   });
   if (error) return { error: error.message };
-  revalidatePath("/inventory");
+  revalidatePath("/inventory", "layout");
   return { success: true };
 }
 
@@ -248,7 +248,7 @@ export async function createRequisitionAction(formData: FormData): Promise<Actio
     });
   }
 
-  revalidatePath("/inventory");
+  revalidatePath("/inventory", "layout");
   return { success: true };
 }
 
@@ -265,7 +265,7 @@ export async function decideRequisitionAction(formData: FormData): Promise<Actio
     .update({ status: decision, approved_by: schoolUser.id, approved_at: new Date().toISOString(), updated_at: new Date().toISOString() })
     .eq("id", requisitionId);
   if (error) return { error: error.message };
-  revalidatePath("/inventory");
+  revalidatePath("/inventory", "layout");
   return { success: true };
 }
 
@@ -312,7 +312,7 @@ export async function createPurchaseOrderAction(formData: FormData): Promise<Act
     }
   }
 
-  revalidatePath("/inventory");
+  revalidatePath("/inventory", "layout");
   return { success: true };
 }
 
@@ -358,7 +358,7 @@ export async function receiveGoodsAction(formData: FormData): Promise<ActionResu
     }
   }
 
-  revalidatePath("/inventory");
+  revalidatePath("/inventory", "layout");
   return { success: true };
 }
 
@@ -388,7 +388,7 @@ export async function createSupplierInvoiceAction(formData: FormData): Promise<A
     amount,
   });
   if (error) return { error: error.message };
-  revalidatePath("/inventory");
+  revalidatePath("/inventory", "layout");
   return { success: true };
 }
 
@@ -402,7 +402,7 @@ export async function markSupplierInvoicePaidAction(formData: FormData): Promise
     .update({ status: "paid", updated_at: new Date().toISOString() })
     .eq("id", invoiceId);
   if (error) return { error: error.message };
-  revalidatePath("/inventory");
+  revalidatePath("/inventory", "layout");
   return { success: true };
 }
 

@@ -59,7 +59,7 @@ export default async function StaffDirectoryPage() {
             </Button>
             {canManage === true && (
               <Button asChild>
-                <Link href="/settings?tab=staff">Add staff member</Link>
+                <Link href="/settings/staff">Add staff member</Link>
               </Button>
             )}
           </div>

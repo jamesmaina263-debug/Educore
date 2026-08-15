@@ -29,7 +29,7 @@ export async function createLibraryItemAction(input: {
     available_copies: input.total_copies,
   });
   if (error) return { error: error.message };
-  revalidatePath("/library");
+  revalidatePath("/library", "layout");
   return { success: true };
 }
 
@@ -41,7 +41,7 @@ export async function issueLoanAction(input: { library_item_id: string; student_
     p_due_date: input.due_date,
   });
   if (error) return { error: error.message };
-  revalidatePath("/library");
+  revalidatePath("/library", "layout");
   return { success: true };
 }
 
@@ -49,7 +49,7 @@ export async function returnLoanAction(id: string): Promise<ActionResult> {
   const supabase = await createClient();
   const { error } = await supabase.rpc("return_library_loan", { p_loan_id: id });
   if (error) return { error: error.message };
-  revalidatePath("/library");
+  revalidatePath("/library", "layout");
   return { success: true };
 }
 
@@ -71,7 +71,7 @@ export async function issueLoanToStaffAction(input: { library_item_id: string; s
     p_due_date: input.due_date,
   });
   if (error) return { error: error.message };
-  revalidatePath("/library");
+  revalidatePath("/library", "layout");
   return { success: true };
 }
 
@@ -96,7 +96,7 @@ export async function markLoanLostOrDamagedAction(input: { loan_id: string; item
     if (adjustError) return { error: adjustError.message };
   }
 
-  revalidatePath("/library");
+  revalidatePath("/library", "layout");
   return { success: true };
 }
 
@@ -108,7 +108,7 @@ export async function adjustCopiesAction(input: { item_id: string; total_delta: 
     p_available_delta: input.available_delta,
   });
   if (error) return { error: error.message };
-  revalidatePath("/library");
+  revalidatePath("/library", "layout");
   return { success: true };
 }
 
@@ -120,7 +120,7 @@ export async function createShelfAction(formData: FormData): Promise<ActionResul
   if (!name) return { error: "Shelf name is required." };
   const { error } = await supabase.from("library_shelves").insert({ school_id: schoolUser.school_id, name, location: location || null });
   if (error) return { error: error.message };
-  revalidatePath("/library");
+  revalidatePath("/library", "layout");
   return { success: true };
 }
 
@@ -140,7 +140,7 @@ export async function createReservationAction(formData: FormData): Promise<Actio
     created_by: schoolUser.id,
   });
   if (error) return { error: error.message };
-  revalidatePath("/library");
+  revalidatePath("/library", "layout");
   return { success: true };
 }
 
@@ -148,7 +148,7 @@ export async function cancelReservationAction(id: string): Promise<ActionResult>
   const supabase = await createClient();
   const { error } = await supabase.from("library_reservations").update({ status: "cancelled" }).eq("id", id);
   if (error) return { error: error.message };
-  revalidatePath("/library");
+  revalidatePath("/library", "layout");
   return { success: true };
 }
 
@@ -168,7 +168,7 @@ export async function createFineAction(formData: FormData): Promise<ActionResult
     created_by: schoolUser.id,
   });
   if (error) return { error: error.message };
-  revalidatePath("/library");
+  revalidatePath("/library", "layout");
   return { success: true };
 }
 
@@ -179,6 +179,6 @@ export async function resolveFineAction(input: { fine_id: string; status: "paid"
     .update({ status: input.status, resolved_at: new Date().toISOString() })
     .eq("id", input.fine_id);
   if (error) return { error: error.message };
-  revalidatePath("/library");
+  revalidatePath("/library", "layout");
   return { success: true };
 }

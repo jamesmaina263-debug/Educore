@@ -6,7 +6,6 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import {
   Dialog,
@@ -131,6 +130,7 @@ function StudentPicker({ students, name }: { students: StudentOption[]; name: st
 }
 
 export function DisciplineWelfareSection({
+  section,
   permissions,
   students,
   staff,
@@ -140,6 +140,7 @@ export function DisciplineWelfareSection({
   welfare,
   safeguarding,
 }: {
+  section: "incidents" | "cases" | "welfare" | "safeguarding";
   permissions: {
     canReadAny: boolean;
     canWrite: boolean;
@@ -224,16 +225,9 @@ export function DisciplineWelfareSection({
         </div>
       </div>
 
-      <Tabs defaultValue="incidents">
-        <TabsList>
-          <TabsTrigger value="incidents">Incidents</TabsTrigger>
-          <TabsTrigger value="cases">Cases</TabsTrigger>
-          <TabsTrigger value="welfare">Welfare</TabsTrigger>
-          {permissions.canSafeguardingRead && <TabsTrigger value="safeguarding">Safeguarding</TabsTrigger>}
-        </TabsList>
-
-        {/* ---------------- Incidents ---------------- */}
-        <TabsContent value="incidents" className="flex flex-col gap-3">
+      {/* ---------------- Incidents ---------------- */}
+      {section === "incidents" && (
+        <div className="flex flex-col gap-3">
           {permissions.canWrite && (
             <div className="flex justify-end">
               <Dialog open={incidentOpen} onOpenChange={setIncidentOpen}>
@@ -343,10 +337,12 @@ export function DisciplineWelfareSection({
               </table>
             </div>
           </div>
-        </TabsContent>
+        </div>
+      )}
 
-        {/* ---------------- Cases ---------------- */}
-        <TabsContent value="cases" className="flex flex-col gap-3">
+      {/* ---------------- Cases ---------------- */}
+      {section === "cases" && (
+        <div className="flex flex-col gap-3">
           {permissions.canManageCases && (
             <div className="flex justify-end gap-2">
               <Dialog open={actionOpen} onOpenChange={setActionOpen}>
@@ -493,10 +489,12 @@ export function DisciplineWelfareSection({
               </div>
             ))}
           </div>
-        </TabsContent>
+        </div>
+      )}
 
-        {/* ---------------- Welfare ---------------- */}
-        <TabsContent value="welfare" className="flex flex-col gap-3">
+      {/* ---------------- Welfare ---------------- */}
+      {section === "welfare" && (
+        <div className="flex flex-col gap-3">
           {permissions.canWelfareWrite && (
             <div className="flex justify-end">
               <Dialog open={welfareOpen} onOpenChange={setWelfareOpen}>
@@ -579,12 +577,13 @@ export function DisciplineWelfareSection({
               </div>
             ))}
           </div>
-        </TabsContent>
+        </div>
+      )}
 
-        {/* ---------------- Safeguarding ---------------- */}
-        {permissions.canSafeguardingRead && (
-          <TabsContent value="safeguarding" className="flex flex-col gap-3">
-            <div className="rounded-md border border-destructive/25 bg-destructive-subtle px-3 py-2 text-sm text-destructive">
+      {/* ---------------- Safeguarding ---------------- */}
+      {section === "safeguarding" && permissions.canSafeguardingRead && (
+        <div className="flex flex-col gap-3">
+          <div className="rounded-md border border-destructive/25 bg-destructive-subtle px-3 py-2 text-sm text-destructive">
               Restricted. Only visible to authorized safeguarding officers.
             </div>
             {permissions.canSafeguardingWrite && (
@@ -689,9 +688,8 @@ export function DisciplineWelfareSection({
                 </div>
               ))}
             </div>
-          </TabsContent>
+          </div>
         )}
-      </Tabs>
     </div>
   );
 }

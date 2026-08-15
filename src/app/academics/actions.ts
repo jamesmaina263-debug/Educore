@@ -24,7 +24,7 @@ export async function createAcademicYear(input: {
   } catch (e) {
     return { error: e instanceof Error ? e.message : "Could not create the academic year." };
   }
-  revalidatePath("/academics");
+  revalidatePath("/academics", "layout");
   return { success: true };
 }
 
@@ -41,7 +41,7 @@ export async function setActiveAcademicYear(id: string): Promise<ActionResult> {
     .eq("status", "active");
   const { error } = await supabase.from("academic_years").update({ status: "active" }).eq("id", id);
   if (error) return { error: error.message };
-  revalidatePath("/academics");
+  revalidatePath("/academics", "layout");
   return { success: true };
 }
 
@@ -60,7 +60,7 @@ export async function createTerm(input: {
   } catch (e) {
     return { error: e instanceof Error ? e.message : "Could not create the term." };
   }
-  revalidatePath("/academics");
+  revalidatePath("/academics", "layout");
   return { success: true };
 }
 
@@ -73,7 +73,7 @@ export async function setActiveTerm(id: string, academic_year_id: string): Promi
     .eq("status", "active");
   const { error } = await supabase.from("terms").update({ status: "active" }).eq("id", id);
   if (error) return { error: error.message };
-  revalidatePath("/academics");
+  revalidatePath("/academics", "layout");
   return { success: true };
 }
 
@@ -90,7 +90,7 @@ export async function createClassLevel(input: {
   } catch (e) {
     return { error: e instanceof Error ? e.message : "Could not create the class." };
   }
-  revalidatePath("/academics");
+  revalidatePath("/academics", "layout");
   return { success: true };
 }
 
@@ -114,7 +114,7 @@ export async function createStream(input: {
   } catch (e) {
     return { error: e instanceof Error ? e.message : "Could not create the stream." };
   }
-  revalidatePath("/academics");
+  revalidatePath("/academics", "layout");
   return { success: true };
 }
 
@@ -128,7 +128,7 @@ export async function updateStreamClassTeacher(
     .update({ class_teacher_id })
     .eq("id", streamId);
   if (error) return { error: error.message };
-  revalidatePath("/academics");
+  revalidatePath("/academics", "layout");
   return { success: true };
 }
 
@@ -136,7 +136,7 @@ export async function updateStreamCapacity(streamId: string, capacity: number | 
   const supabase = await createClient();
   const { error } = await supabase.from("streams").update({ capacity }).eq("id", streamId);
   if (error) return { error: error.message };
-  revalidatePath("/academics");
+  revalidatePath("/academics", "layout");
   return { success: true };
 }
 
@@ -158,7 +158,7 @@ export async function assignSubjectTeacher(
   } catch (e) {
     return { error: e instanceof Error ? e.message : "Could not update the allocation." };
   }
-  revalidatePath("/academics");
+  revalidatePath("/academics", "layout");
   return { success: true };
 }
 
@@ -180,7 +180,7 @@ export async function createTimetableSlot(input: {
     }
     return { error: error.message };
   }
-  revalidatePath("/academics");
+  revalidatePath("/academics", "layout");
   return { success: true };
 }
 
@@ -188,7 +188,7 @@ export async function deleteTimetableSlot(id: string): Promise<{ error: string }
   const supabase = await createClient();
   const { error } = await supabase.from("timetable_slots").delete().eq("id", id);
   if (error) return { error: error.message };
-  revalidatePath("/academics");
+  revalidatePath("/academics", "layout");
   return { success: true };
 }
 
@@ -207,7 +207,7 @@ export async function rolloverAcademicYear(input: {
   });
   if (error) return { error: error.message };
   const row = Array.isArray(data) ? data[0] : data;
-  revalidatePath("/academics");
+  revalidatePath("/academics", "layout");
   revalidatePath("/students");
   return {
     success: true,
@@ -235,6 +235,6 @@ export async function createSubject(input: {
   } catch (e) {
     return { error: e instanceof Error ? e.message : "Could not create the subject." };
   }
-  revalidatePath("/academics");
+  revalidatePath("/academics", "layout");
   return { success: true };
 }

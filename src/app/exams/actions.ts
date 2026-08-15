@@ -45,7 +45,7 @@ export async function createGradingScale(input: {
   } catch (e) {
     return { error: e instanceof Error ? e.message : "Could not create the grading scale." };
   }
-  revalidatePath("/exams");
+  revalidatePath("/exams", "layout");
   return { success: true };
 }
 
@@ -53,7 +53,7 @@ export async function setClassGradingScale(classId: string, gradingScaleId: stri
   const supabase = await createClient();
   const { error } = await supabase.from("classes").update({ grading_scale_id: gradingScaleId }).eq("id", classId);
   if (error) return { error: error.message };
-  revalidatePath("/exams");
+  revalidatePath("/exams", "layout");
   return { success: true };
 }
 
@@ -96,7 +96,7 @@ export async function createExam(input: {
   } catch (e) {
     return { error: e instanceof Error ? e.message : "Could not create the exam." };
   }
-  revalidatePath("/exams");
+  revalidatePath("/exams", "layout");
   return { success: true };
 }
 
@@ -104,7 +104,7 @@ export async function closeExam(examId: string): Promise<ActionResult> {
   const supabase = await createClient();
   const { error } = await supabase.rpc("close_exam", { p_exam_id: examId });
   if (error) return { error: error.message };
-  revalidatePath("/exams");
+  revalidatePath("/exams", "layout");
   return { success: true };
 }
 
@@ -112,7 +112,7 @@ export async function reopenExam(examId: string): Promise<ActionResult> {
   const supabase = await createClient();
   const { error } = await supabase.rpc("reopen_exam", { p_exam_id: examId });
   if (error) return { error: error.message };
-  revalidatePath("/exams");
+  revalidatePath("/exams", "layout");
   return { success: true };
 }
 
@@ -259,7 +259,7 @@ export async function submitMarks(input: {
   } catch (e) {
     return { error: e instanceof Error ? e.message : "Could not save marks." };
   }
-  revalidatePath("/exams");
+  revalidatePath("/exams", "layout");
   return { success: true };
 }
 
@@ -283,7 +283,7 @@ export async function editMark(input: {
     .eq("student_id", input.student_id)
     .eq("subject_id", input.subject_id);
   if (error) return { error: error.message };
-  revalidatePath("/exams");
+  revalidatePath("/exams", "layout");
   return { success: true };
 }
 
@@ -316,7 +316,7 @@ export async function saveExamSchedule(input: {
   } catch (e) {
     return { error: e instanceof Error ? e.message : "Could not save the exam schedule." };
   }
-  revalidatePath("/exams");
+  revalidatePath("/exams", "layout");
   return { success: true };
 }
 
@@ -324,7 +324,7 @@ export async function deleteExamSchedule(id: string): Promise<ActionResult> {
   const supabase = await createClient();
   const { error } = await supabase.from("exam_schedules").delete().eq("id", id);
   if (error) return { error: error.message };
-  revalidatePath("/exams");
+  revalidatePath("/exams", "layout");
   return { success: true };
 }
 
@@ -348,6 +348,6 @@ export async function approveMarks(input: { exam_id: string; class_id: string; s
     .eq("subject_id", input.subject_id)
     .eq("status", "submitted");
   if (error) return { error: error.message };
-  revalidatePath("/exams");
+  revalidatePath("/exams", "layout");
   return { success: true };
 }

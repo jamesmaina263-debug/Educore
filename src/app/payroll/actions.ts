@@ -27,7 +27,7 @@ export async function generatePayrollAction(input: {
     p_deductions_breakdown: input.deductions_breakdown && input.deductions_breakdown.length > 0 ? input.deductions_breakdown : null,
   });
   if (error) return { error: error.message };
-  revalidatePath("/payroll");
+  revalidatePath("/payroll", "layout");
   return { success: true };
 }
 
@@ -35,7 +35,7 @@ export async function approvePayrollAction(id: string): Promise<ActionResult> {
   const supabase = await createClient();
   const { error } = await supabase.rpc("approve_payroll_record", { p_id: id });
   if (error) return { error: error.message };
-  revalidatePath("/payroll");
+  revalidatePath("/payroll", "layout");
   return { success: true };
 }
 
@@ -43,7 +43,7 @@ export async function markPayrollPaidAction(id: string): Promise<ActionResult> {
   const supabase = await createClient();
   const { error } = await supabase.rpc("mark_payroll_paid", { p_id: id });
   if (error) return { error: error.message };
-  revalidatePath("/payroll");
+  revalidatePath("/payroll", "layout");
   return { success: true };
 }
 
@@ -104,7 +104,7 @@ export async function saveSalaryStructureAction(input: {
     }
   }
 
-  revalidatePath("/payroll");
+  revalidatePath("/payroll", "layout");
   return { success: true };
 }
 
@@ -128,6 +128,6 @@ export async function updateStaffStatutoryNumbersAction(input: {
     p_staff_number: input.staff_number || null,
   });
   if (error) return { error: error.message };
-  revalidatePath("/payroll");
+  revalidatePath("/payroll", "layout");
   return { success: true };
 }

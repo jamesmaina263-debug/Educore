@@ -28,7 +28,7 @@ export async function updateGroupBranding(input: {
     .eq("id", groupId);
   if (error) return { error: error.message };
 
-  revalidatePath("/campuses");
+  revalidatePath("/campuses", "layout");
   return { success: true };
 }
 
@@ -55,7 +55,7 @@ export async function issueGroupApiKey(input: {
   if (error || !data) return { error: error?.message ?? "Could not create the API key." };
   const issued = data as { id: string; raw_key: string; key_prefix: string };
 
-  revalidatePath("/campuses");
+  revalidatePath("/campuses", "layout");
   return { success: true, raw_key: issued.raw_key, key_prefix: issued.key_prefix };
 }
 
@@ -72,6 +72,6 @@ export async function revokeGroupApiKey(id: string): Promise<ActionResult> {
     .update({ status: "revoked", revoked_at: new Date().toISOString(), revoked_by: schoolUser?.id })
     .eq("id", id);
   if (error) return { error: error.message };
-  revalidatePath("/campuses");
+  revalidatePath("/campuses", "layout");
   return { success: true };
 }

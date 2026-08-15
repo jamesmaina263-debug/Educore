@@ -42,7 +42,7 @@ export async function checkInStudent(input: {
     checked_in_by: me.id,
   });
   if (error) return { error: error.message };
-  revalidatePath("/health");
+  revalidatePath("/health", "layout");
   return { success: true };
 }
 
@@ -60,7 +60,7 @@ export async function checkOutStudent(
     .update({ check_out_at: new Date().toISOString(), check_out_by: me.id, outcome, notes: notes || null })
     .eq("id", visitId);
   if (error) return { error: error.message };
-  revalidatePath("/health");
+  revalidatePath("/health", "layout");
   return { success: true };
 }
 
@@ -103,7 +103,7 @@ export async function administerMedication(input: {
     notes: input.notes || null,
   });
   if (error) return { error: error.message };
-  revalidatePath("/health");
+  revalidatePath("/health", "layout");
   return { success: true };
 }
 
@@ -133,7 +133,7 @@ export async function createReferral(input: {
     referred_by: me.id,
   });
   if (error) return { error: error.message };
-  revalidatePath("/health");
+  revalidatePath("/health", "layout");
   return { success: true };
 }
 
@@ -145,7 +145,7 @@ export async function updateReferralOutcome(
   const supabase = await createClient();
   const { error } = await supabase.from("health_referrals").update({ status, outcome_notes: outcome_notes || null }).eq("id", referralId);
   if (error) return { error: error.message };
-  revalidatePath("/health");
+  revalidatePath("/health", "layout");
   return { success: true };
 }
 
@@ -178,7 +178,7 @@ export async function logEmergency(input: {
     reported_by: me.id,
   });
   if (error) return { error: error.message };
-  revalidatePath("/health");
+  revalidatePath("/health", "layout");
   return { success: true };
 }
 
@@ -202,7 +202,7 @@ export async function addMedicalInventoryItem(input: {
     p_category_id: input.medicalCategoryId,
   });
   if (error) return { error: error.message };
-  revalidatePath("/health");
+  revalidatePath("/health", "layout");
   return { success: true };
 }
 
@@ -216,7 +216,7 @@ export async function issueMedicalStock(itemId: string, quantity: number, reason
     p_reason: reason || null,
   });
   if (error) return { error: error.message };
-  revalidatePath("/health");
+  revalidatePath("/health", "layout");
   return { success: true };
 }
 
@@ -227,8 +227,8 @@ export async function acceptTransferAction(transferId: string, quantityConfirmed
     p_quantity_confirmed: quantityConfirmed,
   });
   if (error) return { error: error.message };
-  revalidatePath("/health");
-  revalidatePath("/inventory");
+  revalidatePath("/health", "layout");
+  revalidatePath("/inventory", "layout");
   return { success: true };
 }
 
@@ -239,8 +239,8 @@ export async function rejectTransferAction(transferId: string, reason: string): 
     p_reason: reason,
   });
   if (error) return { error: error.message };
-  revalidatePath("/health");
-  revalidatePath("/inventory");
+  revalidatePath("/health", "layout");
+  revalidatePath("/inventory", "layout");
   return { success: true };
 }
 
@@ -274,6 +274,6 @@ export async function sendHealthAlertAction(input: {
   });
   if (error) return { error: error.message };
 
-  revalidatePath("/health");
+  revalidatePath("/health", "layout");
   return { success: true, sent: data.sent };
 }

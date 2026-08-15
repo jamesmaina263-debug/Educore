@@ -33,7 +33,7 @@ export async function updateBranding(input: {
     .eq("id", schoolId);
   if (error) return { error: error.message };
 
-  revalidatePath("/settings");
+  revalidatePath("/settings", "layout");
   return { success: true };
 }
 
@@ -93,7 +93,7 @@ export async function inviteStaffMember(input: {
     return { error: linkError.message };
   }
 
-  revalidatePath("/settings");
+  revalidatePath("/settings", "layout");
   return { success: true, temporaryPassword };
 }
 
@@ -101,7 +101,7 @@ export async function changeStaffRole(schoolUserId: string, roleId: string): Pro
   const supabase = await createClient();
   const { error } = await supabase.from("school_users").update({ role_id: roleId }).eq("id", schoolUserId);
   if (error) return { error: error.message };
-  revalidatePath("/settings");
+  revalidatePath("/settings", "layout");
   return { success: true };
 }
 
@@ -112,7 +112,7 @@ export async function setStaffStatus(
   const supabase = await createClient();
   const { error } = await supabase.from("school_users").update({ status }).eq("id", schoolUserId);
   if (error) return { error: error.message };
-  revalidatePath("/settings");
+  revalidatePath("/settings", "layout");
   return { success: true };
 }
 
@@ -141,7 +141,7 @@ export async function issueSchoolApiKey(input: {
   if (error || !data) return { error: error?.message ?? "Could not create the API key." };
   const issued = data as { id: string; raw_key: string; key_prefix: string };
 
-  revalidatePath("/settings");
+  revalidatePath("/settings", "layout");
   return { success: true, raw_key: issued.raw_key, key_prefix: issued.key_prefix };
 }
 
@@ -158,6 +158,6 @@ export async function revokeSchoolApiKey(id: string): Promise<ActionResult> {
     .update({ status: "revoked", revoked_at: new Date().toISOString(), revoked_by: schoolUser?.id })
     .eq("id", id);
   if (error) return { error: error.message };
-  revalidatePath("/settings");
+  revalidatePath("/settings", "layout");
   return { success: true };
 }

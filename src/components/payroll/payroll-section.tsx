@@ -6,7 +6,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { StatusBadge } from "@/components/status-badge";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { generatePayrollAction, approvePayrollAction, markPayrollPaidAction, saveSalaryStructureAction, updateStaffStatutoryNumbersAction } from "@/app/payroll/actions";
@@ -171,6 +170,7 @@ async function downloadPayslip(schoolName: string, employerKraPin: string | null
 }
 
 export function PayrollSection({
+  section,
   records,
   staffOptions,
   structures,
@@ -181,6 +181,7 @@ export function PayrollSection({
   canMarkPaid,
   canManageStructures,
 }: {
+  section: "runs" | "structures";
   records: PayrollRow[];
   staffOptions: StaffOption[];
   structures: SalaryStructureRow[];
@@ -364,13 +365,8 @@ export function PayrollSection({
         </div>
       </div>
 
-      <Tabs defaultValue="runs">
-        <TabsList>
-          <TabsTrigger value="runs">Payroll Runs</TabsTrigger>
-          {(canManageStructures || structures.length > 0) && <TabsTrigger value="structures">Salary Structures</TabsTrigger>}
-        </TabsList>
-
-        <TabsContent value="runs">
+      {section === "runs" && (
+        <div>
           <div className="panel">
             <header className="flex items-center justify-between border-b border-border px-4 py-2.5">
               <div className="flex items-center gap-3">
@@ -585,9 +581,11 @@ export function PayrollSection({
               </div>
             )}
           </div>
-        </TabsContent>
+        </div>
+      )}
 
-        <TabsContent value="structures">
+      {section === "structures" && (canManageStructures || structures.length > 0) && (
+        <div>
           <div className="panel">
             <header className="flex items-center justify-between border-b border-border px-4 py-2.5">
               <div className="flex items-center gap-3">
@@ -771,8 +769,8 @@ export function PayrollSection({
               </div>
             )}
           </div>
-        </TabsContent>
-      </Tabs>
+        </div>
+      )}
     </div>
   );
 }

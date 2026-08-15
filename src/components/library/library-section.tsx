@@ -6,7 +6,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { StatusBadge } from "@/components/status-badge";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import {
@@ -82,6 +81,7 @@ function defaultDueDate() {
 }
 
 export function LibrarySection({
+  section,
   items,
   loans,
   studentOptions,
@@ -91,6 +91,7 @@ export function LibrarySection({
   fines,
   canWrite,
 }: {
+  section: "catalogue" | "shelves" | "reservations" | "fines";
   items: LibraryItemRow[];
   loans: LoanRow[];
   studentOptions: StudentOption[];
@@ -189,15 +190,8 @@ export function LibrarySection({
     <div className="flex flex-col gap-4">
       {error && <p className="text-sm text-danger">{error}</p>}
 
-      <Tabs defaultValue="catalogue">
-        <TabsList>
-          <TabsTrigger value="catalogue">Catalogue &amp; Loans</TabsTrigger>
-          {canWrite && <TabsTrigger value="shelves">Shelves</TabsTrigger>}
-          {canWrite && <TabsTrigger value="reservations">Reservations</TabsTrigger>}
-          {canWrite && <TabsTrigger value="fines">Fines</TabsTrigger>}
-        </TabsList>
-
-        <TabsContent value="catalogue" className="flex flex-col gap-6">
+      {section === "catalogue" && (
+        <div className="flex flex-col gap-6">
           <div className="panel">
             <header className="flex items-center justify-between border-b border-border px-4 py-2.5">
               <div className="flex items-center gap-3">
@@ -411,12 +405,12 @@ export function LibrarySection({
               </div>
             )}
           </div>
-        </TabsContent>
+        </div>
+      )}
 
-        {canWrite && (
-          <TabsContent value="shelves">
-            <div className="panel">
-              <header className="flex items-center justify-between border-b border-border px-4 py-2.5">
+      {section === "shelves" && canWrite && (
+        <div className="panel">
+          <header className="flex items-center justify-between border-b border-border px-4 py-2.5">
                 <div className="flex items-center gap-3">
                   <h2 className="text-[0.8125rem] font-semibold">Shelves</h2>
                   <span className="text-[0.6875rem] text-muted-foreground">{shelfOptions.length}</span>
@@ -483,13 +477,11 @@ export function LibrarySection({
                 </div>
               )}
             </div>
-          </TabsContent>
         )}
 
-        {canWrite && (
-          <TabsContent value="reservations">
-            <div className="panel">
-              <header className="flex items-center justify-between border-b border-border px-4 py-2.5">
+      {section === "reservations" && canWrite && (
+        <div className="panel">
+          <header className="flex items-center justify-between border-b border-border px-4 py-2.5">
                 <div className="flex items-center gap-3">
                   <h2 className="text-[0.8125rem] font-semibold">Reservations</h2>
                   <span className="text-[0.6875rem] text-muted-foreground">{reservations.length}</span>
@@ -614,13 +606,11 @@ export function LibrarySection({
                 </div>
               )}
             </div>
-          </TabsContent>
         )}
 
-        {canWrite && (
-          <TabsContent value="fines">
-            <div className="panel">
-              <header className="flex items-center justify-between border-b border-border px-4 py-2.5">
+      {section === "fines" && canWrite && (
+        <div className="panel">
+          <header className="flex items-center justify-between border-b border-border px-4 py-2.5">
                 <h2 className="text-[0.8125rem] font-semibold">Fines</h2>
                 <span className="text-[0.6875rem] text-muted-foreground">{fines.length}</span>
               </header>
@@ -670,9 +660,7 @@ export function LibrarySection({
                 </div>
               )}
             </div>
-          </TabsContent>
         )}
-      </Tabs>
 
       {fineOpen && (
         <Dialog open={!!fineOpen} onOpenChange={(o) => !o && setFineOpen(null)}>

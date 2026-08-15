@@ -37,7 +37,7 @@ export async function createBoardingHouse(input: {
   } catch (e) {
     return { error: e instanceof Error ? e.message : "Could not create the house." };
   }
-  revalidatePath("/boarding");
+  revalidatePath("/boarding", "layout");
   return { success: true };
 }
 
@@ -65,7 +65,7 @@ export async function createDormitory(input: {
   } catch (e) {
     return { error: e instanceof Error ? e.message : "Could not create the dormitory." };
   }
-  revalidatePath("/boarding");
+  revalidatePath("/boarding", "layout");
   return { success: true };
 }
 
@@ -103,7 +103,7 @@ export async function createRoom(input: {
   } catch (e) {
     return { error: e instanceof Error ? e.message : "Could not create the room." };
   }
-  revalidatePath("/boarding");
+  revalidatePath("/boarding", "layout");
   return { success: true };
 }
 
@@ -114,7 +114,7 @@ export async function setBedStatus(
   const supabase = await createClient();
   const { error } = await supabase.from("beds").update({ status }).eq("id", bedId);
   if (error) return { error: error.message };
-  revalidatePath("/boarding");
+  revalidatePath("/boarding", "layout");
   return { success: true };
 }
 
@@ -171,7 +171,7 @@ export async function allocateStudentToBed(input: {
   } catch (e) {
     return { error: e instanceof Error ? e.message : "Could not allocate the bed." };
   }
-  revalidatePath("/boarding");
+  revalidatePath("/boarding", "layout");
   revalidatePath("/students");
   return { success: true };
 }
@@ -183,7 +183,7 @@ export async function endAllocation(allocationId: string): Promise<ActionResult>
     .update({ status: "ended", end_date: new Date().toISOString().slice(0, 10) })
     .eq("id", allocationId);
   if (error) return { error: error.message };
-  revalidatePath("/boarding");
+  revalidatePath("/boarding", "layout");
   return { success: true };
 }
 
@@ -250,7 +250,7 @@ export async function transferStudent(input: {
   } catch (e) {
     return { error: e instanceof Error ? e.message : "Could not complete the transfer." };
   }
-  revalidatePath("/boarding");
+  revalidatePath("/boarding", "layout");
   return { success: true };
 }
 
@@ -290,7 +290,7 @@ export async function logIncident(input: {
   } catch (e) {
     return { error: e instanceof Error ? e.message : "Could not log the incident." };
   }
-  revalidatePath("/boarding");
+  revalidatePath("/boarding", "layout");
   return { success: true };
 }
 
@@ -298,7 +298,7 @@ export async function updateIncidentStatus(incidentId: string, status: "open" | 
   const supabase = await createClient();
   const { error } = await supabase.from("boarding_incidents").update({ status }).eq("id", incidentId);
   if (error) return { error: error.message };
-  revalidatePath("/boarding");
+  revalidatePath("/boarding", "layout");
   return { success: true };
 }
 
@@ -338,7 +338,7 @@ export async function submitRollCall(
   } catch (e) {
     return { error: e instanceof Error ? e.message : "Could not save the roll call." };
   }
-  revalidatePath("/boarding");
+  revalidatePath("/boarding", "layout");
   revalidatePath("/attendance");
   return { success: true };
 }

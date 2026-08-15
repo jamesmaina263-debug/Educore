@@ -45,11 +45,11 @@ export function RollCallSection({
   const [saved, setSaved] = useState(false);
 
   function changeDate(newDate: string) {
-    router.push(`/boarding?tab=rollcall&date=${newDate}&session=${session}`);
+    router.push(`/boarding/roll-call?date=${newDate}&session=${session}`);
   }
 
   function changeSession(newSession: string) {
-    router.push(`/boarding?tab=rollcall&date=${date}&session=${newSession}`);
+    router.push(`/boarding/roll-call?date=${date}&session=${newSession}`);
   }
 
   function markAllPresent() {

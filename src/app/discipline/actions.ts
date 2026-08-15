@@ -70,7 +70,7 @@ export async function createIncidentAction(formData: FormData): Promise<ActionRe
     );
   }
 
-  revalidatePath("/discipline");
+  revalidatePath("/discipline", "layout");
   return { success: true };
 }
 
@@ -96,7 +96,7 @@ export async function createCaseAction(formData: FormData): Promise<ActionResult
   });
   if (error) return { error: error.message };
 
-  revalidatePath("/discipline");
+  revalidatePath("/discipline", "layout");
   return { success: true };
 }
 
@@ -126,7 +126,7 @@ export async function updateCaseAction(formData: FormData): Promise<ActionResult
   const { error } = await supabase.from("discipline_cases").update(update).eq("id", caseId);
   if (error) return { error: error.message };
 
-  revalidatePath("/discipline");
+  revalidatePath("/discipline", "layout");
   return { success: true };
 }
 
@@ -158,7 +158,7 @@ export async function addDisciplinaryActionAction(formData: FormData): Promise<A
   });
   if (error) return { error: error.message };
 
-  revalidatePath("/discipline");
+  revalidatePath("/discipline", "layout");
   return { success: true };
 }
 
@@ -190,7 +190,7 @@ export async function createWelfareConcernAction(formData: FormData): Promise<Ac
   });
   if (error) return { error: error.message };
 
-  revalidatePath("/discipline");
+  revalidatePath("/discipline", "layout");
   return { success: true };
 }
 
@@ -216,7 +216,7 @@ export async function updateWelfareConcernAction(formData: FormData): Promise<Ac
   const { error } = await supabase.from("welfare_concerns").update(update).eq("id", concernId);
   if (error) return { error: error.message };
 
-  revalidatePath("/discipline");
+  revalidatePath("/discipline", "layout");
   return { success: true };
 }
 
@@ -245,7 +245,7 @@ export async function createSafeguardingReportAction(formData: FormData): Promis
   });
   if (error) return { error: error.message };
 
-  revalidatePath("/discipline");
+  revalidatePath("/discipline", "layout");
   return { success: true };
 }
 
@@ -276,6 +276,6 @@ export async function updateSafeguardingReportAction(formData: FormData): Promis
   const { error } = await supabase.from("safeguarding_reports").update(update).eq("id", reportId);
   if (error) return { error: error.message };
 
-  revalidatePath("/discipline");
+  revalidatePath("/discipline", "layout");
   return { success: true };
 }
