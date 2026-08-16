@@ -129,8 +129,13 @@ export function ReviewScreen({
 
   const [decisionOpen, setDecisionOpen] = useState<"accept" | "conditionally_accept" | "waitlist" | "reject" | null>(null);
   const [decisionNotes, setDecisionNotes] = useState("");
+  const [reconsidering, setReconsidering] = useState(false);
 
   const decided = DECIDED_STATUSES.includes(application.status);
+  // A rejected/waitlisted decision can be reopened without the applicant reapplying — the
+  // underlying decideApplicationAction has no state-machine restriction, this just unlocks
+  // the same decision buttons again for these two reversible outcomes.
+  const reconsiderable = application.status === "rejected" || application.status === "waitlisted";
   const statusLink = typeof window !== "undefined" ? `${window.location.origin}/apply/${schoolSlug}/status/${application.access_token}` : "";
 
   async function run<T extends { error: string } | { success: true }>(fn: () => Promise<T>) {
@@ -371,7 +376,7 @@ export function ReviewScreen({
 
       <div className="panel p-4">
         <h2 className="mb-3 text-[0.8125rem] font-semibold">Decision</h2>
-        {decided ? (
+        {decided && !(reconsiderable && reconsidering) ? (
           <div>
             <StatusBadge tone={application.status === "rejected" ? "danger" : application.status === "waitlisted" ? "warning" : "success"} label={STATUS_LABELS[application.status] ?? application.status} />
             {application.decision_notes && <p className="mt-2 text-[0.8125rem] text-muted-foreground">{application.decision_notes}</p>}
@@ -388,9 +393,19 @@ export function ReviewScreen({
                 <Link href={`/admissions/${application.id}/wizard`}>Continue Admission</Link>
               </Button>
             )}
+            {reconsiderable && canWrite && (
+              <Button size="sm" variant="outline" className="mt-3 ml-2" onClick={() => setReconsidering(true)}>
+                Reconsider
+              </Button>
+            )}
           </div>
         ) : canWrite ? (
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            {reconsiderable && reconsidering && (
+              <p className="w-full text-[0.75rem] text-muted-foreground">
+                Currently {STATUS_LABELS[application.status]?.toLowerCase()}. Choose a new decision below — no reapplication needed.
+              </p>
+            )}
             <Button size="sm" onClick={() => setDecisionOpen("accept")}>
               Accept
             </Button>
@@ -403,6 +418,11 @@ export function ReviewScreen({
             <Button size="sm" variant="ghost" onClick={() => setDecisionOpen("reject")}>
               Reject
             </Button>
+            {reconsiderable && reconsidering && (
+              <Button size="sm" variant="ghost" onClick={() => setReconsidering(false)}>
+                Cancel
+              </Button>
+            )}
           </div>
         ) : (
           <p className="text-sm text-muted-foreground">Awaiting a decision.</p>
