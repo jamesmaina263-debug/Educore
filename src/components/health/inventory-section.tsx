@@ -43,8 +43,6 @@ export function InventorySection({
   const [adjustingId, setAdjustingId] = useState<string | null>(null);
   const [adjustQty, setAdjustQty] = useState("");
   const [form, setForm] = useState({ name: "", unit: "pieces", reorder_level: "", expiry_date: "" });
-  const [decidingId, setDecidingId] = useState<string | null>(null);
-  const [confirmQty, setConfirmQty] = useState("");
   const [rejectReason, setRejectReason] = useState("");
   const [rejectingId, setRejectingId] = useState<string | null>(null);
 
@@ -87,16 +85,12 @@ export function InventorySection({
     router.refresh();
   }
 
-  async function accept(transferId: string) {
-    const qty = Number(confirmQty);
-    if (!qty || qty <= 0) return;
+  async function accept(transferId: string, quantityRequested: number) {
     setPending(true);
     setError(null);
-    const result = await acceptTransferAction(transferId, qty);
+    const result = await acceptTransferAction(transferId, quantityRequested);
     setPending(false);
     if ("error" in result) return setError(result.error);
-    setDecidingId(null);
-    setConfirmQty("");
     router.refresh();
   }
 
@@ -140,24 +134,7 @@ export function InventorySection({
                   </p>
                   <p className="text-xs text-muted-foreground">Sent {new Date(t.initiated_at).toLocaleDateString()}</p>
                 </div>
-                {decidingId === t.id ? (
-                  <div className="flex items-center gap-1">
-                    <Input
-                      className="h-8 w-20"
-                      type="number"
-                      min={1}
-                      placeholder="Qty received"
-                      value={confirmQty}
-                      onChange={(e) => setConfirmQty(e.target.value)}
-                    />
-                    <Button size="sm" onClick={() => accept(t.id)} disabled={pending}>
-                      Confirm
-                    </Button>
-                    <Button size="sm" variant="ghost" onClick={() => setDecidingId(null)}>
-                      Cancel
-                    </Button>
-                  </div>
-                ) : rejectingId === t.id ? (
+                {rejectingId === t.id ? (
                   <div className="flex items-center gap-1">
                     <Input
                       className="h-8 w-40"
@@ -174,17 +151,10 @@ export function InventorySection({
                   </div>
                 ) : (
                   <div className="flex items-center gap-1">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => {
-                        setDecidingId(t.id);
-                        setConfirmQty(String(t.quantity_requested));
-                      }}
-                    >
+                    <Button size="sm" variant="outline" onClick={() => accept(t.id, t.quantity_requested)} disabled={pending}>
                       Accept
                     </Button>
-                    <Button size="sm" variant="ghost" onClick={() => setRejectingId(t.id)}>
+                    <Button size="sm" variant="ghost" onClick={() => setRejectingId(t.id)} disabled={pending}>
                       Reject
                     </Button>
                   </div>
