@@ -4,8 +4,8 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { updateBranding } from "@/app/settings/actions";
-import { setActiveTerm } from "@/app/academics/actions";
+import { updateBranding } from "@/app/(app)/settings/actions";
+import { setActiveTerm } from "@/app/(app)/academics/actions";
 
 export interface TermOption {
   id: string;

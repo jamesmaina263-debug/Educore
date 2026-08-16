@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/status-badge";
-import { dispatchPending } from "@/app/communication/actions";
+import { dispatchPending } from "@/app/(app)/communication/actions";
 
 export interface LogRow {
   id: string;

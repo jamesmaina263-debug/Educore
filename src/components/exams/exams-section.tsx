@@ -11,7 +11,7 @@ import { StatusBadge } from "@/components/status-badge";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
-import { createExam, closeExam, reopenExam } from "@/app/exams/actions";
+import { createExam, closeExam, reopenExam } from "@/app/(app)/exams/actions";
 
 export interface ExamRow {
   id: string;

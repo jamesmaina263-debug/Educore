@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
-import { askEducoreAI } from "@/app/ai/actions";
+import { askEducoreAI } from "@/app/(app)/ai/actions";
 
 export interface AIQueryLogRow {
   id: string;

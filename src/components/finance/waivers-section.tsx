@@ -11,7 +11,7 @@ import { StatusBadge } from "@/components/status-badge";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
-import { createFeeWaiverAction, revokeFeeWaiverAction } from "@/app/finance/actions";
+import { createFeeWaiverAction, revokeFeeWaiverAction } from "@/app/(app)/finance/actions";
 
 export interface FeeWaiverRow {
   id: string;

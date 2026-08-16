@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/status-badge";
-import { reviewAttendanceCorrection } from "@/app/attendance/actions";
+import { reviewAttendanceCorrection } from "@/app/(app)/attendance/actions";
 
 export interface PendingCorrectionRow {
   id: string;

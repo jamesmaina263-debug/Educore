@@ -11,7 +11,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { rolloverAcademicYear } from "@/app/academics/actions";
+import { rolloverAcademicYear } from "@/app/(app)/academics/actions";
 import type { AcademicYearRow } from "./years-terms-section";
 
 export type StudentOption = {

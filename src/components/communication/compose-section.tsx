@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
-import { composeAndSendAction, type Recipient } from "@/app/communication/actions";
+import { composeAndSendAction, type Recipient } from "@/app/(app)/communication/actions";
 
 export interface TemplateOption {
   id: string;

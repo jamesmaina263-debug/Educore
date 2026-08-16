@@ -41,7 +41,7 @@ export function Topbar({
           </Button>
         </SheetTrigger>
         <SheetContent side="left" className="bg-sidebar p-0">
-          <SheetHeader className="border-b border-sidebar-border p-4">
+          <SheetHeader className="shrink-0 border-b border-sidebar-border p-4">
             <SheetTitle className="text-sidebar-foreground">EduCore</SheetTitle>
           </SheetHeader>
           <SidebarNav />

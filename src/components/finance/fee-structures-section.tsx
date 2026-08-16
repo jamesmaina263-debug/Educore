@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { StatusBadge } from "@/components/status-badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
-import { createFeeStructure, generateInvoicesAction } from "@/app/finance/actions";
+import { createFeeStructure, generateInvoicesAction } from "@/app/(app)/finance/actions";
 
 export interface FeeStructureRow {
   id: string;

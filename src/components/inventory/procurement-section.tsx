@@ -26,7 +26,7 @@ import {
   markSupplierInvoicePaidAction,
   receiveGoodsAction,
   requestAssetMaintenanceAction,
-} from "@/app/inventory/actions";
+} from "@/app/(app)/inventory/actions";
 
 export interface AssetRow {
   id: string;

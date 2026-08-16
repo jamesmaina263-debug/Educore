@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { allocateStudentToBed, endAllocation } from "@/app/boarding/actions";
+import { allocateStudentToBed, endAllocation } from "@/app/(app)/boarding/actions";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/status-badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";

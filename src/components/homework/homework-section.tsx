@@ -11,7 +11,7 @@ import { StatusBadge } from "@/components/status-badge";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
-import { createAssignmentAction, gradeSubmissionAction, getSubmissionsAction } from "@/app/homework/actions";
+import { createAssignmentAction, gradeSubmissionAction, getSubmissionsAction } from "@/app/(app)/homework/actions";
 
 export interface StreamOption {
   id: string;

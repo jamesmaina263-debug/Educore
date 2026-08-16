@@ -20,7 +20,7 @@ import {
   DialogFooter,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { createClassLevel, createStream, updateStreamClassTeacher, updateStreamCapacity } from "@/app/academics/actions";
+import { createClassLevel, createStream, updateStreamClassTeacher, updateStreamCapacity } from "@/app/(app)/academics/actions";
 
 export interface ClassRow {
   id: string;

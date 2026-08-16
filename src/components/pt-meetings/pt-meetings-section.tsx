@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { StatusBadge } from "@/components/status-badge";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
-import { createPtSlotAction, deletePtSlotAction } from "@/app/pt-meetings/actions";
+import { createPtSlotAction, deletePtSlotAction } from "@/app/(app)/pt-meetings/actions";
 
 export interface SlotRow {
   id: string;

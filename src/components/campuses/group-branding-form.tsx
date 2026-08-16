@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { updateGroupBranding } from "@/app/campuses/actions";
+import { updateGroupBranding } from "@/app/(app)/campuses/actions";
 
 export interface GroupBrandingData {
   logo_url: string | null;

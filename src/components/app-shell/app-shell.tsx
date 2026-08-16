@@ -1,10 +1,15 @@
+"use client";
+
 import type { ReactNode } from "react";
-import { SidebarNav } from "./sidebar-nav";
-import { Topbar } from "./topbar";
-import { CommandPalette } from "./command-palette";
-import { CommandPaletteProvider } from "./command-palette-context";
+import { usePublishAppShellChrome } from "./app-shell-chrome-context";
 import type { BreadcrumbItem } from "./breadcrumbs";
 
+// AppShell no longer renders the sidebar/Topbar/main frame itself -- that now lives once in
+// the persistent (app) layout (see src/app/(app)/layout.tsx) so it doesn't remount on every
+// navigation. Every page still calls AppShell exactly as before (same props); internally it
+// just publishes those props (breadcrumbs/userName/userRole/onSignOut) up to the shared
+// chrome via context, and renders children directly in place. This kept every existing
+// page.tsx, ModulePageShell, and FinancePageShell call site unchanged.
 export function AppShell({
   breadcrumbs,
   userName,
@@ -18,27 +23,6 @@ export function AppShell({
   onSignOut: () => void;
   children: ReactNode;
 }) {
-  return (
-    <CommandPaletteProvider>
-      <div className="flex h-screen overflow-hidden bg-background">
-        <aside className="hidden w-56 shrink-0 flex-col border-r border-sidebar-border bg-sidebar lg:flex">
-          <div className="flex h-14 items-center border-b border-sidebar-border px-4 text-sm font-semibold text-sidebar-foreground">
-            EduCore
-          </div>
-          <SidebarNav />
-        </aside>
-
-        <div className="flex min-w-0 flex-1 flex-col">
-          <Topbar
-            breadcrumbs={breadcrumbs}
-            userName={userName}
-            userRole={userRole}
-            onSignOut={onSignOut}
-          />
-          <main className="flex-1 overflow-y-auto p-6">{children}</main>
-        </div>
-      </div>
-      <CommandPalette />
-    </CommandPaletteProvider>
-  );
+  usePublishAppShellChrome({ breadcrumbs, userName, userRole, onSignOut });
+  return <>{children}</>;
 }

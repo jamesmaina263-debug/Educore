@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { StatusBadge } from "@/components/status-badge";
-import { activateSubjects, deactivateSubject } from "@/app/academics/actions";
+import { activateSubjects, deactivateSubject } from "@/app/(app)/academics/actions";
 
 export interface SubjectRow {
   id: string;

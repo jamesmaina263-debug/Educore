@@ -17,7 +17,7 @@ import {
   suspendSchoolSubscription,
   generateSchoolInvoice,
   recordSchoolPayment,
-} from "@/app/admin/billing/actions";
+} from "@/app/(app)/admin/billing/actions";
 
 export type InvoiceRow = {
   id: string;

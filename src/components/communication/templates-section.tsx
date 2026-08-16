@@ -9,7 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { StatusBadge } from "@/components/status-badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
-import { createTemplateAction, updateTemplateAction } from "@/app/communication/actions";
+import { createTemplateAction, updateTemplateAction } from "@/app/(app)/communication/actions";
 
 export interface TemplateRow {
   id: string;

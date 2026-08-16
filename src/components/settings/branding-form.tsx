@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { updateBranding } from "@/app/settings/actions";
+import { updateBranding } from "@/app/(app)/settings/actions";
 
 // Platform default, used only when neither the school nor its group has set a value.
 const PLATFORM_DEFAULT_LOGO_URL = "/branding/educore-default-logo.svg";

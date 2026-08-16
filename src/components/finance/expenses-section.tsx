@@ -9,7 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { StatusBadge } from "@/components/status-badge";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
-import { raiseExpenseAction, approveExpenseAction, rejectExpenseAction } from "@/app/finance/actions";
+import { raiseExpenseAction, approveExpenseAction, rejectExpenseAction } from "@/app/(app)/finance/actions";
 
 export interface ExpenseRow {
   id: string;

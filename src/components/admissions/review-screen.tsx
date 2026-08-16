@@ -18,7 +18,7 @@ import {
   recordAssessmentAction,
   decideApplicationAction,
   markConditionsMetAction,
-} from "@/app/admissions/actions";
+} from "@/app/(app)/admissions/actions";
 
 export interface ApplicationDetail {
   id: string;

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { logIncident, updateIncidentStatus } from "@/app/boarding/actions";
+import { logIncident, updateIncidentStatus } from "@/app/(app)/boarding/actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";

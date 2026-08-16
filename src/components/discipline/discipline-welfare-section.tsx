@@ -25,7 +25,7 @@ import {
   updateCaseAction,
   updateSafeguardingReportAction,
   updateWelfareConcernAction,
-} from "@/app/discipline/actions";
+} from "@/app/(app)/discipline/actions";
 
 export interface StudentOption {
   id: string;

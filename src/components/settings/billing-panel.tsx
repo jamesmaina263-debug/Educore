@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { cancelOwnSubscription } from "@/app/settings/billing-actions";
+import { cancelOwnSubscription } from "@/app/(app)/settings/billing-actions";
 
 export type BillingInvoice = {
   id: string;

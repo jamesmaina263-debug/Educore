@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { StatusBadge } from "@/components/status-badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
-import { createInventoryItemAction, createCategoryAction, recordStockMovementAction, createTransferAction } from "@/app/inventory/actions";
+import { createInventoryItemAction, createCategoryAction, recordStockMovementAction, createTransferAction } from "@/app/(app)/inventory/actions";
 
 export interface ItemRow {
   id: string;

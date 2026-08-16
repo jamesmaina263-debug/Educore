@@ -19,7 +19,7 @@ import {
   cancelReservationAction,
   createFineAction,
   resolveFineAction,
-} from "@/app/library/actions";
+} from "@/app/(app)/library/actions";
 
 export interface LibraryItemRow {
   id: string;

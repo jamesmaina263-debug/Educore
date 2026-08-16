@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { StatusBadge } from "@/components/status-badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
-import { generatePayrollAction, approvePayrollAction, markPayrollPaidAction, saveSalaryStructureAction, updateStaffStatutoryNumbersAction } from "@/app/payroll/actions";
+import { generatePayrollAction, approvePayrollAction, markPayrollPaidAction, saveSalaryStructureAction, updateStaffStatutoryNumbersAction } from "@/app/(app)/payroll/actions";
 import { TableExportMenu } from "@/components/shared/table-export-menu";
 
 const MONTHS = [

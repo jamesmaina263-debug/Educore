@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { StatusBadge } from "@/components/status-badge";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
-import { generateReportCards, approveComment, writeComment, draftCommentWithAI } from "@/app/exams/report-cards/actions";
+import { generateReportCards, approveComment, writeComment, draftCommentWithAI } from "@/app/(app)/exams/report-cards/actions";
 
 export interface StudentMarkLine {
   subject_name: string;

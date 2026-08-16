@@ -9,7 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { StatusBadge } from "@/components/status-badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
-import { createReviewAction } from "@/app/performance/actions";
+import { createReviewAction } from "@/app/(app)/performance/actions";
 
 export interface ReviewRow {
   id: string;

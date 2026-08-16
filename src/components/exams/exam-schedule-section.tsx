@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
-import { saveExamSchedule, deleteExamSchedule } from "@/app/exams/actions";
+import { saveExamSchedule, deleteExamSchedule } from "@/app/(app)/exams/actions";
 
 export interface ExamScheduleRow {
   id: string;

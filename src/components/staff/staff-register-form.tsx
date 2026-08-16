@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { StatusBadge } from "@/components/status-badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { submitStaffAttendance, editStaffAttendanceRecord } from "@/app/staff/actions";
+import { submitStaffAttendance, editStaffAttendanceRecord } from "@/app/(app)/staff/actions";
 
 export interface StaffRosterRow {
   staff_id: string;

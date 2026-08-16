@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { AppShell } from "@/components/app-shell/app-shell";
 import { logout } from "@/app/login/actions";
-import type { FinanceContext } from "@/app/finance/_data";
+import type { FinanceContext } from "@/app/(app)/finance/_data";
 
 export function FinancePageShell({
   ctx,

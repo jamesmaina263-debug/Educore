@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { assignSubjectTeacher } from "@/app/academics/actions";
+import { assignSubjectTeacher } from "@/app/(app)/academics/actions";
 import {
   Select,
   SelectTrigger,

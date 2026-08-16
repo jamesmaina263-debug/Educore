@@ -1,7 +1,7 @@
 import { loadCampusesContext } from "../_data";
 import { ModulePageShell } from "@/components/app-shell/module-page-shell";
 import { ApiKeysPanel } from "@/components/settings/api-keys-panel";
-import { issueGroupApiKey, revokeGroupApiKey } from "@/app/campuses/actions";
+import { issueGroupApiKey, revokeGroupApiKey } from "@/app/(app)/campuses/actions";
 
 export default async function CampusesApiKeysPage() {
   const ctx = await loadCampusesContext();

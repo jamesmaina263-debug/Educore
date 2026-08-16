@@ -14,7 +14,7 @@ import {
   DialogFooter,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { createAcademicYear, setActiveAcademicYear, createTerm, setActiveTerm } from "@/app/academics/actions";
+import { createAcademicYear, setActiveAcademicYear, createTerm, setActiveTerm } from "@/app/(app)/academics/actions";
 
 export interface AcademicYearRow {
   id: string;

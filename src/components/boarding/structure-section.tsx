@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { createBoardingHouse, createDormitory, createRoom, setBedStatus } from "@/app/boarding/actions";
+import { createBoardingHouse, createDormitory, createRoom, setBedStatus } from "@/app/(app)/boarding/actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";

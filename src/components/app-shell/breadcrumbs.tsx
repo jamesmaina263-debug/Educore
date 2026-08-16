@@ -1,4 +1,5 @@
 import * as React from "react";
+import Link from "next/link";
 import { ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -22,9 +23,9 @@ export function Breadcrumbs({
           return (
             <li key={`${item.label}-${i}`} className="flex items-center gap-1.5">
               {item.href && !last ? (
-                <a href={item.href} className="text-muted-foreground hover:text-foreground">
+                <Link href={item.href} className="text-muted-foreground hover:text-foreground">
                   {item.label}
-                </a>
+                </Link>
               ) : (
                 <span className={last ? "font-medium text-foreground" : "text-muted-foreground"}>
                   {item.label}

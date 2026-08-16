@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { StatusBadge } from "@/components/status-badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { submitAttendance, editAttendanceRecord } from "@/app/attendance/actions";
+import { submitAttendance, editAttendanceRecord } from "@/app/(app)/attendance/actions";
 
 export interface RosterRow {
   student_id: string;

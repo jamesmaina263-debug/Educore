@@ -1,7 +1,7 @@
 import { loadSettingsContext } from "../_data";
 import { ModulePageShell } from "@/components/app-shell/module-page-shell";
 import { ApiKeysPanel } from "@/components/settings/api-keys-panel";
-import { issueSchoolApiKey, revokeSchoolApiKey } from "@/app/settings/actions";
+import { issueSchoolApiKey, revokeSchoolApiKey } from "@/app/(app)/settings/actions";
 
 export default async function SettingsApiKeysPage() {
   const ctx = await loadSettingsContext();

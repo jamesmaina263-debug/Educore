@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
-import { setWhitelabelEnabled, setDomainVerified, setDomainPending } from "@/app/admin/whitelabel/actions";
+import { setWhitelabelEnabled, setDomainVerified, setDomainPending } from "@/app/(app)/admin/whitelabel/actions";
 
 export type WhitelabelGroupRow = {
   id: string;

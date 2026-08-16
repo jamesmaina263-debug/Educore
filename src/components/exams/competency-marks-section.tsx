@@ -11,7 +11,7 @@ import {
   createCurriculumSubStrand,
   submitCompetencyMarks,
   editCompetencyMark,
-} from "@/app/exams/actions";
+} from "@/app/(app)/exams/actions";
 
 export interface StrandOption {
   id: string;

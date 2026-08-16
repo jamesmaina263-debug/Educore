@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { addMedicalInventoryItem, issueMedicalStock, acceptTransferAction, rejectTransferAction } from "@/app/health/actions";
+import { addMedicalInventoryItem, issueMedicalStock, acceptTransferAction, rejectTransferAction } from "@/app/(app)/health/actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { StatusBadge } from "@/components/status-badge";

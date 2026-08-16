@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { TableExportMenu } from "@/components/shared/table-export-menu";
-import { recordPaymentAction } from "@/app/finance/actions";
+import { recordPaymentAction } from "@/app/(app)/finance/actions";
 
 export interface InvoiceListRow {
   id: string;

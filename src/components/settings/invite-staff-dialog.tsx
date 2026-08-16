@@ -20,7 +20,7 @@ import {
   DialogFooter,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { inviteStaffMember } from "@/app/settings/actions";
+import { inviteStaffMember } from "@/app/(app)/settings/actions";
 import type { RoleOption } from "./staff-roles-table";
 
 export function InviteStaffDialog({ roles }: { roles: RoleOption[] }) {

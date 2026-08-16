@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import type { Recipient } from "@/app/communication/actions";
+import type { Recipient } from "@/app/(app)/communication/actions";
 
 type ActionResult = { error: string } | { success: true };
 
@@ -332,12 +332,12 @@ export async function linkGuardianToApplication(applicationId: string, input: Li
 // "use server" module convention doesn't support plain re-export statements, so these thin
 // wrappers just forward the call.
 export async function verifyDocumentAction(documentId: string): Promise<ActionResult> {
-  const { verifyDocumentAction: impl } = await import("@/app/admissions/actions");
+  const { verifyDocumentAction: impl } = await import("@/app/(app)/admissions/actions");
   return impl(documentId);
 }
 
 export async function rejectDocumentAction(documentId: string, comment: string): Promise<ActionResult> {
-  const { rejectDocumentAction: impl } = await import("@/app/admissions/actions");
+  const { rejectDocumentAction: impl } = await import("@/app/(app)/admissions/actions");
   return impl(documentId, comment);
 }
 
@@ -412,7 +412,7 @@ export async function allocateBoardingForApplication(applicationId: string, bedI
   const { data: application } = await supabase.from("applications").select("resulting_student_id").eq("id", applicationId).maybeSingle();
   if (!application?.resulting_student_id) return { error: "Complete the Student step first." };
 
-  const { allocateStudentToBed } = await import("@/app/boarding/actions");
+  const { allocateStudentToBed } = await import("@/app/(app)/boarding/actions");
   const result = await allocateStudentToBed({ student_id: application.resulting_student_id, bed_id: bedId });
   if ("error" in result) return result;
 
@@ -434,7 +434,7 @@ export async function removeBoardingForApplication(applicationId: string): Promi
     .maybeSingle();
   if (!allocation) return { success: true };
 
-  const { endAllocation } = await import("@/app/boarding/actions");
+  const { endAllocation } = await import("@/app/(app)/boarding/actions");
   const result = await endAllocation(allocation.id);
   if ("error" in result) return result;
   revalidatePath(`/admissions/${applicationId}/wizard`);
@@ -450,7 +450,7 @@ export async function assignTransportForApplication(
   const { data: application } = await supabase.from("applications").select("resulting_student_id").eq("id", applicationId).maybeSingle();
   if (!application?.resulting_student_id) return { error: "Complete the Student step first." };
 
-  const { assignTransportAction } = await import("@/app/transport/actions");
+  const { assignTransportAction } = await import("@/app/(app)/transport/actions");
   const result = await assignTransportAction({ student_id: application.resulting_student_id, ...input });
   if ("error" in result) return result;
 
@@ -472,7 +472,7 @@ export async function removeTransportForApplication(applicationId: string): Prom
     .maybeSingle();
   if (!assignment) return { success: true };
 
-  const { endTransportAssignmentAction } = await import("@/app/transport/actions");
+  const { endTransportAssignmentAction } = await import("@/app/(app)/transport/actions");
   const result = await endTransportAssignmentAction(assignment.id);
   if ("error" in result) return result;
   revalidatePath(`/admissions/${applicationId}/wizard`);
@@ -597,7 +597,7 @@ export async function completeEnrollmentAction(applicationId: string): Promise<{
         .limit(1)
         .maybeSingle();
       if (template) {
-        const { composeAndSendAction } = await import("@/app/communication/actions");
+        const { composeAndSendAction } = await import("@/app/(app)/communication/actions");
         const { data: guardian } = await supabase.from("school_users").select("phone, email").eq("id", application.guardian_id).maybeSingle();
         const { data: app2 } = await supabase.from("applications").select("resulting_student_id, first_name, last_name").eq("id", applicationId).maybeSingle();
         const recipient: Recipient = {

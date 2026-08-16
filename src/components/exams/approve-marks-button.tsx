@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { approveMarks } from "@/app/exams/actions";
+import { approveMarks } from "@/app/(app)/exams/actions";
 
 export function ApproveMarksButton({ examId, classId, subjectId }: { examId: string; classId: string; subjectId: string }) {
   const router = useRouter();

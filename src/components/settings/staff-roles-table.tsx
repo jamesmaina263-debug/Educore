@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/select";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { changeStaffRole, setStaffStatus } from "@/app/settings/actions";
+import { changeStaffRole, setStaffStatus } from "@/app/(app)/settings/actions";
 
 export interface StaffRow {
   id: string;
