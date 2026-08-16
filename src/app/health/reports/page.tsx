@@ -15,7 +15,7 @@ export default async function HealthReportsPage() {
       title="Reports"
       noAccess={!ctx.canReadAny}
     >
-      <ReportsSection data={ctx.reportsData} />
+      <ReportsSection data={ctx.reportsData} schoolName={ctx.schoolName} />
     </ModulePageShell>
   );
 }

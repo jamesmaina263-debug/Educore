@@ -14,7 +14,7 @@ export default async function BoardingReportsPage() {
       section="Reports"
       title="Reports"
     >
-      <ReportsSection data={ctx.reportsData} />
+      <ReportsSection data={ctx.reportsData} schoolName={ctx.schoolName} />
     </ModulePageShell>
   );
 }

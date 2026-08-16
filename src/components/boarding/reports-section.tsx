@@ -1,3 +1,5 @@
+import { TableExportMenu } from "@/components/shared/table-export-menu";
+
 export interface DormUtilizationRow {
   house_name: string;
   dorm_name: string;
@@ -19,11 +21,41 @@ export interface ReportsData {
   dormUtilization: DormUtilizationRow[];
 }
 
-export function ReportsSection({ data }: { data: ReportsData }) {
+export function ReportsSection({ data, schoolName }: { data: ReportsData; schoolName: string }) {
+  const summaryRows = [
+    {
+      "Total Beds": data.totalBeds,
+      Occupied: data.occupiedBeds,
+      Available: data.availableBeds,
+      Reserved: data.reservedBeds,
+      Unavailable: data.unavailableBeds,
+      "Active Allocations": data.activeAllocations,
+      "Ended This Term": data.endedAllocationsThisTerm,
+      "Transfers This Term": data.transfersThisTerm,
+      "Incidents (Open)": data.incidentsOpenClosed.open,
+      "Incidents (Closed)": data.incidentsOpenClosed.closed,
+    },
+  ];
+  const dormRows = data.dormUtilization.map((d) => ({
+    House: d.house_name,
+    Dormitory: d.dorm_name,
+    Beds: d.beds,
+    Occupied: d.occupied,
+    "Utilization (%)": d.beds > 0 ? Math.round((d.occupied / d.beds) * 100) : 0,
+  }));
+
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <p className="mb-2 text-sm font-medium">Bed availability</p>
+        <div className="mb-2 flex items-center justify-between gap-3">
+          <p className="text-sm font-medium">Bed availability</p>
+          <TableExportMenu
+            filenameStub={`${schoolName}-boarding-summary`}
+            title="Boarding Summary"
+            subtitle={schoolName}
+            rows={summaryRows}
+          />
+        </div>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           <div className="panel p-3">
             <p className="label-eyebrow">Occupied</p>
@@ -65,7 +97,15 @@ export function ReportsSection({ data }: { data: ReportsData }) {
       </div>
 
       <div>
-        <p className="mb-2 text-sm font-medium">Dormitory utilization</p>
+        <div className="mb-2 flex items-center justify-between gap-3">
+          <p className="text-sm font-medium">Dormitory utilization</p>
+          <TableExportMenu
+            filenameStub={`${schoolName}-dormitory-utilization`}
+            title="Dormitory Utilization"
+            subtitle={schoolName}
+            rows={dormRows}
+          />
+        </div>
         <div className="overflow-x-auto">
           <table className="table-dense w-full">
             <thead>
