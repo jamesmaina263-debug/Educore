@@ -14,6 +14,7 @@ export interface FinanceContext {
   userRole?: string;
   schoolName: string;
   expenseApprovalThreshold: number | null;
+  feeAlertThreshold: number | null;
   canRead: boolean;
   canWrite: boolean;
   canApproveDiscounts: boolean;
@@ -55,7 +56,7 @@ export async function loadFinanceContext(): Promise<FinanceContext> {
     await Promise.all([
       supabase
         .from("school_users")
-        .select("full_name, roles(display_name), schools(name, expense_approval_threshold)")
+        .select("full_name, roles(display_name), schools(name, expense_approval_threshold, fee_alert_threshold)")
         .eq("auth_user_id", user.id)
         .maybeSingle(),
       supabase.rpc("auth_has_permission", { p_permission_key: "finance.read" }),
@@ -65,13 +66,14 @@ export async function loadFinanceContext(): Promise<FinanceContext> {
     ]);
 
   const roleName = (schoolUser?.roles as unknown as { display_name: string } | null)?.display_name;
-  const school = schoolUser?.schools as unknown as { name: string; expense_approval_threshold: number | null } | null;
+  const school = schoolUser?.schools as unknown as { name: string; expense_approval_threshold: number | null; fee_alert_threshold: number | null } | null;
 
   const base = {
     userName: schoolUser?.full_name ?? user.email ?? "Account",
     userRole: roleName,
     schoolName: school?.name ?? "EduCore",
     expenseApprovalThreshold: school?.expense_approval_threshold ?? null,
+    feeAlertThreshold: school?.fee_alert_threshold ?? null,
     canRead: canRead === true,
     canWrite: canWrite === true,
     canApproveDiscounts: canApproveDiscounts === true,
