@@ -13,6 +13,7 @@ export interface AcademicsContext {
   schoolName: string;
   canWrite: boolean;
   canRollover: boolean;
+  canSendNewsletter: boolean;
   years: AcademicYearRow[];
   terms: TermRow[];
   activeYearId: string | null;
@@ -50,6 +51,7 @@ export async function loadAcademicsContext(): Promise<AcademicsContext> {
     { data: teacherRows },
     { data: canWriteData },
     { data: canRolloverData },
+    { data: canSendNewsletterData },
     { data: activeStudents },
     { data: timetableSlots },
     { data: classSubjectRows },
@@ -66,6 +68,7 @@ export async function loadAcademicsContext(): Promise<AcademicsContext> {
       .eq("status", "active"),
     supabase.rpc("auth_has_permission", { p_permission_key: "academics.write" }),
     supabase.rpc("auth_has_permission", { p_permission_key: "students.write" }),
+    supabase.rpc("auth_has_permission", { p_permission_key: "communication.write" }),
     supabase
       .from("students")
       .select("id, admission_number, first_name, last_name, current_class_id")
@@ -81,6 +84,7 @@ export async function loadAcademicsContext(): Promise<AcademicsContext> {
 
   const canWrite = canWriteData === true;
   const canRollover = canRolloverData === true;
+  const canSendNewsletter = canSendNewsletterData === true;
   const students: StudentOption[] = (activeStudents ?? []) as StudentOption[];
   const activeYear = (years ?? []).find((y) => y.status === "active") ?? null;
 
@@ -103,6 +107,7 @@ export async function loadAcademicsContext(): Promise<AcademicsContext> {
     schoolName: schoolName ?? "EduCore",
     canWrite,
     canRollover,
+    canSendNewsletter,
     years: (years ?? []) as AcademicYearRow[],
     terms: (terms ?? []) as TermRow[],
     activeYearId: activeYear?.id ?? null,

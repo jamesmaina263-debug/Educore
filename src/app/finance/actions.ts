@@ -314,3 +314,15 @@ export async function rejectExpenseAction(expenseId: string): Promise<ActionResu
   revalidatePath("/finance", "layout");
   return { success: true };
 }
+
+// ---------------------------------------------------------------------------
+// Fee alert threshold (Configuration)
+// ---------------------------------------------------------------------------
+
+export async function setFeeAlertThresholdAction(threshold: number | null): Promise<ActionResult> {
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("set_fee_alert_threshold", { p_threshold: threshold });
+  if (error) return { error: error.message };
+  revalidatePath("/finance", "layout");
+  return { success: true };
+}

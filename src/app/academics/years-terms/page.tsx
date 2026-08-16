@@ -14,7 +14,7 @@ export default async function YearsTermsPage() {
       section="Years & Terms"
       title="Years & Terms"
     >
-      <YearsTermsSection years={ctx.years} terms={ctx.terms} canWrite={ctx.canWrite} />
+      <YearsTermsSection years={ctx.years} terms={ctx.terms} canWrite={ctx.canWrite} canSendNewsletter={ctx.canSendNewsletter} />
     </ModulePageShell>
   );
 }

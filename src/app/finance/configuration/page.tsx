@@ -1,6 +1,7 @@
 import { loadFinanceContext } from "../_data";
 import { FinancePageShell } from "@/components/finance/finance-page-shell";
 import { ExpensesSection } from "@/components/finance/expenses-section";
+import { FeeAlertThresholdPanel } from "@/components/finance/fee-alert-threshold-panel";
 
 export default async function FinanceConfigurationPage() {
   const ctx = await loadFinanceContext();
@@ -16,6 +17,8 @@ export default async function FinanceConfigurationPage() {
             canApprove={ctx.canApproveExpenses}
           />
         </div>
+
+        <FeeAlertThresholdPanel initialThreshold={ctx.feeAlertThreshold} canWrite={ctx.canWrite} />
 
         <div className="panel p-4">
           <p className="mb-2 text-sm font-semibold">Fee Structure & Payment Settings</p>

@@ -15,6 +15,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { createAcademicYear, setActiveAcademicYear, createTerm, setActiveTerm } from "@/app/academics/actions";
+import { sendTermNewsletterAction } from "@/app/academics/newsletter-actions";
 
 export interface AcademicYearRow {
   id: string;
@@ -42,19 +43,33 @@ export function YearsTermsSection({
   years,
   terms,
   canWrite,
+  canSendNewsletter,
 }: {
   years: AcademicYearRow[];
   terms: TermRow[];
   canWrite: boolean;
+  canSendNewsletter: boolean;
 }) {
   const router = useRouter();
   const [yearDialogOpen, setYearDialogOpen] = useState(false);
   const [termDialogOpen, setTermDialogOpen] = useState<string | null>(null); // academic_year_id
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const [newsletterBusyId, setNewsletterBusyId] = useState<string | null>(null);
+  const [newsletterNotice, setNewsletterNotice] = useState<string | null>(null);
 
   const [yearForm, setYearForm] = useState({ name: "", start_date: "", end_date: "" });
   const [termForm, setTermForm] = useState({ name: "", term_number: 1, start_date: "", end_date: "" });
+
+  async function handleSendNewsletter(termId: string) {
+    setNewsletterBusyId(termId);
+    setNewsletterNotice(null);
+    const result = await sendTermNewsletterAction(termId);
+    setNewsletterBusyId(null);
+    if ("error" in result) { setNewsletterNotice(result.error); return; }
+    setNewsletterNotice(`Sent to ${result.recipientCount} guardian(s).`);
+    router.refresh();
+  }
 
   async function handleCreateYear() {
     setPending(true);
@@ -297,6 +312,17 @@ export function YearsTermsSection({
                                 Set active
                               </Button>
                             )}
+                            {canSendNewsletter && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                disabled={newsletterBusyId === t.id}
+                                onClick={() => handleSendNewsletter(t.id)}
+                                title="Sends automatically once the term's end date passes — this sends it now regardless of that date. Safe to click more than once: it only ever sends once per term."
+                              >
+                                {newsletterBusyId === t.id ? "Sending…" : "Send newsletter"}
+                              </Button>
+                            )}
                           </span>
                         </li>
                       ))}
@@ -307,6 +333,7 @@ export function YearsTermsSection({
             })}
           </div>
         )}
+        {newsletterNotice && <p className="mt-2 text-sm text-muted-foreground">{newsletterNotice}</p>}
       </div>
     </div>
   );
