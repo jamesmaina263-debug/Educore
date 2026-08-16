@@ -44,6 +44,7 @@ export function FeeStructuresSection({
   const [open, setOpen] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [lastGenerated, setLastGenerated] = useState<{ structureId: string; count: number } | null>(null);
   const [name, setName] = useState("");
   const [termId, setTermId] = useState(terms[0]?.id ?? "");
   const [classId, setClassId] = useState<string>("__all__");
@@ -71,12 +72,14 @@ export function FeeStructuresSection({
     router.refresh();
   }
 
-  async function handleGenerate(termIdToUse: string, classIdToUse: string | null) {
+  async function handleGenerate(structureId: string, termIdToUse: string, classIdToUse: string | null) {
     setPending(true);
     setError(null);
+    setLastGenerated(null);
     const result = await generateInvoicesAction(termIdToUse, classIdToUse);
     setPending(false);
     if ("error" in result) return setError(result.error);
+    setLastGenerated({ structureId, count: result.count });
     router.refresh();
   }
 
@@ -231,9 +234,22 @@ export function FeeStructuresSection({
                 ))}
               </div>
               {canWrite && (
-                <Button size="sm" variant="outline" className="mt-3" disabled={pending} onClick={() => handleGenerate(s.term_id, s.class_id)}>
-                  Generate invoices for {s.class_name ?? "all grades"} — {s.term_name}
-                </Button>
+                <>
+                  <Button size="sm" variant="outline" className="mt-3" disabled={pending} onClick={() => handleGenerate(s.id, s.term_id, s.class_id)}>
+                    Generate invoices for {s.class_name ?? "all grades"} — {s.term_name}
+                  </Button>
+                  {lastGenerated?.structureId === s.id && (
+                    lastGenerated.count > 0 ? (
+                      <p className="mt-2 text-sm text-success">
+                        {lastGenerated.count} invoice{lastGenerated.count === 1 ? "" : "s"} generated.
+                      </p>
+                    ) : (
+                      <p className="mt-2 text-sm text-muted-foreground">
+                        No invoices generated — no active student in {s.class_name ?? "any grade"} ({s.boarding_type}) is missing an invoice for {s.term_name}. Check that the student is enrolled, active, and their class/boarding status matches this fee structure.
+                      </p>
+                    )
+                  )}
+                </>
               )}
             </div>
           ))}
