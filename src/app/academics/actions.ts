@@ -217,23 +217,67 @@ export async function rolloverAcademicYear(input: {
   };
 }
 
-export async function createSubject(input: {
-  name: string;
-  code?: string;
-  is_core: boolean;
-}): Promise<ActionResult> {
+export async function activateSubjects(catalogueIds: string[]): Promise<ActionResult> {
+  if (catalogueIds.length === 0) return { error: "Select at least one subject to activate." };
   const supabase = await createClient();
   try {
     const school_id = await schoolId(supabase);
-    const { error } = await supabase.from("subjects").insert({
-      school_id,
-      name: input.name,
-      code: input.code || null,
-      is_core: input.is_core,
-    });
+    // Pull the locked snapshot fields from the master catalogue -- a school can only
+    // activate what's actually in subject_catalogue, never type its own name/code/is_core.
+    const { data: catalogueRows, error: catalogueError } = await supabase
+      .from("subject_catalogue")
+      .select("id, name, code, is_core")
+      .in("id", catalogueIds);
+    if (catalogueError) return { error: catalogueError.message };
+    if (!catalogueRows || catalogueRows.length === 0) return { error: "Could not find those catalogue subjects." };
+
+    // Reactivating a previously-deactivated subject must go through UPDATE (is_active
+    // is the only column the DB trigger allows to change post-insert) rather than
+    // upsert-by-insert, which would try to rewrite the locked snapshot columns.
+    const { data: existingRows } = await supabase
+      .from("subjects")
+      .select("id, catalogue_id, is_active")
+      .eq("school_id", school_id)
+      .in("catalogue_id", catalogueIds);
+    const existingByCatalogueId = new Map((existingRows ?? []).map((r) => [r.catalogue_id, r]));
+
+    const toReactivate = (existingRows ?? []).filter((r) => !r.is_active).map((r) => r.id);
+    const toInsert = catalogueRows.filter((c) => !existingByCatalogueId.has(c.id));
+
+    if (toReactivate.length > 0) {
+      const { error } = await supabase.from("subjects").update({ is_active: true }).in("id", toReactivate);
+      if (error) return { error: error.message };
+    }
+    if (toInsert.length > 0) {
+      const { error } = await supabase.from("subjects").insert(
+        toInsert.map((c) => ({
+          school_id,
+          catalogue_id: c.id,
+          name: c.name,
+          code: c.code,
+          is_core: c.is_core,
+          is_active: true,
+        })),
+      );
+      if (error) return { error: error.message };
+    }
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Could not activate the selected subjects." };
+  }
+  revalidatePath("/academics", "layout");
+  return { success: true };
+}
+
+export async function deactivateSubject(subjectId: string): Promise<ActionResult> {
+  const supabase = await createClient();
+  try {
+    // Deactivate only -- subjects has no DELETE RLS policy, so a school can never
+    // remove a catalogue subject outright, only switch it off. Existing exam/marks/
+    // timetable history against this subject_id is untouched.
+    const { error } = await supabase.from("subjects").update({ is_active: false }).eq("id", subjectId);
     if (error) return { error: error.message };
   } catch (e) {
-    return { error: e instanceof Error ? e.message : "Could not create the subject." };
+    return { error: e instanceof Error ? e.message : "Could not deactivate the subject." };
   }
   revalidatePath("/academics", "layout");
   return { success: true };

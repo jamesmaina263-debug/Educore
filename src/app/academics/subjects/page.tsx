@@ -14,7 +14,7 @@ export default async function SubjectsPage() {
       section="Subjects"
       title="Subjects"
     >
-      <SubjectsSection subjects={ctx.subjects} canWrite={ctx.canWrite} />
+      <SubjectsSection subjects={ctx.subjects} catalogue={ctx.catalogue} canWrite={ctx.canWrite} />
     </ModulePageShell>
   );
 }

@@ -16,7 +16,7 @@ export default async function HomeworkPage() {
       supabase.from("school_users").select("id, full_name, roles(display_name), schools(name)").eq("auth_user_id", user.id).maybeSingle(),
       supabase.rpc("auth_has_permission", { p_permission_key: "academics.write" }),
       supabase.from("streams").select("id, name, classes(name)").order("name"),
-      supabase.from("subjects").select("id, name").order("name"),
+      supabase.from("subjects").select("id, name").eq("is_active", true).order("name"),
       supabase
         .from("assignments")
         .select("id, title, description, due_date, stream_id, subject_id, teacher_id, streams(name, classes(name)), subjects(name), assignment_submissions(id, status)")

@@ -39,6 +39,11 @@ export function TeacherAllocationSection({
   const [error, setError] = useState<string | null>(null);
 
   const allocationMap = new Map(allocations.map((a) => [`${a.stream_id}:${a.subject_id}`, a.teacher_id]));
+  // Only offer subjects the school currently has active -- but keep showing a row for a
+  // since-deactivated subject if it still has an allocation on record, so existing
+  // assignments stay visible rather than silently disappearing from the matrix.
+  const allocatedSubjectIds = new Set(allocations.map((a) => a.subject_id));
+  const visibleSubjects = subjects.filter((s) => s.is_active || allocatedSubjectIds.has(s.id));
 
   async function assign(streamId: string, subjectId: string, teacherId: string) {
     const key = `${streamId}:${subjectId}`;
@@ -53,10 +58,10 @@ export function TeacherAllocationSection({
     router.refresh();
   }
 
-  if (streams.length === 0 || subjects.length === 0) {
+  if (streams.length === 0 || visibleSubjects.length === 0) {
     return (
       <div className="panel border-dashed p-6 text-center text-sm text-muted-foreground">
-        Add streams and subjects first, then assign a teacher for each subject per stream here.
+        Add streams and activate subjects first, then assign a teacher for each subject per stream here.
       </div>
     );
   }
@@ -86,7 +91,7 @@ export function TeacherAllocationSection({
                     </tr>
                   </thead>
                   <tbody>
-                    {subjects.map((subj) => (
+                    {visibleSubjects.map((subj) => (
                       <tr key={subj.id}>
                         <td>{subj.name}</td>
                         {classStreams.map((s) => {
