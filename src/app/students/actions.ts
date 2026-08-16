@@ -4,7 +4,16 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { findOrCreateGuardian } from "@/lib/guardians";
 
+export async function previewNextAdmissionNumber(): Promise<{ error: string } | { admissionNumber: string }> {
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("next_admission_number");
+  if (error || !data) return { error: error?.message ?? "Could not compute the next admission number." };
+  return { admissionNumber: data as string };
+}
+
 export interface CreateStudentInput {
+  // Auto-assigned server-side (see the students_before_insert trigger) — always send blank
+  // so the DB computes it atomically at insert time; never trust a client-held preview value.
   admission_number: string;
   upi_number?: string;
   first_name: string;
@@ -22,7 +31,7 @@ export interface CreateStudentInput {
 
 export async function createStudentWithGuardian(
   input: CreateStudentInput,
-): Promise<{ error: string } | { success: true; studentId: string }> {
+): Promise<{ error: string } | { success: true; studentId: string; admissionNumber: string }> {
   const supabase = await createClient();
 
   const guardian = await findOrCreateGuardian(supabase, {
@@ -49,7 +58,7 @@ export async function createStudentWithGuardian(
       date_of_birth: input.date_of_birth,
       gender: input.gender,
     })
-    .select("id")
+    .select("id, admission_number")
     .single();
 
   if (studentError || !student) {
@@ -69,5 +78,5 @@ export async function createStudentWithGuardian(
   // not this form's. See /admissions.
   revalidatePath("/students");
   revalidatePath("/admissions");
-  return { success: true as const, studentId: student.id as string };
+  return { success: true as const, studentId: student.id as string, admissionNumber: student.admission_number as string };
 }

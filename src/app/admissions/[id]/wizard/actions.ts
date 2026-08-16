@@ -6,6 +6,15 @@ import type { Recipient } from "@/app/communication/actions";
 
 type ActionResult = { error: string } | { success: true };
 
+// Display-only preview — see students_before_insert / next_admission_number() for the
+// actual race-safe assignment. Same RPC students/actions.ts uses for the direct-add form.
+export async function previewNextAdmissionNumberForWizard(): Promise<{ error: string } | { admissionNumber: string }> {
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("next_admission_number");
+  if (error || !data) return { error: error?.message ?? "Could not compute the next admission number." };
+  return { admissionNumber: data as string };
+}
+
 // Autosave checkpoint — fires on step transitions (Next/Back), not per keystroke (Brief 4.16.11:
 // "not on every keystroke"). Phase 11 only persists *which step* the officer reached; each step's
 // actual field data is Phase 12's responsibility once real forms exist for Academics/Boarding/
@@ -170,6 +179,8 @@ export async function checkForDuplicateStudents(applicationId: string): Promise<
 }
 
 export interface CreateOrLinkStudentInput {
+  // Ignored when creating (the students_before_insert trigger always assigns it) — kept only
+  // so link_existing_student_id calls can keep passing "" without a type error.
   admission_number: string;
   upi_number?: string;
   override_duplicate: boolean;
@@ -179,7 +190,7 @@ export interface CreateOrLinkStudentInput {
 export async function createOrLinkStudent(
   applicationId: string,
   input: CreateOrLinkStudentInput,
-): Promise<{ error: string } | { success: true; studentId: string }> {
+): Promise<{ error: string } | { success: true; studentId: string; admissionNumber?: string }> {
   const supabase = await createClient();
 
   const { data: application } = await supabase
@@ -208,7 +219,8 @@ export async function createOrLinkStudent(
     .from("students")
     .insert({
       school_id: application.school_id,
-      admission_number: input.admission_number,
+      // Always blank — students_before_insert assigns the real number atomically.
+      admission_number: "",
       upi_number: input.upi_number || null,
       first_name: application.first_name,
       last_name: application.last_name,
@@ -219,7 +231,7 @@ export async function createOrLinkStudent(
       // Phase 13's Complete Enrollment owns the final status flip (Brief 4.16.11).
       status: "approved",
     })
-    .select("id")
+    .select("id, admission_number")
     .single();
   if (studentError || !student) return { error: studentError?.message ?? "Could not create the student record." };
 
@@ -235,7 +247,7 @@ export async function createOrLinkStudent(
 
   revalidatePath(`/admissions/${applicationId}/wizard`);
   revalidatePath("/students");
-  return { success: true, studentId: student.id as string };
+  return { success: true, studentId: student.id as string, admissionNumber: student.admission_number as string };
 }
 
 // ---------- Step 3: Guardian ----------

@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { createStudentWithGuardian } from "../actions";
+import { createStudentWithGuardian, previewNextAdmissionNumber } from "../actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -24,9 +24,9 @@ export default function NewStudentPage() {
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [createdStudentId, setCreatedStudentId] = useState<string | null>(null);
+  const [admissionPreview, setAdmissionPreview] = useState<string | null>(null);
 
   const [studentInfo, setStudentInfo] = useState({
-    admission_number: "",
     upi_number: "",
     first_name: "",
     last_name: "",
@@ -34,6 +34,12 @@ export default function NewStudentPage() {
     date_of_birth: "",
     gender: "male" as "male" | "female",
   });
+
+  useEffect(() => {
+    previewNextAdmissionNumber().then((result) => {
+      if ("admissionNumber" in result) setAdmissionPreview(result.admissionNumber);
+    });
+  }, []);
 
   const [guardianInfo, setGuardianInfo] = useState({
     phone: "",
@@ -61,6 +67,9 @@ export default function NewStudentPage() {
     try {
       const result = await createStudentWithGuardian({
         ...studentInfo,
+        // Always sent blank -- the DB assigns the real admission number atomically at
+        // insert time (students_before_insert trigger). admissionPreview above is display-only.
+        admission_number: "",
         upi_number: studentInfo.upi_number || undefined,
         other_names: studentInfo.other_names || undefined,
         guardian: {
@@ -72,6 +81,7 @@ export default function NewStudentPage() {
         setError(result.error);
         return;
       }
+      setAdmissionPreview(result.admissionNumber);
       setCreatedStudentId(result.studentId);
       goNext();
     } finally {
@@ -146,12 +156,11 @@ export default function NewStudentPage() {
                 <Label htmlFor="admission_number">Admission number</Label>
                 <Input
                   id="admission_number"
-                  value={studentInfo.admission_number}
-                  onChange={(e) =>
-                    setStudentInfo({ ...studentInfo, admission_number: e.target.value })
-                  }
-                  required
+                  value={admissionPreview ?? "Assigning…"}
+                  disabled
+                  readOnly
                 />
+                <p className="text-xs text-muted-foreground">Assigned automatically — next available number.</p>
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="upi_number">UPI number (optional)</Label>

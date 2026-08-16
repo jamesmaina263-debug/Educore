@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useEffect, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,6 +14,7 @@ import {
   updateApplicantIdentity,
   checkForDuplicateStudents,
   createOrLinkStudent,
+  previewNextAdmissionNumberForWizard,
   searchGuardians,
   linkGuardianToApplication,
   verifyDocumentAction,
@@ -191,7 +192,13 @@ export function StudentStep({
   resultingStudentId: string | null;
 }) {
   const router = useRouter();
-  const [admissionNumber, setAdmissionNumber] = useState("");
+  const [admissionNumber, setAdmissionNumber] = useState<string | null>(null);
+
+  useEffect(() => {
+    previewNextAdmissionNumberForWizard().then((result) => {
+      if ("admissionNumber" in result) setAdmissionNumber(result.admissionNumber);
+    });
+  }, []);
   const [candidates, setCandidates] = useState<DuplicateCandidate[] | null>(null);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -236,10 +243,9 @@ export function StudentStep({
   }
 
   function createNew(overrideDuplicate: boolean) {
-    if (!admissionNumber.trim()) { setError("Enter an admission number."); return; }
     setError(null);
     startTransition(async () => {
-      const result = await createOrLinkStudent(applicationId, { admission_number: admissionNumber.trim(), override_duplicate: overrideDuplicate });
+      const result = await createOrLinkStudent(applicationId, { admission_number: "", override_duplicate: overrideDuplicate });
       if ("error" in result) { setError(result.error); return; }
       router.refresh();
     });
@@ -326,7 +332,7 @@ export function StudentStep({
           <div className="mt-3 flex items-end gap-2">
             <div className="space-y-1.5">
               <Label htmlFor="admission_number">Admission number (new student)</Label>
-              <Input id="admission_number" value={admissionNumber} onChange={(e) => setAdmissionNumber(e.target.value)} className="w-48" />
+              <Input id="admission_number" value={admissionNumber ?? "Assigning…"} disabled readOnly className="w-48" />
             </div>
             <Button size="sm" variant="destructive" onClick={() => createNew(true)} disabled={pending}>
               None of these — create new student
@@ -343,7 +349,7 @@ export function StudentStep({
         <div className="flex items-end gap-2">
           <div className="space-y-1.5">
             <Label htmlFor="admission_number2">Admission number</Label>
-            <Input id="admission_number2" value={admissionNumber} onChange={(e) => setAdmissionNumber(e.target.value)} className="w-48" />
+            <Input id="admission_number2" value={admissionNumber ?? "Assigning…"} disabled readOnly className="w-48" />
           </div>
           <Button size="sm" onClick={() => createNew(false)} disabled={pending}>{pending ? "Creating…" : "Create student record"}</Button>
         </div>
