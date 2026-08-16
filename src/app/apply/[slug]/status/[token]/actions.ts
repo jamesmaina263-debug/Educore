@@ -87,9 +87,20 @@ export async function uploadStatusDocument(
     .maybeSingle();
   if (!application) return { error: "We couldn't find an application with this link." };
 
+  // documents.uploaded_by is NOT NULL. If a guardian account hasn't been linked to this
+  // application yet (e.g. a walk-in application, or a race with enrollment/account setup
+  // still in progress), the insert below would fail on that constraint — catch it here with
+  // a clear message instead of uploading to storage and then failing silently on insert.
+  if (!application.guardian_id) {
+    return { error: "This application isn't linked to a guardian account yet — please contact the school before uploading documents." };
+  }
+
   const path = `${application.school_id}/${application.id}/${category}-${Date.now()}-${file.name}`;
   const { error: uploadError } = await admin.storage.from("application-documents").upload(path, file);
-  if (uploadError) return { error: uploadError.message };
+  if (uploadError) {
+    console.error("uploadStatusDocument: storage upload failed", { applicationId: application.id, category, message: uploadError.message });
+    return { error: uploadError.message };
+  }
 
   // A resubmission replaces the pending review, not stacks alongside a rejected one — delete any
   // existing document in this category first so the reviewer sees exactly one, current copy.
@@ -112,7 +123,21 @@ export async function uploadStatusDocument(
     storage_path: path,
     uploaded_by: application.guardian_id,
   });
-  if (insertError) return { error: insertError.message };
+  if (insertError) {
+    // The file is already in storage at this point — if we don't record it, it becomes an
+    // orphan with no linked row (this is exactly the bug this fix responds to). Log loudly so
+    // it shows up in Vercel's server logs (the guardian only ever sees the returned error
+    // message, never the server console), and remove the orphaned object rather than leaving
+    // storage and the documents table out of sync.
+    console.error("uploadStatusDocument: documents insert failed after storage upload succeeded", {
+      applicationId: application.id,
+      category,
+      storagePath: path,
+      message: insertError.message,
+    });
+    await admin.storage.from("application-documents").remove([path]);
+    return { error: `Upload failed: ${insertError.message}` };
+  }
 
   // A fresh/replacement upload while the application was waiting on it returns it to the
   // reviewer's queue (test checklist: "upload returns it to review").
