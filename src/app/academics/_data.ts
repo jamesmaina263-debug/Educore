@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import type { AcademicYearRow, TermRow } from "@/components/academics/years-terms-section";
 import type { ClassRow, StreamRow, TeacherOption } from "@/components/academics/classes-streams-section";
-import type { SubjectRow } from "@/components/academics/subjects-section";
+import type { SubjectRow, CatalogueSubjectRow } from "@/components/academics/subjects-section";
 import type { ClassSubjectRow } from "@/components/academics/teacher-allocation-section";
 import type { StudentOption } from "@/components/academics/rollover-section";
 import type { TimetableSlotRow } from "@/components/academics/timetable-section";
@@ -21,6 +21,7 @@ export interface AcademicsContext {
   activeYearClasses: ClassRow[];
   streams: StreamRow[];
   subjects: SubjectRow[];
+  catalogue: CatalogueSubjectRow[];
   teachers: TeacherOption[];
   occupancyByStream: Record<string, number>;
   classSubjectRows: ClassSubjectRow[];
@@ -47,6 +48,7 @@ export async function loadAcademicsContext(): Promise<AcademicsContext> {
     { data: classes },
     { data: streams },
     { data: subjects },
+    { data: catalogue },
     { data: teacherRows },
     { data: canWriteData },
     { data: canRolloverData },
@@ -58,7 +60,8 @@ export async function loadAcademicsContext(): Promise<AcademicsContext> {
     supabase.from("terms").select("id, academic_year_id, name, term_number, start_date, end_date, status").order("term_number"),
     supabase.from("classes").select("id, academic_year_id, name, level_order"),
     supabase.from("streams").select("id, class_id, name, class_teacher_id, capacity"),
-    supabase.from("subjects").select("id, name, code, is_core").order("name"),
+    supabase.from("subjects").select("id, catalogue_id, name, code, is_core, is_active").order("name"),
+    supabase.from("subject_catalogue").select("id, pathway, category, name, code, is_core, display_order").order("display_order"),
     supabase
       .from("school_users")
       .select("id, full_name, roles!inner(name)")
@@ -111,6 +114,7 @@ export async function loadAcademicsContext(): Promise<AcademicsContext> {
     activeYearClasses: (classes ?? []).filter((c) => c.academic_year_id === activeYear?.id) as ClassRow[],
     streams: (streams ?? []) as StreamRow[],
     subjects: (subjects ?? []) as SubjectRow[],
+    catalogue: (catalogue ?? []) as CatalogueSubjectRow[],
     teachers,
     occupancyByStream: Object.fromEntries(occupancyByStream),
     classSubjectRows: (classSubjectRows ?? []) as ClassSubjectRow[],

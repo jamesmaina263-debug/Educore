@@ -61,6 +61,7 @@ export function TimetableSection({
 
   const classNameById = useMemo(() => new Map(classes.map((c) => [c.id, c.name])), [classes]);
   const subjectNameById = useMemo(() => new Map(subjects.map((s) => [s.id, s.name])), [subjects]);
+  const activeSubjects = useMemo(() => subjects.filter((s) => s.is_active), [subjects]);
   const teacherNameById = useMemo(() => new Map(teachers.map((t) => [t.id, t.full_name])), [teachers]);
 
   const streamSlots = slots.filter((s) => s.stream_id === streamId);
@@ -154,7 +155,7 @@ export function TimetableSection({
                       <SelectValue placeholder="Select a subject" />
                     </SelectTrigger>
                     <SelectContent>
-                      {subjects.map((s) => (
+                      {activeSubjects.map((s) => (
                         <SelectItem key={s.id} value={s.id}>
                           {s.name}
                         </SelectItem>
