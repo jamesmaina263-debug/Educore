@@ -93,27 +93,34 @@ Question: "${question.replace(/"/g, "'")}"
 Respond with ONLY the JSON object, nothing else.`;
 
   const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent?key=${apiKey}`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { temperature: 0, maxOutputTokens: 40 },
+        generationConfig: { maxOutputTokens: 40 },
       }),
     },
   );
-  if (!res.ok) return null;
+  if (!res.ok) {
+    console.error("Educore AI classifyIntent: Gemini API returned", res.status, await res.text().catch(() => ""));
+    return null;
+  }
   const data = await res.json();
   const text: string | undefined = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-  if (!text) return null;
+  if (!text) {
+    console.error("Educore AI classifyIntent: no text in Gemini response", JSON.stringify(data));
+    return null;
+  }
   try {
     const match = text.match(/\{[^}]*\}/);
     const parsed = JSON.parse(match ? match[0] : text);
     const candidate = parsed?.intent as string | undefined;
     if (candidate && INTENTS.some((i) => i.key === candidate)) return candidate as Intent;
     return null;
-  } catch {
+  } catch (e) {
+    console.error("Educore AI classifyIntent: failed to parse Gemini response", text, e);
     return null;
   }
 }
