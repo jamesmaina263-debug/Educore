@@ -91,7 +91,7 @@ async function parseFileToRows(file: File): Promise<TimetableUploadRow[]> {
   });
 }
 
-async function downloadTemplate(streams: StreamRow[], classes: ClassRow[], subjects: SubjectRow[], teachers: TeacherOption[]) {
+export async function downloadTimetableTemplate(streams: StreamRow[], classes: ClassRow[], subjects: SubjectRow[], teachers: TeacherOption[]) {
   const XLSX = await import("xlsx");
   const classNameById = new Map(classes.map((c) => [c.id, c.name]));
   const firstStream = streams[0];
@@ -130,17 +130,7 @@ async function downloadTemplate(streams: StreamRow[], classes: ClassRow[], subje
   XLSX.writeFile(wb, "timetable-template.xlsx");
 }
 
-export function TimetableUploadDialog({
-  streams,
-  classes,
-  subjects,
-  teachers,
-}: {
-  streams: StreamRow[];
-  classes: ClassRow[];
-  subjects: SubjectRow[];
-  teachers: TeacherOption[];
-}) {
+export function TimetableUploadDialog() {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [pending, setPending] = useState(false);
@@ -199,16 +189,10 @@ export function TimetableUploadDialog({
         <div className="space-y-3">
           <p className="text-sm text-muted-foreground">
             Upload a CSV or Excel file with columns Class, Stream, Day, Period, Subject, Teacher, Start Time, End
-            Time -- one row per lesson, across as many classes and streams as you like.
+            Time -- one row per lesson, across as many classes and streams as you like. Use the &ldquo;Download
+            template&rdquo; button next to Upload timetable to get a starter file with your real class, stream,
+            subject, and teacher names.
           </p>
-          <Button
-            type="button"
-            size="sm"
-            variant="secondary"
-            onClick={() => downloadTemplate(streams, classes, subjects, teachers)}
-          >
-            Download template
-          </Button>
           <div className="space-y-1.5">
             <input
               ref={fileInputRef}

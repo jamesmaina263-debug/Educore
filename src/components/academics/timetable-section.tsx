@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
 import { createTimetableSlot, deleteTimetableSlot } from "@/app/(app)/academics/actions";
-import { TimetableUploadDialog } from "./timetable-upload-dialog";
+import { TimetableUploadDialog, downloadTimetableTemplate } from "./timetable-upload-dialog";
 import type { StreamRow } from "./classes-streams-section";
 import type { ClassRow } from "./classes-streams-section";
 import type { SubjectRow } from "./subjects-section";
@@ -118,7 +118,15 @@ export function TimetableSection({
 
         {canWrite && (
           <div className="flex items-center gap-2">
-            <TimetableUploadDialog streams={streams} classes={classes} subjects={subjects} teachers={teachers} />
+            <Button
+              type="button"
+              size="sm"
+              variant="secondary"
+              onClick={() => downloadTimetableTemplate(streams, classes, subjects, teachers)}
+            >
+              Download template
+            </Button>
+            <TimetableUploadDialog />
             {streamId && (
               <Dialog open={open} onOpenChange={setOpen}>
                 <DialogTrigger asChild>
