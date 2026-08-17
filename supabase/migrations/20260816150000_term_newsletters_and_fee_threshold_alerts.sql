@@ -357,7 +357,7 @@ grant execute on function public.check_fee_thresholds() to authenticated;
 -- (notification_logs), which is exactly why this needs security definer rather than
 -- just relying on the table's own update policy.
 create or replace function public.send_fee_threshold_alert(p_alert_id uuid)
-returns void
+returns boolean
 language plpgsql
 security definer
 set search_path to 'public'
@@ -366,6 +366,7 @@ declare
   v_alert record;
   v_school_name text;
   v_sender uuid;
+  v_rows integer;
 begin
   select * into v_alert from public.fee_threshold_alerts where id = p_alert_id;
   if v_alert.id is null then
@@ -384,11 +385,12 @@ begin
   if not public.notification_allowed(v_alert.guardian_user_id, 'fee_threshold_alert', 'sms') then
     -- Guardian opted out of this category -- mark sent (so it stops showing as
     -- pending review) without actually queuing a message, same skip-not-fail
-    -- semantics queue_communication uses elsewhere.
+    -- semantics queue_communication uses elsewhere. Legitimate terminal state,
+    -- not a failure -- returns true.
     update public.fee_threshold_alerts
       set status = 'sent', approved_by = v_sender, approved_at = now(), sent_at = now()
       where id = p_alert_id;
-    return;
+    return true;
   end if;
 
   insert into public.notification_logs (
@@ -400,12 +402,9 @@ begin
     v_alert.draft_body, greatest(1, ceil(length(v_alert.draft_body)::numeric / 160))::smallint,
     v_sender, 'fee_threshold_alert'
   from public.school_users su where su.id = v_alert.guardian_user_id and su.phone is not null;
+  get diagnostics v_rows = row_count;
 
-  -- Sender's own notification_logs insert above uses a correlated subquery so a
-  -- guardian with no phone on file simply queues nothing rather than raising --
-  -- but the alert itself should still be marked sent either way (the fallback
-  -- below matches an email address instead, if one exists).
-  if not found then
+  if v_rows = 0 then
     insert into public.notification_logs (
       school_id, student_id, recipient_school_user_id, recipient_email, recipient_type, channel, subject, body,
       segments, sent_by, source_module
@@ -414,11 +413,25 @@ begin
       v_alert.school_id, v_alert.student_id, v_alert.guardian_user_id, su.email, 'guardian', 'email',
       v_school_name || ' -- Fee Balance Reminder', v_alert.draft_body, 1, v_sender, 'fee_threshold_alert'
     from public.school_users su where su.id = v_alert.guardian_user_id and su.email is not null;
+    get diagnostics v_rows = row_count;
+  end if;
+
+  if v_rows = 0 then
+    -- No phone, no email -- nothing was actually queued. Do NOT mark 'sent'
+    -- (that would silently report success with no message ever delivered).
+    -- Mark 'dismissed' with a clear reason so Finance sees it needs the
+    -- guardian's contact info fixed, not that it was handled.
+    update public.fee_threshold_alerts
+      set status = 'dismissed', dismissed_by = v_sender, dismissed_at = now(),
+          dismiss_reason = 'Could not send: guardian has no phone or email on file.'
+      where id = p_alert_id;
+    return false;
   end if;
 
   update public.fee_threshold_alerts
     set status = 'sent', approved_by = v_sender, approved_at = now(), sent_at = now()
     where id = p_alert_id;
+  return true;
 end;
 $$;
 revoke all on function public.send_fee_threshold_alert(uuid) from public, anon;

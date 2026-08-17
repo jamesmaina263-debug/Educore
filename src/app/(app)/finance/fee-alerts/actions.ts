@@ -58,9 +58,15 @@ export async function dismissAlertAction(alertId: string, reason: string): Promi
 
 export async function approveAndSendAction(alertId: string): Promise<ActionResult> {
   const supabase = await createClient();
-  const { error } = await supabase.rpc("send_fee_threshold_alert", { p_alert_id: alertId });
+  const { data, error } = await supabase.rpc("send_fee_threshold_alert", { p_alert_id: alertId });
   if (error) return { error: error.message };
   revalidatePath("/finance/fee-alerts");
+  // false = the guardian had neither a phone nor an email on file, so nothing
+  // was actually queued -- the alert is marked dismissed (not sent) server-side,
+  // but the person who clicked the button still needs to know why.
+  if (data === false) {
+    return { error: "Couldn't send — this guardian has no phone or email on file. The alert has been marked as needing attention instead of sent." };
+  }
   return { success: true };
 }
 
