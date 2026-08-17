@@ -192,6 +192,47 @@ export async function deleteTimetableSlot(id: string): Promise<{ error: string }
   return { success: true };
 }
 
+export interface TimetableUploadRow {
+  class_name: string;
+  stream_name: string;
+  day: string;
+  period_number: string;
+  subject_name: string;
+  teacher_name: string;
+  start_time: string;
+  end_time: string;
+}
+
+export interface TimetableUploadResult {
+  rowNumber: number;
+  status: "ok" | "error";
+  message: string;
+}
+
+// Every actual lookup/validation (class+stream -> stream_id, subject name -> subject_id,
+// teacher name -> teacher_id, day/time parsing, conflict detection) happens inside
+// bulk_upsert_timetable_slots() itself, not here -- this action just forwards the
+// client-parsed rows and returns the per-row result the RPC already computed. Re-uploading
+// the same file is safe: the RPC upserts on (stream, day, period), so fixing a typo and
+// re-uploading corrects that slot rather than creating a duplicate.
+export async function bulkUploadTimetableAction(
+  rows: TimetableUploadRow[],
+): Promise<{ error: string } | { success: true; results: TimetableUploadResult[] }> {
+  if (rows.length === 0) return { error: "No rows found in the file." };
+  if (rows.length > 1000) return { error: "Too many rows in one file (max 1000) -- split it and upload in batches." };
+
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("bulk_upsert_timetable_slots", { p_rows: rows });
+  if (error) return { error: error.message };
+
+  const results: TimetableUploadResult[] = (
+    (data as { row_number: number; status: "ok" | "error"; message: string }[]) ?? []
+  ).map((r) => ({ rowNumber: r.row_number, status: r.status, message: r.message }));
+
+  revalidatePath("/academics", "layout");
+  return { success: true, results };
+}
+
 export async function rolloverAcademicYear(input: {
   from_academic_year_id: string;
   to_academic_year_id: string;
