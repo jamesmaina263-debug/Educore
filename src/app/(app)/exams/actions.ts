@@ -22,6 +22,16 @@ export async function createGradingScale(input: {
   bands: { label: string; min_score?: number; max_score?: number; points?: number; level_order: number }[];
 }): Promise<ActionResult> {
   const supabase = await createClient();
+  const validBands = input.bands.filter((b) => b.label.trim() !== "");
+  if (validBands.length === 0) {
+    return { error: "Add at least one band before creating the scale — a scale with no bands can never accept a mark." };
+  }
+  if (input.model_type === "numeric") {
+    const incomplete = validBands.some((b) => b.min_score === undefined || b.max_score === undefined);
+    if (incomplete) {
+      return { error: "Every band needs both a min and max score for a numeric scale." };
+    }
+  }
   try {
     const school_id = await schoolId(supabase);
     const { data: scale, error } = await supabase
@@ -32,7 +42,7 @@ export async function createGradingScale(input: {
     if (error) return { error: error.message };
 
     const { error: bandsError } = await supabase.from("grading_scale_bands").insert(
-      input.bands.map((b) => ({
+      validBands.map((b) => ({
         grading_scale_id: scale.id,
         label: b.label,
         min_score: input.model_type === "numeric" ? b.min_score : null,
@@ -41,7 +51,14 @@ export async function createGradingScale(input: {
         level_order: b.level_order,
       })),
     );
-    if (bandsError) return { error: bandsError.message };
+    if (bandsError) {
+      // Bands failed to insert -- don't leave a bandless, unusable scale
+      // behind (that's exactly how the live "Standard 8-4-4 scale" ended up
+      // with zero bands as the school's default, silently breaking every
+      // numeric mark entry against it).
+      await supabase.from("grading_scales").delete().eq("id", scale.id);
+      return { error: bandsError.message };
+    }
   } catch (e) {
     return { error: e instanceof Error ? e.message : "Could not create the grading scale." };
   }

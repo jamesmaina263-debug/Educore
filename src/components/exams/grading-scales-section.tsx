@@ -173,7 +173,16 @@ export function GradingScalesSection({
                   {error && <p className="text-sm text-danger">{error}</p>}
                 </div>
                 <DialogFooter>
-                  <Button onClick={handleCreate} disabled={pending || !name.trim()}>
+                  <Button
+                    onClick={handleCreate}
+                    disabled={
+                      pending ||
+                      !name.trim() ||
+                      !bands.some((b) =>
+                        b.label.trim() !== "" && (modelType === "cbc" || (b.min_score !== "" && b.max_score !== "")),
+                      )
+                    }
+                  >
                     {pending ? "Creating…" : "Create scale"}
                   </Button>
                 </DialogFooter>
