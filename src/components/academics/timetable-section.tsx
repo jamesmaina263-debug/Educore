@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
 import { createTimetableSlot, deleteTimetableSlot } from "@/app/(app)/academics/actions";
+import { TimetableUploadDialog } from "./timetable-upload-dialog";
 import type { StreamRow } from "./classes-streams-section";
 import type { ClassRow } from "./classes-streams-section";
 import type { SubjectRow } from "./subjects-section";
@@ -115,13 +116,16 @@ export function TimetableSection({
           </Select>
         </div>
 
-        {canWrite && streamId && (
-          <Dialog open={open} onOpenChange={setOpen}>
-            <DialogTrigger asChild>
-              <Button size="sm" variant="outline">
-                Add slot
-              </Button>
-            </DialogTrigger>
+        {canWrite && (
+          <div className="flex items-center gap-2">
+            <TimetableUploadDialog streams={streams} classes={classes} subjects={subjects} teachers={teachers} />
+            {streamId && (
+              <Dialog open={open} onOpenChange={setOpen}>
+                <DialogTrigger asChild>
+                  <Button size="sm" variant="outline">
+                    Add slot
+                  </Button>
+                </DialogTrigger>
             <DialogContent>
               <DialogHeader>
                 <DialogTitle>Add timetable slot</DialogTitle>
@@ -199,7 +203,9 @@ export function TimetableSection({
                 </Button>
               </DialogFooter>
             </DialogContent>
-          </Dialog>
+              </Dialog>
+            )}
+          </div>
         )}
       </div>
 
