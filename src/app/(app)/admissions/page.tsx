@@ -6,7 +6,10 @@ import { AppShell } from "@/components/app-shell/app-shell";
 import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import { CopyApplicationLink } from "@/components/admissions/copy-application-link";
+import { DeleteApplicationButton } from "@/components/admissions/delete-application-button";
 import { createWalkInApplication } from "./walk-in-actions";
+import { deleteApplicationPermanentlyAction } from "./actions";
+import { discardDraft } from "./[id]/wizard/actions";
 import { applicableStepCount } from "./wizard-steps";
 
 const STATUS_TONE: Record<string, "success" | "warning" | "danger" | "info" | "neutral"> = {
@@ -164,9 +167,18 @@ export default async function AdmissionsPage() {
                         <td className="text-muted-foreground">{officer?.full_name ?? "Unassigned"}</td>
                         <td className="text-muted-foreground">{new Date(d.updated_at).toLocaleString()}</td>
                         <td className="text-right">
-                          <Link href={`/admissions/${d.id}/wizard`} className="text-[0.8125rem] font-medium text-primary hover:underline">
-                            Resume
-                          </Link>
+                          <div className="flex items-center justify-end gap-3">
+                            <Link href={`/admissions/${d.id}/wizard`} className="text-[0.8125rem] font-medium text-primary hover:underline">
+                              Resume
+                            </Link>
+                            {canWrite && (
+                              <DeleteApplicationButton
+                                applicationId={d.id}
+                                applicantLabel={d.first_name || d.last_name ? `${d.first_name ?? ""} ${d.last_name ?? ""}`.trim() : d.application_number}
+                                deleteAction={discardDraft}
+                              />
+                            )}
+                          </div>
                         </td>
                       </tr>
                     );
@@ -216,11 +228,20 @@ export default async function AdmissionsPage() {
                         {a.submitted_at ? new Date(a.submitted_at).toLocaleDateString() : "—"}
                       </td>
                       <td className="text-right">
-                        {canReview && (
-                          <Link href={`/admissions/${a.id}`} className="text-[0.8125rem] font-medium text-primary hover:underline">
-                            Review
-                          </Link>
-                        )}
+                        <div className="flex items-center justify-end gap-3">
+                          {canReview && (
+                            <Link href={`/admissions/${a.id}`} className="text-[0.8125rem] font-medium text-primary hover:underline">
+                              Review
+                            </Link>
+                          )}
+                          {canWrite && (a.status === "rejected" || a.status === "withdrawn") && (
+                            <DeleteApplicationButton
+                              applicationId={a.id}
+                              applicantLabel={`${a.first_name} ${a.last_name}`}
+                              deleteAction={deleteApplicationPermanentlyAction}
+                            />
+                          )}
+                        </div>
                       </td>
                     </tr>
                   ))}

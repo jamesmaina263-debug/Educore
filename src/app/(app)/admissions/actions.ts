@@ -184,3 +184,26 @@ export async function markConditionsMetAction(applicationId: string): Promise<Ac
   revalidatePath("/admissions", "layout");
   return { success: true };
 }
+
+// Only ever callable for draft/rejected/withdrawn applications -- delete_application_permanently()
+// itself refuses anything further along the pipeline, so this can't be used to erase a live or
+// admitted record even if called with a stale/wrong id. Storage objects aren't reachable from SQL,
+// so the actual file removal happens here, before the RPC deletes the DB rows (which cascade the
+// documents rows themselves).
+export async function deleteApplicationPermanentlyAction(applicationId: string): Promise<ActionResult> {
+  const supabase = await createClient();
+
+  const { data: docs } = await supabase.from("documents").select("storage_path").eq("application_id", applicationId);
+  const paths = (docs ?? []).map((d) => d.storage_path).filter((p): p is string => !!p);
+  if (paths.length > 0) {
+    const { error: storageError } = await supabase.storage.from("application-documents").remove(paths);
+    // Non-fatal -- an orphaned storage object is a cleanup nuisance, not a reason to block the
+    // person from clearing the record itself. Still delete the DB rows below.
+    if (storageError) console.error("deleteApplicationPermanentlyAction storage cleanup failed:", storageError.message);
+  }
+
+  const { error } = await supabase.rpc("delete_application_permanently", { p_application_id: applicationId });
+  if (error) return { error: error.message };
+  revalidatePath("/admissions", "layout");
+  return { success: true };
+}
