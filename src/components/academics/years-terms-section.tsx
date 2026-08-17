@@ -15,7 +15,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { createAcademicYear, setActiveAcademicYear, createTerm, setActiveTerm } from "@/app/(app)/academics/actions";
-import { sendTermNewsletterAction } from "@/app/(app)/academics/newsletter-actions";
+import { prepareTermNewsletterDraftAction } from "@/app/(app)/academics/newsletter-actions";
 
 export interface AcademicYearRow {
   id: string;
@@ -61,13 +61,17 @@ export function YearsTermsSection({
   const [yearForm, setYearForm] = useState({ name: "", start_date: "", end_date: "" });
   const [termForm, setTermForm] = useState({ name: "", term_number: 1, start_date: "", end_date: "" });
 
-  async function handleSendNewsletter(termId: string) {
+  async function handlePrepareNewsletter(termId: string) {
     setNewsletterBusyId(termId);
     setNewsletterNotice(null);
-    const result = await sendTermNewsletterAction(termId);
+    const result = await prepareTermNewsletterDraftAction(termId);
     setNewsletterBusyId(null);
     if ("error" in result) { setNewsletterNotice(result.error); return; }
-    setNewsletterNotice(`Sent to ${result.recipientCount} guardian(s).`);
+    setNewsletterNotice(
+      result.draftId
+        ? "Draft ready for review in Academics \u2192 Newsletters."
+        : "Already sent for this term \u2014 nothing new to prepare.",
+    );
     router.refresh();
   }
 
@@ -317,10 +321,10 @@ export function YearsTermsSection({
                                 size="sm"
                                 variant="outline"
                                 disabled={newsletterBusyId === t.id}
-                                onClick={() => handleSendNewsletter(t.id)}
-                                title="Sends automatically once the term's end date passes — this sends it now regardless of that date. Safe to click more than once: it only ever sends once per term."
+                                onClick={() => handlePrepareNewsletter(t.id)}
+                                title="Prepares a draft newsletter for review in Academics → Newsletters — nothing is sent from here. A daily job also prepares one automatically once the term's end date passes. Safe to click more than once: it only ever prepares one draft per term, and never re-prepares after it's been sent."
                               >
-                                {newsletterBusyId === t.id ? "Sending…" : "Send newsletter"}
+                                {newsletterBusyId === t.id ? "Preparing…" : "Prepare newsletter"}
                               </Button>
                             )}
                           </span>
@@ -333,7 +337,16 @@ export function YearsTermsSection({
             })}
           </div>
         )}
-        {newsletterNotice && <p className="mt-2 text-sm text-muted-foreground">{newsletterNotice}</p>}
+        {newsletterNotice && (
+          <p className="mt-2 text-sm text-muted-foreground">
+            {newsletterNotice}{" "}
+            {canSendNewsletter && (
+              <a href="/academics/newsletters" className="underline">
+                Review newsletters
+              </a>
+            )}
+          </p>
+        )}
       </div>
     </div>
   );

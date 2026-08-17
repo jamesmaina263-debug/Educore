@@ -12,7 +12,7 @@ import {
   Library,
   Bus,
   BedDouble,
-  Package,  MessageSquare,
+  Package,  MessageSquare, Mail,
   Settings,
   Sparkles,
   BarChart3,
@@ -101,6 +101,7 @@ const academicsChildren: NavChild[] = [
   { label: "Teacher Allocation", href: "/academics/teacher-allocation", icon: UserCog },
   { label: "Subjects", href: "/academics/subjects", icon: BookMarked },
   { label: "Timetable", href: "/academics/timetable", icon: CalendarClock },
+  { label: "Newsletters", href: "/academics/newsletters", icon: Mail },
   { label: "Rollover", href: "/academics/rollover", icon: RotateCcw },
 ];
 
