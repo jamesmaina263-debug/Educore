@@ -101,23 +101,27 @@ Write a warm, specific, 2-3 sentence comment on this student's academic performa
 
   try {
     const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent?key=${apiKey}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: { temperature: 0.6, maxOutputTokens: 200 },
+          generationConfig: { maxOutputTokens: 200 },
         }),
       },
     );
     if (!res.ok) {
       const body = await res.text();
+      console.error(`draftCommentWithAI: Gemini returned ${res.status}: ${body.slice(0, 500)}`);
       return { error: `AI drafting failed (${res.status}): ${body.slice(0, 200)}` };
     }
     const data = await res.json();
     const draft: string | undefined = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-    if (!draft) return { error: "AI drafting returned no text." };
+    if (!draft) {
+      console.error("draftCommentWithAI: Gemini response had no text", JSON.stringify(data).slice(0, 500));
+      return { error: "AI drafting returned no text." };
+    }
 
     const { error } = await supabase
       .from("report_cards")
@@ -126,6 +130,7 @@ Write a warm, specific, 2-3 sentence comment on this student's academic performa
       .eq("student_id", input.student_id);
     if (error) return { error: error.message };
   } catch (e) {
+    console.error("draftCommentWithAI: fetch failed", e);
     return { error: e instanceof Error ? e.message : "Could not reach the AI drafting service." };
   }
 
