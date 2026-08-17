@@ -14,6 +14,7 @@ import {
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { changeStaffRole, setStaffStatus } from "@/app/(app)/settings/actions";
+import { UserPermissionsPanel } from "@/components/settings/user-permissions-panel";
 
 export interface StaffRow {
   id: string;
@@ -39,16 +40,19 @@ export function StaffRolesTable({
   rows,
   roles,
   canManage,
+  canManagePermissions,
   currentUserId,
 }: {
   rows: StaffRow[];
   roles: RoleOption[];
   canManage: boolean;
+  canManagePermissions?: boolean;
   currentUserId: string;
 }) {
   const router = useRouter();
   const [pendingRoleChange, setPendingRoleChange] = useState<{ row: StaffRow; newRoleId: string } | null>(null);
   const [pendingDeactivate, setPendingDeactivate] = useState<StaffRow | null>(null);
+  const [permissionsTarget, setPermissionsTarget] = useState<StaffRow | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -144,11 +148,18 @@ export function StaffRolesTable({
                   <StatusBadge tone={statusTone(r.status)} label={r.status} />
                 </TableCell>
                 <TableCell>
-                  {canManage && (
-                    <Button size="sm" variant="ghost" onClick={() => setPendingDeactivate(r)}>
-                      {r.status === "active" ? "Deactivate" : "Reactivate"}
-                    </Button>
-                  )}
+                  <div className="flex items-center justify-end gap-1">
+                    {canManagePermissions && (
+                      <Button size="sm" variant="ghost" onClick={() => setPermissionsTarget(r)}>
+                        Permissions
+                      </Button>
+                    )}
+                    {canManage && (
+                      <Button size="sm" variant="ghost" onClick={() => setPendingDeactivate(r)}>
+                        {r.status === "active" ? "Deactivate" : "Reactivate"}
+                      </Button>
+                    )}
+                  </div>
                 </TableCell>
               </TableRow>
             );
@@ -206,6 +217,13 @@ export function StaffRolesTable({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <UserPermissionsPanel
+        schoolUserId={permissionsTarget?.id ?? null}
+        fullName={permissionsTarget?.full_name ?? ""}
+        open={permissionsTarget !== null}
+        onOpenChange={(open) => !open && setPermissionsTarget(null)}
+      />
     </div>
   );
 }

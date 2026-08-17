@@ -14,6 +14,7 @@ export interface SettingsContext {
   currentUserId: string;
   canWriteBranding: boolean;
   canManageStaff: boolean;
+  canManagePermissions: boolean;
   canReadBilling: boolean;
   canManageApiKeys: boolean;
   canReadAudit: boolean;
@@ -38,6 +39,7 @@ export async function loadSettingsContext(): Promise<SettingsContext> {
     { data: schoolUser },
     { data: canWriteBranding },
     { data: canManageStaff },
+    { data: canManagePermissions },
     { data: canReadBilling },
     { data: canManageApiKeys },
     { data: canReadAudit },
@@ -49,6 +51,7 @@ export async function loadSettingsContext(): Promise<SettingsContext> {
       .maybeSingle(),
     supabase.rpc("auth_has_permission", { p_permission_key: "settings.branding.write" }),
     supabase.rpc("auth_has_permission", { p_permission_key: "staff.manage" }),
+    supabase.rpc("auth_has_permission", { p_permission_key: "settings.roles.manage" }),
     supabase.rpc("auth_has_permission", { p_permission_key: "billing.read" }),
     supabase.rpc("auth_has_permission", { p_permission_key: "api.manage" }),
     supabase.rpc("auth_has_permission", { p_permission_key: "audit.read" }),
@@ -166,6 +169,7 @@ export async function loadSettingsContext(): Promise<SettingsContext> {
     currentUserId: schoolUser?.id ?? "",
     canWriteBranding: canWriteBranding === true,
     canManageStaff: canManageStaff === true,
+    canManagePermissions: canManagePermissions === true,
     canReadBilling: canReadBilling === true,
     canManageApiKeys: canManageApiKeys === true,
     canReadAudit: canReadAudit === true,

@@ -20,7 +20,13 @@ export default async function SettingsStaffPage() {
           <p className="label-eyebrow">{ctx.staff.length} staff</p>
           {ctx.canManageStaff && <InviteStaffDialog roles={ctx.roles} />}
         </div>
-        <StaffRolesTable rows={ctx.staff} roles={ctx.roles} canManage={ctx.canManageStaff} currentUserId={ctx.currentUserId} />
+        <StaffRolesTable
+          rows={ctx.staff}
+          roles={ctx.roles}
+          canManage={ctx.canManageStaff}
+          canManagePermissions={ctx.canManagePermissions}
+          currentUserId={ctx.currentUserId}
+        />
       </div>
     </ModulePageShell>
   );
