@@ -57,11 +57,20 @@ export async function editAttendanceRecord(
   } = await supabase.auth.getUser();
   const { data: me } = await supabase.from("school_users").select("id").eq("auth_user_id", user?.id ?? "").maybeSingle();
 
+  const { data: current, error: currentError } = await supabase
+    .from("student_attendance")
+    .select("status")
+    .eq("id", id)
+    .single();
+  if (currentError || !current) return { error: "Could not find that attendance record." };
+
   // The correction itself takes effect immediately (unchanged behaviour) --
   // but is now also flagged for after-the-fact review by an authority
   // (attendance.approve_correction), giving oversight over every retroactive
   // change to attendance history without blocking the class teacher's
-  // day-to-day ability to fix a mistake.
+  // day-to-day ability to fix a mistake. previous_status preserves what the
+  // record said before this edit, so a later Reject can actually restore it
+  // instead of just leaving the disputed value in place with a label.
   const { error } = await supabase
     .from("student_attendance")
     .update({
@@ -71,6 +80,7 @@ export async function editAttendanceRecord(
       requested_status: status,
       correction_reason: edit_reason,
       requested_by: me?.id ?? null,
+      previous_status: current.status,
     })
     .eq("id", id);
   if (error) return { error: error.message };
@@ -88,9 +98,27 @@ export async function reviewAttendanceCorrection(id: string, decision: "approved
   } = await supabase.auth.getUser();
   const { data: me } = await supabase.from("school_users").select("id").eq("auth_user_id", user?.id ?? "").maybeSingle();
 
+  const update: Record<string, unknown> = {
+    correction_status: decision,
+    reviewed_by: me?.id ?? null,
+    reviewed_at: new Date().toISOString(),
+    previous_status: null,
+  };
+  if (decision === "rejected") {
+    // Restore what the record said before the disputed correction was applied.
+    const { data: record } = await supabase
+      .from("student_attendance")
+      .select("previous_status")
+      .eq("id", id)
+      .single();
+    if (record?.previous_status) {
+      update.status = record.previous_status;
+    }
+  }
+
   const { error } = await supabase
     .from("student_attendance")
-    .update({ correction_status: decision, reviewed_by: me?.id ?? null, reviewed_at: new Date().toISOString() })
+    .update(update)
     .eq("id", id)
     .eq("correction_status", "pending");
   if (error) return { error: error.message };
