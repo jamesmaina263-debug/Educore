@@ -3,6 +3,17 @@ import { NextResponse, type NextRequest } from "next/server";
 
 const PROTECTED_PREFIXES = ["/dashboard"];
 
+function isProtectedPath(pathname: string): boolean {
+  // Bare form ("/dashboard...") or slug-prefixed form ("/{slug}/dashboard...")
+  // -- this runs before school-slug-routing's rewrite, so both shapes can
+  // reach here depending on whether the browser already has a slug cookie.
+  if (PROTECTED_PREFIXES.some((prefix) => pathname.startsWith(prefix))) return true;
+  const segments = pathname.split("/").filter(Boolean);
+  if (segments.length < 2) return false;
+  const withoutFirstSegment = "/" + segments.slice(1).join("/");
+  return PROTECTED_PREFIXES.some((prefix) => withoutFirstSegment.startsWith(prefix));
+}
+
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
 
@@ -33,9 +44,7 @@ export async function updateSession(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const isProtected = PROTECTED_PREFIXES.some((prefix) =>
-    request.nextUrl.pathname.startsWith(prefix),
-  );
+  const isProtected = isProtectedPath(request.nextUrl.pathname);
 
   if (isProtected && !user) {
     const loginUrl = request.nextUrl.clone();

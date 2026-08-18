@@ -1,9 +1,11 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { cookies } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { slugify } from "@/lib/slug";
+import { setSchoolSlugCookie } from "@/lib/school-slug-cookie";
 
 export type Plan = {
   id: string;
@@ -136,6 +138,13 @@ export async function signUpSchool(
     // Account and school were created successfully — just send them to
     // log in manually rather than failing the whole signup at this point.
     redirect("/login");
+  }
+
+  try {
+    const cookieStore = await cookies();
+    setSchoolSlugCookie(cookieStore, slug);
+  } catch {
+    // Cosmetic only -- see school-slug-cookie.ts. Never fail signup over this.
   }
 
   redirect("/dashboard");
