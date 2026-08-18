@@ -1,0 +1,77 @@
+import { NextResponse, type NextRequest } from "next/server";
+import { SCHOOL_SLUG_COOKIE } from "@/lib/school-slug-cookie";
+
+// Real top-level folders under src/app/(app) -- i.e. every actual staff-app
+// route. Used to tell "/dashboard" (a real route, bare/unslugged) apart from
+// "/gititu-high-school/dashboard" (a real route, slug-prefixed) so the same
+// first path segment can be handled correctly either way. Keep in sync with
+// src/app/(app)'s folder list if a new top-level module is ever added.
+const APP_ROUTE_SEGMENTS = new Set([
+  "academics", "admin", "admissions", "ai", "attendance", "boarding", "campuses",
+  "communication", "dashboard", "discipline", "exams", "finance", "health",
+  "homework", "inventory", "library", "payroll", "performance", "pt-meetings",
+  "reports", "settings", "staff", "students", "transport",
+]);
+
+// Never slug-prefixed: public/marketing pages, the parent/student portal
+// (separate login, out of scope for this staff-app change), API routes, and
+// the platform super_admin panel (no single school to prefix with).
+const NEVER_PREFIX = new Set(["api", "apply", "login", "signup", "notifications", "parent-login", "portal", "admin"]);
+
+export type SlugRouting = { type: "next" } | { type: "redirect"; url: URL } | { type: "rewrite"; url: URL };
+
+// Pure function (no cookie writes, no response construction) so proxy.ts can
+// decide how to combine this with the session-refresh response it already
+// has, without either one silently dropping the other's cookies.
+export function resolveSlugRouting(request: NextRequest): SlugRouting {
+  if (request.method !== "GET") return { type: "next" };
+
+  const { pathname } = request.nextUrl;
+  const segments = pathname.split("/").filter(Boolean);
+  const first = segments[0];
+
+  if (!first || NEVER_PREFIX.has(first)) {
+    return { type: "next" };
+  }
+
+  if (APP_ROUTE_SEGMENTS.has(first)) {
+    // Bare, unslugged request to a real staff-app route (e.g. "/dashboard").
+    // If we know this browser's school (cookie set at login/signup), send it
+    // to the slug-prefixed version. If we don't (older session predating
+    // this change, or genuinely unauthenticated), fall through unchanged --
+    // the page's own auth check still applies either way; this cookie is
+    // purely cosmetic for the URL.
+    const slug = request.cookies.get(SCHOOL_SLUG_COOKIE)?.value;
+    if (!slug) return { type: "next" };
+
+    const target = request.nextUrl.clone();
+    target.pathname = `/${slug}${pathname}`;
+    return { type: "redirect", url: target };
+  }
+
+  // Anything else starting with an unrecognized first segment is treated as
+  // "/{slug}/rest-of-path" and rewritten to "/rest-of-path" so the existing
+  // route files keep serving it completely unchanged. Deliberately NOT
+  // validated against the real school here -- authorization is entirely
+  // RLS/auth_school_id()'s job server-side regardless of what's in the URL,
+  // so a stale or someone-else's slug in the address bar is a cosmetic
+  // mismatch, never a data-access issue.
+  const rest = "/" + segments.slice(1).join("/");
+  const rewritten = request.nextUrl.clone();
+  rewritten.pathname = rest === "/" ? "/dashboard" : rest;
+  return { type: "rewrite", url: rewritten };
+}
+
+// Applies a SlugRouting decision on top of an existing response (typically
+// updateSession()'s), preserving any Set-Cookie headers that response
+// already carries (the refreshed Supabase session cookies) instead of
+// dropping them by constructing an unrelated new response.
+export function applySlugRouting(routing: SlugRouting, baseResponse: NextResponse): NextResponse {
+  if (routing.type === "next") return baseResponse;
+
+  const next = routing.type === "redirect"
+    ? NextResponse.redirect(routing.url, 307)
+    : NextResponse.rewrite(routing.url);
+  baseResponse.cookies.getAll().forEach((c) => next.cookies.set(c));
+  return next;
+}
