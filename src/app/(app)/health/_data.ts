@@ -19,6 +19,7 @@ export interface HealthContext {
   userRole?: string;
   schoolName: string;
   canReadAny: boolean;
+  canReadMedicalRecords: boolean;
   canWrite: boolean;
   studentOptions: StudentOption[];
   medicalItems: MedicalItemRow[];
@@ -41,17 +42,19 @@ export async function loadHealthContext(): Promise<HealthContext> {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const [{ data: viewer }, { data: canReadAny }, { data: canWriteData }] = await Promise.all([
+  const [{ data: viewer }, { data: canReadAny }, { data: canWriteData }, { data: canReadMedicalData }] = await Promise.all([
     supabase.from("school_users").select("full_name, roles(display_name), schools(name)").eq("auth_user_id", user.id).maybeSingle(),
     supabase.rpc("auth_has_permission", { p_permission_key: "health.read_any" }),
     supabase.rpc("auth_has_permission", { p_permission_key: "health.write" }),
+    supabase.rpc("auth_has_permission", { p_permission_key: "students.medical.read" }),
   ]);
   const canWrite = canWriteData === true;
+  const canReadMedicalRecords = canReadMedicalData === true;
   const roleName = (viewer?.roles as unknown as { display_name: string } | null)?.display_name;
   const schoolName = (viewer?.schools as unknown as { name: string } | null)?.name ?? "EduCore";
   const userName = viewer?.full_name ?? user.email ?? "Account";
 
-  const base = { userName, userRole: roleName, schoolName, canReadAny: canReadAny === true, canWrite };
+  const base = { userName, userRole: roleName, schoolName, canReadAny: canReadAny === true, canReadMedicalRecords, canWrite };
 
   if (canReadAny !== true) {
     return {
@@ -204,14 +207,30 @@ export async function loadHealthContext(): Promise<HealthContext> {
     guardian_notified: e.guardian_notified,
   }));
 
-  const { data: medicalRecordFlags } = await supabase.from("medical_records").select("student_id, conditions, allergies");
-  const flagByStudent = new Map((medicalRecordFlags ?? []).map((r) => [r.student_id, Boolean(r.conditions || r.allergies)]));
-  const medicalRecordRows: MedicalRecordListRow[] = (students ?? []).map((s) => ({
-    student_id: s.id,
-    student_name: `${s.first_name} ${s.last_name}`,
-    has_record: flagByStudent.has(s.id),
-    has_conditions_or_allergies: flagByStudent.get(s.id) ?? false,
-  }));
+  // medical_records RLS requires students.medical.read specifically -- health.read_any
+  // (which gates the rest of this module, including deputy_principal/group_admin) does
+  // NOT imply it. Querying unconditionally here would come back RLS-filtered to empty for
+  // those roles, silently rendering every student as "no known conditions/allergies" --
+  // a false negative in a health/safety context, not just a missing feature.
+  const medicalRecordRows: MedicalRecordListRow[] = canReadMedicalRecords
+    ? await (async () => {
+        const { data: medicalRecordFlags } = await supabase.from("medical_records").select("student_id, conditions, allergies");
+        const flagByStudent = new Map((medicalRecordFlags ?? []).map((r) => [r.student_id, Boolean(r.conditions || r.allergies)]));
+        return (students ?? []).map((s) => ({
+          student_id: s.id,
+          student_name: `${s.first_name} ${s.last_name}`,
+          has_record: flagByStudent.has(s.id),
+          has_conditions_or_allergies: flagByStudent.get(s.id) ?? false,
+          restricted: false,
+        }));
+      })()
+    : (students ?? []).map((s) => ({
+        student_id: s.id,
+        student_name: `${s.first_name} ${s.last_name}`,
+        has_record: false,
+        has_conditions_or_allergies: false,
+        restricted: true,
+      }));
 
   const today = new Date().toISOString().slice(0, 10);
   const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
