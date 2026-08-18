@@ -14,7 +14,13 @@ export default async function BoardingStructurePage() {
       section="Structure"
       title="Structure"
     >
-      <StructureSection houses={ctx.houseTree} staff={ctx.staffOptions} canWrite={ctx.canWrite} />
+      <StructureSection
+        houses={ctx.houseTree}
+        standaloneDormitories={ctx.standaloneDormitories}
+        standaloneRooms={ctx.standaloneRooms}
+        staff={ctx.staffOptions}
+        canWrite={ctx.canWrite}
+      />
     </ModulePageShell>
   );
 }

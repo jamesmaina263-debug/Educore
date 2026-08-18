@@ -19,6 +19,8 @@ export interface BoardingContext {
   canReadAny: boolean;
   canWrite: boolean;
   houseTree: HouseRow[];
+  standaloneDormitories: HouseRow["dormitories"];
+  standaloneRooms: HouseRow["direct_rooms"];
   staffOptions: StaffOption[];
   availableBeds: AvailableBedOption[];
   studentOptions: StudentOption[];
@@ -91,16 +93,66 @@ export async function loadBoardingContext(date?: string, session?: string): Prom
 
   const activeAllocationByBed = new Map(allocations.filter((a) => a.status === "active").map((a) => [a.bed_id, a]));
 
+  function roomLabel(r: { room_number: string; dormitory_id: string | null; house_id: string | null }): string {
+    if (r.dormitory_id) {
+      const dorm = dorms.find((d) => d.id === r.dormitory_id);
+      const house = houses.find((h) => h.id === dorm?.house_id);
+      return `${house?.name ?? "?"} > ${dorm?.name ?? "?"} > Room ${r.room_number}`;
+    }
+    if (r.house_id) {
+      const house = houses.find((h) => h.id === r.house_id);
+      return `${house?.name ?? "?"} > Room ${r.room_number}`;
+    }
+    return `Room ${r.room_number}`;
+  }
+
   function bedLabel(bedId: string | null): string {
     if (!bedId) return "—";
     const bed = beds.find((b) => b.id === bedId);
     if (!bed) return "—";
     const room = rooms.find((r) => r.id === bed.room_id);
-    const dorm = dorms.find((d) => d.id === room?.dormitory_id);
-    const house = houses.find((h) => h.id === dorm?.house_id);
-    return `${house?.name ?? "?"} > ${dorm?.name ?? "?"} > Room ${room?.room_number ?? "?"} > Bed ${bed.bed_number}`;
+    if (!room) return "—";
+    return `${roomLabel(room)} > Bed ${bed.bed_number}`;
   }
 
+  function mapRoom(r: (typeof rooms)[number]) {
+    return {
+      id: r.id,
+      room_number: r.room_number,
+      capacity: r.capacity,
+      gender: r.gender,
+      beds: beds
+        .filter((b) => b.room_id === r.id)
+        .map((b) => {
+          const occ = activeAllocationByBed.get(b.id);
+          return {
+            id: b.id,
+            bed_number: b.bed_number,
+            status: b.status,
+            occupant_name: occ ? fullName(occ.students as unknown as { first_name: string; last_name: string }) : null,
+          };
+        }),
+    };
+  }
+
+  function mapDormitory(d: (typeof dorms)[number]) {
+    return {
+      id: d.id,
+      name: d.name,
+      capacity: d.capacity,
+      gender: d.gender,
+      master_name: (d.school_users_master as unknown as { full_name: string } | null)?.full_name ?? null,
+      assistant_name: (d.school_users_assistant as unknown as { full_name: string } | null)?.full_name ?? null,
+      rooms: rooms.filter((r) => r.dormitory_id === d.id).map(mapRoom),
+    };
+  }
+
+  // Every school gets a House/Dormitory/Room tree in the UI, but none of the
+  // three levels is mandatory (Brief item #5). houseTree covers the fully
+  // hierarchical case; standaloneDormitories covers a school that names
+  // dormitories directly with no House concept; standaloneRooms covers plain
+  // room-level tracking with neither. A house's own direct_rooms covers a
+  // room attached straight to a house, skipping Dormitory.
   const houseTree: HouseRow[] = houses.map((h) => ({
     id: h.id,
     name: h.name,
@@ -109,36 +161,12 @@ export async function loadBoardingContext(date?: string, session?: string): Prom
     capacity: h.capacity,
     master_name: h.master_id ? (staffById.get(h.master_id) ?? null) : null,
     assistant_name: h.assistant_id ? (staffById.get(h.assistant_id) ?? null) : null,
-    dormitories: dorms
-      .filter((d) => d.house_id === h.id)
-      .map((d) => ({
-        id: d.id,
-        name: d.name,
-        capacity: d.capacity,
-        gender: d.gender,
-        master_name: (d.school_users_master as unknown as { full_name: string } | null)?.full_name ?? null,
-        assistant_name: (d.school_users_assistant as unknown as { full_name: string } | null)?.full_name ?? null,
-        rooms: rooms
-          .filter((r) => r.dormitory_id === d.id)
-          .map((r) => ({
-            id: r.id,
-            room_number: r.room_number,
-            capacity: r.capacity,
-            gender: r.gender,
-            beds: beds
-              .filter((b) => b.room_id === r.id)
-              .map((b) => {
-                const occ = activeAllocationByBed.get(b.id);
-                return {
-                  id: b.id,
-                  bed_number: b.bed_number,
-                  status: b.status,
-                  occupant_name: occ ? fullName(occ.students as unknown as { first_name: string; last_name: string }) : null,
-                };
-              }),
-          })),
-      })),
+    dormitories: dorms.filter((d) => d.house_id === h.id).map(mapDormitory),
+    direct_rooms: rooms.filter((r) => r.house_id === h.id && !r.dormitory_id).map(mapRoom),
   }));
+
+  const standaloneDormitories = dorms.filter((d) => !d.house_id).map(mapDormitory);
+  const standaloneRooms = rooms.filter((r) => !r.house_id && !r.dormitory_id).map(mapRoom);
 
   const staffOptions: StaffOption[] = (staffRows ?? []).map((s) => ({ id: s.id, full_name: s.full_name }));
 
@@ -241,9 +269,7 @@ export async function loadBoardingContext(date?: string, session?: string): Prom
       .map((r) => {
         const roomBeds = beds.filter((b) => b.room_id === r.id);
         const occupied = roomBeds.filter((b) => activeAllocationByBed.has(b.id)).length;
-        const dorm = dorms.find((d) => d.id === r.dormitory_id);
-        const house = houses.find((h) => h.id === dorm?.house_id);
-        return { label: `${house?.name ?? "?"} > Room ${r.room_number}`, occupied, capacity: r.capacity };
+        return { label: roomLabel(r), occupied, capacity: r.capacity };
       })
       .filter((a) => a.capacity > 0 && a.occupied >= a.capacity),
   };
@@ -280,6 +306,8 @@ export async function loadBoardingContext(date?: string, session?: string): Prom
     canReadAny: canReadAny === true,
     canWrite,
     houseTree,
+    standaloneDormitories,
+    standaloneRooms,
     staffOptions,
     availableBeds,
     studentOptions,

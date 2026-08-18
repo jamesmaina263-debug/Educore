@@ -42,7 +42,9 @@ export async function createBoardingHouse(input: {
 }
 
 export async function createDormitory(input: {
-  house_id: string;
+  // Optional -- a school using flat "Dormitory" naming with no House concept
+  // can create one without a parent house (Brief item #5: House is optional).
+  house_id?: string;
   name: string;
   gender: "male" | "female" | "mixed";
   capacity?: number;
@@ -54,7 +56,7 @@ export async function createDormitory(input: {
     const school_id = await schoolId(supabase);
     const { error } = await supabase.from("dormitories").insert({
       school_id,
-      house_id: input.house_id,
+      house_id: input.house_id || null,
       name: input.name,
       gender: input.gender,
       capacity: input.capacity || null,
@@ -70,11 +72,19 @@ export async function createDormitory(input: {
 }
 
 export async function createRoom(input: {
-  dormitory_id: string;
+  // At most one of these -- a room can sit under a dormitory, directly under a
+  // house (skipping Dormitory), or standalone under neither (Brief item #5:
+  // Division/Cubicle are both optional). Enforced again server-side by
+  // hostel_rooms_one_parent_check regardless of what the client sends.
+  dormitory_id?: string;
+  house_id?: string;
   room_number: string;
   capacity: number;
   gender: "male" | "female" | "mixed";
 }): Promise<ActionResult> {
+  if (input.dormitory_id && input.house_id) {
+    return { error: "A room can belong to a dormitory or directly to a house, not both." };
+  }
   const supabase = await createClient();
   try {
     const school_id = await schoolId(supabase);
@@ -82,7 +92,8 @@ export async function createRoom(input: {
       .from("hostel_rooms")
       .insert({
         school_id,
-        dormitory_id: input.dormitory_id,
+        dormitory_id: input.dormitory_id || null,
+        house_id: input.house_id || null,
         room_number: input.room_number,
         capacity: input.capacity,
         gender: input.gender,

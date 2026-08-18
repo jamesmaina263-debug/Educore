@@ -50,6 +50,8 @@ export interface HouseRow {
   master_name: string | null;
   assistant_name: string | null;
   dormitories: DormitoryRow[];
+  // A room can attach directly to a house, skipping Dormitory entirely.
+  direct_rooms: RoomRow[];
 }
 
 type Gender = "male" | "female" | "mixed";
@@ -103,12 +105,41 @@ function StaffSelect({
   );
 }
 
+function RoomCard({ room, canWrite, onToggleBed }: { room: RoomRow; canWrite: boolean; onToggleBed: (bed: BedRow) => void }) {
+  return (
+    <div>
+      <p className="mb-1.5 text-xs font-medium text-muted-foreground">
+        Room {room.room_number} — {room.beds.filter((b) => b.occupant_name).length}/{room.capacity} occupied
+      </p>
+      <div className="flex flex-wrap gap-1.5">
+        {room.beds.map((bed) => (
+          <span
+            key={bed.id}
+            title={bed.occupant_name ?? (canWrite ? "Click to toggle available/unavailable" : bed.status)}
+            onClick={() => canWrite && onToggleBed(bed)}
+            className={canWrite && !bed.occupant_name ? "cursor-pointer" : undefined}
+          >
+            <StatusBadge
+              tone={bed.occupant_name ? "danger" : bedTone[bed.status]}
+              label={bed.occupant_name ? `${bed.bed_number} · occupied` : `${bed.bed_number} · ${bed.status}`}
+            />
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export function StructureSection({
   houses,
+  standaloneDormitories,
+  standaloneRooms,
   staff,
   canWrite,
 }: {
   houses: HouseRow[];
+  standaloneDormitories: DormitoryRow[];
+  standaloneRooms: RoomRow[];
   staff: StaffOption[];
   canWrite: boolean;
 }) {
@@ -121,10 +152,15 @@ export function StructureSection({
   const [houseOpen, setHouseOpen] = useState(false);
   const [houseForm, setHouseForm] = useState({ name: "", description: "", gender: "mixed" as Gender, capacity: "", master_id: "none", assistant_id: "none" });
 
-  const [dormOpen, setDormOpen] = useState<string | null>(null); // house id
+  // null = closed. "standalone" = adding a dormitory with no parent house.
+  // Any other string = adding a dormitory under that house's id.
+  const [dormOpen, setDormOpen] = useState<string | null>(null);
   const [dormForm, setDormForm] = useState({ name: "", gender: "mixed" as Gender, capacity: "", master_id: "none", assistant_id: "none" });
 
-  const [roomOpen, setRoomOpen] = useState<string | null>(null); // dormitory id
+  // null = closed. "standalone" = room under neither a house nor dormitory.
+  // "house:<id>" = room directly under that house, skipping Dormitory.
+  // Any other string = room under that dormitory's id.
+  const [roomOpen, setRoomOpen] = useState<string | null>(null);
   const [roomForm, setRoomForm] = useState({ room_number: "", capacity: "", gender: "mixed" as Gender });
 
   async function submitHouse() {
@@ -145,7 +181,7 @@ export function StructureSection({
     router.refresh();
   }
 
-  async function submitDorm(houseId: string) {
+  async function submitDorm(houseId?: string) {
     setPending(true);
     setError(null);
     const result = await createDormitory({
@@ -163,11 +199,12 @@ export function StructureSection({
     router.refresh();
   }
 
-  async function submitRoom(dormitoryId: string) {
+  async function submitRoom(opts: { dormitory_id?: string; house_id?: string }) {
     setPending(true);
     setError(null);
     const result = await createRoom({
-      dormitory_id: dormitoryId,
+      dormitory_id: opts.dormitory_id,
+      house_id: opts.house_id,
       room_number: roomForm.room_number,
       capacity: Number(roomForm.capacity),
       gender: roomForm.gender,
@@ -364,7 +401,10 @@ export function StructureSection({
                               </p>
                             </div>
                             <DialogFooter>
-                              <Button onClick={() => submitRoom(dorm.id)} disabled={pending || !roomForm.room_number || !roomForm.capacity}>
+                              <Button
+                                onClick={() => submitRoom({ dormitory_id: dorm.id })}
+                                disabled={pending || !roomForm.room_number || !roomForm.capacity}
+                              >
                                 {pending ? "Creating…" : "Create room"}
                               </Button>
                             </DialogFooter>
@@ -375,35 +415,225 @@ export function StructureSection({
                       {dorm.rooms.length === 0 && <p className="text-sm text-muted-foreground">No rooms yet.</p>}
 
                       {dorm.rooms.map((room) => (
-                        <div key={room.id}>
-                          <p className="mb-1.5 text-xs font-medium text-muted-foreground">
-                            Room {room.room_number} — {room.beds.filter((b) => b.occupant_name).length}/{room.capacity} occupied
-                          </p>
-                          <div className="flex flex-wrap gap-1.5">
-                            {room.beds.map((bed) => (
-                              <span
-                                key={bed.id}
-                                title={bed.occupant_name ?? (canWrite ? "Click to toggle available/unavailable" : bed.status)}
-                                onClick={() => canWrite && toggleBed(bed)}
-                                className={canWrite && !bed.occupant_name ? "cursor-pointer" : undefined}
-                              >
-                                <StatusBadge
-                                  tone={bed.occupant_name ? "danger" : bedTone[bed.status]}
-                                  label={bed.occupant_name ? `${bed.bed_number} · occupied` : `${bed.bed_number} · ${bed.status}`}
-                                />
-                              </span>
-                            ))}
-                          </div>
-                        </div>
+                        <RoomCard key={room.id} room={room} canWrite={canWrite} onToggleBed={toggleBed} />
                       ))}
                     </div>
                   )}
                 </div>
               ))}
+
+              {canWrite && (
+                <Dialog open={roomOpen === `house:${house.id}`} onOpenChange={(o) => setRoomOpen(o ? `house:${house.id}` : null)}>
+                  <DialogTrigger asChild>
+                    <Button size="sm" variant="outline" className="self-start">
+                      Add room directly to {house.name}
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent>
+                    <DialogHeader>
+                      <DialogTitle>New room in {house.name} (no dormitory)</DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-3">
+                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                        <div className="space-y-1.5">
+                          <Label>Room number</Label>
+                          <Input value={roomForm.room_number} onChange={(e) => setRoomForm({ ...roomForm, room_number: e.target.value })} />
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label>Capacity (beds)</Label>
+                          <Input type="number" min={1} value={roomForm.capacity} onChange={(e) => setRoomForm({ ...roomForm, capacity: e.target.value })} />
+                        </div>
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label>Gender</Label>
+                        <GenderSelect value={roomForm.gender} onChange={(g) => setRoomForm({ ...roomForm, gender: g })} />
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        For schools that don&apos;t group rooms into dormitories -- this room attaches straight to {house.name}.
+                      </p>
+                    </div>
+                    <DialogFooter>
+                      <Button
+                        onClick={() => submitRoom({ house_id: house.id })}
+                        disabled={pending || !roomForm.room_number || !roomForm.capacity}
+                      >
+                        {pending ? "Creating…" : "Create room"}
+                      </Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
+              )}
+
+              {house.direct_rooms.length > 0 && (
+                <div className="rounded-md border border-border p-3">
+                  <p className="mb-2 text-xs font-medium text-muted-foreground">Rooms directly in {house.name} (no dormitory)</p>
+                  <div className="flex flex-col gap-3">
+                    {house.direct_rooms.map((room) => (
+                      <RoomCard key={room.id} room={room} canWrite={canWrite} onToggleBed={toggleBed} />
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>
       ))}
+
+      {/* Standalone dormitories: schools that use "Dormitory" naming with no House concept at all. */}
+      {canWrite && (
+        <Dialog open={dormOpen === "standalone"} onOpenChange={(o) => setDormOpen(o ? "standalone" : null)}>
+          <DialogTrigger asChild>
+            <Button size="sm" variant="outline" className="self-start">
+              Add dormitory (no house)
+            </Button>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>New standalone dormitory</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-3">
+              <div className="space-y-1.5">
+                <Label>Name</Label>
+                <Input value={dormForm.name} onChange={(e) => setDormForm({ ...dormForm, name: e.target.value })} />
+              </div>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <Label>Gender</Label>
+                  <GenderSelect value={dormForm.gender} onChange={(g) => setDormForm({ ...dormForm, gender: g })} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Capacity (optional)</Label>
+                  <Input type="number" min={0} value={dormForm.capacity} onChange={(e) => setDormForm({ ...dormForm, capacity: e.target.value })} />
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                For schools that don&apos;t use a House structure -- this dormitory won&apos;t belong to any house.
+              </p>
+            </div>
+            <DialogFooter>
+              <Button onClick={() => submitDorm(undefined)} disabled={pending || !dormForm.name}>
+                {pending ? "Creating…" : "Create dormitory"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {standaloneDormitories.map((dorm) => (
+        <div key={dorm.id} className="panel p-4">
+          <button
+            className="flex w-full items-center justify-between text-left"
+            onClick={() => setExpandedDorm(expandedDorm === dorm.id ? null : dorm.id)}
+          >
+            <div>
+              <p className="font-medium">{dorm.name}</p>
+              <p className="text-xs text-muted-foreground">
+                {dorm.gender} · Master: {dorm.master_name ?? "Unassigned"}
+              </p>
+            </div>
+            <span className="text-muted-foreground">{expandedDorm === dorm.id ? "▾" : "▸"}</span>
+          </button>
+
+          {expandedDorm === dorm.id && (
+            <div className="mt-4 flex flex-col gap-3 border-t border-border pt-4">
+              {canWrite && (
+                <Dialog open={roomOpen === dorm.id} onOpenChange={(o) => setRoomOpen(o ? dorm.id : null)}>
+                  <DialogTrigger asChild>
+                    <Button size="sm" variant="outline" className="self-start">
+                      Add room
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent>
+                    <DialogHeader>
+                      <DialogTitle>New room in {dorm.name}</DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-3">
+                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                        <div className="space-y-1.5">
+                          <Label>Room number</Label>
+                          <Input value={roomForm.room_number} onChange={(e) => setRoomForm({ ...roomForm, room_number: e.target.value })} />
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label>Capacity (beds)</Label>
+                          <Input type="number" min={1} value={roomForm.capacity} onChange={(e) => setRoomForm({ ...roomForm, capacity: e.target.value })} />
+                        </div>
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label>Gender</Label>
+                        <GenderSelect value={roomForm.gender} onChange={(g) => setRoomForm({ ...roomForm, gender: g })} />
+                      </div>
+                    </div>
+                    <DialogFooter>
+                      <Button
+                        onClick={() => submitRoom({ dormitory_id: dorm.id })}
+                        disabled={pending || !roomForm.room_number || !roomForm.capacity}
+                      >
+                        {pending ? "Creating…" : "Create room"}
+                      </Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
+              )}
+
+              {dorm.rooms.length === 0 && <p className="text-sm text-muted-foreground">No rooms yet.</p>}
+              {dorm.rooms.map((room) => (
+                <RoomCard key={room.id} room={room} canWrite={canWrite} onToggleBed={toggleBed} />
+              ))}
+            </div>
+          )}
+        </div>
+      ))}
+
+      {/* Standalone rooms: schools tracking plain rooms/beds with no House or Dormitory concept. */}
+      {canWrite && (
+        <Dialog open={roomOpen === "standalone"} onOpenChange={(o) => setRoomOpen(o ? "standalone" : null)}>
+          <DialogTrigger asChild>
+            <Button size="sm" variant="outline" className="self-start">
+              Add room (no house or dormitory)
+            </Button>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>New standalone room</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <Label>Room number</Label>
+                  <Input value={roomForm.room_number} onChange={(e) => setRoomForm({ ...roomForm, room_number: e.target.value })} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Capacity (beds)</Label>
+                  <Input type="number" min={1} value={roomForm.capacity} onChange={(e) => setRoomForm({ ...roomForm, capacity: e.target.value })} />
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <Label>Gender</Label>
+                <GenderSelect value={roomForm.gender} onChange={(g) => setRoomForm({ ...roomForm, gender: g })} />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button
+                onClick={() => submitRoom({})}
+                disabled={pending || !roomForm.room_number || !roomForm.capacity}
+              >
+                {pending ? "Creating…" : "Create room"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {standaloneRooms.length > 0 && (
+        <div className="panel p-4">
+          <p className="mb-3 text-sm font-medium">Standalone rooms</p>
+          <div className="flex flex-col gap-3">
+            {standaloneRooms.map((room) => (
+              <RoomCard key={room.id} room={room} canWrite={canWrite} onToggleBed={toggleBed} />
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
