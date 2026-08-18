@@ -239,13 +239,18 @@ export async function createRequisitionAction(formData: FormData): Promise<Actio
   if (error) return { error: error.message };
 
   if (requisition) {
-    await supabase.from("purchase_requisition_items").insert({
+    const { error: itemError } = await supabase.from("purchase_requisition_items").insert({
       requisition_id: requisition.id,
       school_id: schoolUser.school_id,
       item_description: itemDescription,
       quantity,
       estimated_unit_cost: estimatedCost,
     });
+    if (itemError) {
+      // Don't leave an itemless requisition behind claiming success -- roll the header back.
+      await supabase.from("purchase_requisitions").delete().eq("id", requisition.id);
+      return { error: `Could not save the requisition item: ${itemError.message}` };
+    }
   }
 
   revalidatePath("/inventory", "layout");
@@ -300,13 +305,19 @@ export async function createPurchaseOrderAction(formData: FormData): Promise<Act
   if (error) return { error: error.message };
 
   if (po) {
-    await supabase.from("purchase_order_items").insert({
+    const { error: itemError } = await supabase.from("purchase_order_items").insert({
       po_id: po.id,
       school_id: schoolUser.school_id,
       item_description: itemDescription,
       quantity,
       unit_cost: unitCost,
     });
+    if (itemError) {
+      // Don't leave an itemless PO behind claiming success -- roll the header back, and
+      // leave the requisition (if any) exactly as it was so it can be converted again.
+      await supabase.from("purchase_orders").delete().eq("id", po.id);
+      return { error: `Could not save the purchase order item: ${itemError.message}` };
+    }
     if (requisitionId) {
       await supabase.from("purchase_requisitions").update({ status: "converted", updated_at: new Date().toISOString() }).eq("id", requisitionId);
     }
@@ -334,13 +345,19 @@ export async function receiveGoodsAction(formData: FormData): Promise<ActionResu
   if (error) return { error: error.message };
 
   if (grn) {
-    await supabase.from("goods_received_items").insert({
+    const { error: itemError } = await supabase.from("goods_received_items").insert({
       grn_id: grn.id,
       school_id: schoolUser.school_id,
       po_item_id: poItemId,
       quantity_received: quantityReceived,
       condition_notes: conditionNotes || null,
     });
+    if (itemError) {
+      // Don't leave an itemless GRN behind claiming success -- and critically, don't let the
+      // PO's received-quantity/status silently stay stale as if nothing was ever recorded.
+      await supabase.from("goods_received_notes").delete().eq("id", grn.id);
+      return { error: `Could not save the received item: ${itemError.message}` };
+    }
 
     const { data: poItem } = await supabase
       .from("purchase_order_items")
