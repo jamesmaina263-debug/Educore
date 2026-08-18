@@ -80,12 +80,23 @@ export async function setActiveTerm(id: string, academic_year_id: string): Promi
 export async function createClassLevel(input: {
   academic_year_id: string;
   name: string;
-  level_order: number;
+  /** Omit to let the database derive it automatically from the class name (preferred). */
+  level_order?: number;
 }): Promise<ActionResult> {
   const supabase = await createClient();
   try {
     const school_id = await schoolId(supabase);
-    const { error } = await supabase.from("classes").insert({ school_id, ...input });
+    const isManual = typeof input.level_order === "number";
+    const { error } = await supabase.from("classes").insert({
+      school_id,
+      academic_year_id: input.academic_year_id,
+      name: input.name,
+      // A placeholder is required because the column is NOT NULL, but the
+      // trg_classes_assign_level_order trigger overwrites it server-side
+      // unless level_order_is_manual is true -- see phase23 migration.
+      level_order: input.level_order ?? 0,
+      level_order_is_manual: isManual,
+    });
     if (error) return { error: error.message };
   } catch (e) {
     return { error: e instanceof Error ? e.message : "Could not create the class." };

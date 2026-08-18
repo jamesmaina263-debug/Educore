@@ -68,7 +68,8 @@ export function ClassesStreamsSection({
   const [editingCapacityFor, setEditingCapacityFor] = useState<string | null>(null);
   const [capacityDraft, setCapacityDraft] = useState("");
 
-  const [classForm, setClassForm] = useState({ name: "", level_order: 1 });
+  const [classForm, setClassForm] = useState({ name: "", level_order: "" });
+  const [showManualOrder, setShowManualOrder] = useState(false);
   const [streamForm, setStreamForm] = useState({ name: "", class_teacher_id: "", capacity: "" });
 
   if (!activeYearId) {
@@ -82,11 +83,17 @@ export function ClassesStreamsSection({
   async function handleCreateClass() {
     setPending(true);
     setError(null);
-    const result = await createClassLevel({ academic_year_id: activeYearId!, ...classForm });
+    const trimmedOrder = classForm.level_order.trim();
+    const result = await createClassLevel({
+      academic_year_id: activeYearId!,
+      name: classForm.name,
+      level_order: trimmedOrder === "" ? undefined : Number(trimmedOrder),
+    });
     setPending(false);
     if ("error" in result) return setError(result.error);
     setClassDialogOpen(false);
-    setClassForm({ name: "", level_order: 1 });
+    setClassForm({ name: "", level_order: "" });
+    setShowManualOrder(false);
     router.refresh();
   }
 
@@ -153,15 +160,34 @@ export function ClassesStreamsSection({
                     value={classForm.name}
                     onChange={(e) => setClassForm({ ...classForm, name: e.target.value })}
                   />
+                  <p className="text-xs text-muted-foreground">
+                    Sorting is worked out automatically from the name (e.g. &quot;Grade 6&quot;, &quot;Form 2&quot;,
+                    &quot;S.3&quot; all sort correctly). No number needed.
+                  </p>
                 </div>
-                <div className="space-y-1.5">
-                  <Label>Level order (for sorting)</Label>
-                  <Input
-                    type="number"
-                    value={classForm.level_order}
-                    onChange={(e) => setClassForm({ ...classForm, level_order: Number(e.target.value) })}
-                  />
-                </div>
+                {showManualOrder ? (
+                  <div className="space-y-1.5">
+                    <Label>Level order (manual override)</Label>
+                    <Input
+                      type="number"
+                      placeholder="e.g. 1"
+                      value={classForm.level_order}
+                      onChange={(e) => setClassForm({ ...classForm, level_order: e.target.value })}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Use this only if the class name has no number, or your school mixes naming schemes (e.g. PP1/PP2
+                      alongside Grade 1/Grade 2) where automatic detection would collide.
+                    </p>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    className="text-left text-xs text-muted-foreground underline underline-offset-2"
+                    onClick={() => setShowManualOrder(true)}
+                  >
+                    Set sort order manually instead
+                  </button>
+                )}
                 {error && <p className="text-sm text-danger">{error}</p>}
               </div>
               <DialogFooter>
