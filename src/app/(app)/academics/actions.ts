@@ -28,6 +28,22 @@ export async function createAcademicYear(input: {
   return { success: true };
 }
 
+export async function updateAcademicYear(
+  id: string,
+  input: { name: string; start_date: string; end_date: string },
+): Promise<ActionResult> {
+  const supabase = await createClient();
+  const { error } = await supabase.from("academic_years").update(input).eq("id", id);
+  if (error) {
+    // trg_academic_years_validate raises a plain-language message (overlap,
+    // or "closed year" protection) -- surface it as-is rather than the raw
+    // Postgres error code.
+    return { error: error.message };
+  }
+  revalidatePath("/academics", "layout");
+  return { success: true };
+}
+
 export async function setActiveAcademicYear(id: string): Promise<ActionResult> {
   const supabase = await createClient();
   // One active year per school: demote any current one first, then promote this one —
@@ -60,6 +76,21 @@ export async function createTerm(input: {
   } catch (e) {
     return { error: e instanceof Error ? e.message : "Could not create the term." };
   }
+  revalidatePath("/academics", "layout");
+  return { success: true };
+}
+
+export async function updateTerm(
+  id: string,
+  input: { name: string; start_date: string; end_date: string },
+): Promise<ActionResult> {
+  const supabase = await createClient();
+  // Identity fields (academic_year_id, term_number) are intentionally not
+  // editable here -- moving a term to a different year, or renumbering it,
+  // is a structural change that should go through delete+recreate so it's
+  // obvious in the audit log, not a quiet field edit.
+  const { error } = await supabase.from("terms").update(input).eq("id", id);
+  if (error) return { error: error.message };
   revalidatePath("/academics", "layout");
   return { success: true };
 }
