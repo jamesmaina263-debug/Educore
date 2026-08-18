@@ -1,10 +1,9 @@
 import { redirect } from "next/navigation";
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { logout } from "@/app/login/actions";
 import { AppShell } from "@/components/app-shell/app-shell";
-import { Button } from "@/components/ui/button";
 import { StudentsTable, type StudentRow } from "@/components/students/students-table";
-import { createWalkInApplication } from "@/app/(app)/admissions/walk-in-actions";
 
 export default async function StudentsPage() {
   const supabase = await createClient();
@@ -19,10 +18,6 @@ export default async function StudentsPage() {
     .select("full_name, roles(display_name), schools(name)")
     .eq("auth_user_id", user.id)
     .maybeSingle();
-
-  const { data: canStartAdmission } = await supabase.rpc("auth_has_permission", {
-    p_permission_key: "admissions.write",
-  });
 
   const { data: students } = await supabase
     .from("students")
@@ -70,18 +65,15 @@ export default async function StudentsPage() {
             <h1 className="text-lg font-semibold">Students</h1>
             <p className="text-sm text-muted-foreground">{rows.length} total</p>
           </div>
-          {/* Previously inserted directly into `students` via a standalone form at
-              /students/new, bypassing the entire Admissions pipeline -- new students
-              created that way had no linked application, no class placement, and (per
-              enforce_student_status_transition) no way to ever progress past status
-              'applied'. Two real students were found stuck this way during the phase-25
-              audit. This now reuses the same walk-in entry point as /admissions, so
-              every new student goes through one onboarding engine, not two. */}
-          {canStartAdmission && (
-            <form action={createWalkInApplication}>
-              <Button type="submit">Register student</Button>
-            </form>
-          )}
+          {/* Students has no student-creation entry point of its own -- a real,
+              live bug (phase-25 audit) came from a duplicate "Register student"
+              path here that inserted directly into `students`, bypassing the
+              entire Admissions pipeline. New students exist because an
+              application was admitted; this page only ever displays that
+              result, and the only way to start one is /admissions. */}
+          <Link href="/admissions" className="text-sm text-primary underline underline-offset-2">
+            Add a student via Admissions →
+          </Link>
         </div>
 
         {rows.length === 0 ? (
