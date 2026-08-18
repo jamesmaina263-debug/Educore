@@ -45,6 +45,21 @@ export async function createPtSlotAction(formData: FormData): Promise<ActionResu
 
 export async function deletePtSlotAction(slotId: string): Promise<ActionResult> {
   const supabase = await createClient();
+
+  // pt_meeting_bookings.slot_id is ON DELETE CASCADE — without this check, deleting a slot with
+  // active bookings would silently wipe out a guardian's booking with zero notification to them.
+  const { count: activeBookings, error: bookingsError } = await supabase
+    .from("pt_meeting_bookings")
+    .select("id", { count: "exact", head: true })
+    .eq("slot_id", slotId)
+    .eq("status", "booked");
+  if (bookingsError) return { error: bookingsError.message };
+  if ((activeBookings ?? 0) > 0) {
+    return {
+      error: `This slot has ${activeBookings} active booking${activeBookings === 1 ? "" : "s"}. Cancel or reassign them with the guardian(s) before removing the slot.`,
+    };
+  }
+
   const { error } = await supabase.from("pt_meeting_slots").delete().eq("id", slotId);
   if (error) return { error: error.message };
   revalidatePath("/pt-meetings");
