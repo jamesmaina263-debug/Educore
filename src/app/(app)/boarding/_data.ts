@@ -40,12 +40,17 @@ export async function loadBoardingContext(date?: string, session?: string): Prom
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const [{ data: viewer }, { data: canReadAny }, { data: canWriteData }] = await Promise.all([
+  const [{ data: viewer }, { data: canReadAny }, { data: canWriteData }, { data: canWriteAssigned }] = await Promise.all([
     supabase.from("school_users").select("full_name, roles(display_name), schools(name)").eq("auth_user_id", user.id).maybeSingle(),
     supabase.rpc("auth_has_permission", { p_permission_key: "hostel.read_any" }),
     supabase.rpc("auth_has_permission", { p_permission_key: "hostel.write" }),
+    supabase.rpc("auth_has_permission", { p_permission_key: "hostel.write_assigned" }),
   ]);
-  const canWrite = canWriteData === true;
+  // hostel.write_assigned holders (e.g. a dormitory master without the
+  // hostel_warden role) genuinely have DB-level write access to their
+  // assigned dormitory via RLS -- without this, the UI hid every write
+  // control from them even though their writes would have succeeded.
+  const canWrite = canWriteData === true || canWriteAssigned === true;
 
   const [
     { data: houseRows },

@@ -221,22 +221,38 @@ export async function transferStudent(input: {
       .maybeSingle();
     if (destOccupant) return { error: "The destination bed is already occupied." };
 
+    const { data: destBed } = await supabase
+      .from("beds")
+      .select("id, status, room_id, hostel_rooms(gender)")
+      .eq("id", input.to_bed_id)
+      .maybeSingle();
+    if (!destBed) return { error: "Destination bed not found." };
+    if (destBed.status === "unavailable") return { error: "The destination bed is marked unavailable." };
+
+    const destRoomGender = (destBed.hostel_rooms as unknown as { gender: string } | null)?.gender;
+    const { data: student } = await supabase.from("students").select("gender").eq("id", input.student_id).single();
+    if (destRoomGender && destRoomGender !== "mixed" && student?.gender !== destRoomGender) {
+      return { error: `The destination room is designated ${destRoomGender} — the student's gender doesn't match.` };
+    }
+
     if (currentAllocation) {
       await supabase.from("hostel_allocations").update({ status: "ended", end_date: new Date().toISOString().slice(0, 10) }).eq("id", currentAllocation.id);
     }
 
-    const { data: room } = await supabase.from("beds").select("room_id").eq("id", input.to_bed_id).single();
-    if (!room) return { error: "Destination bed not found." };
-
     const { error: allocError } = await supabase.from("hostel_allocations").insert({
       school_id,
       student_id: input.student_id,
-      hostel_room_id: room.room_id,
+      hostel_room_id: destBed.room_id,
       bed_id: input.to_bed_id,
       start_date: new Date().toISOString().slice(0, 10),
       status: "active",
     });
-    if (allocError) return { error: allocError.message };
+    if (allocError) {
+      if (allocError.code === "23505") {
+        return { error: "This student or bed already has an active allocation." };
+      }
+      return { error: allocError.message };
+    }
 
     const { error: transferError } = await supabase.from("boarding_transfers").insert({
       school_id,
