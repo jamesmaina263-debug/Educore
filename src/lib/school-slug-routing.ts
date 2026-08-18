@@ -24,8 +24,6 @@ export type SlugRouting = { type: "next" } | { type: "redirect"; url: URL } | { 
 // decide how to combine this with the session-refresh response it already
 // has, without either one silently dropping the other's cookies.
 export function resolveSlugRouting(request: NextRequest): SlugRouting {
-  if (request.method !== "GET") return { type: "next" };
-
   const { pathname } = request.nextUrl;
   const segments = pathname.split("/").filter(Boolean);
   const first = segments[0];
@@ -36,11 +34,15 @@ export function resolveSlugRouting(request: NextRequest): SlugRouting {
 
   if (APP_ROUTE_SEGMENTS.has(first)) {
     // Bare, unslugged request to a real staff-app route (e.g. "/dashboard").
+    // Only ever applies to GET (navigation) -- redirecting a POST/Server
+    // Action here would be wrong, and none should ever target a bare
+    // unslugged path anyway since the page itself was served slug-prefixed.
     // If we know this browser's school (cookie set at login/signup), send it
     // to the slug-prefixed version. If we don't (older session predating
     // this change, or genuinely unauthenticated), fall through unchanged --
     // the page's own auth check still applies either way; this cookie is
     // purely cosmetic for the URL.
+    if (request.method !== "GET") return { type: "next" };
     const slug = request.cookies.get(SCHOOL_SLUG_COOKIE)?.value;
     if (!slug) return { type: "next" };
 
@@ -56,6 +58,16 @@ export function resolveSlugRouting(request: NextRequest): SlugRouting {
   // RLS/auth_school_id()'s job server-side regardless of what's in the URL,
   // so a stale or someone-else's slug in the address bar is a cosmetic
   // mismatch, never a data-access issue.
+  //
+  // Deliberately method-agnostic (unlike the branch above): a page rendered
+  // at "/{slug}/admissions" stays at that URL in the browser, so a Server
+  // Action fired from it POSTs to that same slugged URL. If this branch were
+  // GET-only, every Server Action / form POST on a slug-prefixed page would
+  // 404 (no literal route exists at "/{slug}/admissions") while the page
+  // itself loaded fine -- exactly what happened to the admissions delete
+  // button: the GET-only restriction that used to guard this whole function
+  // let the page render, then broke the first POST anyone actually fired
+  // against it.
   const rest = "/" + segments.slice(1).join("/");
   const rewritten = request.nextUrl.clone();
   rewritten.pathname = rest === "/" ? "/dashboard" : rest;
