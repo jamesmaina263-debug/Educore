@@ -161,7 +161,15 @@ export async function requestAssetMaintenanceAction(formData: FormData): Promise
   });
   if (error) return { error: error.message };
 
-  await supabase.from("assets").update({ status: "under_maintenance", updated_at: new Date().toISOString() }).eq("id", assetId);
+  const { error: statusError } = await supabase
+    .from("assets")
+    .update({ status: "under_maintenance", updated_at: new Date().toISOString() })
+    .eq("id", assetId);
+  if (statusError) {
+    // The maintenance record itself is already saved -- that's the real record --
+    // but tell the caller its status badge won't reflect it, rather than staying silent.
+    return { error: `Maintenance request saved, but the asset's status could not be updated: ${statusError.message}` };
+  }
 
   revalidatePath("/inventory", "layout");
   return { success: true };
@@ -184,7 +192,13 @@ export async function completeAssetMaintenanceAction(formData: FormData): Promis
   if (error) return { error: error.message };
 
   if (assetId) {
-    await supabase.from("assets").update({ status: "in_use", updated_at: new Date().toISOString() }).eq("id", assetId);
+    const { error: statusError } = await supabase
+      .from("assets")
+      .update({ status: "in_use", updated_at: new Date().toISOString() })
+      .eq("id", assetId);
+    if (statusError) {
+      return { error: `Maintenance marked complete, but the asset's status could not be updated: ${statusError.message}` };
+    }
   }
 
   revalidatePath("/inventory", "layout");
@@ -359,19 +373,16 @@ export async function receiveGoodsAction(formData: FormData): Promise<ActionResu
       return { error: `Could not save the received item: ${itemError.message}` };
     }
 
-    const { data: poItem } = await supabase
-      .from("purchase_order_items")
-      .select("quantity, quantity_received")
-      .eq("id", poItemId)
-      .maybeSingle();
-    if (poItem) {
-      const newReceived = Number(poItem.quantity_received) + Number(quantityReceived);
-      await supabase.from("purchase_order_items").update({ quantity_received: newReceived }).eq("id", poItemId);
-      const fullyReceived = newReceived >= Number(poItem.quantity);
-      await supabase
-        .from("purchase_orders")
-        .update({ status: fullyReceived ? "received" : "partially_received", updated_at: new Date().toISOString() })
-        .eq("id", poId);
+    const { error: recordError } = await supabase.rpc("record_goods_received", {
+      p_po_id: poId,
+      p_po_item_id: poItemId,
+      p_quantity_received: Number(quantityReceived),
+    });
+    if (recordError) {
+      // The GRN + item are already saved at this point -- that's real, so we don't
+      // delete it -- but the PO's received-quantity/status update failed, so surface
+      // that clearly instead of pretending everything is in sync.
+      return { error: `Received item was recorded, but updating the purchase order failed: ${recordError.message}` };
     }
   }
 
