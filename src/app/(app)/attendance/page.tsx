@@ -185,7 +185,7 @@ export default async function AttendancePage({
             You don&apos;t have a class assigned to mark attendance for.
           </p>
         ) : (
-          <RegisterForm streamId={selectedStreamId} attendanceDate={attendanceDate} roster={roster} canMark={!!canMark} />
+          <RegisterForm streamId={selectedStreamId} attendanceDate={attendanceDate} roster={roster} canMark={!!canMark || !!canMarkAny} />
         )}
 
         {canApproveCorrection && <PendingCorrectionsPanel corrections={pendingCorrections} />}
