@@ -43,8 +43,12 @@ function normalizeHeader(h: string): keyof TimetableUploadRow | null {
 }
 
 // Excel stores a "Time"-formatted cell as a fraction of a day (e.g. 0.375 = 09:00).
-// A plain-text cell like "9:00" or "9:00 AM" also needs normalizing to 24h "HH:MM".
+// exceljs additionally parses genuinely date/time-formatted cells straight into JS Date
+// objects. A plain-text cell like "9:00" or "9:00 AM" also needs normalizing to 24h "HH:MM".
 function normalizeTime(v: unknown): string {
+  if (v instanceof Date) {
+    return `${String(v.getUTCHours()).padStart(2, "0")}:${String(v.getUTCMinutes()).padStart(2, "0")}`;
+  }
   if (typeof v === "number") {
     const frac = v - Math.floor(v);
     const totalMinutes = Math.round(frac * 24 * 60);
@@ -64,18 +68,26 @@ function normalizeTime(v: unknown): string {
   return s; // pass through unrecognized text -- the server validates and reports a clear error
 }
 
-async function parseFileToRows(file: File): Promise<TimetableUploadRow[]> {
-  const XLSX = await import("xlsx");
-  const buf = await file.arrayBuffer();
-  const wb = XLSX.read(buf, { type: "array" });
-  const sheet = wb.Sheets[wb.SheetNames[0]];
-  const raw = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: "" });
+// Unwraps exceljs's richer cell.value shapes (formula results, rich text runs) down to a
+// plain primitive, matching what a simple typed-in cell already gives us.
+function flattenCellValue(v: unknown): unknown {
+  if (v && typeof v === "object") {
+    if ("result" in v) return (v as { result: unknown }).result;
+    if ("richText" in v) {
+      return (v as { richText: { text: string }[] }).richText.map((r) => r.text).join("");
+    }
+    if ("text" in v) return (v as { text: unknown }).text;
+  }
+  return v;
+}
 
+function rowsFromRaw(raw: Record<string, unknown>[]): TimetableUploadRow[] {
   return raw.map((rawRow) => {
     const row: Partial<TimetableUploadRow> = {};
-    for (const [header, value] of Object.entries(rawRow)) {
+    for (const [header, rawValue] of Object.entries(rawRow)) {
       const key = normalizeHeader(header);
       if (!key) continue;
+      const value = flattenCellValue(rawValue);
       row[key] = key === "start_time" || key === "end_time" ? normalizeTime(value) : String(value ?? "").trim();
     }
     return {
@@ -89,6 +101,51 @@ async function parseFileToRows(file: File): Promise<TimetableUploadRow[]> {
       end_time: row.end_time ?? "",
     };
   });
+}
+
+async function parseCsv(file: File): Promise<TimetableUploadRow[]> {
+  const Papa = (await import("papaparse")).default;
+  const text = await file.text();
+  const result = Papa.parse<Record<string, unknown>>(text, { header: true, skipEmptyLines: true });
+  return rowsFromRaw(result.data);
+}
+
+async function parseXlsx(file: File): Promise<TimetableUploadRow[]> {
+  const ExcelJS = await import("exceljs");
+  const buf = await file.arrayBuffer();
+  const wb = new ExcelJS.Workbook();
+  await wb.xlsx.load(buf);
+  const sheet = wb.worksheets[0];
+  if (!sheet) return [];
+
+  const headers: string[] = [];
+  sheet.getRow(1).eachCell({ includeEmpty: false }, (cell, colNumber) => {
+    headers[colNumber] = String(flattenCellValue(cell.value) ?? "").trim();
+  });
+
+  const raw: Record<string, unknown>[] = [];
+  sheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
+    if (rowNumber === 1) return;
+    const obj: Record<string, unknown> = {};
+    row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+      const header = headers[colNumber];
+      if (header) obj[header] = cell.value;
+    });
+    raw.push(obj);
+  });
+  return rowsFromRaw(raw);
+}
+
+async function parseFileToRows(file: File): Promise<TimetableUploadRow[]> {
+  const name = file.name.toLowerCase();
+  if (name.endsWith(".csv")) return parseCsv(file);
+  if (name.endsWith(".xlsx")) return parseXlsx(file);
+  if (name.endsWith(".xls")) {
+    throw new Error(
+      "The old .xls format isn't supported -- please save the file as .xlsx or .csv (in Excel: File > Save As > Excel Workbook) and re-upload.",
+    );
+  }
+  throw new Error("Unrecognized file type -- please upload a .csv or .xlsx file.");
 }
 
 export async function downloadTimetableTemplate(streams: StreamRow[], classes: ClassRow[], subjects: SubjectRow[], teachers: TeacherOption[]) {
@@ -197,7 +254,7 @@ export function TimetableUploadDialog() {
             <input
               ref={fileInputRef}
               type="file"
-              accept=".csv,.xlsx,.xls"
+              accept=".csv,.xlsx"
               disabled={pending}
               onChange={(e) => {
                 const file = e.target.files?.[0];
