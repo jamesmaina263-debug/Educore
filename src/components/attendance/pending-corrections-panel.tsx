@@ -18,11 +18,17 @@ export interface PendingCorrectionRow {
 export function PendingCorrectionsPanel({ corrections }: { corrections: PendingCorrectionRow[] }) {
   const router = useRouter();
   const [pending, setPending] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   async function handleReview(id: string, decision: "approved" | "rejected") {
     setPending(id);
-    await reviewAttendanceCorrection(id, decision);
+    setError(null);
+    const result = await reviewAttendanceCorrection(id, decision);
     setPending(null);
+    if (result && "error" in result) {
+      setError(result.error);
+      return;
+    }
     router.refresh();
   }
 
@@ -34,6 +40,7 @@ export function PendingCorrectionsPanel({ corrections }: { corrections: PendingC
         <h2 className="text-[0.8125rem] font-semibold">Corrections Awaiting Review</h2>
         <StatusBadge tone="warning" label={`${corrections.length} pending`} />
       </header>
+      {error && <p className="border-b border-border px-4 py-2 text-sm text-danger">{error}</p>}
       <div className="overflow-x-auto">
         <table className="table-dense w-full">
           <thead className="bg-muted/70">

@@ -136,12 +136,26 @@ export default async function AttendancePage({
 
   let pendingCorrections: PendingCorrectionRow[] = [];
   if (canApproveCorrection) {
-    const { data: correctionRows } = await supabase
+    // Mirrors the streamQuery split above: mark_any holders (deputy/
+    // principal/owner) can approve any stream's corrections and should see
+    // the school-wide queue; a class_teacher's approve_correction only
+    // reaches their own stream per RLS (student_attendance_approve_own_class),
+    // so scope the list the same way -- otherwise they'd see every other
+    // class's disputed corrections (names, reasons, who requested them) with
+    // no way to act on any of them.
+    let correctionsQuery = supabase
       .from("student_attendance")
       .select("id, attendance_date, requested_status, correction_reason, students(first_name, last_name), school_users!student_attendance_requested_by_fkey(full_name)")
       .eq("correction_status", "pending")
       .order("attendance_date", { ascending: false })
       .limit(50);
+    if (!canMarkAny) {
+      correctionsQuery = correctionsQuery.in(
+        "stream_id",
+        (availableStreams ?? []).map((s) => s.id),
+      );
+    }
+    const { data: correctionRows } = await correctionsQuery;
     pendingCorrections = (correctionRows ?? []).map((c) => {
       const st = c.students as unknown as { first_name: string; last_name: string } | null;
       return {
