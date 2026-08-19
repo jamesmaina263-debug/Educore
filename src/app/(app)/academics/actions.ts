@@ -45,6 +45,40 @@ export async function setActiveAcademicYear(id: string): Promise<ActionResult> {
   return { success: true };
 }
 
+// Editing a year's name/dates never touches which records belong to it --
+// every historical record (attendance, marks, fees, exams, ...) links to an
+// academic_year_id/term_id by foreign key, not by date range, so nothing is
+// re-derived from these dates after the fact. Safe to edit freely, including
+// after a year has closed.
+export async function updateAcademicYear(
+  id: string,
+  input: { name?: string; start_date?: string; end_date?: string },
+): Promise<ActionResult> {
+  const supabase = await createClient();
+  const { error } = await supabase.from("academic_years").update(input).eq("id", id);
+  if (error) return { error: error.message };
+  revalidatePath("/academics", "layout");
+  return { success: true };
+}
+
+// Blocked automatically (via a clear Postgres FK error, surfaced as-is below)
+// the moment any real data references this year -- classes, applications,
+// fee structures, terms, etc. all have NO ACTION/RESTRICT foreign keys to
+// academic_years, so this can only ever succeed for a genuinely empty,
+// unused year.
+export async function deleteAcademicYear(id: string): Promise<ActionResult> {
+  const supabase = await createClient();
+  const { error } = await supabase.from("academic_years").delete().eq("id", id);
+  if (error) {
+    if (error.code === "23503") {
+      return { error: "This academic year has terms, classes, or other records linked to it and can't be deleted." };
+    }
+    return { error: error.message };
+  }
+  revalidatePath("/academics", "layout");
+  return { success: true };
+}
+
 export async function createTerm(input: {
   academic_year_id: string;
   name: string;
@@ -73,6 +107,35 @@ export async function setActiveTerm(id: string, academic_year_id: string): Promi
     .eq("status", "active");
   const { error } = await supabase.from("terms").update({ status: "active" }).eq("id", id);
   if (error) return { error: error.message };
+  revalidatePath("/academics", "layout");
+  return { success: true };
+}
+
+// Same reasoning as updateAcademicYear: nothing re-derives term membership
+// from these dates after the fact, so editing is safe even for a closed term.
+export async function updateTerm(
+  id: string,
+  input: { name?: string; term_number?: number; start_date?: string; end_date?: string },
+): Promise<ActionResult> {
+  const supabase = await createClient();
+  const { error } = await supabase.from("terms").update(input).eq("id", id);
+  if (error) return { error: error.message };
+  revalidatePath("/academics", "layout");
+  return { success: true };
+}
+
+// Same protection as deleteAcademicYear: invoices, exams, fee structures,
+// applications, etc. all have NO ACTION/RESTRICT foreign keys to terms, so
+// this can only succeed for a term nothing has actually used yet.
+export async function deleteTerm(id: string): Promise<ActionResult> {
+  const supabase = await createClient();
+  const { error } = await supabase.from("terms").delete().eq("id", id);
+  if (error) {
+    if (error.code === "23503") {
+      return { error: "This term has invoices, exams, or other records linked to it and can't be deleted." };
+    }
+    return { error: error.message };
+  }
   revalidatePath("/academics", "layout");
   return { success: true };
 }

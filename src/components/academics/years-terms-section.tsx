@@ -14,7 +14,7 @@ import {
   DialogFooter,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { createAcademicYear, setActiveAcademicYear, createTerm, setActiveTerm } from "@/app/(app)/academics/actions";
+import { createAcademicYear, setActiveAcademicYear, updateAcademicYear, deleteAcademicYear, createTerm, setActiveTerm, updateTerm, deleteTerm } from "@/app/(app)/academics/actions";
 import { prepareTermNewsletterDraftAction } from "@/app/(app)/academics/newsletter-actions";
 
 export interface AcademicYearRow {
@@ -53,6 +53,8 @@ export function YearsTermsSection({
   const router = useRouter();
   const [yearDialogOpen, setYearDialogOpen] = useState(false);
   const [termDialogOpen, setTermDialogOpen] = useState<string | null>(null); // academic_year_id
+  const [editYearOpen, setEditYearOpen] = useState<AcademicYearRow | null>(null);
+  const [editTermOpen, setEditTermOpen] = useState<TermRow | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [newsletterBusyId, setNewsletterBusyId] = useState<string | null>(null);
@@ -60,6 +62,62 @@ export function YearsTermsSection({
 
   const [yearForm, setYearForm] = useState({ name: "", start_date: "", end_date: "" });
   const [termForm, setTermForm] = useState({ name: "", term_number: 1, start_date: "", end_date: "" });
+  const [editYearForm, setEditYearForm] = useState({ name: "", start_date: "", end_date: "" });
+  const [editTermForm, setEditTermForm] = useState({ name: "", term_number: 1, start_date: "", end_date: "" });
+
+  function openEditYear(y: AcademicYearRow) {
+    setEditYearForm({ name: y.name, start_date: y.start_date, end_date: y.end_date });
+    setEditYearOpen(y);
+    setError(null);
+  }
+
+  async function handleUpdateYear() {
+    if (!editYearOpen) return;
+    setPending(true);
+    setError(null);
+    const result = await updateAcademicYear(editYearOpen.id, editYearForm);
+    setPending(false);
+    if ("error" in result) return setError(result.error);
+    setEditYearOpen(null);
+    router.refresh();
+  }
+
+  async function handleDeleteYear(id: string) {
+    if (!confirm("Delete this academic year? This only works if nothing (terms, classes, records) is linked to it yet.")) return;
+    setPending(true);
+    setError(null);
+    const result = await deleteAcademicYear(id);
+    setPending(false);
+    if ("error" in result) return setError(result.error);
+    router.refresh();
+  }
+
+  function openEditTerm(t: TermRow) {
+    setEditTermForm({ name: t.name, term_number: t.term_number, start_date: t.start_date, end_date: t.end_date });
+    setEditTermOpen(t);
+    setError(null);
+  }
+
+  async function handleUpdateTerm() {
+    if (!editTermOpen) return;
+    setPending(true);
+    setError(null);
+    const result = await updateTerm(editTermOpen.id, editTermForm);
+    setPending(false);
+    if ("error" in result) return setError(result.error);
+    setEditTermOpen(null);
+    router.refresh();
+  }
+
+  async function handleDeleteTerm(id: string) {
+    if (!confirm("Delete this term? This only works if nothing (invoices, exams, records) is linked to it yet.")) return;
+    setPending(true);
+    setError(null);
+    const result = await deleteTerm(id);
+    setPending(false);
+    if ("error" in result) return setError(result.error);
+    router.refresh();
+  }
 
   async function handlePrepareNewsletter(termId: string) {
     setNewsletterBusyId(termId);
@@ -202,10 +260,20 @@ export function YearsTermsSection({
                         <StatusBadge tone={statusTone(y.status)} label={y.status} />
                       </td>
                       <td className="text-right">
-                        {canWrite && y.status !== "active" && (
-                          <Button size="sm" variant="ghost" disabled={pending} onClick={() => handleActivateYear(y.id)}>
-                            Set active
-                          </Button>
+                        {canWrite && (
+                          <>
+                            <Button size="sm" variant="ghost" disabled={pending} onClick={() => openEditYear(y)}>
+                              Edit
+                            </Button>
+                            {y.status !== "active" && (
+                              <Button size="sm" variant="ghost" disabled={pending} onClick={() => handleActivateYear(y.id)}>
+                                Set active
+                              </Button>
+                            )}
+                            <Button size="sm" variant="ghost" disabled={pending} onClick={() => handleDeleteYear(y.id)}>
+                              Delete
+                            </Button>
+                          </>
                         )}
                       </td>
                     </tr>
@@ -254,11 +322,11 @@ export function YearsTermsSection({
                                 />
                               </div>
                               <div className="space-y-1.5">
-                                <Label>Term number (1–3)</Label>
+                                <Label>Term number</Label>
                                 <Input
                                   type="number"
                                   min={1}
-                                  max={3}
+                                  max={12}
                                   value={termForm.term_number}
                                   onChange={(e) =>
                                     setTermForm({ ...termForm, term_number: Number(e.target.value) })
@@ -306,6 +374,11 @@ export function YearsTermsSection({
                           </span>
                           <span className="flex items-center gap-2">
                             <StatusBadge tone={statusTone(t.status)} label={t.status} />
+                            {canWrite && (
+                              <Button size="sm" variant="ghost" disabled={pending} onClick={() => openEditTerm(t)}>
+                                Edit
+                              </Button>
+                            )}
                             {canWrite && t.status !== "active" && (
                               <Button
                                 size="sm"
@@ -314,6 +387,11 @@ export function YearsTermsSection({
                                 onClick={() => handleActivateTerm(t.id, y.id)}
                               >
                                 Set active
+                              </Button>
+                            )}
+                            {canWrite && (
+                              <Button size="sm" variant="ghost" disabled={pending} onClick={() => handleDeleteTerm(t.id)}>
+                                Delete
                               </Button>
                             )}
                             {canSendNewsletter && (
@@ -348,6 +426,102 @@ export function YearsTermsSection({
           </p>
         )}
       </div>
+
+      <Dialog open={editYearOpen !== null} onOpenChange={(open) => !open && setEditYearOpen(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit {editYearOpen?.name}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-1.5">
+              <Label>Name</Label>
+              <Input value={editYearForm.name} onChange={(e) => setEditYearForm({ ...editYearForm, name: e.target.value })} />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label>Start date</Label>
+                <Input
+                  type="date"
+                  value={editYearForm.start_date}
+                  onChange={(e) => setEditYearForm({ ...editYearForm, start_date: e.target.value })}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>End date</Label>
+                <Input
+                  type="date"
+                  value={editYearForm.end_date}
+                  onChange={(e) => setEditYearForm({ ...editYearForm, end_date: e.target.value })}
+                />
+              </div>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Editing dates never moves historical attendance, marks, fees, or reports — those stay linked to this
+              year by record, not by date range.
+            </p>
+            {error && <p className="text-sm text-danger">{error}</p>}
+          </div>
+          <DialogFooter>
+            <Button onClick={handleUpdateYear} disabled={pending}>
+              {pending ? "Saving…" : "Save changes"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={editTermOpen !== null} onOpenChange={(open) => !open && setEditTermOpen(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit {editTermOpen?.name}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label>Name</Label>
+                <Input value={editTermForm.name} onChange={(e) => setEditTermForm({ ...editTermForm, name: e.target.value })} />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Term number</Label>
+                <Input
+                  type="number"
+                  min={1}
+                  max={12}
+                  value={editTermForm.term_number}
+                  onChange={(e) => setEditTermForm({ ...editTermForm, term_number: Number(e.target.value) })}
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label>Start date</Label>
+                <Input
+                  type="date"
+                  value={editTermForm.start_date}
+                  onChange={(e) => setEditTermForm({ ...editTermForm, start_date: e.target.value })}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>End date</Label>
+                <Input
+                  type="date"
+                  value={editTermForm.end_date}
+                  onChange={(e) => setEditTermForm({ ...editTermForm, end_date: e.target.value })}
+                />
+              </div>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Editing dates never moves historical attendance, marks, fees, or reports — those stay linked to this
+              term by record, not by date range.
+            </p>
+            {error && <p className="text-sm text-danger">{error}</p>}
+          </div>
+          <DialogFooter>
+            <Button onClick={handleUpdateTerm} disabled={pending}>
+              {pending ? "Saving…" : "Save changes"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
