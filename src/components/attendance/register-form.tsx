@@ -1,13 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Check, Minus, Save, X } from "lucide-react";
+import { Check, Minus, Save, X, WifiOff, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { StatusBadge } from "@/components/status-badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { submitAttendance, editAttendanceRecord } from "@/app/(app)/attendance/actions";
+import { useAttendanceSync } from "@/hooks/use-attendance-sync";
+import { queueAttendanceSubmission } from "@/lib/offline/attendance-queue";
 
 export interface RosterRow {
   student_id: string;
@@ -41,28 +43,67 @@ export function RegisterForm({
   canMark: boolean;
 }) {
   const router = useRouter();
+  const { online, pendingCount, syncing, sync } = useAttendanceSync();
   const [draft, setDraft] = useState<Record<string, Mark>>(
     Object.fromEntries(roster.filter((r) => !r.existing).map((r) => [r.student_id, "present" as Mark])),
   );
+  // Marks submitted while offline: queued locally, not yet confirmed by the
+  // server. Kept separate from `draft` so they render distinctly and can't
+  // be edited or re-submitted while a sync is still pending.
+  const [queued, setQueued] = useState<Record<string, Mark>>({});
   const [editTarget, setEditTarget] = useState<RosterRow | null>(null);
   const [editStatus, setEditStatus] = useState<Mark>("present");
   const [editReason, setEditReason] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
 
-  const unmarked = roster.filter((r) => !r.existing);
+  // Derived, not stored: once a queued student's row shows up as `existing`
+  // (confirmed by the server after a refresh), it drops out of view here
+  // automatically -- no effect needed to "clean up" `queued`, since this is
+  // recomputed every render straight from props + state.
+  const visibleQueued = Object.fromEntries(
+    Object.entries(queued).filter(([studentId]) => !roster.find((r) => r.student_id === studentId)?.existing),
+  );
+
+  const unmarked = roster.filter((r) => !r.existing && !(r.student_id in visibleQueued));
   const marked = roster.filter((r) => r.existing);
   const presentCount = marked.filter((r) => r.existing!.status === "present").length;
   const absentCount = marked.filter((r) => r.existing!.status === "absent").length;
   const lateCount = marked.filter((r) => r.existing!.status === "late").length;
+  const queuedCount = Object.keys(visibleQueued).length;
+
+  // Once this stream/date's queued marks are confirmed by the server (the
+  // sync hook empties the IndexedDB queue), pull the authoritative roster
+  // so "queued" rows become real "existing" rows instead of staying stuck
+  // in the locally-queued state. router.refresh() is a Next.js navigation
+  // method, not a React state setter, so it isn't subject to the
+  // set-state-in-effect restriction.
+  useEffect(() => {
+    if (online && queuedCount > 0 && pendingCount === 0 && !syncing && !pending) {
+      router.refresh();
+    }
+  }, [online, queuedCount, pendingCount, syncing, pending, router]);
 
   async function handleSubmit() {
     setPending(true);
     setError(null);
+    const marksToSubmit = unmarked.map((r) => ({ student_id: r.student_id, status: draft[r.student_id] ?? "present" }));
+
+    if (!online) {
+      try {
+        await queueAttendanceSubmission({ stream_id: streamId, attendance_date: attendanceDate, marks: marksToSubmit });
+        setQueued((q) => ({ ...q, ...Object.fromEntries(marksToSubmit.map((m) => [m.student_id, m.status])) }));
+      } catch {
+        setError("Couldn't save offline either — try again in a moment.");
+      }
+      setPending(false);
+      return;
+    }
+
     const result = await submitAttendance({
       stream_id: streamId,
       attendance_date: attendanceDate,
-      marks: unmarked.map((r) => ({ student_id: r.student_id, status: draft[r.student_id] ?? "present" })),
+      marks: marksToSubmit,
     });
     setPending(false);
     if ("error" in result) return setError(result.error);
@@ -74,7 +115,7 @@ export function RegisterForm({
   }
 
   function handleMarkClick(row: RosterRow, mark: Mark) {
-    if (!canMark) return;
+    if (!canMark || row.student_id in visibleQueued) return;
     if (!row.existing) {
       setDraft((d) => ({ ...d, [row.student_id]: mark }));
       return;
@@ -107,6 +148,27 @@ export function RegisterForm({
 
   return (
     <>
+      {!online && (
+        <div className="panel flex items-center gap-2 border-warning/40 bg-warning/10 px-4 py-2.5 text-sm text-warning-foreground">
+          <WifiOff className="size-4 shrink-0" aria-hidden />
+          <span>
+            You&apos;re offline. Marks you submit now are saved on this device and will sync automatically once
+            you&apos;re back online.
+          </span>
+        </div>
+      )}
+      {online && pendingCount > 0 && (
+        <div className="panel flex items-center gap-2 border-border bg-muted/50 px-4 py-2.5 text-sm text-muted-foreground">
+          <RefreshCw className={"size-4 shrink-0 " + (syncing ? "animate-spin" : "")} aria-hidden />
+          <span>{syncing ? "Syncing offline attendance…" : `${pendingCount} offline submission${pendingCount === 1 ? "" : "s"} waiting to sync.`}</span>
+          {!syncing && (
+            <Button size="sm" variant="ghost" className="ml-auto" onClick={() => sync()}>
+              Retry now
+            </Button>
+          )}
+        </div>
+      )}
+
       {error && <p className="text-sm text-danger">{error}</p>}
 
       <div className="panel">
@@ -126,7 +188,14 @@ export function RegisterForm({
                   Mark all present
                 </Button>
                 <Button size="sm" onClick={handleSubmit} disabled={pending}>
-                  <Save className="size-4" aria-hidden /> {pending ? "Submitting…" : `Submit register (${unmarked.length})`}
+                  <Save className="size-4" aria-hidden />{" "}
+                  {pending
+                    ? online
+                      ? "Submitting…"
+                      : "Saving offline…"
+                    : online
+                      ? `Submit register (${unmarked.length})`
+                      : `Save offline (${unmarked.length})`}
                 </Button>
               </div>
             )}
@@ -145,7 +214,8 @@ export function RegisterForm({
             </thead>
             <tbody>
               {roster.map((r, i) => {
-                const currentMark = r.existing?.status ?? draft[r.student_id];
+                const isQueued = r.student_id in visibleQueued;
+                const currentMark = r.existing?.status ?? (isQueued ? visibleQueued[r.student_id] : draft[r.student_id]);
                 return (
                   <tr key={r.student_id}>
                     <td className="text-muted-foreground">{i + 1}</td>
@@ -174,7 +244,7 @@ export function RegisterForm({
                             <button
                               key={m.key}
                               type="button"
-                              disabled={!canMark}
+                              disabled={!canMark || isQueued}
                               onClick={() => handleMarkClick(r, m.key)}
                               className={
                                 "inline-flex h-6 items-center gap-1 border-r border-input px-2 text-[0.6875rem] font-medium last:border-r-0 hover:bg-accent hover:text-accent-foreground focus-visible:relative disabled:cursor-not-allowed disabled:opacity-50 " +
@@ -187,8 +257,14 @@ export function RegisterForm({
                           );
                         })}
                       </div>
-                      {r.existing && (
-                        <p className="mt-1 text-[0.625rem] text-muted-foreground">Submitted — pick a different mark to correct</p>
+                      {isQueued ? (
+                        <p className="mt-1 flex items-center gap-1 text-[0.625rem] text-muted-foreground">
+                          <WifiOff className="size-3" aria-hidden /> Saved offline — will sync automatically
+                        </p>
+                      ) : (
+                        r.existing && (
+                          <p className="mt-1 text-[0.625rem] text-muted-foreground">Submitted — pick a different mark to correct</p>
+                        )
                       )}
                     </td>
                   </tr>
