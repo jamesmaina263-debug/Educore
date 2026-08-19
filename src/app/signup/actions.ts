@@ -1,7 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { slugify } from "@/lib/slug";
@@ -60,6 +60,22 @@ export async function signUpSchool(
     adminClient = createAdminClient();
   } catch (e) {
     return { error: e instanceof Error ? e.message : "Signup is not configured yet." };
+  }
+
+  // Abuse guard: this endpoint is public/unauthenticated and creates a real Supabase Auth
+  // user + school + 30-day trial subscription on every successful call — previously nothing
+  // stopped a script from spamming it. Keyed by client IP (Vercel sets x-forwarded-for), 5
+  // signups per IP per hour. increment_and_check_rate_limit() already existed for exactly
+  // this purpose but had never actually been called from anywhere in the app.
+  const forwardedFor = (await headers()).get("x-forwarded-for");
+  const clientIp = forwardedFor?.split(",")[0]?.trim() || "unknown";
+  const { data: withinLimit } = await adminClient.rpc("increment_and_check_rate_limit", {
+    p_bucket: `signup:${clientIp}`,
+    p_max_events: 5,
+    p_window_seconds: 3600,
+  });
+  if (withinLimit === false) {
+    return { error: "Too many signup attempts from this network. Please try again later." };
   }
 
   // 1. Owner auth account.
