@@ -19,6 +19,7 @@ import {
   cancelReservationAction,
   createFineAction,
   resolveFineAction,
+  adjustCopiesAction,
 } from "@/app/(app)/library/actions";
 
 export interface LibraryItemRow {
@@ -124,6 +125,28 @@ export function LibrarySection({
   const [reserveBorrowerId, setReserveBorrowerId] = useState("");
 
   const [fineOpen, setFineOpen] = useState<string | null>(null);
+
+  const [adjustOpen, setAdjustOpen] = useState<string | null>(null);
+  const [adjustMode, setAdjustMode] = useState<"add" | "remove">("add");
+  const [adjustCount, setAdjustCount] = useState("1");
+  const [adjustAlreadyUnavailable, setAdjustAlreadyUnavailable] = useState(false);
+
+  async function handleAdjustCopies(item: LibraryItemRow) {
+    const n = Number(adjustCount);
+    if (!n || n <= 0) return;
+    setPending(true);
+    setError(null);
+    const total_delta = adjustMode === "add" ? n : -n;
+    const available_delta = adjustMode === "add" ? n : adjustAlreadyUnavailable ? 0 : -n;
+    const result = await adjustCopiesAction({ item_id: item.id, total_delta, available_delta });
+    setPending(false);
+    if ("error" in result) return setError(result.error);
+    setAdjustOpen(null);
+    setAdjustCount("1");
+    setAdjustMode("add");
+    setAdjustAlreadyUnavailable(false);
+    router.refresh();
+  }
 
   async function handleAddItem() {
     setPending(true);
@@ -327,6 +350,7 @@ export function LibrarySection({
                       <th>Category</th>
                       <th>Shelf</th>
                       <th>Available</th>
+                      {canWrite && <th></th>}
                     </tr>
                   </thead>
                   <tbody>
@@ -339,6 +363,68 @@ export function LibrarySection({
                         <td data-numeric>
                           {i.available_copies} / {i.total_copies}
                         </td>
+                        {canWrite && (
+                          <td>
+                            <Dialog
+                              open={adjustOpen === i.id}
+                              onOpenChange={(o) => {
+                                setAdjustOpen(o ? i.id : null);
+                                if (!o) {
+                                  setAdjustCount("1");
+                                  setAdjustMode("add");
+                                  setAdjustAlreadyUnavailable(false);
+                                  setError(null);
+                                }
+                              }}
+                            >
+                              <DialogTrigger asChild>
+                                <Button size="sm" variant="outline">Adjust copies</Button>
+                              </DialogTrigger>
+                              <DialogContent>
+                                <DialogHeader>
+                                  <DialogTitle>Adjust copies — {i.title}</DialogTitle>
+                                </DialogHeader>
+                                <div className="flex flex-col gap-3">
+                                  <div className="space-y-1.5">
+                                    <Label>Reason</Label>
+                                    <Select value={adjustMode} onValueChange={(v) => setAdjustMode(v as "add" | "remove")}>
+                                      <SelectTrigger>
+                                        <SelectValue />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        <SelectItem value="add">New copies purchased</SelectItem>
+                                        <SelectItem value="remove">Lost, damaged, or withdrawn</SelectItem>
+                                      </SelectContent>
+                                    </Select>
+                                  </div>
+                                  <div className="space-y-1.5">
+                                    <Label>Number of copies</Label>
+                                    <Input type="number" min={1} value={adjustCount} onChange={(e) => setAdjustCount(e.target.value)} />
+                                  </div>
+                                  {adjustMode === "remove" && (
+                                    <label className="flex items-center gap-2 text-sm text-muted-foreground">
+                                      <input
+                                        type="checkbox"
+                                        checked={adjustAlreadyUnavailable}
+                                        onChange={(e) => setAdjustAlreadyUnavailable(e.target.checked)}
+                                      />
+                                      This copy was already out on loan (don&apos;t also reduce the available count)
+                                    </label>
+                                  )}
+                                  <p className="text-xs text-muted-foreground">
+                                    Current: {i.available_copies} available / {i.total_copies} total.
+                                  </p>
+                                  {error && <p className="text-sm text-danger">{error}</p>}
+                                </div>
+                                <DialogFooter>
+                                  <Button onClick={() => handleAdjustCopies(i)} disabled={pending || !adjustCount || Number(adjustCount) <= 0}>
+                                    {pending ? "Saving…" : "Save"}
+                                  </Button>
+                                </DialogFooter>
+                              </DialogContent>
+                            </Dialog>
+                          </td>
+                        )}
                       </tr>
                     ))}
                   </tbody>

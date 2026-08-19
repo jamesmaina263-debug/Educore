@@ -26,6 +26,7 @@ import {
   markSupplierInvoicePaidAction,
   receiveGoodsAction,
   requestAssetMaintenanceAction,
+  updateAssetStatusAction,
 } from "@/app/(app)/inventory/actions";
 
 export interface AssetRow {
@@ -122,6 +123,7 @@ export function AssetsPanel({ assets, maintenance, canWrite }: { assets: AssetRo
   const { isPending, error, run } = useAction();
   const [assetOpen, setAssetOpen] = useState(false);
   const [maintenanceOpen, setMaintenanceOpen] = useState<string | null>(null);
+  const [statusOpen, setStatusOpen] = useState<string | null>(null);
 
   return (
     <div className="flex flex-col gap-4">
@@ -214,28 +216,80 @@ export function AssetsPanel({ assets, maintenance, canWrite }: { assets: AssetRo
                     </td>
                     {canWrite && (
                       <td>
-                        {a.status !== "under_maintenance" && a.status !== "disposed" && (
-                          <Dialog open={maintenanceOpen === a.id} onOpenChange={(o) => setMaintenanceOpen(o ? a.id : null)}>
+                        <div className="flex gap-2">
+                          {a.status !== "under_maintenance" && a.status !== "disposed" && (
+                            <Dialog open={maintenanceOpen === a.id} onOpenChange={(o) => setMaintenanceOpen(o ? a.id : null)}>
+                              <DialogTrigger asChild>
+                                <Button size="sm" variant="outline">Request Maintenance</Button>
+                              </DialogTrigger>
+                              <DialogContent>
+                                <DialogHeader>
+                                  <DialogTitle>Request Maintenance — {a.name}</DialogTitle>
+                                </DialogHeader>
+                                <form className="flex flex-col gap-3" action={(fd) => run(requestAssetMaintenanceAction, fd, () => setMaintenanceOpen(null))}>
+                                  <input type="hidden" name="asset_id" value={a.id} />
+                                  <div className="flex flex-col gap-1.5">
+                                    <Label>Description</Label>
+                                    <Textarea name="description" required />
+                                  </div>
+                                  <DialogFooter>
+                                    <Button type="submit" disabled={isPending}>Submit</Button>
+                                  </DialogFooter>
+                                </form>
+                              </DialogContent>
+                            </Dialog>
+                          )}
+                          <Dialog open={statusOpen === a.id} onOpenChange={(o) => setStatusOpen(o ? a.id : null)}>
                             <DialogTrigger asChild>
-                              <Button size="sm" variant="outline">Request Maintenance</Button>
+                              <Button size="sm" variant="outline">Edit Status</Button>
                             </DialogTrigger>
                             <DialogContent>
                               <DialogHeader>
-                                <DialogTitle>Request Maintenance — {a.name}</DialogTitle>
+                                <DialogTitle>Edit Status — {a.name}</DialogTitle>
                               </DialogHeader>
-                              <form className="flex flex-col gap-3" action={(fd) => run(requestAssetMaintenanceAction, fd, () => setMaintenanceOpen(null))}>
+                              <form className="flex flex-col gap-3" action={(fd) => run(updateAssetStatusAction, fd, () => setStatusOpen(null))}>
                                 <input type="hidden" name="asset_id" value={a.id} />
                                 <div className="flex flex-col gap-1.5">
-                                  <Label>Description</Label>
-                                  <Textarea name="description" required />
+                                  <Label>Status</Label>
+                                  <Select name="status" defaultValue={a.status}>
+                                    <SelectTrigger>
+                                      <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="in_use">In use</SelectItem>
+                                      <SelectItem value="in_storage">In storage</SelectItem>
+                                      <SelectItem value="under_maintenance">Under maintenance</SelectItem>
+                                      <SelectItem value="disposed">Disposed</SelectItem>
+                                    </SelectContent>
+                                  </Select>
                                 </div>
+                                <div className="flex flex-col gap-1.5">
+                                  <Label>Condition</Label>
+                                  <Select name="condition" defaultValue={a.condition}>
+                                    <SelectTrigger>
+                                      <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="excellent">Excellent</SelectItem>
+                                      <SelectItem value="good">Good</SelectItem>
+                                      <SelectItem value="fair">Fair</SelectItem>
+                                      <SelectItem value="poor">Poor</SelectItem>
+                                      <SelectItem value="damaged">Damaged</SelectItem>
+                                    </SelectContent>
+                                  </Select>
+                                </div>
+                                <p className="text-xs text-muted-foreground">
+                                  For maintenance, prefer &quot;Request Maintenance&quot; so it&apos;s tracked as a record.
+                                  Use this for direct changes — disposing an asset, moving it to storage, or correcting
+                                  its condition.
+                                </p>
                                 <DialogFooter>
-                                  <Button type="submit" disabled={isPending}>Submit</Button>
+                                  <Button type="submit" disabled={isPending}>Save</Button>
                                 </DialogFooter>
                               </form>
                             </DialogContent>
                           </Dialog>
-                        )}
+                        </div>
                       </td>
                     )}
                   </tr>
