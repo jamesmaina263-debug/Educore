@@ -1,0 +1,13 @@
+-- Audit finding: one row in auth.users (id efe128c5-763a-4e17-826f-cfc5bd749c91) had
+-- every field null -- email, phone, created_at, instance_id, aud, role, no password,
+-- no auth.identities row. A real signup (even an abandoned one) always has instance_id/
+-- aud/role/created_at set by GoTrue; this row's blankness means it was never a
+-- functioning account and couldn't authenticate as-is -- most likely a direct-SQL
+-- artifact (a failed manual seed/test insert), not a genuine user action.
+--
+-- Verified before deleting: zero references anywhere --
+--   public.school_users (the only app table with a FK to auth.users): none
+--   auth.identities, auth.sessions, auth.mfa_factors, auth.one_time_tokens,
+--   auth.oauth_authorizations, auth.oauth_consents, auth.webauthn_credentials,
+--   auth.webauthn_challenges: all zero
+delete from auth.users where id = 'efe128c5-763a-4e17-826f-cfc5bd749c91';
