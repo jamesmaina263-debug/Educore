@@ -161,15 +161,66 @@ export function ApplicationForm({
         </div>
       )}
 
+      {state.needsGuardianVerification && (
+        <div className="space-y-2 rounded-md border border-border bg-muted/40 p-3">
+          <p className="text-[0.8125rem] font-medium">Confirm it&apos;s you (optional)</p>
+          {state.guardianVerificationNotice && (
+            <p className="text-[0.75rem] text-muted-foreground">{state.guardianVerificationNotice}</p>
+          )}
+          <div className="space-y-1.5">
+            <Label htmlFor="guardian_otp_code">6-digit code</Label>
+            <Input
+              id="guardian_otp_code"
+              name="guardian_otp_code"
+              inputMode="numeric"
+              maxLength={6}
+              placeholder="000000"
+            />
+          </div>
+          <div className="flex flex-wrap gap-2 pt-1">
+            <Button
+              type="submit"
+              name="guardian_verification_intent"
+              value="verify"
+              disabled={pending}
+              className="flex-1"
+            >
+              {pending ? "Checking…" : "Confirm & submit"}
+            </Button>
+            <Button
+              type="submit"
+              name="guardian_verification_intent"
+              value="skip"
+              variant="outline"
+              disabled={pending}
+              className="flex-1"
+            >
+              Submit without confirming
+            </Button>
+          </div>
+          <button
+            type="submit"
+            name="guardian_verification_intent"
+            value="resend"
+            disabled={pending}
+            className="text-[0.75rem] text-muted-foreground underline underline-offset-2 disabled:opacity-50"
+          >
+            Resend code
+          </button>
+        </div>
+      )}
+
       {state.error && (
         <p role="alert" className="text-sm text-danger">
           {state.error}
         </p>
       )}
 
-      <Button type="submit" className="w-full" disabled={pending || !gender}>
-        {pending ? "Submitting…" : "Submit application"}
-      </Button>
+      {!state.needsGuardianVerification && (
+        <Button type="submit" className="w-full" disabled={pending || !gender}>
+          {pending ? "Submitting…" : "Submit application"}
+        </Button>
+      )}
     </form>
   );
 }

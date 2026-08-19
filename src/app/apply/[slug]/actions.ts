@@ -2,11 +2,21 @@
 
 import { createAdminClient } from "@/lib/supabase/admin";
 
+const KENYA_PHONE_RE = /^\+254\d{9}$/;
+const GUARDIAN_VERIFICATION_PURPOSE = "guardian_verification";
+
 export type ApplyState = {
   error: string | null;
   success?: boolean;
   applicationNumber?: string;
   accessToken?: string;
+  // Set when a submitted guardian phone matches an existing guardian account at the school.
+  // Verification is entirely optional — the applicant can confirm with the code we texted, or
+  // just submit anyway (e.g. no access to that phone right now, shared/borrowed number, etc.).
+  // Nothing below this ever blocks the application from completing.
+  needsGuardianVerification?: boolean;
+  guardianVerificationPhone?: string;
+  guardianVerificationNotice?: string | null;
 };
 
 export async function submitApplication(
@@ -96,6 +106,7 @@ export async function submitApplication(
   // findOrCreateGuardian (that helper relies on auth_school_id(), which doesn't exist here since
   // nobody is signed in yet).
   let guardianId: string;
+  let guardianIdentityVerified = true;
   const { data: existingGuardian } = await admin
     .from("school_users")
     .select("id, roles(name)")
@@ -109,6 +120,61 @@ export async function submitApplication(
       return { error: "This phone number is already registered under a different role at this school." };
     }
     guardianId = existingGuardian.id as string;
+
+    // This phone belongs to an existing guardian account. Offer an optional OTP confirmation
+    // before attaching this application to it, so a stranger who happens to know a parent's
+    // number can't silently pin a fake application on their identity. This never blocks
+    // submission — some applicants won't have access to that phone right now (shared/borrowed
+    // number, etc.), or the school may be entering this for a parent without a smartphone —
+    // "skip" and any failure to send a code both fall through to an unverified submission.
+    const intent = String(formData.get("guardian_verification_intent") ?? "").trim();
+    const otpCode = String(formData.get("guardian_otp_code") ?? "").trim();
+    const canReceiveOtp = KENYA_PHONE_RE.test(guardianPhone);
+
+    if (intent === "skip") {
+      guardianIdentityVerified = false;
+    } else if (intent === "verify" && canReceiveOtp) {
+      if (!/^\d{6}$/.test(otpCode)) {
+        return {
+          error: null,
+          needsGuardianVerification: true,
+          guardianVerificationPhone: guardianPhone,
+          guardianVerificationNotice: "Enter the 6-digit code, or submit without confirming.",
+        };
+      }
+      const { data: isValid } = await admin.rpc("verify_otp", {
+        p_phone: guardianPhone,
+        p_code: otpCode,
+        p_purpose: GUARDIAN_VERIFICATION_PURPOSE,
+      });
+      if (!isValid) {
+        return {
+          error: null,
+          needsGuardianVerification: true,
+          guardianVerificationPhone: guardianPhone,
+          guardianVerificationNotice: "That code didn't match — check it and try again, or submit without confirming.",
+        };
+      }
+      guardianIdentityVerified = true;
+    } else if (canReceiveOtp && (intent === "" || intent === "resend")) {
+      const { error: otpError } = await admin.functions.invoke("request-otp", {
+        body: { phone: guardianPhone, purpose: GUARDIAN_VERIFICATION_PURPOSE },
+      });
+      return {
+        error: null,
+        needsGuardianVerification: true,
+        guardianVerificationPhone: guardianPhone,
+        guardianVerificationNotice: otpError
+          ? "We couldn't send a verification code right now — you can still submit without confirming."
+          : intent === "resend"
+            ? "We've sent a new code."
+            : "We've texted a 6-digit code to this number to confirm it's you. This step is optional — you can submit without it.",
+      };
+    } else {
+      // Not a format we can send an OTP to (or an unexpected intent value) — proceed
+      // unverified rather than getting the applicant stuck.
+      guardianIdentityVerified = false;
+    }
   } else {
     const { data: parentRole } = await admin.from("roles").select("id").eq("name", "parent").single();
     if (!parentRole) return { error: "Could not process your application — contact the school directly." };
@@ -156,6 +222,7 @@ export async function submitApplication(
         ? relationship
         : "guardian",
       submitted_at: new Date().toISOString(),
+      guardian_identity_verified: guardianIdentityVerified,
     })
     .select("id, application_number, access_token")
     .single();
