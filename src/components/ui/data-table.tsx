@@ -184,29 +184,3 @@ export function DataTable<TData, TValue>({
   );
 }
 
-/** Standard row-selection checkbox column — spread this into a columns
- *  array first when enableRowSelection is used. */
-export function selectionColumn<TData>(): ColumnDef<TData, unknown> {
-  return {
-    id: "select",
-    header: ({ table }) => (
-      <input
-        type="checkbox"
-        checked={table.getIsAllPageRowsSelected()}
-        onChange={table.getToggleAllPageRowsSelectedHandler()}
-        className="size-4 rounded-sm border-border"
-        aria-label="Select all"
-      />
-    ),
-    cell: ({ row }) => (
-      <input
-        type="checkbox"
-        checked={row.getIsSelected()}
-        onChange={row.getToggleSelectedHandler()}
-        className="size-4 rounded-sm border-border"
-        aria-label="Select row"
-      />
-    ),
-    enableSorting: false,
-  };
-}

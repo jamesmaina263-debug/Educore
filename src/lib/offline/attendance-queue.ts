@@ -28,11 +28,6 @@ export async function getPendingAttendanceSubmissions(): Promise<QueuedAttendanc
   return idbGetAll<QueuedAttendanceSubmission>(STORES.pendingAttendance);
 }
 
-export async function getPendingAttendanceSubmissionsFor(streamId: string, date: string) {
-  const all = await getPendingAttendanceSubmissions();
-  return all.filter((s) => s.stream_id === streamId && s.attendance_date === date);
-}
-
 /**
  * Flushes every queued submission to the server, in the order queued.
  * Each success removes that record from the queue immediately, so a

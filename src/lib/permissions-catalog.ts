@@ -245,11 +245,3 @@ export const PERMISSION_CATALOG: PermissionGroup[] = [
 ];
 
 export const ALL_PERMISSION_KEYS: string[] = PERMISSION_CATALOG.flatMap((g) => g.permissions.map((p) => p.key));
-
-export function permissionLabel(key: string): string {
-  for (const group of PERMISSION_CATALOG) {
-    const found = group.permissions.find((p) => p.key === key);
-    if (found) return found.label;
-  }
-  return key;
-}
