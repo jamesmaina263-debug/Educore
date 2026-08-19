@@ -11,6 +11,22 @@ const nextConfig: NextConfig = {
       bodySizeLimit: "10mb",
     },
   },
+  // Baseline hardening headers. Deliberately not adding a Content-Security-Policy here —
+  // this app has no browser tool to live-verify one against every page (Sentry's inline
+  // init script, Tailwind's runtime styles, etc.) without risking a silent breakage; a CSP
+  // is worth adding in a follow-up session with real browser verification.
+  async headers() {
+    return [
+      {
+        source: "/:path*",
+        headers: [
+          { key: "X-Content-Type-Options", value: "nosniff" },
+          { key: "X-Frame-Options", value: "DENY" },
+          { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+        ],
+      },
+    ];
+  },
 };
 
 export default withSentryConfig(nextConfig, {
