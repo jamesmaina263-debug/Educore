@@ -457,7 +457,8 @@ export function YearsTermsSection({
             </div>
             <p className="text-xs text-muted-foreground">
               Editing dates never moves historical attendance, marks, fees, or reports — those stay linked to this
-              year by record, not by date range.
+              year by record, not by date range. Once this year is closed, only a super admin can still edit it, to
+              protect it as an accurate historical record.
             </p>
             {error && <p className="text-sm text-danger">{error}</p>}
           </div>
@@ -511,7 +512,8 @@ export function YearsTermsSection({
             </div>
             <p className="text-xs text-muted-foreground">
               Editing dates never moves historical attendance, marks, fees, or reports — those stay linked to this
-              term by record, not by date range.
+              term by record, not by date range. Once this term is closed, only a super admin can still edit it, to
+              protect it as an accurate historical record.
             </p>
             {error && <p className="text-sm text-danger">{error}</p>}
           </div>

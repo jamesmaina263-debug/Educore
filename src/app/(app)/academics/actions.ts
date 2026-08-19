@@ -48,8 +48,10 @@ export async function setActiveAcademicYear(id: string): Promise<ActionResult> {
 // Editing a year's name/dates never touches which records belong to it --
 // every historical record (attendance, marks, fees, exams, ...) links to an
 // academic_year_id/term_id by foreign key, not by date range, so nothing is
-// re-derived from these dates after the fact. Safe to edit freely, including
-// after a year has closed.
+// re-derived from these dates after the fact. A separate guardrail trigger
+// (validate_academic_year_mutation, added by a concurrent audit pass) blocks
+// non-super-admins from editing a year once it's closed, treating a closed
+// year as a protected historical record -- that error surfaces here as-is.
 export async function updateAcademicYear(
   id: string,
   input: { name?: string; start_date?: string; end_date?: string },
@@ -111,8 +113,8 @@ export async function setActiveTerm(id: string, academic_year_id: string): Promi
   return { success: true };
 }
 
-// Same reasoning as updateAcademicYear: nothing re-derives term membership
-// from these dates after the fact, so editing is safe even for a closed term.
+// Same reasoning as updateAcademicYear, including the closed-record
+// guardrail (validate_term_mutation).
 export async function updateTerm(
   id: string,
   input: { name?: string; term_number?: number; start_date?: string; end_date?: string },
