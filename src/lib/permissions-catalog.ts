@@ -217,9 +217,17 @@ export const PERMISSION_CATALOG: PermissionGroup[] = [
     permissions: [{ key: "audit.read", label: "View the audit log" }],
   },
   {
+    module: "reports",
+    label: "Reports",
+    permissions: [{ key: "reports.read", label: "View reports & analytics" }],
+  },
+  {
     module: "billing",
     label: "Platform Billing",
-    permissions: [{ key: "billing.read", label: "View school's platform subscription/billing" }],
+    permissions: [
+      { key: "billing.read", label: "View school's platform subscription/billing" },
+      { key: "billing.manage", label: "Cancel the school's platform subscription" },
+    ],
   },
   {
     module: "settings",

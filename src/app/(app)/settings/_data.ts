@@ -16,8 +16,10 @@ export interface SettingsContext {
   canManageStaff: boolean;
   canManagePermissions: boolean;
   canReadBilling: boolean;
+  canManageBilling: boolean;
   canManageApiKeys: boolean;
   canReadAudit: boolean;
+  canReadStaff: boolean;
   staff: StaffRow[];
   roles: RoleOption[];
   billingData: BillingData | null;
@@ -41,8 +43,10 @@ export async function loadSettingsContext(): Promise<SettingsContext> {
     { data: canManageStaff },
     { data: canManagePermissions },
     { data: canReadBilling },
+    { data: canManageBilling },
     { data: canManageApiKeys },
     { data: canReadAudit },
+    { data: canReadStaff },
   ] = await Promise.all([
     supabase
       .from("school_users")
@@ -53,8 +57,10 @@ export async function loadSettingsContext(): Promise<SettingsContext> {
     supabase.rpc("auth_has_permission", { p_permission_key: "staff.manage" }),
     supabase.rpc("auth_has_permission", { p_permission_key: "settings.roles.manage" }),
     supabase.rpc("auth_has_permission", { p_permission_key: "billing.read" }),
+    supabase.rpc("auth_has_permission", { p_permission_key: "billing.manage" }),
     supabase.rpc("auth_has_permission", { p_permission_key: "api.manage" }),
     supabase.rpc("auth_has_permission", { p_permission_key: "audit.read" }),
+    supabase.rpc("auth_has_permission", { p_permission_key: "staff.read" }),
   ]);
 
   const roleName = (schoolUser?.roles as unknown as { display_name: string } | null)?.display_name;
@@ -175,8 +181,10 @@ export async function loadSettingsContext(): Promise<SettingsContext> {
     canManageStaff: canManageStaff === true,
     canManagePermissions: canManagePermissions === true,
     canReadBilling: canReadBilling === true,
+    canManageBilling: canManageBilling === true,
     canManageApiKeys: canManageApiKeys === true,
     canReadAudit: canReadAudit === true,
+    canReadStaff: canReadStaff === true,
     staff,
     roles,
     billingData,

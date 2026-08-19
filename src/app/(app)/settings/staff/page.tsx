@@ -14,6 +14,7 @@ export default async function SettingsStaffPage() {
       moduleHref="/settings/general"
       section="Users & Roles"
       title="Settings"
+      noAccess={!ctx.canReadStaff && !ctx.canManageStaff}
     >
       <div className="flex flex-col gap-3">
         <div className="flex items-center justify-between">

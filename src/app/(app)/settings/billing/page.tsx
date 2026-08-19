@@ -15,7 +15,7 @@ export default async function SettingsBillingPage() {
       title="Settings"
       noAccess={!ctx.billingData}
     >
-      {ctx.billingData && <BillingPanel data={ctx.billingData} />}
+      {ctx.billingData && <BillingPanel data={ctx.billingData} canManage={ctx.canManageBilling} />}
     </ModulePageShell>
   );
 }
