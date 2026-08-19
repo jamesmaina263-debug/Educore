@@ -63,7 +63,7 @@ export function YearsTermsSection({
   const [yearForm, setYearForm] = useState({ name: "", start_date: "", end_date: "" });
   const [termForm, setTermForm] = useState({ name: "", term_number: 1, start_date: "", end_date: "" });
   const [editYearForm, setEditYearForm] = useState({ name: "", start_date: "", end_date: "" });
-  const [editTermForm, setEditTermForm] = useState({ name: "", term_number: 1, start_date: "", end_date: "" });
+  const [editTermForm, setEditTermForm] = useState({ name: "", start_date: "", end_date: "" });
 
   function openEditYear(y: AcademicYearRow) {
     setEditYearForm({ name: y.name, start_date: y.start_date, end_date: y.end_date });
@@ -93,7 +93,7 @@ export function YearsTermsSection({
   }
 
   function openEditTerm(t: TermRow) {
-    setEditTermForm({ name: t.name, term_number: t.term_number, start_date: t.start_date, end_date: t.end_date });
+    setEditTermForm({ name: t.name, start_date: t.start_date, end_date: t.end_date });
     setEditTermOpen(t);
     setError(null);
   }
@@ -483,13 +483,7 @@ export function YearsTermsSection({
               </div>
               <div className="space-y-1.5">
                 <Label>Term number</Label>
-                <Input
-                  type="number"
-                  min={1}
-                  max={12}
-                  value={editTermForm.term_number}
-                  onChange={(e) => setEditTermForm({ ...editTermForm, term_number: Number(e.target.value) })}
-                />
+                <Input type="number" value={editTermOpen?.term_number ?? ""} disabled />
               </div>
             </div>
             <div className="grid grid-cols-2 gap-3">
@@ -513,7 +507,9 @@ export function YearsTermsSection({
             <p className="text-xs text-muted-foreground">
               Editing dates never moves historical attendance, marks, fees, or reports — those stay linked to this
               term by record, not by date range. Once this term is closed, only a super admin can still edit it, to
-              protect it as an accurate historical record.
+              protect it as an accurate historical record. Term number can&apos;t be changed here — renumbering is a
+              structural change, so delete this term and create its replacement instead, keeping the change visible
+              in the audit log.
             </p>
             {error && <p className="text-sm text-danger">{error}</p>}
           </div>

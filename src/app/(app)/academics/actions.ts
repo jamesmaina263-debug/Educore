@@ -114,10 +114,15 @@ export async function setActiveTerm(id: string, academic_year_id: string): Promi
 }
 
 // Same reasoning as updateAcademicYear, including the closed-record
-// guardrail (validate_term_mutation).
+// guardrail (validate_term_mutation) -- with one deliberate exception:
+// term_number is NOT accepted here. Renumbering a term is a structural
+// change (it can reorder a school's term sequence, not just relabel it),
+// so it goes through deleteTerm + createTerm instead of a quiet field edit --
+// that way it's an unambiguous pair of events in the audit log rather than
+// a silent update. Use deleteTerm/createTerm for that case.
 export async function updateTerm(
   id: string,
-  input: { name?: string; term_number?: number; start_date?: string; end_date?: string },
+  input: { name?: string; start_date?: string; end_date?: string },
 ): Promise<ActionResult> {
   const supabase = await createClient();
   const { error } = await supabase.from("terms").update(input).eq("id", id);
