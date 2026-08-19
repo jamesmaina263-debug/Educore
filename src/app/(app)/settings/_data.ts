@@ -70,7 +70,10 @@ export async function loadSettingsContext(): Promise<SettingsContext> {
   } | null;
 
   const [{ data: staffRows }, { data: roleRows }] = await Promise.all([
-    supabase.from("school_users").select("id, full_name, email, status, role_id, roles(name, display_name)").order("full_name"),
+    supabase
+      .from("school_users")
+      .select("id, full_name, email, status, role_id, must_change_password, roles(name, display_name)")
+      .order("full_name"),
     supabase.from("roles").select("id, name, display_name").order("display_name"),
   ]);
 
@@ -84,6 +87,7 @@ export async function loadSettingsContext(): Promise<SettingsContext> {
       role_id: s.role_id,
       role_name: role?.name ?? "",
       role_display_name: role?.display_name ?? "—",
+      must_change_password: s.must_change_password ?? false,
     };
   });
 

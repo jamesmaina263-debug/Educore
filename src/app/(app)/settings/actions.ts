@@ -44,6 +44,16 @@ function generateTemporaryPassword() {
   return randomBytes(9).toString("base64url");
 }
 
+// How long a temp password (invite or reset) is usable before the app
+// refuses to honor it. must_change_password forces a change well before
+// this if the staff member logs in promptly; this bounds the window for
+// one who never logs in at all.
+const TEMP_PASSWORD_TTL_MS = 3 * 24 * 60 * 60 * 1000; // 3 days
+
+function temporaryPasswordExpiry() {
+  return new Date(Date.now() + TEMP_PASSWORD_TTL_MS).toISOString();
+}
+
 export async function inviteStaffMember(input: {
   full_name: string;
   email: string;
@@ -84,6 +94,8 @@ export async function inviteStaffMember(input: {
     full_name: input.full_name,
     email: input.email,
     status: "active",
+    must_change_password: true,
+    temp_password_expires_at: temporaryPasswordExpiry(),
   });
   if (linkError) {
     // Roll back the orphaned auth user rather than leaving a login with
@@ -114,6 +126,64 @@ export async function setStaffStatus(
   if (error) return { error: error.message };
   revalidatePath("/settings", "layout");
   return { success: true };
+}
+
+// Issues a fresh temporary password for a staff member who is locked out
+// (temp password expired, or they've simply forgotten it — there's no
+// self-serve "forgot password" flow yet since staff never had a real email
+// inbox this app can rely on). Re-arms must_change_password so the new
+// temp password is subject to the same forced-change + expiry rules as a
+// first-time invite.
+export async function resetStaffPassword(schoolUserId: string): Promise<InviteResult> {
+  const supabase = await createClient();
+  const { data: schoolId, error: schoolIdError } = await supabase.rpc("auth_school_id");
+  if (schoolIdError || !schoolId) return { error: "Could not resolve your school." };
+
+  const { data: canManage } = await supabase.rpc("auth_has_permission", { p_permission_key: "staff.manage" });
+  if (!canManage) return { error: "You don't have permission to reset staff passwords." };
+
+  // Scope the lookup to our own school explicitly — schoolUserId is
+  // client-supplied, and RLS on the select below (school_id = auth_school_id())
+  // already enforces this, but resolving school_id here too keeps the
+  // school_id filter and the auth_user_id lookup as one traceable step.
+  const { data: target, error: targetError } = await supabase
+    .from("school_users")
+    .select("auth_user_id, school_id")
+    .eq("id", schoolUserId)
+    .maybeSingle();
+  if (targetError || !target) return { error: "Staff member not found." };
+  if (target.school_id !== schoolId) return { error: "Staff member not found." };
+
+  const temporaryPassword = generateTemporaryPassword();
+
+  let adminClient;
+  try {
+    adminClient = createAdminClient();
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Admin client is not configured." };
+  }
+
+  const { error: updatePasswordError } = await adminClient.auth.admin.updateUserById(
+    target.auth_user_id,
+    { password: temporaryPassword },
+  );
+  if (updatePasswordError) return { error: updatePasswordError.message };
+
+  // Service-role write: auth.uid() is null here, so the escalation-guard
+  // trigger on school_users treats it as trusted (see the migration that
+  // introduced these columns) — a non-admin user could not do this to
+  // their own row via the regular client.
+  const { error: flagError } = await adminClient
+    .from("school_users")
+    .update({
+      must_change_password: true,
+      temp_password_expires_at: temporaryPasswordExpiry(),
+    })
+    .eq("id", schoolUserId);
+  if (flagError) return { error: flagError.message };
+
+  revalidatePath("/settings", "layout");
+  return { success: true, temporaryPassword };
 }
 
 // School-scoped API keys (Phase 5 Item 3). issue_api_key() itself re-checks api.manage and

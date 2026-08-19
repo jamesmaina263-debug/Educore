@@ -65,7 +65,8 @@ export function InviteStaffDialog({ roles }: { roles: RoleOption[] }) {
             <p className="text-muted-foreground">
               No email invite is sent yet — share these sign-in details with{" "}
               <span className="font-medium text-foreground">{form.full_name}</span> directly. This password is only
-              shown once.
+              shown once. They&apos;ll be required to set their own password on first login, and this one stops
+              working in 3 days if it&apos;s never used.
             </p>
             <div className="rounded-md border border-border bg-muted p-3 font-mono text-sm">
               <div>{form.email}</div>

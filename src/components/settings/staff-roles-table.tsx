@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/select";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { changeStaffRole, setStaffStatus } from "@/app/(app)/settings/actions";
+import { changeStaffRole, setStaffStatus, resetStaffPassword } from "@/app/(app)/settings/actions";
 import { UserPermissionsPanel } from "@/components/settings/user-permissions-panel";
 
 export interface StaffRow {
@@ -24,6 +24,7 @@ export interface StaffRow {
   role_id: string;
   role_name: string;
   role_display_name: string;
+  must_change_password: boolean;
 }
 
 export interface RoleOption {
@@ -53,6 +54,8 @@ export function StaffRolesTable({
   const [pendingRoleChange, setPendingRoleChange] = useState<{ row: StaffRow; newRoleId: string } | null>(null);
   const [pendingDeactivate, setPendingDeactivate] = useState<StaffRow | null>(null);
   const [permissionsTarget, setPermissionsTarget] = useState<StaffRow | null>(null);
+  const [pendingReset, setPendingReset] = useState<StaffRow | null>(null);
+  const [resetTempPassword, setResetTempPassword] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -77,6 +80,23 @@ export function StaffRolesTable({
     if ("error" in result) return setError(result.error);
     setPendingDeactivate(null);
     router.refresh();
+  }
+
+  async function confirmReset() {
+    if (!pendingReset) return;
+    setBusy(true);
+    setError(null);
+    const result = await resetStaffPassword(pendingReset.id);
+    setBusy(false);
+    if ("error" in result) return setError(result.error);
+    setResetTempPassword(result.temporaryPassword);
+    router.refresh();
+  }
+
+  function closeResetDialog() {
+    setPendingReset(null);
+    setResetTempPassword(null);
+    setError(null);
   }
 
   const wasClassTeacher = pendingRoleChange?.row.role_name === "class_teacher";
@@ -145,13 +165,23 @@ export function StaffRolesTable({
                   )}
                 </TableCell>
                 <TableCell>
-                  <StatusBadge tone={statusTone(r.status)} label={r.status} />
+                  <div className="flex items-center gap-1.5">
+                    <StatusBadge tone={statusTone(r.status)} label={r.status} />
+                    {r.must_change_password && (
+                      <StatusBadge tone="neutral" label="Password not set" />
+                    )}
+                  </div>
                 </TableCell>
                 <TableCell>
                   <div className="flex items-center justify-end gap-1">
                     {canManagePermissions && (
                       <Button size="sm" variant="ghost" onClick={() => setPermissionsTarget(r)}>
                         Permissions
+                      </Button>
+                    )}
+                    {canManage && (
+                      <Button size="sm" variant="ghost" onClick={() => setPendingReset(r)}>
+                        Reset password
                       </Button>
                     )}
                     {canManage && (
@@ -214,6 +244,47 @@ export function StaffRolesTable({
             <Button onClick={confirmDeactivate} disabled={busy} variant={pendingDeactivate?.status === "active" ? "destructive" : "default"}>
               {busy ? "Saving…" : pendingDeactivate?.status === "active" ? "Deactivate" : "Reactivate"}
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={pendingReset !== null} onOpenChange={(open) => !open && closeResetDialog()}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {resetTempPassword ? "New temporary password" : `Reset ${pendingReset?.full_name}'s password?`}
+            </DialogTitle>
+          </DialogHeader>
+
+          {resetTempPassword ? (
+            <div className="space-y-3 text-sm">
+              <p className="text-muted-foreground">
+                Share this with <span className="font-medium text-foreground">{pendingReset?.full_name}</span>{" "}
+                directly — it&apos;s only shown once. They&apos;ll be required to set their own password on next
+                login, and this one stops working in 3 days if it&apos;s never used.
+              </p>
+              <div className="rounded-md border border-border bg-muted p-3 font-mono text-sm">
+                <div>{pendingReset?.email}</div>
+                <div className="mt-1 font-semibold">{resetTempPassword}</div>
+              </div>
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              This immediately invalidates their current password. They&apos;ll need the new temporary password
+              below to sign in again.
+            </p>
+          )}
+
+          {error && <p className="text-sm text-danger">{error}</p>}
+
+          <DialogFooter>
+            {resetTempPassword ? (
+              <Button onClick={closeResetDialog}>Done</Button>
+            ) : (
+              <Button onClick={confirmReset} disabled={busy}>
+                {busy ? "Resetting…" : "Reset password"}
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>

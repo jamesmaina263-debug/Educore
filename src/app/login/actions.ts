@@ -29,6 +29,37 @@ export async function login(
     return { error: "Invalid email or password." };
   }
 
+  // Forced password-change / temp-password expiry gate. Only applies to
+  // staff (school_owner, teacher, etc.) -- parents/students never have
+  // must_change_password set since they authenticate via OTP, not a
+  // password an admin generated for them.
+  if (signInData.user) {
+    const { data: schoolUser } = await supabase
+      .from("school_users")
+      .select("must_change_password, temp_password_expires_at")
+      .eq("auth_user_id", signInData.user.id)
+      .maybeSingle();
+
+    if (schoolUser?.must_change_password) {
+      const expiresAt = schoolUser.temp_password_expires_at
+        ? new Date(schoolUser.temp_password_expires_at).getTime()
+        : null;
+      if (expiresAt !== null && Date.now() > expiresAt) {
+        // The temp password itself still authenticates against Supabase
+        // Auth (we have no server-side way to expire the password
+        // credential from here) -- but the app never establishes a real
+        // session on top of an expired, unused temp password. Sign back
+        // out immediately and send the person to an admin instead.
+        await supabase.auth.signOut();
+        return {
+          error: "Your temporary password has expired. Ask your school admin to reset it.",
+        };
+      }
+
+      redirect("/change-password");
+    }
+  }
+
   // Slug is cosmetic (see school-slug-cookie.ts) -- never block or fail the
   // login itself if this lookup has any trouble.
   const cookieStore = await cookies();
