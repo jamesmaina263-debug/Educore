@@ -10,6 +10,14 @@ import {
 } from "@/components/ui/dropdown-menu";
 import type { AtRiskRow, TransportRouteCapacityRow, FeeForecast } from "./reports-section";
 
+export interface AttendanceExportDay {
+  date: string;
+  present: number;
+  absent: number;
+  late: number;
+  total: number;
+}
+
 export interface ReportExportData {
   schoolName: string;
   generatedAt: string;
@@ -18,6 +26,7 @@ export interface ReportExportData {
   atRisk: AtRiskRow[];
   transport: TransportRouteCapacityRow[];
   fee: FeeForecast | null;
+  attendance: AttendanceExportDay[];
 }
 
 function toCSV(rows: Record<string, string | number>[]): string {
@@ -58,6 +67,18 @@ async function exportCSV(data: ReportExportData) {
   downloadBlob(toCSV(rows), `${filenameStub(data)}-at-risk.csv`, "text/csv;charset=utf-8;");
 }
 
+async function exportAttendanceCSV(data: ReportExportData) {
+  const rows = data.attendance.map((d) => ({
+    Date: d.date,
+    Present: d.present,
+    Absent: d.absent,
+    Late: d.late,
+    Total: d.total,
+    "Attendance %": d.total > 0 ? Math.round((1000 * (d.present + d.late)) / d.total) / 10 : "",
+  }));
+  downloadBlob(toCSV(rows), `${filenameStub(data)}-attendance.csv`, "text/csv;charset=utf-8;");
+}
+
 async function exportExcel(data: ReportExportData) {
   const XLSX = await import("xlsx");
   const wb = XLSX.utils.book_new();
@@ -86,6 +107,18 @@ async function exportExcel(data: ReportExportData) {
     })),
   );
   XLSX.utils.book_append_sheet(wb, transportSheet, "Transport capacity");
+
+  const attendanceSheet = XLSX.utils.json_to_sheet(
+    data.attendance.map((d) => ({
+      Date: d.date,
+      Present: d.present,
+      Absent: d.absent,
+      Late: d.late,
+      Total: d.total,
+      "Attendance %": d.total > 0 ? Math.round((1000 * (d.present + d.late)) / d.total) / 10 : "",
+    })),
+  );
+  XLSX.utils.book_append_sheet(wb, attendanceSheet, "Attendance");
 
   XLSX.writeFile(wb, `${filenameStub(data)}.xlsx`);
 }
@@ -124,11 +157,12 @@ async function exportPDF(data: ReportExportData) {
 
   const afterSummaryY = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 8;
 
+  let nextY = afterSummaryY;
   if (data.atRisk.length > 0) {
     doc.setFontSize(11);
-    doc.text("At-risk students", 14, afterSummaryY);
+    doc.text("At-risk students", 14, nextY);
     autoTable(doc, {
-      startY: afterSummaryY + 3,
+      startY: nextY + 3,
       head: [["Student", "Adm. No.", "Attendance", "Exam avg", "Overdue", "Reasons"]],
       body: data.atRisk.map((r) => [
         `${r.first_name} ${r.last_name}`,
@@ -137,6 +171,27 @@ async function exportPDF(data: ReportExportData) {
         r.latest_exam_average ?? "—",
         r.overdue_balance != null ? `KES ${Number(r.overdue_balance).toLocaleString()}` : "—",
         r.risk_reasons.join(", "),
+      ]),
+      theme: "grid",
+      styles: { fontSize: 8 },
+      headStyles: { fillColor: [30, 41, 59] },
+    });
+    nextY = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 8;
+  }
+
+  if (data.attendance.length > 0) {
+    doc.setFontSize(11);
+    doc.text("Attendance by day", 14, nextY);
+    autoTable(doc, {
+      startY: nextY + 3,
+      head: [["Date", "Present", "Absent", "Late", "Total", "Attendance %"]],
+      body: data.attendance.map((d) => [
+        d.date,
+        String(d.present),
+        String(d.absent),
+        String(d.late),
+        String(d.total),
+        d.total > 0 ? `${Math.round((1000 * (d.present + d.late)) / d.total) / 10}%` : "—",
       ]),
       theme: "grid",
       styles: { fontSize: 8 },
@@ -157,6 +212,7 @@ export function ReportsExportMenu({ data }: { data: ReportExportData }) {
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
         <DropdownMenuItem onClick={() => exportCSV(data)}>Export at-risk table (CSV)</DropdownMenuItem>
+        <DropdownMenuItem onClick={() => exportAttendanceCSV(data)}>Export attendance (CSV)</DropdownMenuItem>
         <DropdownMenuItem onClick={() => exportExcel(data)}>Export full report (Excel)</DropdownMenuItem>
         <DropdownMenuItem onClick={() => exportPDF(data)}>Export full report (PDF)</DropdownMenuItem>
       </DropdownMenuContent>

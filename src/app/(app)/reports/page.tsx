@@ -72,6 +72,7 @@ export default async function ReportsPage({
   let feeForecast: FeeForecast | null = null;
   let atRiskRows: AtRiskRow[] = [];
   let attendanceDays: AttendanceTrendDay[] = [];
+  let attendanceExportDays: { date: string; present: number; absent: number; late: number; total: number }[] = [];
   let transportRoutes: TransportRouteCapacityRow[] = [];
   let termOptions: { id: string; name: string }[] = [];
   let streamOptions: { id: string; name: string }[] = [];
@@ -192,19 +193,22 @@ export default async function ReportsPage({
     if (streamParam) attendanceQuery = attendanceQuery.eq("stream_id", streamParam);
     const { data: attendanceRows } = await attendanceQuery;
 
-    const dayBuckets = new Map<string, { present: number; total: number }>();
+    const dayBuckets = new Map<string, { present: number; absent: number; late: number; total: number }>();
     const fromDate = new Date(from);
     const toDate = new Date(to);
     for (let d = new Date(fromDate); d <= toDate; d.setDate(d.getDate() + 1)) {
-      dayBuckets.set(isoDate(d), { present: 0, total: 0 });
+      dayBuckets.set(isoDate(d), { present: 0, absent: 0, late: 0, total: 0 });
     }
     for (const row of attendanceRows ?? []) {
       const bucket = dayBuckets.get(row.attendance_date);
       if (!bucket) continue;
       bucket.total += 1;
       if (row.status === "present") bucket.present += 1;
+      else if (row.status === "absent") bucket.absent += 1;
+      else if (row.status === "late") bucket.late += 1;
     }
-    attendanceDays = Array.from(dayBuckets.entries()).map(([date, v]) => ({ date, ...v }));
+    attendanceDays = Array.from(dayBuckets.entries()).map(([date, v]) => ({ date, present: v.present, total: v.total }));
+    attendanceExportDays = Array.from(dayBuckets.entries()).map(([date, v]) => ({ date, ...v }));
 
     const { data: transportRows } = await supabase
       .from("v_transport_route_capacity")
@@ -232,6 +236,7 @@ export default async function ReportsPage({
     atRisk: atRiskRows,
     transport: transportRoutes,
     fee: feeForecast,
+    attendance: attendanceExportDays,
   };
 
   return (
