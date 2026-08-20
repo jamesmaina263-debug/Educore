@@ -168,6 +168,7 @@ const settingsChildren: NavChild[] = [
   { label: "General", href: "/settings/general", icon: Settings },
   { label: "Branding", href: "/settings/branding", icon: Palette },
   { label: "Users & Roles", href: "/settings/staff", icon: Users },
+  { label: "Leave Types", href: "/settings/leave-types", icon: CalendarClock },
   { label: "Billing", href: "/settings/billing", icon: CoinsIcon },
   { label: "Notifications", href: "/settings/notifications", icon: Bell },
   { label: "API Keys", href: "/settings/api-keys", icon: KeyRound },
