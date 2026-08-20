@@ -1,0 +1,72 @@
+drop function if exists public.send_fee_threshold_alert(uuid);
+
+create function public.send_fee_threshold_alert(p_alert_id uuid)
+returns boolean
+language plpgsql
+security definer
+set search_path to 'public'
+as $$
+declare
+  v_alert record;
+  v_school_name text;
+  v_sender uuid;
+  v_rows integer;
+begin
+  select * into v_alert from public.fee_threshold_alerts where id = p_alert_id;
+  if v_alert.id is null then
+    raise exception 'Alert not found.';
+  end if;
+  if not (auth_is_super_admin() or (v_alert.school_id = auth_school_id() and auth_has_permission('finance.write'))) then
+    raise exception 'Not authorized to send this alert.';
+  end if;
+  if v_alert.status not in ('draft', 'approved') then
+    raise exception 'This alert has already been sent or dismissed.';
+  end if;
+
+  select id into v_sender from public.school_users where auth_user_id = auth.uid();
+  select name into v_school_name from public.schools where id = v_alert.school_id;
+
+  if not public.notification_allowed(v_alert.guardian_user_id, 'fee_threshold_alert', 'sms') then
+    update public.fee_threshold_alerts
+      set status = 'sent', approved_by = v_sender, approved_at = now(), sent_at = now()
+      where id = p_alert_id;
+    return true;
+  end if;
+
+  insert into public.notification_logs (
+    school_id, student_id, recipient_school_user_id, recipient_phone, recipient_type, channel, body,
+    segments, sent_by, source_module
+  )
+  select
+    v_alert.school_id, v_alert.student_id, v_alert.guardian_user_id, su.phone, 'guardian', 'sms',
+    v_alert.draft_body, greatest(1, ceil(length(v_alert.draft_body)::numeric / 160))::smallint,
+    v_sender, 'fee_threshold_alert'
+  from public.school_users su where su.id = v_alert.guardian_user_id and su.phone is not null;
+  get diagnostics v_rows = row_count;
+
+  if v_rows = 0 then
+    insert into public.notification_logs (
+      school_id, student_id, recipient_school_user_id, recipient_email, recipient_type, channel, subject, body,
+      segments, sent_by, source_module
+    )
+    select
+      v_alert.school_id, v_alert.student_id, v_alert.guardian_user_id, su.email, 'guardian', 'email',
+      v_school_name || ' -- Fee Balance Reminder', v_alert.draft_body, 1, v_sender, 'fee_threshold_alert'
+    from public.school_users su where su.id = v_alert.guardian_user_id and su.email is not null;
+    get diagnostics v_rows = row_count;
+  end if;
+
+  if v_rows = 0 then
+    update public.fee_threshold_alerts
+      set status = 'dismissed', dismissed_by = v_sender, dismissed_at = now(),
+          dismiss_reason = 'Could not send: guardian has no phone or email on file.'
+      where id = p_alert_id;
+    return false;
+  end if;
+
+  update public.fee_threshold_alerts
+    set status = 'sent', approved_by = v_sender, approved_at = now(), sent_at = now()
+    where id = p_alert_id;
+  return true;
+end;
+$$;
