@@ -16,7 +16,7 @@ export const APP_ROUTE_SEGMENTS = new Set([
 // Never slug-prefixed: public/marketing pages, the parent/student portal
 // (separate login, out of scope for this staff-app change), API routes, and
 // the platform super_admin panel (no single school to prefix with).
-export const NEVER_PREFIX = new Set(["api", "apply", "login", "signup", "notifications", "parent-login", "portal", "admin"]);
+export const NEVER_PREFIX = new Set(["api", "apply", "login", "signup", "notifications", "parent-login", "portal", "admin", "change-password"]);
 
 export type SlugRouting = { type: "next" } | { type: "redirect"; url: URL } | { type: "rewrite"; url: URL };
 
