@@ -183,6 +183,7 @@ export const navGroups: NavGroup[] = [
       { label: "Admissions", href: "/admissions", icon: ClipboardList },
       { label: "Academics", href: "/academics", icon: BookOpen, children: academicsChildren },
       { label: "Students", href: "/students", icon: GraduationCap },
+      { label: "Parents", href: "/parents", icon: Handshake },
       { label: "Staff", href: "/staff", icon: Users },
     ],
   },
