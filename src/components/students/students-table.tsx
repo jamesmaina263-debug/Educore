@@ -1,11 +1,19 @@
 "use client";
 
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import { type ColumnDef } from "@tanstack/react-table";
 import { StatusBadge } from "@/components/status-badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
+import {
+  Select,
+  SelectTrigger,
+  SelectValue,
+  SelectContent,
+  SelectItem,
+} from "@/components/ui/select";
 
 export interface StudentRow {
   id: string;
@@ -83,13 +91,48 @@ const columns: ColumnDef<StudentRow>[] = [
   },
 ];
 
+const STATUS_FILTER_OPTIONS = [
+  { value: "all", label: "All statuses" },
+  { value: "active", label: "Active" },
+  { value: "enrolled", label: "Enrolled" },
+  { value: "withdrawn", label: "Withdrawn" },
+  { value: "transferred", label: "Transferred" },
+  { value: "graduated", label: "Graduated" },
+];
+
 export function StudentsTable({ rows }: { rows: StudentRow[] }) {
+  const [statusFilter, setStatusFilter] = useState("all");
+
+  // All statuses shown by default -- this only narrows the view, it never
+  // hides withdrawn/transferred/graduated students from the roster.
+  const filteredRows = useMemo(
+    () => (statusFilter === "all" ? rows : rows.filter((r) => r.status === statusFilter)),
+    [rows, statusFilter],
+  );
+
   return (
-    <DataTable
-      columns={columns}
-      data={rows}
-      searchColumnId="full_name"
-      searchPlaceholder="Search students by name…"
-    />
+    <div className="space-y-2">
+      <div className="flex items-center gap-2">
+        <span className="text-sm text-muted-foreground">Status</span>
+        <Select value={statusFilter} onValueChange={setStatusFilter}>
+          <SelectTrigger className="h-8 w-44 text-[0.8125rem]">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {STATUS_FILTER_OPTIONS.map((o) => (
+              <SelectItem key={o.value} value={o.value}>
+                {o.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      <DataTable
+        columns={columns}
+        data={filteredRows}
+        searchColumnId="full_name"
+        searchPlaceholder="Search students by name…"
+      />
+    </div>
   );
 }
