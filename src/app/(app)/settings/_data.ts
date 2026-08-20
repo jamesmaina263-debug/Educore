@@ -140,11 +140,10 @@ export async function loadSettingsContext(): Promise<SettingsContext> {
 
   let groupBranding: { logo_url: string | null; primary_color: string | null } | null = null;
   if (school?.school_group_id) {
-    const { data: group } = await supabase
-      .from("school_groups")
-      .select("logo_url, primary_color, whitelabel_enabled")
-      .eq("id", school.school_group_id)
-      .maybeSingle();
+    const { data: groupRows } = await supabase.rpc("group_branding_public", {
+      p_group_id: school.school_group_id,
+    });
+    const group = groupRows?.[0];
     if (group?.whitelabel_enabled) {
       groupBranding = { logo_url: group.logo_url, primary_color: group.primary_color };
     }
