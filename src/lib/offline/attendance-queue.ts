@@ -1,5 +1,8 @@
-import { idbDelete, idbGetAll, idbPut, STORES } from "./db";
-import { submitAttendance } from "@/app/(app)/attendance/actions";
+// Thin, module-scoped wrapper around the generic offline queue (./queue.ts).
+// Kept as its own file/export so use-attendance-sync.ts and
+// register-form.tsx don't need to change, and other callers get
+// attendance-shaped types instead of the generic QueuedMutation<unknown>.
+import { discardMutation, getPendingMutations, queueMutation, syncPendingMutations } from "./queue";
 
 export interface QueuedAttendanceSubmission {
   id: string; // client-generated, so a retry never double-submits
@@ -11,21 +14,22 @@ export interface QueuedAttendanceSubmission {
   last_error?: string;
 }
 
-export async function queueAttendanceSubmission(
-  input: Omit<QueuedAttendanceSubmission, "id" | "queued_at" | "status">,
-): Promise<QueuedAttendanceSubmission> {
-  const record: QueuedAttendanceSubmission = {
-    ...input,
-    id: crypto.randomUUID(),
-    queued_at: new Date().toISOString(),
-    status: "pending",
-  };
-  await idbPut(STORES.pendingAttendance, record);
-  return record;
+type AttendancePayload = Omit<QueuedAttendanceSubmission, "id" | "queued_at" | "status" | "last_error">;
+
+export async function queueAttendanceSubmission(input: AttendancePayload): Promise<QueuedAttendanceSubmission> {
+  const record = await queueMutation("attendance", "submitAttendance", input);
+  return { ...input, id: record.id, queued_at: record.queued_at, status: record.status };
 }
 
 export async function getPendingAttendanceSubmissions(): Promise<QueuedAttendanceSubmission[]> {
-  return idbGetAll<QueuedAttendanceSubmission>(STORES.pendingAttendance);
+  const pending = await getPendingMutations<AttendancePayload>("attendance");
+  return pending.map((m) => ({
+    ...m.payload,
+    id: m.id,
+    queued_at: m.queued_at,
+    status: m.status,
+    last_error: m.last_error,
+  }));
 }
 
 // A "failed" item (e.g. someone else already marked this stream/date while
@@ -35,7 +39,7 @@ export async function getPendingAttendanceSubmissions(): Promise<QueuedAttendanc
 // a permanently-stuck banner; if the marks still need correcting, that's
 // a normal edit through the register once the confirmed data is visible.
 export async function discardFailedSubmission(id: string): Promise<void> {
-  await idbDelete(STORES.pendingAttendance, id);
+  await discardMutation(id);
 }
 
 /**
@@ -45,33 +49,5 @@ export async function discardFailedSubmission(id: string): Promise<void> {
  * or re-sends work already confirmed by the server.
  */
 export async function syncPendingAttendance(): Promise<{ synced: number; failed: number }> {
-  const pending = await getPendingAttendanceSubmissions();
-  let synced = 0;
-  let failed = 0;
-
-  for (const submission of pending) {
-    await idbPut(STORES.pendingAttendance, { ...submission, status: "syncing" });
-    try {
-      const result = await submitAttendance({
-        stream_id: submission.stream_id,
-        attendance_date: submission.attendance_date,
-        marks: submission.marks,
-      });
-      if ("error" in result) {
-        await idbPut(STORES.pendingAttendance, { ...submission, status: "failed", last_error: result.error });
-        failed += 1;
-      } else {
-        await idbDelete(STORES.pendingAttendance, submission.id);
-        synced += 1;
-      }
-    } catch (e) {
-      // Network failed again mid-sync -- leave it pending (not failed) so
-      // the next online event retries automatically without user action.
-      await idbPut(STORES.pendingAttendance, { ...submission, status: "pending" });
-      failed += 1;
-      if (e instanceof TypeError) break; // likely offline again; stop this pass
-    }
-  }
-
-  return { synced, failed };
+  return syncPendingMutations("attendance");
 }
