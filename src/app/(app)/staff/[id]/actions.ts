@@ -11,6 +11,7 @@ export async function updateEmployment(
     hire_date?: string | null;
     contract_type?: "permanent" | "contract" | "part_time" | null;
     contract_end_date?: string | null;
+    gender?: "male" | "female" | null;
   },
 ): Promise<{ error: string } | { success: true }> {
   const supabase = await createClient();

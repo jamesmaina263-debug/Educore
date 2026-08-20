@@ -28,7 +28,7 @@ export default async function StaffProfilePage({ params }: { params: Promise<{ i
   const { data: staff } = await supabase
     .from("school_users")
     .select(
-      "id, full_name, email, phone, status, position, department, hire_date, contract_type, contract_end_date, roles(display_name)",
+      "id, full_name, email, phone, status, position, department, hire_date, contract_type, contract_end_date, gender, roles(display_name)",
     )
     .eq("id", id)
     .maybeSingle();
@@ -52,7 +52,7 @@ export default async function StaffProfilePage({ params }: { params: Promise<{ i
       .select("id, qualification_name, institution, year_obtained, expiry_date")
       .eq("staff_id", id)
       .order("year_obtained", { ascending: false }),
-    supabase.from("leave_types").select("id, name, days_per_year").order("name"),
+    supabase.from("leave_types").select("id, name, days_per_year, restricted_gender").order("name"),
     supabase
       .from("leave_requests")
       .select("id, start_date, end_date, days_count, status, reason, leave_types(name, id)")
@@ -105,6 +105,7 @@ export default async function StaffProfilePage({ params }: { params: Promise<{ i
     hire_date: staff.hire_date,
     contract_type: staff.contract_type as EmploymentData["contract_type"],
     contract_end_date: staff.contract_end_date,
+    gender: staff.gender as EmploymentData["gender"],
   };
 
   return (
@@ -164,6 +165,7 @@ export default async function StaffProfilePage({ params }: { params: Promise<{ i
               balances={balances}
               isSelf={isSelf}
               canApprove={canApproveLeave === true}
+              staffGender={staff.gender as "male" | "female" | null}
             />
           </TabsContent>
 

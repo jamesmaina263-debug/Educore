@@ -19,6 +19,7 @@ export interface EmploymentData {
   hire_date: string | null;
   contract_type: "permanent" | "contract" | "part_time" | null;
   contract_end_date: string | null;
+  gender: "male" | "female" | null;
 }
 
 export function EmploymentTab({
@@ -70,6 +71,14 @@ export function EmploymentTab({
           <div>
             <dt className="text-muted-foreground">Contract end date</dt>
             <dd>{data.contract_end_date ?? "—"}</dd>
+          </div>
+          <div>
+            <dt className="text-muted-foreground">Gender</dt>
+            <dd className="capitalize">
+              {data.gender ?? (
+                <span className="text-danger">Not set — required before this staff member can request leave</span>
+              )}
+            </dd>
           </div>
         </dl>
         {canManage && (
@@ -136,6 +145,25 @@ export function EmploymentTab({
           value={form.contract_end_date ?? ""}
           onChange={(e) => setForm({ ...form, contract_end_date: e.target.value })}
         />
+      </div>
+      <div className="space-y-1.5">
+        <Label>Gender</Label>
+        <Select
+          value={form.gender ?? undefined}
+          onValueChange={(v: "male" | "female") => setForm({ ...form, gender: v })}
+        >
+          <SelectTrigger>
+            <SelectValue placeholder="Select…" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="male">Male</SelectItem>
+            <SelectItem value="female">Female</SelectItem>
+          </SelectContent>
+        </Select>
+        <p className="text-xs text-muted-foreground">
+          Required before this staff member can request leave — also determines eligibility for
+          gender-restricted leave types (e.g. Maternity/Paternity).
+        </p>
       </div>
       {error && <p className="text-sm text-danger">{error}</p>}
       <div className="flex gap-2">

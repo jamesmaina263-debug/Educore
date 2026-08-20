@@ -18,6 +18,7 @@ export interface LeaveTypeOption {
   id: string;
   name: string;
   days_per_year: number;
+  restricted_gender: "male" | "female" | null;
 }
 
 export interface LeaveRequestRow {
@@ -37,6 +38,7 @@ export function LeaveTab({
   balances,
   isSelf,
   canApprove,
+  staffGender,
 }: {
   staffId: string;
   leaveTypes: LeaveTypeOption[];
@@ -45,12 +47,18 @@ export function LeaveTab({
   balances: { leave_type_id: string; name: string; allocated: number; used: number }[];
   isSelf: boolean;
   canApprove: boolean;
+  /** Gender must be set (on the Employment tab, by an admin) before any leave can be requested — also gates gender-restricted leave types. */
+  staffGender: "male" | "female" | null;
 }) {
+  // Requestable types: unrestricted, or restricted to this staff member's own gender. Balances
+  // above still show every type the staff has ever had a request against, unfiltered.
+  const requestableTypes = leaveTypes.filter((t) => !t.restricted_gender || t.restricted_gender === staffGender);
+
   const [requesting, setRequesting] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [form, setForm] = useState({
-    leave_type_id: leaveTypes[0]?.id ?? "",
+    leave_type_id: requestableTypes[0]?.id ?? "",
     start_date: "",
     end_date: "",
     reason: "",
@@ -70,7 +78,7 @@ export function LeaveTab({
       return;
     }
     setRequesting(false);
-    setForm({ leave_type_id: leaveTypes[0]?.id ?? "", start_date: "", end_date: "", reason: "" });
+    setForm({ leave_type_id: requestableTypes[0]?.id ?? "", start_date: "", end_date: "", reason: "" });
   }
 
   async function respond(requestId: string, status: "approved" | "rejected") {
@@ -146,13 +154,25 @@ export function LeaveTab({
         </ul>
       </div>
 
-      {isSelf && !requesting && (
-        <Button size="sm" variant="outline" onClick={() => setRequesting(true)} disabled={leaveTypes.length === 0}>
+      {isSelf && staffGender === null && (
+        <p className="text-sm text-muted-foreground">
+          Your gender isn&apos;t set yet — ask an admin to set it on your Employment tab before you can request
+          leave.
+        </p>
+      )}
+
+      {isSelf && staffGender !== null && !requesting && (
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => setRequesting(true)}
+          disabled={requestableTypes.length === 0}
+        >
           Request leave
         </Button>
       )}
 
-      {isSelf && requesting && (
+      {isSelf && staffGender !== null && requesting && (
         <div className="space-y-3 rounded-md border border-border p-4">
           <div className="space-y-1.5">
             <Label>Leave type</Label>
@@ -161,7 +181,7 @@ export function LeaveTab({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {leaveTypes.map((t) => (
+                {requestableTypes.map((t) => (
                   <SelectItem key={t.id} value={t.id}>
                     {t.name}
                   </SelectItem>
