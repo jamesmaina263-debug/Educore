@@ -6,17 +6,17 @@ import { SCHOOL_SLUG_COOKIE } from "@/lib/school-slug-cookie";
 // "/gititu-high-school/dashboard" (a real route, slug-prefixed) so the same
 // first path segment can be handled correctly either way. Keep in sync with
 // src/app/(app)'s folder list if a new top-level module is ever added.
-const APP_ROUTE_SEGMENTS = new Set([
+export const APP_ROUTE_SEGMENTS = new Set([
   "academics", "admin", "admissions", "ai", "attendance", "boarding", "campuses",
   "communication", "dashboard", "discipline", "exams", "finance", "health",
-  "homework", "inventory", "library", "payroll", "performance", "pt-meetings",
+  "homework", "inventory", "library", "parents", "payroll", "performance", "pt-meetings",
   "reports", "settings", "staff", "students", "transport",
 ]);
 
 // Never slug-prefixed: public/marketing pages, the parent/student portal
 // (separate login, out of scope for this staff-app change), API routes, and
 // the platform super_admin panel (no single school to prefix with).
-const NEVER_PREFIX = new Set(["api", "apply", "login", "signup", "notifications", "parent-login", "portal", "admin"]);
+export const NEVER_PREFIX = new Set(["api", "apply", "login", "signup", "notifications", "parent-login", "portal", "admin"]);
 
 export type SlugRouting = { type: "next" } | { type: "redirect"; url: URL } | { type: "rewrite"; url: URL };
 
