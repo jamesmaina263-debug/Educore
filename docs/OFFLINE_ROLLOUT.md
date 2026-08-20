@@ -180,6 +180,32 @@ This is exactly what attendance already does -- copy the pattern:
   `(applicationId, input)` -- two args, not one object -- same adapter
   pattern as `checkOutStudent` / `submitRollCall`, with its own test.
 
+- [x] **Library** -- write queueing for `issueLoanAction`,
+  `issueLoanToStaffAction`, `returnLoanAction`, `markLoanLostOrDamagedAction`.
+  All 4 live in one component (`LibrarySection`) and share one "library"
+  module queue/banner. `returnLoanAction(id)` takes a single positional
+  string, not an object -- same adapter pattern as `checkOutStudent`, with
+  its own test.
+
+  Known tradeoff, same category as `administerMedication`'s: marking a
+  loan "lost" also permanently deducts a copy from the collection, but
+  only once the mutation actually syncs -- the copy count shown during an
+  outage won't reflect it until then.
+
+  Deliberately **not** queued: `createLibraryItemAction` /
+  `adjustCopiesAction` (desk cataloguing), `createShelfAction` /
+  `createReservationAction` / `createFineAction` (`FormData`),
+  `cancelReservationAction` / `resolveFineAction` (desk follow-up).
+
+- [x] **Inventory** -- write queueing for `recordStockMovementAction` only
+  (the literal "stock movement" this rollout order named). Typed-object,
+  RPC-backed, no adapter needed.
+
+  Deliberately **not** queued: `createInventoryItemAction` /
+  `createCategoryAction` (desk cataloguing), `createTransferAction`
+  (desk-initiated, same reasoning as boarding's `transferStudent`), and
+  everything asset/procurement-related (`FormData`, desk/office workflows).
+
 ## Next up
 
 Given "both spotty connections and full dead zones happen regularly," the
@@ -189,9 +215,8 @@ away from a router doing time-sensitive data entry:
 1. ~~Health / sick bay~~ -- done, see above.
 2. ~~Boarding roll call~~ -- done, see above.
 3. ~~Admissions~~ -- done (partial, by design), see above.
-4. **Library loans / inventory stock movements** (next) -- typed-object,
-   lower urgency but easy wins.
-5. **Discipline** -- do last; needs the `FormData` adapter decision above
+4. ~~Library loans / inventory stock movements~~ -- done, see above.
+5. **Discipline** (next) -- needs the `FormData` adapter decision above
    settled first.
 
 Each module should get its own review pass (this checklist, then a real

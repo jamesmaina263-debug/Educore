@@ -9,6 +9,9 @@ import { StatusBadge } from "@/components/status-badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { createInventoryItemAction, createCategoryAction, recordStockMovementAction, createTransferAction } from "@/app/(app)/inventory/actions";
+import { useOfflineSync } from "@/hooks/use-offline-sync";
+import { queueMutation } from "@/lib/offline/queue";
+import { InventoryOfflineBanner } from "./offline-banner";
 
 export interface ItemRow {
   id: string;
@@ -62,6 +65,7 @@ export function InventorySection({
   canWrite: boolean;
 }) {
   const router = useRouter();
+  const { online, pendingCount, failed, syncing, sync, discard } = useOfflineSync("inventory");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -120,12 +124,22 @@ export function InventorySection({
   async function handleRecordMovement() {
     setPending(true);
     setError(null);
-    const result = await recordStockMovementAction({
+    const input = {
       item_id: moveItemId,
       movement_type: moveType,
       quantity: Number(moveQuantity),
       reason: moveReason,
-    });
+    };
+    if (!online) {
+      await queueMutation("inventory", "recordStockMovementAction", input);
+      setPending(false);
+      setMoveOpen(false);
+      setMoveItemId("");
+      setMoveQuantity("");
+      setMoveReason("");
+      return;
+    }
+    const result = await recordStockMovementAction(input);
     setPending(false);
     if ("error" in result) return setError(result.error);
     setMoveOpen(false);
@@ -149,6 +163,7 @@ export function InventorySection({
 
   return (
     <div className="flex flex-col gap-6">
+      <InventoryOfflineBanner online={online} pendingCount={pendingCount} failed={failed} syncing={syncing} sync={sync} discard={discard} />
       {error && <p className="text-sm text-danger">{error}</p>}
 
       {canWrite && (
