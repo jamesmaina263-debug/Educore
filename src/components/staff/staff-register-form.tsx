@@ -1,12 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { StatusBadge } from "@/components/status-badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { submitStaffAttendance, editStaffAttendanceRecord } from "@/app/(app)/staff/actions";
+import { useOfflineSync } from "@/hooks/use-offline-sync";
+import { queueMutation } from "@/lib/offline/queue";
+import { StaffOfflineBanner } from "./offline-banner";
 
 export interface StaffRosterRow {
   staff_id: string;
@@ -41,24 +44,57 @@ export function StaffRegisterForm({
   canMark: boolean;
 }) {
   const router = useRouter();
+  const { online, pendingCount, failed, syncing, sync, discard } = useOfflineSync("staff-attendance");
   const [draft, setDraft] = useState<Record<string, Mark>>(
     Object.fromEntries(roster.filter((r) => !r.existing).map((r) => [r.staff_id, "present" as Mark])),
   );
+  // Marks submitted while offline: queued locally, not yet confirmed by the
+  // server. Kept separate from `draft` so they render distinctly. Mirrors
+  // src/components/attendance/register-form.tsx.
+  const [queued, setQueued] = useState<Record<string, Mark>>({});
   const [editTarget, setEditTarget] = useState<StaffRosterRow | null>(null);
   const [editStatus, setEditStatus] = useState<Mark>("present");
   const [editReason, setEditReason] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
 
-  const unmarked = roster.filter((r) => !r.existing);
+  const visibleQueued = Object.fromEntries(
+    Object.entries(queued).filter(([staffId]) => !roster.find((r) => r.staff_id === staffId)?.existing),
+  );
+
+  const unmarked = roster.filter((r) => !r.existing && !(r.staff_id in visibleQueued));
   const marked = roster.filter((r) => r.existing);
+  const queuedCount = Object.keys(visibleQueued).length;
+
+  // Once queued marks are confirmed by the server, pull the authoritative
+  // roster so queued rows become real "existing" rows. router.refresh() is
+  // a navigation method, not a React state setter -- not subject to the
+  // set-state-in-effect restriction.
+  useEffect(() => {
+    if (online && queuedCount > 0 && pendingCount === 0 && !syncing && !pending) {
+      router.refresh();
+    }
+  }, [online, queuedCount, pendingCount, syncing, pending, router]);
 
   async function handleSubmit() {
     setPending(true);
     setError(null);
+    const marksToSubmit = unmarked.map((r) => ({ staff_id: r.staff_id, status: draft[r.staff_id] ?? "present" }));
+
+    if (!online) {
+      try {
+        await queueMutation("staff-attendance", "submitStaffAttendance", { attendance_date: attendanceDate, marks: marksToSubmit });
+        setQueued((q) => ({ ...q, ...Object.fromEntries(marksToSubmit.map((m) => [m.staff_id, m.status])) }));
+      } catch {
+        setError("Couldn't save offline either — try again in a moment.");
+      }
+      setPending(false);
+      return;
+    }
+
     const result = await submitStaffAttendance({
       attendance_date: attendanceDate,
-      marks: unmarked.map((r) => ({ staff_id: r.staff_id, status: draft[r.staff_id] ?? "present" })),
+      marks: marksToSubmit,
     });
     setPending(false);
     if ("error" in result) return setError(result.error);
@@ -91,6 +127,7 @@ export function StaffRegisterForm({
 
   return (
     <div className="flex flex-col gap-4">
+      <StaffOfflineBanner online={online} pendingCount={pendingCount} failed={failed} syncing={syncing} sync={sync} discard={discard} />
       {error && <p className="text-sm text-danger">{error}</p>}
 
       {unmarked.length > 0 && (
@@ -135,7 +172,13 @@ export function StaffRegisterForm({
               </div>
               <div className="flex justify-end border-t border-border px-4 py-2.5">
                 <Button onClick={handleSubmit} disabled={pending}>
-                  {pending ? "Submitting…" : `Submit register (${unmarked.length} staff)`}
+                  {pending
+                    ? online
+                      ? "Submitting…"
+                      : "Saving offline…"
+                    : online
+                      ? `Submit register (${unmarked.length} staff)`
+                      : `Save offline (${unmarked.length} staff)`}
                 </Button>
               </div>
             </>

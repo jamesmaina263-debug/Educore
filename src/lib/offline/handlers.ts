@@ -32,6 +32,7 @@ import {
   createSafeguardingReportAction,
 } from "@/app/(app)/discipline/actions";
 import { objectToFormData } from "./form-data";
+import { submitStaffAttendance } from "@/app/(app)/staff/actions";
 
 export type MutationResult = { error: string } | { success: true } | Record<string, unknown>;
 export type MutationHandler = (payload: never) => Promise<MutationResult>;
@@ -159,4 +160,11 @@ export const mutationHandlers: Record<string, MutationHandler> = {
   // updateSafeguardingReportAction -- status/follow-up updates, desk-based
   // like updateReferralOutcome and updateIncidentStatus elsewhere in this
   // rollout. See docs/OFFLINE_ROLLOUT.md.
+
+  "staff-attendance:submitStaffAttendance": submitStaffAttendance as MutationHandler,
+  // Transport was audited and has nothing to queue -- every one of its 5
+  // actions is desk/office setup or assignment work, not field activity.
+  // editStaffAttendanceRecord is deliberately not queued -- a correction,
+  // desk follow-up like every other *record/*Status update excluded
+  // elsewhere. See docs/OFFLINE_ROLLOUT.md.
 };
