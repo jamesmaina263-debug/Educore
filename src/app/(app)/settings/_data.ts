@@ -83,7 +83,7 @@ export async function loadSettingsContext(): Promise<SettingsContext> {
       .select("id, full_name, email, status, role_id, must_change_password, roles(name, display_name)")
       .order("full_name"),
     supabase.from("roles").select("id, name, display_name").order("display_name"),
-    supabase.from("leave_types").select("id, name, days_per_year").order("name"),
+    supabase.from("leave_types").select("id, name, days_per_year, restricted_gender").order("name"),
   ]);
 
   const leaveTypes: LeaveTypeRow[] = leaveTypeRows ?? [];

@@ -235,7 +235,11 @@ export async function revokeSchoolApiKey(id: string): Promise<ActionResult> {
 // Leave Types (Settings > Leave Types). leave_types is school-scoped and RLS-gated on
 // staff.manage for writes — see the phase3 staff-directory migration and the
 // seed_default_leave_types migration for why every school starts with a default set.
-export async function createLeaveType(input: { name: string; days_per_year: number }): Promise<ActionResult> {
+export async function createLeaveType(input: {
+  name: string;
+  days_per_year: number;
+  restricted_gender?: "male" | "female" | null;
+}): Promise<ActionResult> {
   const name = input.name.trim();
   if (!name) return { error: "Name is required." };
   if (!Number.isFinite(input.days_per_year) || input.days_per_year < 0) {
@@ -250,6 +254,7 @@ export async function createLeaveType(input: { name: string; days_per_year: numb
     school_id: schoolId,
     name,
     days_per_year: input.days_per_year,
+    restricted_gender: input.restricted_gender ?? null,
   });
   if (error) {
     if (error.code === "23505") return { error: "A leave type with that name already exists." };
@@ -262,7 +267,7 @@ export async function createLeaveType(input: { name: string; days_per_year: numb
 
 export async function updateLeaveType(
   id: string,
-  input: { name: string; days_per_year: number },
+  input: { name: string; days_per_year: number; restricted_gender?: "male" | "female" | null },
 ): Promise<ActionResult> {
   const name = input.name.trim();
   if (!name) return { error: "Name is required." };
@@ -273,7 +278,7 @@ export async function updateLeaveType(
   const supabase = await createClient();
   const { error } = await supabase
     .from("leave_types")
-    .update({ name, days_per_year: input.days_per_year })
+    .update({ name, days_per_year: input.days_per_year, restricted_gender: input.restricted_gender ?? null })
     .eq("id", id);
   if (error) {
     if (error.code === "23505") return { error: "A leave type with that name already exists." };

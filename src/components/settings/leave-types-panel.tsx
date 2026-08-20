@@ -13,13 +13,26 @@ import {
   DialogFooter,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import {
+  Select,
+  SelectTrigger,
+  SelectValue,
+  SelectContent,
+  SelectItem,
+} from "@/components/ui/select";
 import { createLeaveType, updateLeaveType, deleteLeaveType } from "@/app/(app)/settings/actions";
 
 export interface LeaveTypeRow {
   id: string;
   name: string;
   days_per_year: number;
+  restricted_gender: "male" | "female" | null;
 }
+
+const GENDER_LABEL: Record<string, string> = {
+  male: "Male only",
+  female: "Female only",
+};
 
 export function LeaveTypesPanel({ rows, canManage }: { rows: LeaveTypeRow[]; canManage: boolean }) {
   const router = useRouter();
@@ -27,16 +40,20 @@ export function LeaveTypesPanel({ rows, canManage }: { rows: LeaveTypeRow[]; can
   const [editingId, setEditingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
-  const [form, setForm] = useState({ name: "", days_per_year: "" });
+  const [form, setForm] = useState<{ name: string; days_per_year: string; restricted_gender: "male" | "female" | "" }>({
+    name: "",
+    days_per_year: "",
+    restricted_gender: "",
+  });
 
   function openAdd() {
-    setForm({ name: "", days_per_year: "" });
+    setForm({ name: "", days_per_year: "", restricted_gender: "" });
     setError(null);
     setAddOpen(true);
   }
 
   function openEdit(row: LeaveTypeRow) {
-    setForm({ name: row.name, days_per_year: String(row.days_per_year) });
+    setForm({ name: row.name, days_per_year: String(row.days_per_year), restricted_gender: row.restricted_gender ?? "" });
     setError(null);
     setEditingId(row.id);
   }
@@ -56,7 +73,11 @@ export function LeaveTypesPanel({ rows, canManage }: { rows: LeaveTypeRow[]; can
     }
     setPending(true);
     setError(null);
-    const result = await createLeaveType({ name: form.name, days_per_year: days });
+    const result = await createLeaveType({
+      name: form.name,
+      days_per_year: days,
+      restricted_gender: form.restricted_gender || null,
+    });
     setPending(false);
     if ("error" in result) return setError(result.error);
     setAddOpen(false);
@@ -72,7 +93,11 @@ export function LeaveTypesPanel({ rows, canManage }: { rows: LeaveTypeRow[]; can
     }
     setPending(true);
     setError(null);
-    const result = await updateLeaveType(editingId, { name: form.name, days_per_year: days });
+    const result = await updateLeaveType(editingId, {
+      name: form.name,
+      days_per_year: days,
+      restricted_gender: form.restricted_gender || null,
+    });
     setPending(false);
     if ("error" in result) return setError(result.error);
     setEditingId(null);
@@ -131,6 +156,24 @@ export function LeaveTypesPanel({ rows, canManage }: { rows: LeaveTypeRow[]; can
                     onChange={(e) => setForm({ ...form, days_per_year: e.target.value })}
                   />
                 </div>
+                <div className="space-y-1.5">
+                  <Label>Restrict to gender</Label>
+                  <Select
+                    value={form.restricted_gender || "none"}
+                    onValueChange={(v) =>
+                      setForm({ ...form, restricted_gender: v === "none" ? "" : (v as "male" | "female") })
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Not restricted</SelectItem>
+                      <SelectItem value="female">Female only</SelectItem>
+                      <SelectItem value="male">Male only</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
                 {error && <p className="text-sm text-danger">{error}</p>}
               </div>
               <DialogFooter>
@@ -153,7 +196,9 @@ export function LeaveTypesPanel({ rows, canManage }: { rows: LeaveTypeRow[]; can
             <li key={r.id} className="flex items-center justify-between gap-3 px-3 py-2 text-sm">
               <div>
                 <span className="font-medium">{r.name}</span>{" "}
-                <span className="text-muted-foreground">— {r.days_per_year} days/year</span>
+                <span className="text-muted-foreground">
+                  — {r.days_per_year} days/year{r.restricted_gender ? ` · ${GENDER_LABEL[r.restricted_gender]}` : ""}
+                </span>
               </div>
               {canManage && (
                 <div className="flex items-center gap-2">
@@ -188,6 +233,24 @@ export function LeaveTypesPanel({ rows, canManage }: { rows: LeaveTypeRow[]; can
                 value={form.days_per_year}
                 onChange={(e) => setForm({ ...form, days_per_year: e.target.value })}
               />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Restrict to gender</Label>
+              <Select
+                value={form.restricted_gender || "none"}
+                onValueChange={(v) =>
+                  setForm({ ...form, restricted_gender: v === "none" ? "" : (v as "male" | "female") })
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Not restricted</SelectItem>
+                  <SelectItem value="female">Female only</SelectItem>
+                  <SelectItem value="male">Male only</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
             {error && <p className="text-sm text-danger">{error}</p>}
           </div>
