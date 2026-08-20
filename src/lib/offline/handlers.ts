@@ -14,6 +14,14 @@
 import { submitAttendance } from "@/app/(app)/attendance/actions";
 import { checkInStudent, checkOutStudent, administerMedication, logEmergency, createReferral } from "@/app/(app)/health/actions";
 import { submitRollCall, logIncident } from "@/app/(app)/boarding/actions";
+import {
+  updateAdmissionDetails,
+  updateApplicantIdentity,
+  saveHealthProfileForApplication,
+  type AdmissionDetailsInput,
+  type ApplicantIdentityInput,
+  type HealthProfileInput,
+} from "@/app/(app)/admissions/[id]/wizard/actions";
 
 export type MutationResult = { error: string } | { success: true } | Record<string, unknown>;
 export type MutationHandler = (payload: never) => Promise<MutationResult>;
@@ -40,6 +48,29 @@ async function submitRollCallMutation(payload: {
   return submitRollCall(payload.date, payload.session, payload.entries);
 }
 
+// The admissions wizard's step-save actions take (applicationId, input) --
+// two args -- rather than a single object. Same adapter pattern as above.
+async function updateAdmissionDetailsMutation(payload: {
+  applicationId: string;
+  input: AdmissionDetailsInput;
+}): Promise<MutationResult> {
+  return updateAdmissionDetails(payload.applicationId, payload.input);
+}
+
+async function updateApplicantIdentityMutation(payload: {
+  applicationId: string;
+  input: ApplicantIdentityInput;
+}): Promise<MutationResult> {
+  return updateApplicantIdentity(payload.applicationId, payload.input);
+}
+
+async function saveHealthProfileForApplicationMutation(payload: {
+  applicationId: string;
+  input: HealthProfileInput;
+}): Promise<MutationResult> {
+  return saveHealthProfileForApplication(payload.applicationId, payload.input);
+}
+
 export const mutationHandlers: Record<string, MutationHandler> = {
   "attendance:submitAttendance": submitAttendance as MutationHandler,
 
@@ -60,4 +91,17 @@ export const mutationHandlers: Record<string, MutationHandler> = {
   // updateIncidentStatus -- all desk-based admin actions, not the
   // dorm-floor, possibly-no-signal work roll call and incident logging are.
   // See docs/OFFLINE_ROLLOUT.md.
+
+  // Admissions is structurally different from the modules above: the wizard
+  // is a live, sequential flow (duplicate detection, guardian search, fee
+  // calculation, a final enrollment-commit step) that genuinely needs a
+  // connection to progress safely. Only the plain field-save steps that
+  // don't depend on a live server computation are queued here -- everything
+  // else (checkForDuplicateStudents, createOrLinkStudent, searchGuardians,
+  // linkGuardianToApplication, document upload, boarding/transport
+  // assignment, getFeePreview, saveFinanceDecision, completeEnrollmentAction)
+  // stays online-only. See docs/OFFLINE_ROLLOUT.md for the full reasoning.
+  "admissions:updateAdmissionDetails": updateAdmissionDetailsMutation as MutationHandler,
+  "admissions:updateApplicantIdentity": updateApplicantIdentityMutation as MutationHandler,
+  "admissions:saveHealthProfileForApplication": saveHealthProfileForApplicationMutation as MutationHandler,
 };

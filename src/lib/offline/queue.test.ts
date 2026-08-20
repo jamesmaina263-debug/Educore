@@ -129,6 +129,33 @@ describe("offline mutation queue", () => {
     expect(submitRollCall).toHaveBeenCalledWith("2026-02-01", "boarding_pm", entries);
   });
 
+  it("adapts admissions wizard's (applicationId, input) adapters correctly when replaying from the queue", async () => {
+    const updateAdmissionDetails = vi.fn().mockResolvedValue({ success: true });
+    const updateApplicantIdentity = vi.fn().mockResolvedValue({ success: true });
+    const saveHealthProfileForApplication = vi.fn().mockResolvedValue({ success: true });
+    vi.doMock("@/app/(app)/admissions/[id]/wizard/actions", () => ({
+      updateAdmissionDetails,
+      updateApplicantIdentity,
+      saveHealthProfileForApplication,
+    }));
+    const { queueMod } = await freshModules();
+
+    const admissionInput = { admission_type: "new", academic_year_id: "ay1", term_id: "t1", intended_class_id: null, boarding_preference: null, transport_required: false };
+    const identityInput = { first_name: "Jane", last_name: "Doe", date_of_birth: "2015-01-01", gender: "female" as const };
+    const healthInput = { blood_group: "O+" };
+
+    await queueMod.queueMutation("admissions", "updateAdmissionDetails", { applicationId: "app-1", input: admissionInput });
+    await queueMod.queueMutation("admissions", "updateApplicantIdentity", { applicationId: "app-1", input: identityInput });
+    await queueMod.queueMutation("admissions", "saveHealthProfileForApplication", { applicationId: "app-1", input: healthInput });
+
+    const result = await queueMod.syncPendingMutations("admissions");
+
+    expect(result).toEqual({ synced: 3, failed: 0 });
+    expect(updateAdmissionDetails).toHaveBeenCalledWith("app-1", admissionInput);
+    expect(updateApplicantIdentity).toHaveBeenCalledWith("app-1", identityInput);
+    expect(saveHealthProfileForApplication).toHaveBeenCalledWith("app-1", healthInput);
+  });
+
   it("leaves a mutation untouched when no handler is registered for it", async () => {
     const { queueMod } = await freshModules();
     await queueMod.queueMutation("some-future-module", "someAction", { x: 1 });

@@ -138,6 +138,48 @@ This is exactly what attendance already does -- copy the pattern:
   `updateIncidentStatus` -- all desk-based admin actions, not the
   dorm-floor, possibly-no-signal work roll call and incident logging are.
 
+- [x] **Admissions (partial, by design)** -- write queueing for exactly 3 of
+  the wizard's ~20 actions: `updateAdmissionDetails`, `updateApplicantIdentity`,
+  `saveHealthProfileForApplication`. This module is structurally different
+  from the three above, and the scope reflects that rather than forcing the
+  same pattern where it doesn't fit:
+
+  The admissions wizard is a **live, sequential, interdependent flow** --
+  the code comment on `createOrLinkStudent` literally says "the Student
+  record is created for real at step 2." Most of its actions genuinely
+  need a fresh connection to be safe or meaningful:
+  - `checkForDuplicateStudents` / `createOrLinkStudent` -- duplicate
+    detection has to run against current server data; queuing a blind
+    "create student" against possibly-stale duplicate-check results risks
+    creating real duplicate student records.
+  - `searchGuardians` / `linkGuardianToApplication` -- live search, no
+    offline value without results to select from.
+  - `uploadDocumentAsStaff` -- `FormData` with a file, same caveat as
+    discipline (not queued anywhere in this rollout yet).
+  - `allocateBoardingForApplication` / `assignTransportForApplication` --
+    same desk-based-assignment reasoning as boarding's bed/transport
+    actions, kept online-only for consistency.
+  - `getFeePreview` / `saveFinanceDecision` / `getAdmissionChecklist` /
+    `completeEnrollmentAction` -- the final commit step of the whole
+    wizard, converting an application into a real enrolled student. This
+    is the single highest-risk action in the app to run against stale
+    offline state; it must run live, every time.
+
+  What genuinely doesn't have that dependency -- three plain field saves
+  (Admission Details, Applicant Identity, Health Profile step) -- are
+  queued through the same engine as everything else, with their own
+  banner (`src/components/admissions/offline-banner.tsx`) that says so
+  explicitly: *"these steps are captured offline; the rest of the wizard
+  needs a connection."* An admissions officer who loses signal mid-wizard
+  doesn't lose typed-in data on those specific steps, but still can't
+  finish enrolling a student until they're back online -- which was
+  already true before this change, and isn't something a write-queue can
+  safely fix.
+
+  `updateAdmissionDetails` and `updateApplicantIdentity` both take
+  `(applicationId, input)` -- two args, not one object -- same adapter
+  pattern as `checkOutStudent` / `submitRollCall`, with its own test.
+
 ## Next up
 
 Given "both spotty connections and full dead zones happen regularly," the
@@ -146,9 +188,10 @@ away from a router doing time-sensitive data entry:
 
 1. ~~Health / sick bay~~ -- done, see above.
 2. ~~Boarding roll call~~ -- done, see above.
-3. **Library loans / inventory stock movements** (next) -- typed-object,
+3. ~~Admissions~~ -- done (partial, by design), see above.
+4. **Library loans / inventory stock movements** (next) -- typed-object,
    lower urgency but easy wins.
-4. **Discipline** -- do last; needs the `FormData` adapter decision above
+5. **Discipline** -- do last; needs the `FormData` adapter decision above
    settled first.
 
 Each module should get its own review pass (this checklist, then a real

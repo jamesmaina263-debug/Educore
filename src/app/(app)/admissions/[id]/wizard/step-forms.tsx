@@ -30,12 +30,18 @@ import {
   saveFinanceDecision,
   getAdmissionChecklist,
   completeEnrollmentAction,
+  type AdmissionDetailsInput,
+  type ApplicantIdentityInput,
+  type HealthProfileInput,
   type DuplicateCandidate,
   type GuardianSearchResult,
   type FeeChargeLine,
   type ChecklistItem,
   type EnrollmentResult,
 } from "./actions";
+import { useOfflineSync } from "@/hooks/use-offline-sync";
+import { queueMutation } from "@/lib/offline/queue";
+import { AdmissionsOfflineBanner } from "@/components/admissions/offline-banner";
 
 // Shared shell every step form renders inside, matching the wizard panel's existing look.
 function StepPanel({ title, hint, children }: { title: string; hint?: string; children: React.ReactNode }) {
@@ -87,6 +93,7 @@ export function AdmissionDetailsStep({
   };
 }) {
   const router = useRouter();
+  const { online, pendingCount, failed, syncing, sync, discard } = useOfflineSync("admissions");
   const [form, setForm] = useState(initial);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -97,17 +104,23 @@ export function AdmissionDetailsStep({
   function save() {
     setError(null);
     setSaved(false);
+    const input: AdmissionDetailsInput = {
+      admission_type: form.admission_type as "new" | "transfer" | "re_admission",
+      academic_year_id: form.academic_year_id,
+      term_id: form.term_id,
+      intended_class_id: null,
+      boarding_preference: (form.boarding_preference as "day" | "boarding" | null) ?? null,
+      transport_required: form.transport_required,
+      previous_school: form.previous_school ?? undefined,
+      previous_class: form.previous_class ?? undefined,
+    };
     startTransition(async () => {
-      const result = await updateAdmissionDetails(applicationId, {
-        admission_type: form.admission_type as "new" | "transfer" | "re_admission",
-        academic_year_id: form.academic_year_id,
-        term_id: form.term_id,
-        intended_class_id: null,
-        boarding_preference: (form.boarding_preference as "day" | "boarding" | null) ?? null,
-        transport_required: form.transport_required,
-        previous_school: form.previous_school ?? undefined,
-        previous_class: form.previous_class ?? undefined,
-      });
+      if (!online) {
+        await queueMutation("admissions", "updateAdmissionDetails", { applicationId, input });
+        setSaved(true);
+        return;
+      }
+      const result = await updateAdmissionDetails(applicationId, input);
       if ("error" in result) { setError(result.error); return; }
       setSaved(true);
       router.refresh();
@@ -116,6 +129,7 @@ export function AdmissionDetailsStep({
 
   return (
     <StepPanel title="Admission Details" hint="Admission type, academic year, term, and day/boarding + transport preference — these drive which later steps apply.">
+      <AdmissionsOfflineBanner online={online} pendingCount={pendingCount} failed={failed} syncing={syncing} sync={sync} discard={discard} />
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div className="space-y-1.5">
           <Label>Admission type</Label>
@@ -192,6 +206,7 @@ export function StudentStep({
   resultingStudentId: string | null;
 }) {
   const router = useRouter();
+  const { online, pendingCount, failed, syncing, sync, discard } = useOfflineSync("admissions");
   const [admissionNumber, setAdmissionNumber] = useState<string | null>(null);
 
   useEffect(() => {
@@ -219,14 +234,24 @@ export function StudentStep({
       return;
     }
     setError(null);
+    const input: ApplicantIdentityInput = {
+      first_name: identity.first_name,
+      last_name: identity.last_name,
+      other_names: identity.other_names,
+      date_of_birth: identity.date_of_birth,
+      gender: identity.gender as "male" | "female",
+    };
     startTransition(async () => {
-      const result = await updateApplicantIdentity(applicationId, {
-        first_name: identity.first_name,
-        last_name: identity.last_name,
-        other_names: identity.other_names,
-        date_of_birth: identity.date_of_birth,
-        gender: identity.gender as "male" | "female",
-      });
+      if (!online) {
+        // Duplicate-checking and student creation (the next actions in this
+        // step) both need a live connection regardless -- this just makes
+        // sure typed-in identity details aren't lost if the connection was
+        // already down before the officer got that far.
+        await queueMutation("admissions", "updateApplicantIdentity", { applicationId, input });
+        setEditingIdentity(false);
+        return;
+      }
+      const result = await updateApplicantIdentity(applicationId, input);
       if ("error" in result) { setError(result.error); return; }
       setEditingIdentity(false);
       router.refresh();
@@ -271,6 +296,7 @@ export function StudentStep({
   if (editingIdentity) {
     return (
       <StepPanel title="Student" hint="Enter the applicant's name, date of birth, and gender — these identify the student and are used to check for an existing record.">
+        <AdmissionsOfflineBanner online={online} pendingCount={pendingCount} failed={failed} syncing={syncing} sync={sync} discard={discard} />
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div className="space-y-1.5">
             <Label htmlFor="first_name">First name</Label>
@@ -307,6 +333,7 @@ export function StudentStep({
 
   return (
     <StepPanel title="Student" hint="Verify the applicant's details, check for a possible existing student, then create the master Student record.">
+      <AdmissionsOfflineBanner online={online} pendingCount={pendingCount} failed={failed} syncing={syncing} sync={sync} discard={discard} />
       <dl className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
         <div><dt className="text-muted-foreground">Name</dt><dd>{applicantSummary.first_name} {applicantSummary.last_name}</dd></div>
         <div><dt className="text-muted-foreground">Date of birth</dt><dd>{applicantSummary.date_of_birth}</dd></div>
@@ -795,6 +822,7 @@ export function HealthStep({
   canWrite: boolean;
 }) {
   const router = useRouter();
+  const { online, pendingCount, failed, syncing, sync, discard } = useOfflineSync("admissions");
   const [form, setForm] = useState(initial);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -803,15 +831,21 @@ export function HealthStep({
   function save() {
     setError(null);
     setSaved(false);
+    const input: HealthProfileInput = {
+      blood_group: form.blood_group ?? undefined,
+      allergies: form.allergies ?? undefined,
+      conditions: form.conditions ?? undefined,
+      emergency_contact_name: form.emergency_contact_name ?? undefined,
+      emergency_contact_phone: form.emergency_contact_phone ?? undefined,
+      notes: form.notes ?? undefined,
+    };
     startTransition(async () => {
-      const result = await saveHealthProfileForApplication(applicationId, {
-        blood_group: form.blood_group ?? undefined,
-        allergies: form.allergies ?? undefined,
-        conditions: form.conditions ?? undefined,
-        emergency_contact_name: form.emergency_contact_name ?? undefined,
-        emergency_contact_phone: form.emergency_contact_phone ?? undefined,
-        notes: form.notes ?? undefined,
-      });
+      if (!online) {
+        await queueMutation("admissions", "saveHealthProfileForApplication", { applicationId, input });
+        setSaved(true);
+        return;
+      }
+      const result = await saveHealthProfileForApplication(applicationId, input);
       if ("error" in result) { setError(result.error); return; }
       setSaved(true);
       router.refresh();
@@ -830,6 +864,7 @@ export function HealthStep({
 
   return (
     <StepPanel title="Health" hint="Initial profile only — full medical detail is managed by the Health module, not here.">
+      <AdmissionsOfflineBanner online={online} pendingCount={pendingCount} failed={failed} syncing={syncing} sync={sync} discard={discard} />
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div className="space-y-1.5">
           <Label htmlFor="blood_group">Blood group</Label>
