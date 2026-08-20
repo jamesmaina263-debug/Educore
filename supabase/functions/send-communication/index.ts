@@ -1,5 +1,5 @@
 import { createClient } from "jsr:@supabase/supabase-js@2";
-import { corsHeaders } from "../_shared/cors.ts";
+import { buildCorsHeaders } from "../_shared/cors.ts";
 import { getSmsProvider } from "../_shared/sms/index.ts";
 import { getEmailProvider } from "../_shared/email/index.ts";
 import { getWhatsAppProvider } from "../_shared/whatsapp/index.ts";
@@ -15,6 +15,13 @@ import { getWhatsAppProvider } from "../_shared/whatsapp/index.ts";
 // Also dispatches health-sourced alerts (queue_health_alert, health.write) — a health.write-only
 // caller is scoped to source_module='health' rows only, see below.
 Deno.serve(async (req) => {
+  const corsHeaders = buildCorsHeaders(req);
+  const json = (body: unknown, status = 200) =>
+    new Response(JSON.stringify(body), {
+      status,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
@@ -105,10 +112,3 @@ Deno.serve(async (req) => {
     return json({ error: "Unexpected error." }, 500);
   }
 });
-
-function json(body: unknown, status = 200) {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
-  });
-}

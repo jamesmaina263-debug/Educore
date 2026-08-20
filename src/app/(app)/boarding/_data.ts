@@ -121,6 +121,7 @@ export async function loadBoardingContext(date?: string, session?: string): Prom
       room_number: r.room_number,
       capacity: r.capacity,
       gender: r.gender,
+      status: r.status,
       beds: beds
         .filter((b) => b.room_id === r.id)
         .map((b) => {
@@ -141,6 +142,7 @@ export async function loadBoardingContext(date?: string, session?: string): Prom
       name: d.name,
       capacity: d.capacity,
       gender: d.gender,
+      status: d.status,
       master_name: (d.school_users_master as unknown as { full_name: string } | null)?.full_name ?? null,
       assistant_name: (d.school_users_assistant as unknown as { full_name: string } | null)?.full_name ?? null,
       rooms: rooms.filter((r) => r.dormitory_id === d.id).map(mapRoom),
@@ -159,6 +161,7 @@ export async function loadBoardingContext(date?: string, session?: string): Prom
     description: h.description,
     gender: h.gender,
     capacity: h.capacity,
+    status: h.status,
     master_name: h.master_id ? (staffById.get(h.master_id) ?? null) : null,
     assistant_name: h.assistant_id ? (staffById.get(h.assistant_id) ?? null) : null,
     dormitories: dorms.filter((d) => d.house_id === h.id).map(mapDormitory),

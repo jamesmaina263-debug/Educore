@@ -206,6 +206,56 @@ This is exactly what attendance already does -- copy the pattern:
   (desk-initiated, same reasoning as boarding's `transferStudent`), and
   everything asset/procurement-related (`FormData`, desk/office workflows).
 
+- [x] **Discipline** -- the `FormData` decision from earlier is resolved:
+  inspecting every discipline form turned up **no file inputs at all** --
+  the module uses `FormData` purely as a form-submission convention (React
+  19's native `<form action={fn}>`), not because anything uploads a file.
+  That changes the risk profile completely from what was assumed earlier
+  in this doc.
+
+  New pattern, `src/lib/offline/form-data.ts`: `formDataToObject()` /
+  `objectToFormData()` convert a `FormData` submission to a plain string
+  map and back. This is necessary (not just convenient) because FormData
+  itself isn't structured-cloneable -- `idbPut()`-ing one directly throws
+  `DataCloneError` -- so every FormData-based mutation needs this
+  round-trip before it can be queued at all. `formDataToObject()` throws
+  loudly (rather than silently dropping the field) if it ever encounters a
+  `File`, so a future FormData-based module with a real file input can't
+  silently lose an attachment through this path -- it'll fail fast in
+  testing instead.
+
+  Queues: `createIncidentAction`, `addDisciplinaryActionAction`,
+  `createCaseAction`, `createWelfareConcernAction`,
+  `createSafeguardingReportAction`. All 5 share discipline's existing
+  central `runAction()` dispatcher (already used by every form in the
+  module) -- it now takes an optional `mutationType` string; passing one
+  makes that specific call offline-queueable, omitting it leaves the
+  original online-only behavior unchanged. `createSafeguardingReportAction`
+  is included deliberately, same reasoning as `logEmergency` in health: a
+  safeguarding concern should never be lost to a dropped connection, and
+  capturing it immediately (even offline) is more protective of the child
+  than risking it not getting filed at all.
+
+  Deliberately **not** queued: `updateCaseAction` / `updateWelfareConcernAction`
+  / `updateSafeguardingReportAction` -- status/follow-up updates, desk-based
+  like every other `update*` action excluded elsewhere in this rollout.
+
+- [x] **Staff attendance** -- queues `submitStaffAttendance` (typed-object,
+  same shape as student attendance's `submitAttendance`, right down to the
+  unique-constraint-on-first-marking pattern). `staff-register-form.tsx`
+  replicates `register-form.tsx`'s queued-marks-merge UX (a local `queued`
+  state, kept separate from `draft`, so a submitted-while-offline row can't
+  be double-submitted and disappears from "to mark" without yet claiming to
+  be server-confirmed).
+
+  Deliberately **not** queued: `editStaffAttendanceRecord` -- a correction,
+  desk follow-up like every other `edit`/`update` action excluded
+  elsewhere in this rollout.
+
+  Found via the same audit that ruled out transport (see below) -- worth
+  noting since it shows the audit process finds real wins, not just
+  exclusions.
+
 ## Next up
 
 Given "both spotty connections and full dead zones happen regularly," the
@@ -216,8 +266,26 @@ away from a router doing time-sensitive data entry:
 2. ~~Boarding roll call~~ -- done, see above.
 3. ~~Admissions~~ -- done (partial, by design), see above.
 4. ~~Library loans / inventory stock movements~~ -- done, see above.
-5. **Discipline** (next) -- needs the `FormData` adapter decision above
-   settled first.
+5. ~~Discipline~~ -- done, see above.
+6. **Transport -- audited, nothing to do here.** All 5 of its actions
+   (`createRouteAction`, `createVehicleAction`, `createStopAction`,
+   `assignTransportAction`, `endTransportAssignmentAction`) turned out to
+   be desk/office setup and assignment work -- defining routes, registering
+   vehicles (with license/insurance/inspection expiry fields, clearly
+   paperwork), assigning a student to a route. There's no daily trip log,
+   no "student boarded" tracking, no driver check-in -- nothing
+   representing actual in-transit field activity. Under the same criteria
+   applied to every module above, none of these qualify. **Don't re-audit
+   this one** unless a real trip-logging feature gets added later.
+7. ~~Staff attendance~~ -- done, see above (added alongside this entry).
+
+Not yet reviewed: academics, exams, finance, homework, payroll,
+performance, pt-meetings, reports, students, communication, campuses,
+settings, admin, ai, dashboard. **Exams marks entry** is the next
+plausible "field, time-pressured" candidate, but hasn't been audited the
+way the modules above were -- don't assume it fits the simple pattern
+until that's actually done. Transport looked promising from the module
+name too, until the audit showed otherwise.
 
 Each module should get its own review pass (this checklist, then a real
 device/offline test) rather than being batch-applied -- that's what keeps

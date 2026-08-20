@@ -186,6 +186,57 @@ describe("offline mutation queue", () => {
     expect(recordStockMovementAction).toHaveBeenCalledWith(input);
   });
 
+  it("reconstructs FormData correctly for discipline's FormData-based actions when replaying from the queue", async () => {
+    const createIncidentAction = vi.fn().mockResolvedValue({ success: true });
+    vi.doMock("@/app/(app)/discipline/actions", () => ({
+      createIncidentAction,
+      addDisciplinaryActionAction: vi.fn(),
+      createCaseAction: vi.fn(),
+      createWelfareConcernAction: vi.fn(),
+      createSafeguardingReportAction: vi.fn(),
+    }));
+    const { queueMod } = await freshModules();
+    // This is exactly what formDataToObject() produces from a real form
+    // submission -- see form-data.test.ts for that conversion's own tests.
+    const payload = {
+      student_id: "stu-1",
+      category: "moderate",
+      description: "Left class without permission",
+      visible_to_guardian: "on",
+    };
+    await queueMod.queueMutation("discipline", "createIncidentAction", payload);
+
+    const result = await queueMod.syncPendingMutations("discipline");
+
+    expect(result).toEqual({ synced: 1, failed: 0 });
+    const receivedFormData = createIncidentAction.mock.calls[0][0] as FormData;
+    expect(receivedFormData).toBeInstanceOf(FormData);
+    expect(receivedFormData.get("student_id")).toBe("stu-1");
+    expect(receivedFormData.get("category")).toBe("moderate");
+    expect(receivedFormData.get("description")).toBe("Left class without permission");
+    expect(receivedFormData.get("visible_to_guardian")).toBe("on");
+  });
+
+  it("syncs staff attendance the same way student attendance works, under its own module key", async () => {
+    const submitStaffAttendance = vi.fn().mockResolvedValue({ success: true });
+    vi.doMock("@/app/(app)/staff/actions", () => ({ submitStaffAttendance }));
+    const { queueMod } = await freshModules();
+    const input = { attendance_date: "2026-02-01", marks: [{ staff_id: "staff-1", status: "present" as const }] };
+    await queueMod.queueMutation("staff-attendance", "submitStaffAttendance", input);
+
+    // A concurrently-queued student attendance mutation shouldn't be
+    // touched by a staff-attendance-scoped sync -- confirms module scoping
+    // still holds now that there are two differently-shaped "attendance"
+    // mutation types in the same queue.
+    await queueMod.queueMutation("attendance", "submitAttendance", { stream_id: "s1", attendance_date: "2026-02-01", marks: [] });
+
+    const result = await queueMod.syncPendingMutations("staff-attendance");
+
+    expect(result).toEqual({ synced: 1, failed: 0 });
+    expect(submitStaffAttendance).toHaveBeenCalledWith(input);
+    expect(await queueMod.getPendingMutations("attendance")).toHaveLength(1);
+  });
+
   it("leaves a mutation untouched when no handler is registered for it", async () => {
     const { queueMod } = await freshModules();
     await queueMod.queueMutation("some-future-module", "someAction", { x: 1 });

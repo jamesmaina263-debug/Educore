@@ -15,6 +15,7 @@ program.
 | `RESEND_API_KEY` / `RESEND_FROM_ADDRESS` | Supabase Edge Function secrets | Email | Not set — no provider account yet |
 | `TWILIO_ACCOUNT_SID` / `TWILIO_AUTH_TOKEN` / `TWILIO_WHATSAPP_FROM` | Supabase Edge Function secrets | WhatsApp | Not set — no provider account yet |
 | `CRON_SECRET` | Vercel env vars | Authenticates Vercel Cron calls to `/api/cron/billing` | Unconfirmed — needs manual set (see billing session handover) |
+| `ALLOWED_ORIGINS` | Supabase Edge Function secrets | CORS allowlist for `request-otp`/`verify-otp`/`send-communication`/`api-v1` (comma-separated production/staging origins) | **Not yet set — must be set before launch, see pre-launch security audit report.** Unset means every cross-origin browser request is rejected (fails closed, not open), so the app-facing symptom of forgetting this is broken OTP login, not an open CORS hole. |
 | Database password | Supabase dashboard | Direct Postgres connections | Not used by the app (only via Supabase client libraries) |
 | GitHub PAT | Never stored | Repo clone/commit/push during agent sessions | Provided fresh each session, used once, never persisted |
 | `super_admin` account password (Jimmy) | Given in-chat only | Platform admin login | Not stored anywhere — user should rotate via password reset |
@@ -33,6 +34,12 @@ program.
 - **`CRON_SECRET`**: rotate every 12 months or on compromise — low blast
   radius (only triggers billing maintenance functions, which are themselves
   permission-gated).
+- **`ALLOWED_ORIGINS`**: not really a secret (it's a list of public domain
+  names, not a credential), so no rotation cadence applies — but it must be
+  kept in sync whenever the production or staging domain changes. A stale
+  entry just breaks OTP login/comms dispatch from that origin (fails closed);
+  a *missing* new-domain entry does the same. Update it as part of any domain
+  migration, not on a timer.
 - **Database password**: rotate every 12 months even though the app doesn't
   use it directly — anyone with it has unrestricted access.
 - **Staff/owner/super_admin account passwords**: user-driven, not a fixed

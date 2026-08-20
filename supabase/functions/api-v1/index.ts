@@ -19,7 +19,7 @@
 // running as service_role, writes to it).
 
 import { createClient } from "jsr:@supabase/supabase-js@2";
-import { corsHeaders } from "./cors.ts";
+import { buildCorsHeaders } from "./cors.ts";
 
 type Resource = "students" | "attendance" | "fees" | "exams";
 
@@ -31,6 +31,7 @@ const RESOURCE_SCOPES: Record<Resource, string> = {
 };
 
 Deno.serve(async (req) => {
+  const corsHeaders = buildCorsHeaders(req);
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
