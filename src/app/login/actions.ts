@@ -1,8 +1,9 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { setSchoolSlugCookie, clearSchoolSlugCookie } from "@/lib/school-slug-cookie";
 
 export type LoginState = { error: string | null };
@@ -16,6 +17,38 @@ export async function login(
 
   if (!email || !password) {
     return { error: "Email and password are required." };
+  }
+
+  // Abuse guard, same increment_and_check_rate_limit() primitive/pattern as
+  // signup (src/app/signup/actions.ts): this endpoint is public/unauthenticated
+  // and every failed attempt still costs a real Supabase Auth verification, so
+  // nothing previously stopped a script from credential-stuffing it. Two
+  // buckets, since either could be abused independently -- IP catches one
+  // source hammering many accounts, email catches many sources (e.g. a
+  // botnet) hammering one account.
+  const forwardedFor = (await headers()).get("x-forwarded-for");
+  const clientIp = forwardedFor?.split(",")[0]?.trim() || "unknown";
+  try {
+    const adminClient = createAdminClient();
+    const [{ data: withinIpLimit }, { data: withinEmailLimit }] = await Promise.all([
+      adminClient.rpc("increment_and_check_rate_limit", {
+        p_bucket: `login-ip:${clientIp}`,
+        p_max_events: 20,
+        p_window_seconds: 3600,
+      }),
+      adminClient.rpc("increment_and_check_rate_limit", {
+        p_bucket: `login-email:${email.toLowerCase()}`,
+        p_max_events: 10,
+        p_window_seconds: 3600,
+      }),
+    ]);
+    if (withinIpLimit === false || withinEmailLimit === false) {
+      return { error: "Too many login attempts. Please wait a while and try again." };
+    }
+  } catch {
+    // If the admin client isn't configured in this environment, fall through
+    // rather than blocking login entirely over a missing rate-limit layer --
+    // Supabase Auth's own project-level rate limiting is still in effect.
   }
 
   const supabase = await createClient();
