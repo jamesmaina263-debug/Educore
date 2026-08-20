@@ -10,8 +10,15 @@ import { EmploymentTab, type EmploymentData } from "./employment-tab";
 import { QualificationsTab, type QualificationRow } from "./qualifications-tab";
 import { LeaveTab, type LeaveTypeOption, type LeaveRequestRow } from "./leave-tab";
 
-export default async function StaffProfilePage({ params }: { params: Promise<{ id: string }> }) {
+export default async function StaffProfilePage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ tab?: string }>;
+}) {
   const { id } = await params;
+  const { tab } = await searchParams;
   const supabase = await createClient();
 
   const {
@@ -141,7 +148,7 @@ export default async function StaffProfilePage({ params }: { params: Promise<{ i
           <StatusBadge tone={staff.status === "active" ? "success" : "neutral"} label={staff.status} className="ml-auto" />
         </div>
 
-        <Tabs defaultValue="employment">
+        <Tabs defaultValue={tab === "leave" ? "leave" : "employment"}>
           <TabsList>
             <TabsTrigger value="employment">Employment</TabsTrigger>
             <TabsTrigger value="qualifications">Qualifications</TabsTrigger>

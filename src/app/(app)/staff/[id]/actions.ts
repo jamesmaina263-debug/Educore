@@ -60,6 +60,12 @@ export async function requestLeave(
   const { data: schoolId, error: schoolIdError } = await supabase.rpc("auth_school_id");
   if (schoolIdError || !schoolId) return { error: "Could not resolve your school." };
 
+  const { data: requester } = await supabase
+    .from("school_users")
+    .select("full_name")
+    .eq("id", staffId)
+    .maybeSingle();
+
   const { error } = await supabase.from("leave_requests").insert({
     school_id: schoolId,
     staff_id: staffId,
@@ -70,6 +76,18 @@ export async function requestLeave(
     reason: input.reason || null,
   });
   if (error) return { error: error.message };
+
+  // Best-effort: let everyone who can approve leave know a request is waiting on them.
+  // Never block the request itself on this — a notification failure shouldn't stop
+  // someone from submitting their leave request.
+  await supabase.rpc("notify_users_with_permission", {
+    p_permission_key: "staff.leave.approve",
+    p_subject: "Leave request needs approval",
+    p_body: `${requester?.full_name ?? "A staff member"} requested ${input.start_date} to ${input.end_date}.`,
+    p_action_url: `/staff/${staffId}?tab=leave`,
+    p_category: "other",
+  });
+
   revalidatePath(`/staff/${staffId}`);
   return { success: true as const };
 }
@@ -96,6 +114,19 @@ export async function respondToLeaveRequest(
     .update({ status, approved_by: me?.id ?? null, approved_at: new Date().toISOString() })
     .eq("id", requestId);
   if (error) return { error: error.message };
+
+  // Best-effort: tell the requester the outcome. Never block the approval on this.
+  await supabase.rpc("notify_school_user", {
+    p_recipient_id: staffId,
+    p_subject: status === "approved" ? "Leave request approved" : "Leave request rejected",
+    p_body:
+      status === "approved"
+        ? "Your leave request has been approved."
+        : "Your leave request was not approved.",
+    p_action_url: `/staff/${staffId}?tab=leave`,
+    p_category: "other",
+  });
+
   revalidatePath(`/staff/${staffId}`);
   return { success: true as const };
 }

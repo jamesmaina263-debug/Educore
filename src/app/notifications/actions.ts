@@ -66,6 +66,7 @@ export interface InAppNotification {
   subject: string | null;
   created_at: string;
   read_at: string | null;
+  action_url: string | null;
 }
 
 export async function getMyInAppNotifications(): Promise<
@@ -79,7 +80,7 @@ export async function getMyInAppNotifications(): Promise<
 
   const { data, error } = await supabase
     .from("notification_logs")
-    .select("id, body, subject, created_at, read_at")
+    .select("id, body, subject, created_at, read_at, action_url")
     .eq("channel", "in_app")
     .order("created_at", { ascending: false })
     .limit(20);
