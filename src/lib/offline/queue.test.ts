@@ -186,6 +186,37 @@ describe("offline mutation queue", () => {
     expect(recordStockMovementAction).toHaveBeenCalledWith(input);
   });
 
+  it("reconstructs FormData correctly for discipline's FormData-based actions when replaying from the queue", async () => {
+    const createIncidentAction = vi.fn().mockResolvedValue({ success: true });
+    vi.doMock("@/app/(app)/discipline/actions", () => ({
+      createIncidentAction,
+      addDisciplinaryActionAction: vi.fn(),
+      createCaseAction: vi.fn(),
+      createWelfareConcernAction: vi.fn(),
+      createSafeguardingReportAction: vi.fn(),
+    }));
+    const { queueMod } = await freshModules();
+    // This is exactly what formDataToObject() produces from a real form
+    // submission -- see form-data.test.ts for that conversion's own tests.
+    const payload = {
+      student_id: "stu-1",
+      category: "moderate",
+      description: "Left class without permission",
+      visible_to_guardian: "on",
+    };
+    await queueMod.queueMutation("discipline", "createIncidentAction", payload);
+
+    const result = await queueMod.syncPendingMutations("discipline");
+
+    expect(result).toEqual({ synced: 1, failed: 0 });
+    const receivedFormData = createIncidentAction.mock.calls[0][0] as FormData;
+    expect(receivedFormData).toBeInstanceOf(FormData);
+    expect(receivedFormData.get("student_id")).toBe("stu-1");
+    expect(receivedFormData.get("category")).toBe("moderate");
+    expect(receivedFormData.get("description")).toBe("Left class without permission");
+    expect(receivedFormData.get("visible_to_guardian")).toBe("on");
+  });
+
   it("leaves a mutation untouched when no handler is registered for it", async () => {
     const { queueMod } = await freshModules();
     await queueMod.queueMutation("some-future-module", "someAction", { x: 1 });

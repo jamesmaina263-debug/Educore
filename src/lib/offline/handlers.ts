@@ -24,6 +24,14 @@ import {
 } from "@/app/(app)/admissions/[id]/wizard/actions";
 import { issueLoanAction, issueLoanToStaffAction, returnLoanAction, markLoanLostOrDamagedAction } from "@/app/(app)/library/actions";
 import { recordStockMovementAction } from "@/app/(app)/inventory/actions";
+import {
+  createIncidentAction,
+  addDisciplinaryActionAction,
+  createCaseAction,
+  createWelfareConcernAction,
+  createSafeguardingReportAction,
+} from "@/app/(app)/discipline/actions";
+import { objectToFormData } from "./form-data";
 
 export type MutationResult = { error: string } | { success: true } | Record<string, unknown>;
 export type MutationHandler = (payload: never) => Promise<MutationResult>;
@@ -79,6 +87,20 @@ async function returnLoanMutation(payload: { id: string }): Promise<MutationResu
   return returnLoanAction(payload.id);
 }
 
+// Discipline's actions all take FormData rather than a typed object -- and
+// FormData itself can't be stored in IndexedDB (not structured-cloneable),
+// so the UI queues a plain string map instead (see ./form-data.ts) and
+// these adapters rebuild a real FormData from it before calling the actual
+// action, unchanged. Only safe because none of discipline's forms have a
+// file input -- verified by inspection, not assumed. If a future
+// FormData-based module has file inputs, don't reuse this pattern blindly;
+// see docs/OFFLINE_ROLLOUT.md.
+function formDataMutation(
+  action: (fd: FormData) => Promise<MutationResult>,
+): (payload: Record<string, string>) => Promise<MutationResult> {
+  return (payload) => action(objectToFormData(payload));
+}
+
 export const mutationHandlers: Record<string, MutationHandler> = {
   "attendance:submitAttendance": submitAttendance as MutationHandler,
 
@@ -127,4 +149,14 @@ export const mutationHandlers: Record<string, MutationHandler> = {
   // (desk cataloguing), createTransferAction (desk-initiated, like boarding's
   // transferStudent), everything asset/procurement-related (FormData, and
   // desk/office workflows). See docs/OFFLINE_ROLLOUT.md.
+
+  "discipline:createIncidentAction": formDataMutation(createIncidentAction) as MutationHandler,
+  "discipline:addDisciplinaryActionAction": formDataMutation(addDisciplinaryActionAction) as MutationHandler,
+  "discipline:createCaseAction": formDataMutation(createCaseAction) as MutationHandler,
+  "discipline:createWelfareConcernAction": formDataMutation(createWelfareConcernAction) as MutationHandler,
+  "discipline:createSafeguardingReportAction": formDataMutation(createSafeguardingReportAction) as MutationHandler,
+  // Deliberately not queued: updateCaseAction / updateWelfareConcernAction /
+  // updateSafeguardingReportAction -- status/follow-up updates, desk-based
+  // like updateReferralOutcome and updateIncidentStatus elsewhere in this
+  // rollout. See docs/OFFLINE_ROLLOUT.md.
 };
