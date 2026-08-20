@@ -14,7 +14,13 @@ import { useAppShellChrome } from "./app-shell-chrome-context";
 // position (and any section a user has open, e.g. Health) stable instead of snapping back to
 // the top of the nav list on every click. Breadcrumbs/userName/userRole/onSignOut come from
 // AppShellChromeContext, published per-page by the (now-passthrough) AppShell component.
-export function AppShellFrame({ children }: { children: ReactNode }) {
+export function AppShellFrame({
+  children,
+  schoolName,
+}: {
+  children: ReactNode;
+  schoolName?: string;
+}) {
   const { chrome } = useAppShellChrome();
 
   return (
@@ -25,7 +31,7 @@ export function AppShellFrame({ children }: { children: ReactNode }) {
             href="/dashboard"
             className="flex h-14 items-center border-b border-sidebar-border px-4 text-sm font-semibold text-sidebar-foreground transition-opacity hover:opacity-80"
           >
-            EduCore
+            {schoolName ?? "EduCore"}
           </Link>
           <SidebarNav />
         </aside>
@@ -36,6 +42,7 @@ export function AppShellFrame({ children }: { children: ReactNode }) {
             userName={chrome?.userName ?? ""}
             userRole={chrome?.userRole}
             onSignOut={chrome?.onSignOut ?? (() => {})}
+            schoolName={schoolName}
           />
           <main className="flex-1 overflow-y-auto p-6">{children}</main>
         </div>
