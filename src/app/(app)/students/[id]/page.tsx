@@ -10,6 +10,7 @@ import { DocumentsTab, type DocumentRow } from "@/components/documents-tab";
 import { MedicalTab } from "./medical-tab";
 import { CertificatesTab, type CertificateRow } from "./certificates-tab";
 import { DisciplineTab, type DisciplineRow } from "./discipline-tab";
+import { StudentStatusControl } from "@/components/students/student-status-control";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 
@@ -186,6 +187,9 @@ export default async function StudentProfilePage({
             label={student.status}
             className="ml-auto"
           />
+          {canManageStudents && (
+            <StudentStatusControl studentId={id} currentStatus={student.status} />
+          )}
           <Button asChild variant="outline" size="sm">
             <Link href={`/students/${id}/id-card`} target="_blank">
               Print ID card

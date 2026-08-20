@@ -9,6 +9,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { StatusBadge } from "@/components/status-badge";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
+import { useOfflineSync } from "@/hooks/use-offline-sync";
+import { queueMutation } from "@/lib/offline/queue";
+import { HealthOfflineBanner } from "./offline-banner";
 import type { StudentOption } from "./student-picker";
 
 export interface EmergencyRow {
@@ -38,6 +41,7 @@ export function EmergenciesSection({
   canWrite: boolean;
 }) {
   const router = useRouter();
+  const { online, pendingCount, failed, syncing, sync, discard } = useOfflineSync("health");
   const [open, setOpen] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -57,11 +61,15 @@ export function EmergenciesSection({
     }
     setPending(true);
     setError(null);
-    const result = await logEmergency({
-      ...form,
-      action_taken: form.action_taken || undefined,
-      hospital_name: form.hospital_name || undefined,
-    });
+    const input = { ...form, action_taken: form.action_taken || undefined, hospital_name: form.hospital_name || undefined };
+    if (!online) {
+      await queueMutation("health", "logEmergency", input);
+      setPending(false);
+      setOpen(false);
+      setForm({ student_id: "", description: "", severity: "moderate", action_taken: "", hospital_name: "", guardian_notified: false });
+      return;
+    }
+    const result = await logEmergency(input);
     setPending(false);
     if ("error" in result) return setError(result.error);
     setOpen(false);
@@ -71,6 +79,7 @@ export function EmergenciesSection({
 
   return (
     <div className="flex flex-col gap-4">
+      <HealthOfflineBanner online={online} pendingCount={pendingCount} failed={failed} syncing={syncing} sync={sync} discard={discard} />
       {canWrite && (
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild>

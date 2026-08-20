@@ -110,3 +110,28 @@ export async function addGuardian(
 
   return linkGuardian(studentId, guardian.id, input.relationship, input.primary_contact);
 }
+
+export type StudentStatus = "active" | "withdrawn" | "transferred" | "graduated";
+
+// Withdraw/transfer/graduate a student, or reactivate one. The RPC (not a plain
+// .update()) is what actually ends any active transport assignment / boarding
+// allocation when a student leaves — see set_student_status in the migration
+// for why that has to happen server-side and atomically with the status change.
+export async function updateStudentStatus(
+  studentId: string,
+  status: StudentStatus,
+  reason?: string,
+): Promise<{ error: string } | { success: true }> {
+  const supabase = await createClient();
+
+  const { error } = await supabase.rpc("set_student_status", {
+    p_student_id: studentId,
+    p_status: status,
+    p_reason: reason?.trim() || null,
+  });
+  if (error) return { error: error.message };
+
+  revalidatePath(`/students/${studentId}`);
+  revalidatePath("/students", "layout");
+  return { success: true as const };
+}
