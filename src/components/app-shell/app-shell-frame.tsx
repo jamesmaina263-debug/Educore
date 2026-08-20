@@ -5,6 +5,7 @@ import { SidebarNav } from "./sidebar-nav";
 import { Topbar } from "./topbar";
 import { CommandPalette } from "./command-palette";
 import { CommandPaletteProvider } from "./command-palette-context";
+import { GoToShortcuts } from "./go-to-shortcuts";
 import { useAppShellChrome } from "./app-shell-chrome-context";
 
 // Renders the sidebar + topbar + main frame exactly once, at the (app) layout level, so it
@@ -36,6 +37,7 @@ export function AppShellFrame({ children }: { children: ReactNode }) {
         </div>
       </div>
       <CommandPalette />
+      <GoToShortcuts />
     </CommandPaletteProvider>
   );
 }
