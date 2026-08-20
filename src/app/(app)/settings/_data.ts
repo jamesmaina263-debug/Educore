@@ -5,6 +5,7 @@ import type { GeneralSettingsData } from "@/components/settings/general-panel";
 import type { StaffRow, RoleOption } from "@/components/settings/staff-roles-table";
 import type { BillingData } from "@/components/settings/billing-panel";
 import type { ApiKeyRow } from "@/components/settings/api-keys-panel";
+import type { LeaveTypeRow } from "@/components/settings/leave-types-panel";
 import { getMyNotificationPreferences, type PreferenceRow } from "@/app/notifications/actions";
 
 export interface SettingsContext {
@@ -22,6 +23,7 @@ export interface SettingsContext {
   canReadStaff: boolean;
   staff: StaffRow[];
   roles: RoleOption[];
+  leaveTypes: LeaveTypeRow[];
   billingData: BillingData | null;
   preferenceRows: PreferenceRow[];
   apiKeyRows: ApiKeyRow[];
@@ -75,13 +77,16 @@ export async function loadSettingsContext(): Promise<SettingsContext> {
     kra_pin: string | null;
   } | null;
 
-  const [{ data: staffRows }, { data: roleRows }] = await Promise.all([
+  const [{ data: staffRows }, { data: roleRows }, { data: leaveTypeRows }] = await Promise.all([
     supabase
       .from("school_users")
       .select("id, full_name, email, status, role_id, must_change_password, roles(name, display_name)")
       .order("full_name"),
     supabase.from("roles").select("id, name, display_name").order("display_name"),
+    supabase.from("leave_types").select("id, name, days_per_year").order("name"),
   ]);
+
+  const leaveTypes: LeaveTypeRow[] = leaveTypeRows ?? [];
 
   const staff: StaffRow[] = (staffRows ?? []).map((s) => {
     const role = s.roles as unknown as { name: string; display_name: string } | null;
@@ -187,6 +192,7 @@ export async function loadSettingsContext(): Promise<SettingsContext> {
     canReadStaff: canReadStaff === true,
     staff,
     roles,
+    leaveTypes,
     billingData,
     preferenceRows,
     apiKeyRows,

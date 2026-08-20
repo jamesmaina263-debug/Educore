@@ -231,3 +231,71 @@ export async function revokeSchoolApiKey(id: string): Promise<ActionResult> {
   revalidatePath("/settings", "layout");
   return { success: true };
 }
+
+// Leave Types (Settings > Leave Types). leave_types is school-scoped and RLS-gated on
+// staff.manage for writes — see the phase3 staff-directory migration and the
+// seed_default_leave_types migration for why every school starts with a default set.
+export async function createLeaveType(input: { name: string; days_per_year: number }): Promise<ActionResult> {
+  const name = input.name.trim();
+  if (!name) return { error: "Name is required." };
+  if (!Number.isFinite(input.days_per_year) || input.days_per_year < 0) {
+    return { error: "Days per year must be a non-negative number." };
+  }
+
+  const supabase = await createClient();
+  const { data: schoolId, error: schoolIdError } = await supabase.rpc("auth_school_id");
+  if (schoolIdError || !schoolId) return { error: "Could not resolve your school." };
+
+  const { error } = await supabase.from("leave_types").insert({
+    school_id: schoolId,
+    name,
+    days_per_year: input.days_per_year,
+  });
+  if (error) {
+    if (error.code === "23505") return { error: "A leave type with that name already exists." };
+    return { error: error.message };
+  }
+  revalidatePath("/settings", "layout");
+  revalidatePath("/staff", "layout");
+  return { success: true };
+}
+
+export async function updateLeaveType(
+  id: string,
+  input: { name: string; days_per_year: number },
+): Promise<ActionResult> {
+  const name = input.name.trim();
+  if (!name) return { error: "Name is required." };
+  if (!Number.isFinite(input.days_per_year) || input.days_per_year < 0) {
+    return { error: "Days per year must be a non-negative number." };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("leave_types")
+    .update({ name, days_per_year: input.days_per_year })
+    .eq("id", id);
+  if (error) {
+    if (error.code === "23505") return { error: "A leave type with that name already exists." };
+    return { error: error.message };
+  }
+  revalidatePath("/settings", "layout");
+  revalidatePath("/staff", "layout");
+  return { success: true };
+}
+
+export async function deleteLeaveType(id: string): Promise<ActionResult> {
+  const supabase = await createClient();
+  const { error } = await supabase.from("leave_types").delete().eq("id", id);
+  if (error) {
+    // leave_requests.leave_type_id has no ON DELETE clause (default RESTRICT) — a type
+    // that's ever been used on a request can't be dropped, only renamed/edited.
+    if (error.code === "23503") {
+      return { error: "This leave type has requests recorded against it and can't be deleted. You can rename it instead." };
+    }
+    return { error: error.message };
+  }
+  revalidatePath("/settings", "layout");
+  revalidatePath("/staff", "layout");
+  return { success: true };
+}
