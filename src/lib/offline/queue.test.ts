@@ -156,6 +156,36 @@ describe("offline mutation queue", () => {
     expect(saveHealthProfileForApplication).toHaveBeenCalledWith("app-1", healthInput);
   });
 
+  it("adapts returnLoanAction's single positional-arg signature correctly when replaying from the queue", async () => {
+    const returnLoanAction = vi.fn().mockResolvedValue({ success: true });
+    vi.doMock("@/app/(app)/library/actions", () => ({
+      issueLoanAction: vi.fn(),
+      issueLoanToStaffAction: vi.fn(),
+      returnLoanAction,
+      markLoanLostOrDamagedAction: vi.fn(),
+    }));
+    const { queueMod } = await freshModules();
+    await queueMod.queueMutation("library", "returnLoanAction", { id: "loan-1" });
+
+    const result = await queueMod.syncPendingMutations("library");
+
+    expect(result).toEqual({ synced: 1, failed: 0 });
+    expect(returnLoanAction).toHaveBeenCalledWith("loan-1");
+  });
+
+  it("syncs a typed-object inventory mutation with no adapter needed", async () => {
+    const recordStockMovementAction = vi.fn().mockResolvedValue({ success: true });
+    vi.doMock("@/app/(app)/inventory/actions", () => ({ recordStockMovementAction }));
+    const { queueMod } = await freshModules();
+    const input = { item_id: "item-1", movement_type: "out" as const, quantity: 5, reason: "Classroom use" };
+    await queueMod.queueMutation("inventory", "recordStockMovementAction", input);
+
+    const result = await queueMod.syncPendingMutations("inventory");
+
+    expect(result).toEqual({ synced: 1, failed: 0 });
+    expect(recordStockMovementAction).toHaveBeenCalledWith(input);
+  });
+
   it("leaves a mutation untouched when no handler is registered for it", async () => {
     const { queueMod } = await freshModules();
     await queueMod.queueMutation("some-future-module", "someAction", { x: 1 });

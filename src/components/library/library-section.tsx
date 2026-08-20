@@ -8,6 +8,9 @@ import { Label } from "@/components/ui/label";
 import { StatusBadge } from "@/components/status-badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
+import { useOfflineSync } from "@/hooks/use-offline-sync";
+import { queueMutation } from "@/lib/offline/queue";
+import { LibraryOfflineBanner } from "./offline-banner";
 import {
   createLibraryItemAction,
   issueLoanAction,
@@ -103,6 +106,7 @@ export function LibrarySection({
   canWrite: boolean;
 }) {
   const router = useRouter();
+  const { online, pendingCount, failed, syncing, sync, discard } = useOfflineSync("library");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -165,6 +169,19 @@ export function LibrarySection({
   async function handleIssue() {
     setPending(true);
     setError(null);
+    if (!online) {
+      const type = borrowerType === "student" ? "issueLoanAction" : "issueLoanToStaffAction";
+      const payload =
+        borrowerType === "student"
+          ? { library_item_id: issueItemId, student_id: issueBorrowerId, due_date: dueDate }
+          : { library_item_id: issueItemId, staff_id: issueBorrowerId, due_date: dueDate };
+      await queueMutation("library", type, payload);
+      setPending(false);
+      setIssueOpen(false);
+      setIssueItemId("");
+      setIssueBorrowerId("");
+      return;
+    }
     const result =
       borrowerType === "student"
         ? await issueLoanAction({ library_item_id: issueItemId, student_id: issueBorrowerId, due_date: dueDate })
@@ -179,6 +196,11 @@ export function LibrarySection({
 
   async function handleReturn(id: string) {
     setPending(true);
+    if (!online) {
+      await queueMutation("library", "returnLoanAction", { id });
+      setPending(false);
+      return;
+    }
     const result = await returnLoanAction(id);
     setPending(false);
     if ("error" in result) return setError(result.error);
@@ -187,7 +209,16 @@ export function LibrarySection({
 
   async function handleMarkLostOrDamaged(loan: LoanRow, status: "lost" | "damaged") {
     setPending(true);
-    const result = await markLoanLostOrDamagedAction({ loan_id: loan.id, item_id: loan.library_item_id, status });
+    const input = { loan_id: loan.id, item_id: loan.library_item_id, status };
+    if (!online) {
+      // A "lost" mark also deducts a copy from the collection permanently --
+      // that adjustment only happens once this replays. The item's copy
+      // count shown right now won't reflect it until then.
+      await queueMutation("library", "markLoanLostOrDamagedAction", input);
+      setPending(false);
+      return;
+    }
+    const result = await markLoanLostOrDamagedAction(input);
     setPending(false);
     if ("error" in result) return setError(result.error);
     router.refresh();
@@ -211,6 +242,7 @@ export function LibrarySection({
 
   return (
     <div className="flex flex-col gap-4">
+      <LibraryOfflineBanner online={online} pendingCount={pendingCount} failed={failed} syncing={syncing} sync={sync} discard={discard} />
       {error && <p className="text-sm text-danger">{error}</p>}
 
       {section === "catalogue" && (

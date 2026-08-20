@@ -22,6 +22,8 @@ import {
   type ApplicantIdentityInput,
   type HealthProfileInput,
 } from "@/app/(app)/admissions/[id]/wizard/actions";
+import { issueLoanAction, issueLoanToStaffAction, returnLoanAction, markLoanLostOrDamagedAction } from "@/app/(app)/library/actions";
+import { recordStockMovementAction } from "@/app/(app)/inventory/actions";
 
 export type MutationResult = { error: string } | { success: true } | Record<string, unknown>;
 export type MutationHandler = (payload: never) => Promise<MutationResult>;
@@ -71,6 +73,12 @@ async function saveHealthProfileForApplicationMutation(payload: {
   return saveHealthProfileForApplication(payload.applicationId, payload.input);
 }
 
+// returnLoanAction(id) takes a bare string, not an object -- same adapter
+// pattern as above, just for a single positional arg.
+async function returnLoanMutation(payload: { id: string }): Promise<MutationResult> {
+  return returnLoanAction(payload.id);
+}
+
 export const mutationHandlers: Record<string, MutationHandler> = {
   "attendance:submitAttendance": submitAttendance as MutationHandler,
 
@@ -104,4 +112,19 @@ export const mutationHandlers: Record<string, MutationHandler> = {
   "admissions:updateAdmissionDetails": updateAdmissionDetailsMutation as MutationHandler,
   "admissions:updateApplicantIdentity": updateApplicantIdentityMutation as MutationHandler,
   "admissions:saveHealthProfileForApplication": saveHealthProfileForApplicationMutation as MutationHandler,
+
+  "library:issueLoanAction": issueLoanAction as MutationHandler,
+  "library:issueLoanToStaffAction": issueLoanToStaffAction as MutationHandler,
+  "library:returnLoanAction": returnLoanMutation as MutationHandler,
+  "library:markLoanLostOrDamagedAction": markLoanLostOrDamagedAction as MutationHandler,
+  // Deliberately not queued: createLibraryItemAction / adjustCopiesAction
+  // (desk cataloguing), createShelfAction / createReservationAction /
+  // createFineAction (FormData), cancelReservationAction /
+  // resolveFineAction (desk follow-up). See docs/OFFLINE_ROLLOUT.md.
+
+  "inventory:recordStockMovementAction": recordStockMovementAction as MutationHandler,
+  // Deliberately not queued: createInventoryItemAction / createCategoryAction
+  // (desk cataloguing), createTransferAction (desk-initiated, like boarding's
+  // transferStudent), everything asset/procurement-related (FormData, and
+  // desk/office workflows). See docs/OFFLINE_ROLLOUT.md.
 };
