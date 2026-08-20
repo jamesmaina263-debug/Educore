@@ -33,7 +33,7 @@ const STATUS_TONE: Record<string, "neutral" | "success" | "warning" | "danger"> 
   cancelled: "danger",
 };
 
-export function BillingPanel({ data }: { data: BillingData }) {
+export function BillingPanel({ data, canManage }: { data: BillingData; canManage: boolean }) {
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [confirming, setConfirming] = useState(false);
@@ -75,7 +75,7 @@ export function BillingPanel({ data }: { data: BillingData }) {
         )}
       </div>
 
-      {data.status && !["cancelled"].includes(data.status) && (
+      {canManage && data.status && !["cancelled"].includes(data.status) && (
         <div>
           {!confirming ? (
             <Button variant="outline" onClick={() => setConfirming(true)}>

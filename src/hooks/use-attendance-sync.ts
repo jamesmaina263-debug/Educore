@@ -2,12 +2,30 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useOnlineStatus } from "@/hooks/use-online-status";
-import { getPendingAttendanceSubmissions, syncPendingAttendance } from "@/lib/offline/attendance-queue";
+import {
+  getPendingAttendanceSubmissions,
+  syncPendingAttendance,
+  discardFailedSubmission,
+  type QueuedAttendanceSubmission,
+} from "@/lib/offline/attendance-queue";
 
 export function useAttendanceSync() {
   const online = useOnlineStatus();
   const [pendingCount, setPendingCount] = useState(0);
+  const [failed, setFailed] = useState<QueuedAttendanceSubmission[]>([]);
   const [syncing, setSyncing] = useState(false);
+
+  const refreshCounts = useCallback(() => {
+    return getPendingAttendanceSubmissions()
+      .then((pending) => {
+        setPendingCount(pending.filter((p) => p.status !== "failed").length);
+        setFailed(pending.filter((p) => p.status === "failed"));
+      })
+      .catch(() => {
+        setPendingCount(0);
+        setFailed([]);
+      });
+  }, []);
 
   // Manual "Retry now" button calls this directly from a click handler --
   // setState there is a normal user-triggered update, not subject to the
@@ -16,25 +34,31 @@ export function useAttendanceSync() {
     setSyncing(true);
     syncPendingAttendance().finally(() => {
       setSyncing(false);
-      getPendingAttendanceSubmissions()
-        .then((pending) => setPendingCount(pending.length))
-        .catch(() => setPendingCount(0));
+      refreshCounts();
     });
-  }, []);
+  }, [refreshCounts]);
 
-  // Mount: read the current queue length once. getPendingAttendanceSubmissions
-  // is a plain imported function with no access to this hook's state; the
-  // setState call lives inside its .then()/.catch() callback, which runs as
-  // a reaction to the promise resolving -- not synchronously within the
-  // effect's own execution.
+  const discard = useCallback(
+    (id: string) => {
+      discardFailedSubmission(id).finally(() => refreshCounts());
+    },
+    [refreshCounts],
+  );
+
+  // Mount: read the current queue length once.
   useEffect(() => {
     let cancelled = false;
     getPendingAttendanceSubmissions()
       .then((pending) => {
-        if (!cancelled) setPendingCount(pending.length);
+        if (cancelled) return;
+        setPendingCount(pending.filter((p) => p.status !== "failed").length);
+        setFailed(pending.filter((p) => p.status === "failed"));
       })
       .catch(() => {
-        if (!cancelled) setPendingCount(0);
+        if (!cancelled) {
+          setPendingCount(0);
+          setFailed([]);
+        }
       });
     return () => {
       cancelled = true;
@@ -49,19 +73,13 @@ export function useAttendanceSync() {
     let cancelled = false;
     syncPendingAttendance().finally(() => {
       if (cancelled) return;
-      getPendingAttendanceSubmissions()
-        .then((pending) => {
-          if (!cancelled) setPendingCount(pending.length);
-        })
-        .catch(() => {
-          if (!cancelled) setPendingCount(0);
-        });
+      refreshCounts();
     });
     return () => {
       cancelled = true;
     };
-  }, [online]);
+  }, [online, refreshCounts]);
 
-  return { online, pendingCount, syncing, sync };
+  return { online, pendingCount, failed, syncing, sync, discard };
 }
 

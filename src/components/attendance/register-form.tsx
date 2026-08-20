@@ -43,7 +43,7 @@ export function RegisterForm({
   canMark: boolean;
 }) {
   const router = useRouter();
-  const { online, pendingCount, syncing, sync } = useAttendanceSync();
+  const { online, pendingCount, failed, syncing, sync, discard } = useAttendanceSync();
   const [draft, setDraft] = useState<Record<string, Mark>>(
     Object.fromEntries(roster.filter((r) => !r.existing).map((r) => [r.student_id, "present" as Mark])),
   );
@@ -166,6 +166,25 @@ export function RegisterForm({
               Retry now
             </Button>
           )}
+        </div>
+      )}
+      {failed.length > 0 && (
+        <div className="panel flex flex-col gap-2 border-danger/40 bg-danger/10 px-4 py-2.5 text-sm">
+          <p className="font-medium text-danger">
+            {failed.length} offline submission{failed.length === 1 ? "" : "s"} couldn&apos;t sync and won&apos;t
+            succeed by retrying — usually because someone else already marked that class for that day.
+          </p>
+          {failed.map((f) => (
+            <div key={f.id} className="flex items-center justify-between gap-2 rounded-md bg-background/60 px-3 py-1.5">
+              <span className="text-muted-foreground">
+                {f.attendance_date} · {f.marks.length} learner{f.marks.length === 1 ? "" : "s"}
+                {f.last_error ? ` — ${f.last_error}` : ""}
+              </span>
+              <Button size="sm" variant="ghost" onClick={() => discard(f.id)}>
+                Discard
+              </Button>
+            </div>
+          ))}
         </div>
       )}
 

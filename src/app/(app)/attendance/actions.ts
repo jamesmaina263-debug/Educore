@@ -71,7 +71,7 @@ export async function editAttendanceRecord(
   // day-to-day ability to fix a mistake. previous_status preserves what the
   // record said before this edit, so a later Reject can actually restore it
   // instead of just leaving the disputed value in place with a label.
-  const { error } = await supabase
+  const { data: updated, error } = await supabase
     .from("student_attendance")
     .update({
       status,
@@ -82,8 +82,12 @@ export async function editAttendanceRecord(
       requested_by: me?.id ?? null,
       previous_status: current.status,
     })
-    .eq("id", id);
+    .eq("id", id)
+    .select("id");
   if (error) return { error: error.message };
+  if (!updated || updated.length === 0) {
+    return { error: "You don't have permission to edit this record." };
+  }
   revalidatePath("/attendance");
   return { success: true };
 }
@@ -116,12 +120,21 @@ export async function reviewAttendanceCorrection(id: string, decision: "approved
     }
   }
 
-  const { error } = await supabase
+  // .select() on the update is required here, not cosmetic: RLS blocks an
+  // unauthorized UPDATE by matching zero rows, not by raising an error --
+  // a class teacher (approve_correction without mark_any) trying to review
+  // a correction outside their own stream would otherwise get {error: null}
+  // back and the caller would report success even though nothing changed.
+  const { data: updated, error } = await supabase
     .from("student_attendance")
     .update(update)
     .eq("id", id)
-    .eq("correction_status", "pending");
+    .eq("correction_status", "pending")
+    .select("id");
   if (error) return { error: error.message };
+  if (!updated || updated.length === 0) {
+    return { error: "You don't have permission to review this correction, or it was already reviewed." };
+  }
   revalidatePath("/attendance");
   return { success: true };
 }

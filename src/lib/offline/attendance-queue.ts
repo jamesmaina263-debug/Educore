@@ -28,6 +28,16 @@ export async function getPendingAttendanceSubmissions(): Promise<QueuedAttendanc
   return idbGetAll<QueuedAttendanceSubmission>(STORES.pendingAttendance);
 }
 
+// A "failed" item (e.g. someone else already marked this stream/date while
+// this device was offline, so the unique constraint rejects the insert)
+// can never succeed by retrying -- retry just fails identically forever.
+// This removes it from the local queue so the teacher can stop staring at
+// a permanently-stuck banner; if the marks still need correcting, that's
+// a normal edit through the register once the confirmed data is visible.
+export async function discardFailedSubmission(id: string): Promise<void> {
+  await idbDelete(STORES.pendingAttendance, id);
+}
+
 /**
  * Flushes every queued submission to the server, in the order queued.
  * Each success removes that record from the queue immediately, so a

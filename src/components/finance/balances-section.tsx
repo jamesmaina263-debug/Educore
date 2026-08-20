@@ -9,7 +9,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
-import { recordPaymentAction } from "@/app/(app)/finance/actions";
+import { recordPaymentAction, createInvoiceForStudentAction } from "@/app/(app)/finance/actions";
+import type { StudentOption } from "@/components/finance/waivers-section";
 
 export interface BalanceRow {
   student_id: string;
@@ -26,7 +27,17 @@ export interface BalanceRow {
 
 type Method = "mpesa" | "cash" | "bank" | "cheque" | "card" | "other";
 
-export function BalancesSection({ rows, canWrite }: { rows: BalanceRow[]; canWrite: boolean }) {
+export function BalancesSection({
+  rows,
+  canWrite,
+  students,
+  activeTermId,
+}: {
+  rows: BalanceRow[];
+  canWrite: boolean;
+  students: StudentOption[];
+  activeTermId: string | null;
+}) {
   const router = useRouter();
   const [query, setQuery] = useState("");
   const [target, setTarget] = useState<BalanceRow | null>(null);
@@ -38,6 +49,23 @@ export function BalancesSection({ rows, canWrite }: { rows: BalanceRow[]; canWri
   const [phone, setPhone] = useState("");
   const [purpose, setPurpose] = useState("");
   const [notes, setNotes] = useState("");
+
+  const [genOpen, setGenOpen] = useState(false);
+  const [genStudentId, setGenStudentId] = useState("");
+  const [genPending, setGenPending] = useState(false);
+  const [genError, setGenError] = useState<string | null>(null);
+
+  async function handleGenerateInvoice() {
+    if (!genStudentId || !activeTermId) return;
+    setGenPending(true);
+    setGenError(null);
+    const result = await createInvoiceForStudentAction(genStudentId, activeTermId);
+    setGenPending(false);
+    if ("error" in result) return setGenError(result.error);
+    setGenOpen(false);
+    setGenStudentId("");
+    router.refresh();
+  }
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -74,22 +102,81 @@ export function BalancesSection({ rows, canWrite }: { rows: BalanceRow[]; canWri
     router.refresh();
   }
 
+  const genDialog = (
+    <Dialog open={genOpen} onOpenChange={(o) => { setGenOpen(o); if (!o) { setGenStudentId(""); setGenError(null); } }}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Generate invoice</DialogTitle>
+        </DialogHeader>
+        <div className="flex flex-col gap-3">
+          {activeTermId ? (
+            <div className="space-y-1.5">
+              <Label>Student</Label>
+              <Select value={genStudentId} onValueChange={setGenStudentId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a student" />
+                </SelectTrigger>
+                <SelectContent>
+                  {students.map((s) => (
+                    <SelectItem key={s.id} value={s.id}>
+                      {s.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Applies the active term&apos;s fee structure. If this student already has an invoice for the
+                active term, nothing new is created — you&apos;ll just see the existing one.
+              </p>
+            </div>
+          ) : (
+            <p className="text-sm text-danger">No active term — set one in Academics before generating invoices.</p>
+          )}
+          {genError && <p className="text-sm text-danger">{genError}</p>}
+        </div>
+        <DialogFooter>
+          <Button onClick={handleGenerateInvoice} disabled={genPending || !genStudentId || !activeTermId}>
+            {genPending ? "Generating…" : "Generate invoice"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+
   if (rows.length === 0) {
     return (
-      <div className="panel border-dashed p-10 text-center text-sm text-muted-foreground">
-        No invoices generated yet — student accounts appear once invoices exist.
+      <div className="flex flex-col gap-4">
+        <div className="panel border-dashed p-10 text-center text-sm text-muted-foreground">
+          No invoices generated yet — student accounts appear once invoices exist.
+          {canWrite && (
+            <div className="mt-4">
+              <Button variant="secondary" onClick={() => setGenOpen(true)}>
+                Generate invoice for a student
+              </Button>
+            </div>
+          )}
+        </div>
+        {genDialog}
       </div>
     );
   }
 
   return (
     <div className="flex flex-col gap-4">
-      <Input
-        placeholder="Search by name, admission number, or payment reference…"
-        value={query}
-        onChange={(e) => setQuery(e.target.value)}
-        className="max-w-sm"
-      />
+      <div className="flex items-center justify-between gap-3">
+        <Input
+          placeholder="Search by name, admission number, or payment reference…"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          className="max-w-sm"
+        />
+        {canWrite && (
+          <Button variant="secondary" onClick={() => setGenOpen(true)}>
+            Generate invoice
+          </Button>
+        )}
+      </div>
+      {genDialog}
 
       <div className="panel overflow-x-auto">
         <Table className="table-dense">
