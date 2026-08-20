@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Bell } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -23,11 +24,13 @@ function timeAgo(iso: string): string {
 }
 
 export function NotificationBell() {
+  const router = useRouter();
   const [notifications, setNotifications] = useState<InAppNotification[]>([]);
   const [open, setOpen] = useState(false);
   const [loaded, setLoaded] = useState(false);
 
   const unreadCount = notifications.filter((n) => !n.read_at).length;
+  const actionRequiredCount = notifications.filter((n) => !n.read_at && n.action_url).length;
 
   async function load() {
     const result = await getMyInAppNotifications();
@@ -57,9 +60,14 @@ export function NotificationBell() {
   }
 
   async function handleClick(n: InAppNotification) {
-    if (n.read_at) return;
-    setNotifications((prev) => prev.map((x) => (x.id === n.id ? { ...x, read_at: new Date().toISOString() } : x)));
-    await markNotificationReadAction(n.id);
+    if (!n.read_at) {
+      setNotifications((prev) => prev.map((x) => (x.id === n.id ? { ...x, read_at: new Date().toISOString() } : x)));
+      await markNotificationReadAction(n.id);
+    }
+    if (n.action_url) {
+      setOpen(false);
+      router.push(n.action_url);
+    }
   }
 
   return (
@@ -68,7 +76,9 @@ export function NotificationBell() {
         <Button variant="ghost" size="icon" aria-label="Notifications" className="relative">
           <Bell className="size-4.5" />
           {unreadCount > 0 && (
-            <span className="absolute right-1 top-1 flex size-2 rounded-full bg-danger" />
+            <span
+              className={`absolute right-1 top-1 flex size-2 rounded-full ${actionRequiredCount > 0 ? "bg-danger" : "bg-primary"}`}
+            />
           )}
         </Button>
       </DropdownMenuTrigger>
@@ -90,7 +100,16 @@ export function NotificationBell() {
                 onClick={() => handleClick(n)}
                 className={`flex w-full flex-col gap-0.5 border-b border-border px-3 py-2.5 text-left last:border-0 hover:bg-muted ${!n.read_at ? "bg-primary/5" : ""}`}
               >
-                {n.subject && <span className="text-[0.75rem] font-medium">{n.subject}</span>}
+                {(n.subject || (n.action_url && !n.read_at)) && (
+                  <span className="flex items-center gap-1.5">
+                    {n.subject && <span className="text-[0.75rem] font-medium">{n.subject}</span>}
+                    {n.action_url && !n.read_at && (
+                      <span className="rounded-full bg-danger/10 px-1.5 py-0.5 text-[0.625rem] font-medium text-danger">
+                        Action required
+                      </span>
+                    )}
+                  </span>
+                )}
                 <span className="text-[0.8125rem] text-foreground/90">{n.body}</span>
                 <span className="text-[0.6875rem] text-muted-foreground">{timeAgo(n.created_at)}</span>
               </button>
