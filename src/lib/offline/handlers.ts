@@ -13,6 +13,7 @@
 
 import { submitAttendance } from "@/app/(app)/attendance/actions";
 import { checkInStudent, checkOutStudent, administerMedication, logEmergency, createReferral } from "@/app/(app)/health/actions";
+import { submitRollCall, logIncident } from "@/app/(app)/boarding/actions";
 
 export type MutationResult = { error: string } | { success: true } | Record<string, unknown>;
 export type MutationHandler = (payload: never) => Promise<MutationResult>;
@@ -30,6 +31,15 @@ async function checkOutStudentMutation(payload: {
   return checkOutStudent(payload.visitId, payload.outcome, payload.notes);
 }
 
+// Same adapter pattern for submitRollCall(date, session, entries).
+async function submitRollCallMutation(payload: {
+  date: string;
+  session: "boarding_am" | "boarding_pm";
+  entries: { student_id: string; stream_id: string; status: "present" | "absent" | "sick_bay" | "excused" | "late" }[];
+}): Promise<MutationResult> {
+  return submitRollCall(payload.date, payload.session, payload.entries);
+}
+
 export const mutationHandlers: Record<string, MutationHandler> = {
   "attendance:submitAttendance": submitAttendance as MutationHandler,
 
@@ -41,5 +51,13 @@ export const mutationHandlers: Record<string, MutationHandler> = {
   // Deliberately not queued: updateReferralOutcome / sendHealthAlertAction
   // (delayed guardian notification timing needs its own UX, not silent
   // replay) / medical-inventory admin actions (desk-based, not field work).
+  // See docs/OFFLINE_ROLLOUT.md.
+
+  "boarding:submitRollCall": submitRollCallMutation as MutationHandler,
+  "boarding:logIncident": logIncident as MutationHandler,
+  // Deliberately not queued: house/dormitory/room/bed structure setup,
+  // allocateStudentToBed / endAllocation / transferStudent, and
+  // updateIncidentStatus -- all desk-based admin actions, not the
+  // dorm-floor, possibly-no-signal work roll call and incident logging are.
   // See docs/OFFLINE_ROLLOUT.md.
 };

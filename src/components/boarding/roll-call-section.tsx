@@ -6,6 +6,9 @@ import { submitRollCall } from "@/app/(app)/boarding/actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
+import { useOfflineSync } from "@/hooks/use-offline-sync";
+import { queueMutation } from "@/lib/offline/queue";
+import { BoardingOfflineBanner } from "./offline-banner";
 
 export interface BoardingStudentRow {
   student_id: string;
@@ -37,6 +40,7 @@ export function RollCallSection({
   canWrite: boolean;
 }) {
   const router = useRouter();
+  const { online, pendingCount, failed, syncing, sync, discard } = useOfflineSync("boarding");
   const [statuses, setStatuses] = useState<Record<string, RollCallStatus>>(
     Object.fromEntries(students.map((s) => [s.student_id, s.existing_status ?? "present"])),
   );
@@ -65,6 +69,12 @@ export function RollCallSection({
       stream_id: s.stream_id,
       status: statuses[s.student_id] ?? "present",
     }));
+    if (!online) {
+      await queueMutation("boarding", "submitRollCall", { date, session, entries });
+      setPending(false);
+      setSaved(true);
+      return;
+    }
     const result = await submitRollCall(date, session, entries);
     setPending(false);
     if ("error" in result) return setError(result.error);
@@ -74,6 +84,7 @@ export function RollCallSection({
 
   return (
     <div className="flex flex-col gap-4">
+      <BoardingOfflineBanner online={online} pendingCount={pendingCount} failed={failed} syncing={syncing} sync={sync} discard={discard} />
       <div className="flex flex-wrap items-center gap-3">
         <Input type="date" value={date} onChange={(e) => changeDate(e.target.value)} className="w-40" />
         <Select value={session} onValueChange={changeSession}>

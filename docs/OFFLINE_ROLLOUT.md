@@ -125,6 +125,19 @@ This is exactly what attendance already does -- copy the pattern:
   IndexedDB. The banner ("N entries waiting to sync") is what confirms the
   submission was captured in the meantime.
 
+- [x] **Boarding** -- write queueing for `submitRollCall` and `logIncident`.
+  Same shared-banner pattern as health, its own "boarding" module queue
+  (`src/components/boarding/offline-banner.tsx`).
+
+  `submitRollCall` also takes positional args (`date, session, entries`)
+  rather than a single object -- same adapter pattern used for
+  `checkOutStudent`, with its own dedicated args-ordering test.
+
+  Deliberately **not** queued: house/dormitory/room/bed structure setup,
+  `allocateStudentToBed` / `endAllocation` / `transferStudent`, and
+  `updateIncidentStatus` -- all desk-based admin actions, not the
+  dorm-floor, possibly-no-signal work roll call and incident logging are.
+
 ## Next up
 
 Given "both spotty connections and full dead zones happen regularly," the
@@ -132,10 +145,9 @@ remaining highest-value modules are the ones where someone is physically
 away from a router doing time-sensitive data entry:
 
 1. ~~Health / sick bay~~ -- done, see above.
-2. **Boarding roll call** (next) -- same shape as attendance, likely taken
-   in dorms with the worst signal on campus.
-3. **Library loans / inventory stock movements** -- typed-object, lower
-   urgency but easy wins.
+2. ~~Boarding roll call~~ -- done, see above.
+3. **Library loans / inventory stock movements** (next) -- typed-object,
+   lower urgency but easy wins.
 4. **Discipline** -- do last; needs the `FormData` adapter decision above
    settled first.
 

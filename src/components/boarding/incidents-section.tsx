@@ -10,6 +10,9 @@ import { Label } from "@/components/ui/label";
 import { StatusBadge } from "@/components/status-badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
+import { useOfflineSync } from "@/hooks/use-offline-sync";
+import { queueMutation } from "@/lib/offline/queue";
+import { BoardingOfflineBanner } from "./offline-banner";
 import type { StudentOption } from "./allocation-section";
 
 export interface IncidentRow {
@@ -37,6 +40,7 @@ export function IncidentsSection({
   canWrite: boolean;
 }) {
   const router = useRouter();
+  const { online, pendingCount, failed, syncing, sync, discard } = useOfflineSync("boarding");
   const [open, setOpen] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -56,14 +60,22 @@ export function IncidentsSection({
     }
     setPending(true);
     setError(null);
-    const result = await logIncident({
+    const input = {
       student_id: form.student_id,
       incident_type: form.incident_type,
       location: form.location || undefined,
       description: form.description,
       action_taken: form.action_taken || undefined,
       follow_up: form.follow_up || undefined,
-    });
+    };
+    if (!online) {
+      await queueMutation("boarding", "logIncident", input);
+      setPending(false);
+      setOpen(false);
+      setForm({ student_id: "", incident_type: INCIDENT_TYPES[0], location: "", description: "", action_taken: "", follow_up: "" });
+      return;
+    }
+    const result = await logIncident(input);
     setPending(false);
     if ("error" in result) return setError(result.error);
     setOpen(false);
@@ -80,6 +92,7 @@ export function IncidentsSection({
 
   return (
     <div className="flex flex-col gap-4">
+      <BoardingOfflineBanner online={online} pendingCount={pendingCount} failed={failed} syncing={syncing} sync={sync} discard={discard} />
       {canWrite && (
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild>

@@ -113,6 +113,22 @@ describe("offline mutation queue", () => {
     expect(checkOutStudent).toHaveBeenCalledWith("visit-1", "sent_home", "Fever, parent collecting");
   });
 
+  it("adapts submitRollCall's positional-args signature correctly when replaying from the queue", async () => {
+    const submitRollCall = vi.fn().mockResolvedValue({ success: true });
+    vi.doMock("@/app/(app)/boarding/actions", () => ({
+      submitRollCall,
+      logIncident: vi.fn(),
+    }));
+    const { queueMod } = await freshModules();
+    const entries = [{ student_id: "stu-1", stream_id: "stream-1", status: "present" as const }];
+    await queueMod.queueMutation("boarding", "submitRollCall", { date: "2026-02-01", session: "boarding_pm", entries });
+
+    const result = await queueMod.syncPendingMutations("boarding");
+
+    expect(result).toEqual({ synced: 1, failed: 0 });
+    expect(submitRollCall).toHaveBeenCalledWith("2026-02-01", "boarding_pm", entries);
+  });
+
   it("leaves a mutation untouched when no handler is registered for it", async () => {
     const { queueMod } = await freshModules();
     await queueMod.queueMutation("some-future-module", "someAction", { x: 1 });
