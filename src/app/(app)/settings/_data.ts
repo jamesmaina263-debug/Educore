@@ -80,7 +80,8 @@ export async function loadSettingsContext(): Promise<SettingsContext> {
   const [{ data: staffRows }, { data: roleRows }, { data: leaveTypeRows }] = await Promise.all([
     supabase
       .from("school_users")
-      .select("id, full_name, email, status, role_id, must_change_password, roles(name, display_name)")
+      .select("id, full_name, email, status, role_id, must_change_password, roles!inner(name, display_name)")
+      .not("roles.name", "in", "(parent,student,super_admin)")
       .order("full_name"),
     supabase.from("roles").select("id, name, display_name").order("display_name"),
     supabase.from("leave_types").select("id, name, days_per_year, restricted_gender").order("name"),
