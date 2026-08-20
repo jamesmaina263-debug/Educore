@@ -5,6 +5,15 @@ import { createClient } from "@/lib/supabase/server";
 
 type ActionResult = { error: string } | { success: true };
 
+export async function setStaffGender(staffId: string, gender: "male" | "female"): Promise<ActionResult> {
+  const supabase = await createClient();
+  const { error } = await supabase.from("school_users").update({ gender }).eq("id", staffId);
+  if (error) return { error: error.message };
+  revalidatePath("/staff");
+  revalidatePath(`/staff/${staffId}`);
+  return { success: true as const };
+}
+
 type StaffStatus = "present" | "absent" | "late" | "on_leave" | "half_day";
 
 export async function submitStaffAttendance(input: {

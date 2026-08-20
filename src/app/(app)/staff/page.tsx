@@ -24,7 +24,7 @@ export default async function StaffDirectoryPage() {
 
   const { data: staffRows } = await supabase
     .from("school_users")
-    .select("id, full_name, department, position, status, roles!inner(name, display_name)")
+    .select("id, full_name, department, position, status, gender, roles!inner(name, display_name)")
     .not("roles.name", "in", "(parent,student,super_admin)")
     .order("full_name");
 
@@ -35,6 +35,7 @@ export default async function StaffDirectoryPage() {
     department: s.department,
     position: s.position,
     status: s.status,
+    gender: s.gender as StaffRow["gender"],
   }));
 
   const roleName = (schoolUser?.roles as unknown as { display_name: string } | null)?.display_name;
@@ -70,7 +71,7 @@ export default async function StaffDirectoryPage() {
             No staff records yet.
           </div>
         ) : (
-          <StaffTable rows={rows} />
+          <StaffTable rows={rows} canManage={canManage === true} />
         )}
       </div>
     </AppShell>
