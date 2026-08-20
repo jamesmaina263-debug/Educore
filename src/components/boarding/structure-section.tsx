@@ -2,7 +2,15 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { createBoardingHouse, createDormitory, createRoom, setBedStatus } from "@/app/(app)/boarding/actions";
+import {
+  createBoardingHouse,
+  createDormitory,
+  createRoom,
+  setBedStatus,
+  updateBoardingHouseStatus,
+  updateDormitoryStatus,
+  updateRoomStatus,
+} from "@/app/(app)/boarding/actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -28,6 +36,7 @@ export interface RoomRow {
   room_number: string;
   capacity: number;
   gender: "male" | "female" | "mixed";
+  status: "active" | "maintenance" | "inactive";
   beds: BedRow[];
 }
 
@@ -36,6 +45,7 @@ export interface DormitoryRow {
   name: string;
   capacity: number | null;
   gender: "male" | "female" | "mixed";
+  status: "active" | "inactive";
   master_name: string | null;
   assistant_name: string | null;
   rooms: RoomRow[];
@@ -47,6 +57,7 @@ export interface HouseRow {
   description: string | null;
   gender: "male" | "female" | "mixed";
   capacity: number | null;
+  status: "active" | "inactive";
   master_name: string | null;
   assistant_name: string | null;
   dormitories: DormitoryRow[];
@@ -105,12 +116,38 @@ function StaffSelect({
   );
 }
 
-function RoomCard({ room, canWrite, onToggleBed }: { room: RoomRow; canWrite: boolean; onToggleBed: (bed: BedRow) => void }) {
+function RoomCard({
+  room,
+  canWrite,
+  onToggleBed,
+  onChangeStatus,
+}: {
+  room: RoomRow;
+  canWrite: boolean;
+  onToggleBed: (bed: BedRow) => void;
+  onChangeStatus: (room: RoomRow, status: RoomRow["status"]) => void;
+}) {
   return (
     <div>
-      <p className="mb-1.5 text-xs font-medium text-muted-foreground">
-        Room {room.room_number} — {room.beds.filter((b) => b.occupant_name).length}/{room.capacity} occupied
-      </p>
+      <div className="mb-1.5 flex items-center justify-between gap-2">
+        <p className="text-xs font-medium text-muted-foreground">
+          Room {room.room_number} — {room.beds.filter((b) => b.occupant_name).length}/{room.capacity} occupied
+        </p>
+        {canWrite ? (
+          <Select value={room.status} onValueChange={(v) => onChangeStatus(room, v as RoomRow["status"])}>
+            <SelectTrigger className="h-6 w-28 text-[0.7rem]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="active">Active</SelectItem>
+              <SelectItem value="maintenance">Maintenance</SelectItem>
+              <SelectItem value="inactive">Inactive</SelectItem>
+            </SelectContent>
+          </Select>
+        ) : (
+          room.status !== "active" && <StatusBadge tone="neutral" label={room.status} />
+        )}
+      </div>
       <div className="flex flex-wrap gap-1.5">
         {room.beds.map((bed) => (
           <span
@@ -225,6 +262,35 @@ export function StructureSection({
     router.refresh();
   }
 
+  async function toggleHouseStatus(house: HouseRow) {
+    const next = house.status === "active" ? "inactive" : "active";
+    setPending(true);
+    setError(null);
+    const result = await updateBoardingHouseStatus(house.id, next);
+    setPending(false);
+    if ("error" in result) return setError(result.error);
+    router.refresh();
+  }
+
+  async function toggleDormitoryStatus(dorm: DormitoryRow) {
+    const next = dorm.status === "active" ? "inactive" : "active";
+    setPending(true);
+    setError(null);
+    const result = await updateDormitoryStatus(dorm.id, next);
+    setPending(false);
+    if ("error" in result) return setError(result.error);
+    router.refresh();
+  }
+
+  async function changeRoomStatus(room: RoomRow, status: RoomRow["status"]) {
+    setPending(true);
+    setError(null);
+    const result = await updateRoomStatus(room.id, status);
+    setPending(false);
+    if ("error" in result) return setError(result.error);
+    router.refresh();
+  }
+
   return (
     <div className="flex flex-col gap-4">
       {error && <p className="text-sm text-danger">{error}</p>}
@@ -287,19 +353,29 @@ export function StructureSection({
 
       {houses.map((house) => (
         <div key={house.id} className="panel p-4">
-          <button
-            className="flex w-full items-center justify-between text-left"
-            onClick={() => setExpandedHouse(expandedHouse === house.id ? null : house.id)}
-          >
-            <div>
-              <p className="font-medium">{house.name}</p>
-              <p className="text-xs text-muted-foreground">
-                {house.gender} · Master: {house.master_name ?? "Unassigned"}
-                {house.assistant_name ? ` · Assistant: ${house.assistant_name}` : ""}
-              </p>
-            </div>
-            <span className="text-muted-foreground">{expandedHouse === house.id ? "▾" : "▸"}</span>
-          </button>
+          <div className="flex w-full items-center justify-between gap-2">
+            <button
+              className="flex flex-1 items-center justify-between text-left"
+              onClick={() => setExpandedHouse(expandedHouse === house.id ? null : house.id)}
+            >
+              <div>
+                <p className="font-medium">
+                  {house.name}
+                  {house.status !== "active" && <span className="ml-2 align-middle"><StatusBadge tone="neutral" label={house.status} /></span>}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {house.gender} · Master: {house.master_name ?? "Unassigned"}
+                  {house.assistant_name ? ` · Assistant: ${house.assistant_name}` : ""}
+                </p>
+              </div>
+              <span className="text-muted-foreground">{expandedHouse === house.id ? "▾" : "▸"}</span>
+            </button>
+            {canWrite && (
+              <Button variant="outline" size="sm" onClick={() => toggleHouseStatus(house)} disabled={pending}>
+                {house.status === "active" ? "Deactivate" : "Reactivate"}
+              </Button>
+            )}
+          </div>
 
           {expandedHouse === house.id && (
             <div className="mt-4 flex flex-col gap-3 border-t border-border pt-4">
@@ -355,18 +431,28 @@ export function StructureSection({
 
               {house.dormitories.map((dorm) => (
                 <div key={dorm.id} className="rounded-md border border-border p-3">
-                  <button
-                    className="flex w-full items-center justify-between text-left"
-                    onClick={() => setExpandedDorm(expandedDorm === dorm.id ? null : dorm.id)}
-                  >
-                    <div>
-                      <p className="text-sm font-medium">{dorm.name}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {dorm.gender} · Master: {dorm.master_name ?? "Unassigned"}
-                      </p>
-                    </div>
-                    <span className="text-muted-foreground">{expandedDorm === dorm.id ? "▾" : "▸"}</span>
-                  </button>
+                  <div className="flex w-full items-center justify-between gap-2">
+                    <button
+                      className="flex flex-1 items-center justify-between text-left"
+                      onClick={() => setExpandedDorm(expandedDorm === dorm.id ? null : dorm.id)}
+                    >
+                      <div>
+                        <p className="text-sm font-medium">
+                          {dorm.name}
+                          {dorm.status !== "active" && <span className="ml-2 align-middle"><StatusBadge tone="neutral" label={dorm.status} /></span>}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {dorm.gender} · Master: {dorm.master_name ?? "Unassigned"}
+                        </p>
+                      </div>
+                      <span className="text-muted-foreground">{expandedDorm === dorm.id ? "▾" : "▸"}</span>
+                    </button>
+                    {canWrite && (
+                      <Button variant="outline" size="sm" onClick={() => toggleDormitoryStatus(dorm)} disabled={pending}>
+                        {dorm.status === "active" ? "Deactivate" : "Reactivate"}
+                      </Button>
+                    )}
+                  </div>
 
                   {expandedDorm === dorm.id && (
                     <div className="mt-3 flex flex-col gap-3 border-t border-border pt-3">
@@ -415,7 +501,7 @@ export function StructureSection({
                       {dorm.rooms.length === 0 && <p className="text-sm text-muted-foreground">No rooms yet.</p>}
 
                       {dorm.rooms.map((room) => (
-                        <RoomCard key={room.id} room={room} canWrite={canWrite} onToggleBed={toggleBed} />
+                        <RoomCard key={room.id} room={room} canWrite={canWrite} onToggleBed={toggleBed} onChangeStatus={changeRoomStatus} />
                       ))}
                     </div>
                   )}
@@ -469,7 +555,7 @@ export function StructureSection({
                   <p className="mb-2 text-xs font-medium text-muted-foreground">Rooms directly in {house.name} (no dormitory)</p>
                   <div className="flex flex-col gap-3">
                     {house.direct_rooms.map((room) => (
-                      <RoomCard key={room.id} room={room} canWrite={canWrite} onToggleBed={toggleBed} />
+                      <RoomCard key={room.id} room={room} canWrite={canWrite} onToggleBed={toggleBed} onChangeStatus={changeRoomStatus} />
                     ))}
                   </div>
                 </div>
@@ -521,18 +607,28 @@ export function StructureSection({
 
       {standaloneDormitories.map((dorm) => (
         <div key={dorm.id} className="panel p-4">
-          <button
-            className="flex w-full items-center justify-between text-left"
-            onClick={() => setExpandedDorm(expandedDorm === dorm.id ? null : dorm.id)}
-          >
-            <div>
-              <p className="font-medium">{dorm.name}</p>
-              <p className="text-xs text-muted-foreground">
-                {dorm.gender} · Master: {dorm.master_name ?? "Unassigned"}
-              </p>
-            </div>
-            <span className="text-muted-foreground">{expandedDorm === dorm.id ? "▾" : "▸"}</span>
-          </button>
+          <div className="flex w-full items-center justify-between gap-2">
+            <button
+              className="flex flex-1 items-center justify-between text-left"
+              onClick={() => setExpandedDorm(expandedDorm === dorm.id ? null : dorm.id)}
+            >
+              <div>
+                <p className="font-medium">
+                  {dorm.name}
+                  {dorm.status !== "active" && <span className="ml-2 align-middle"><StatusBadge tone="neutral" label={dorm.status} /></span>}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {dorm.gender} · Master: {dorm.master_name ?? "Unassigned"}
+                </p>
+              </div>
+              <span className="text-muted-foreground">{expandedDorm === dorm.id ? "▾" : "▸"}</span>
+            </button>
+            {canWrite && (
+              <Button variant="outline" size="sm" onClick={() => toggleDormitoryStatus(dorm)} disabled={pending}>
+                {dorm.status === "active" ? "Deactivate" : "Reactivate"}
+              </Button>
+            )}
+          </div>
 
           {expandedDorm === dorm.id && (
             <div className="mt-4 flex flex-col gap-3 border-t border-border pt-4">
@@ -577,7 +673,7 @@ export function StructureSection({
 
               {dorm.rooms.length === 0 && <p className="text-sm text-muted-foreground">No rooms yet.</p>}
               {dorm.rooms.map((room) => (
-                <RoomCard key={room.id} room={room} canWrite={canWrite} onToggleBed={toggleBed} />
+                <RoomCard key={room.id} room={room} canWrite={canWrite} onToggleBed={toggleBed} onChangeStatus={changeRoomStatus} />
               ))}
             </div>
           )}
@@ -629,7 +725,7 @@ export function StructureSection({
           <p className="mb-3 text-sm font-medium">Standalone rooms</p>
           <div className="flex flex-col gap-3">
             {standaloneRooms.map((room) => (
-              <RoomCard key={room.id} room={room} canWrite={canWrite} onToggleBed={toggleBed} />
+              <RoomCard key={room.id} room={room} canWrite={canWrite} onToggleBed={toggleBed} onChangeStatus={changeRoomStatus} />
             ))}
           </div>
         </div>

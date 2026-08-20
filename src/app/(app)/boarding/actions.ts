@@ -129,6 +129,92 @@ export async function setBedStatus(
   return { success: true };
 }
 
+// Houses/dormitories/rooms could be created but never taken back out of service --
+// no action anywhere ever touched their status columns despite the schema (and, for
+// beds one level down, the UI) supporting it. Reactivating is always allowed with no
+// check (mirrors setBedStatus and the student-status work); leaving 'active' is blocked
+// while any bed underneath still has a live occupant, so staff move students out first
+// rather than a room silently going "under maintenance" with someone still living in it.
+
+async function countActiveOccupants(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  scope: { house_id?: string; dormitory_id?: string; hostel_room_id?: string },
+): Promise<number> {
+  let roomIds: string[] | null = null;
+
+  if (scope.hostel_room_id) {
+    roomIds = [scope.hostel_room_id];
+  } else if (scope.dormitory_id) {
+    const { data } = await supabase.from("hostel_rooms").select("id").eq("dormitory_id", scope.dormitory_id);
+    roomIds = (data ?? []).map((r) => r.id);
+  } else if (scope.house_id) {
+    const { data: dorms } = await supabase.from("dormitories").select("id").eq("house_id", scope.house_id);
+    const dormIds = (dorms ?? []).map((d) => d.id);
+    const orClauses = [`house_id.eq.${scope.house_id}`, ...(dormIds.length ? [`dormitory_id.in.(${dormIds.join(",")})`] : [])];
+    const { data: rooms } = await supabase.from("hostel_rooms").select("id").or(orClauses.join(","));
+    roomIds = (rooms ?? []).map((r) => r.id);
+  }
+
+  if (!roomIds || roomIds.length === 0) return 0;
+  const { count } = await supabase
+    .from("hostel_allocations")
+    .select("id", { count: "exact", head: true })
+    .in("hostel_room_id", roomIds)
+    .eq("status", "active");
+  return count ?? 0;
+}
+
+export async function updateBoardingHouseStatus(
+  houseId: string,
+  status: "active" | "inactive",
+): Promise<ActionResult> {
+  const supabase = await createClient();
+  if (status !== "active") {
+    const occupied = await countActiveOccupants(supabase, { house_id: houseId });
+    if (occupied > 0) {
+      return { error: `${occupied} student${occupied === 1 ? " is" : "s are"} still allocated a bed in this house — move them out first.` };
+    }
+  }
+  const { error } = await supabase.from("boarding_houses").update({ status }).eq("id", houseId);
+  if (error) return { error: error.message };
+  revalidatePath("/boarding", "layout");
+  return { success: true };
+}
+
+export async function updateDormitoryStatus(
+  dormitoryId: string,
+  status: "active" | "inactive",
+): Promise<ActionResult> {
+  const supabase = await createClient();
+  if (status !== "active") {
+    const occupied = await countActiveOccupants(supabase, { dormitory_id: dormitoryId });
+    if (occupied > 0) {
+      return { error: `${occupied} student${occupied === 1 ? " is" : "s are"} still allocated a bed in this dormitory — move them out first.` };
+    }
+  }
+  const { error } = await supabase.from("dormitories").update({ status }).eq("id", dormitoryId);
+  if (error) return { error: error.message };
+  revalidatePath("/boarding", "layout");
+  return { success: true };
+}
+
+export async function updateRoomStatus(
+  roomId: string,
+  status: "active" | "maintenance" | "inactive",
+): Promise<ActionResult> {
+  const supabase = await createClient();
+  if (status !== "active") {
+    const occupied = await countActiveOccupants(supabase, { hostel_room_id: roomId });
+    if (occupied > 0) {
+      return { error: `${occupied} student${occupied === 1 ? " is" : "s are"} still allocated a bed in this room — move them out first.` };
+    }
+  }
+  const { error } = await supabase.from("hostel_rooms").update({ status }).eq("id", roomId);
+  if (error) return { error: error.message };
+  revalidatePath("/boarding", "layout");
+  return { success: true };
+}
+
 // ---------- Allocation ----------
 
 export async function allocateStudentToBed(input: {
@@ -145,13 +231,36 @@ export async function allocateStudentToBed(input: {
     // in the common case.
     const { data: bed } = await supabase
       .from("beds")
-      .select("id, status, room_id, hostel_rooms(room_number, gender)")
+      .select("id, status, room_id, hostel_rooms(room_number, gender, status, house_id, dormitory_id)")
       .eq("id", input.bed_id)
       .maybeSingle();
     if (!bed) return { error: "Bed not found." };
     if (bed.status === "unavailable") return { error: "This bed is marked unavailable." };
 
-    const roomGender = (bed.hostel_rooms as unknown as { gender: string } | null)?.gender;
+    const room = bed.hostel_rooms as unknown as {
+      room_number: string;
+      gender: string;
+      status: string;
+      house_id: string | null;
+      dormitory_id: string | null;
+    } | null;
+    if (room?.status && room.status !== "active") {
+      return { error: `This room is marked ${room.status} and isn't taking new occupants.` };
+    }
+    if (room?.dormitory_id) {
+      const { data: dorm } = await supabase.from("dormitories").select("status").eq("id", room.dormitory_id).maybeSingle();
+      if (dorm && dorm.status !== "active") {
+        return { error: "This dormitory is marked inactive and isn't taking new occupants." };
+      }
+    }
+    if (room?.house_id) {
+      const { data: house } = await supabase.from("boarding_houses").select("status").eq("id", room.house_id).maybeSingle();
+      if (house && house.status !== "active") {
+        return { error: "This house is marked inactive and isn't taking new occupants." };
+      }
+    }
+
+    const roomGender = room?.gender;
     const { data: student } = await supabase.from("students").select("gender").eq("id", input.student_id).single();
     if (roomGender && roomGender !== "mixed" && student?.gender !== roomGender) {
       return { error: `This room is designated ${roomGender} — the student's gender doesn't match.` };
