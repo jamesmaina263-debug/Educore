@@ -81,18 +81,59 @@ This is exactly what attendance already does -- copy the pattern:
    shell. If a module's page itself needs to load while offline (not just
    its data), that page's route needs adding to the shell's cache list too.
 
-## Suggested order
+## Progress
+
+- [x] **Attendance** -- write queueing (`submitAttendance`), plus discard for
+  permanently-failed items.
+- [x] **Health** -- write queueing for `checkInStudent`, `checkOutStudent`,
+  `administerMedication`, `logEmergency`, `createReferral`. All 4 write
+  forms (sick bay, medication, emergencies, referrals) share one "health"
+  module queue and one shared banner component
+  (`src/components/health/offline-banner.tsx`), so a nurse sees one
+  consistent "N entries waiting to sync" count regardless of which tab
+  she's on.
+
+  Deliberately **not** queued:
+  - `updateReferralOutcome` -- an update to an existing record with no
+    strong "must happen right now, in the field" need; a desk follow-up
+    task once back online.
+  - `sendHealthAlertAction` -- dispatches an actual guardian notification.
+    Queuing a "the SMS is sent" action silently for later means the
+    nurse's screen would say "sent" only once synced, with no way to tell
+    the guardian in the moment that the message hasn't gone out yet. That
+    needs its own delayed-delivery UX, not a silent replay -- left online-only
+    for now.
+  - Medical-inventory admin actions (`addMedicalInventoryItem`,
+    `issueMedicalStock`, `acceptTransferAction`, `rejectTransferAction`) --
+    desk-based bookkeeping, not field work under time pressure.
+
+  **Known tradeoff, documented rather than silently accepted:**
+  `administerMedication` can deduct from tracked medical inventory. If
+  queued offline, that deduction only happens once the mutation actually
+  syncs -- so the stock count shown during an outage won't reflect doses
+  given but not yet synced. Two nurses (or one nurse across two offline
+  sessions) could theoretically both believe there's enough stock for a
+  dose that's already been used. Same category of risk as attendance's
+  race on a duplicate submission (both are resolved by the server's real
+  check running at sync time, not blindly trusted client-side) -- but
+  worth knowing about specifically here since it's inventory, not just a
+  record.
+
+  Queued items intentionally do **not** appear in the sick-bay/medication/
+  emergency/referral tables until they've actually synced -- there's no
+  local row to show for something that only exists in this device's
+  IndexedDB. The banner ("N entries waiting to sync") is what confirms the
+  submission was captured in the meantime.
+
+## Next up
 
 Given "both spotty connections and full dead zones happen regularly," the
-highest-value next modules are the ones where someone is physically away
-from a router doing time-sensitive data entry:
+remaining highest-value modules are the ones where someone is physically
+away from a router doing time-sensitive data entry:
 
-1. **Health / sick bay** (`checkInStudent`, `administerMedication`,
-   `logEmergency`) -- typed-object actions, matches the checklist above
-   directly, and a nurse mid-emergency is the clearest case for "must not
-   lose this because wifi dropped."
-2. **Boarding roll call** -- same shape as attendance, likely taken in
-   dorms with the worst signal on campus.
+1. ~~Health / sick bay~~ -- done, see above.
+2. **Boarding roll call** (next) -- same shape as attendance, likely taken
+   in dorms with the worst signal on campus.
 3. **Library loans / inventory stock movements** -- typed-object, lower
    urgency but easy wins.
 4. **Discipline** -- do last; needs the `FormData` adapter decision above

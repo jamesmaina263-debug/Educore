@@ -8,6 +8,9 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
+import { useOfflineSync } from "@/hooks/use-offline-sync";
+import { queueMutation } from "@/lib/offline/queue";
+import { HealthOfflineBanner } from "./offline-banner";
 import type { StudentOption } from "./student-picker";
 
 export interface MedicationRow {
@@ -40,6 +43,7 @@ export function MedicationSection({
   canWrite: boolean;
 }) {
   const router = useRouter();
+  const { online, pendingCount, failed, syncing, sync, discard } = useOfflineSync("health");
   const [open, setOpen] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -59,14 +63,25 @@ export function MedicationSection({
     }
     setPending(true);
     setError(null);
-    const result = await administerMedication({
+    const input = {
       student_id: form.student_id,
       medication_name: form.medication_name,
       dosage: form.dosage,
       route: form.route,
       inventory_item_id: form.inventory_item_id === "none" ? undefined : form.inventory_item_id,
       notes: form.notes || undefined,
-    });
+    };
+    if (!online) {
+      // Inventory deduction (if any) only happens when this replays on
+      // reconnect -- the stock count shown right now won't reflect this
+      // dose until then, same as any other offline-queued write.
+      await queueMutation("health", "administerMedication", input);
+      setPending(false);
+      setOpen(false);
+      setForm({ student_id: "", medication_name: "", dosage: "", route: ROUTES[0], inventory_item_id: "none", notes: "" });
+      return;
+    }
+    const result = await administerMedication(input);
     setPending(false);
     if ("error" in result) return setError(result.error);
     setOpen(false);
@@ -76,6 +91,7 @@ export function MedicationSection({
 
   return (
     <div className="flex flex-col gap-4">
+      <HealthOfflineBanner online={online} pendingCount={pendingCount} failed={failed} syncing={syncing} sync={sync} discard={discard} />
       {canWrite && (
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild>

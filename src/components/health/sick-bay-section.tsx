@@ -11,6 +11,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogT
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
+import { useOfflineSync } from "@/hooks/use-offline-sync";
+import { queueMutation } from "@/lib/offline/queue";
+import { HealthOfflineBanner } from "./offline-banner";
 import type { StudentOption, GuardianOption } from "./student-picker";
 
 export interface SickBayVisitRow {
@@ -39,6 +42,7 @@ export function SickBaySection({
   canWrite: boolean;
 }) {
   const router = useRouter();
+  const { online, pendingCount, failed, syncing, sync, discard } = useOfflineSync("health");
   const [checkInOpen, setCheckInOpen] = useState(false);
   const [checkOutFor, setCheckOutFor] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
@@ -86,12 +90,20 @@ export function SickBaySection({
   async function submitCheckIn() {
     setPending(true);
     setError(null);
-    const result = await checkInStudent({
+    const input = {
       student_id: checkInForm.student_id,
       reason: checkInForm.reason,
       symptoms: checkInForm.symptoms || undefined,
       temperature_c: checkInForm.temperature_c ? Number(checkInForm.temperature_c) : undefined,
-    });
+    };
+    if (!online) {
+      await queueMutation("health", "checkInStudent", input);
+      setPending(false);
+      setCheckInOpen(false);
+      setCheckInForm({ student_id: "", reason: "", symptoms: "", temperature_c: "" });
+      return;
+    }
+    const result = await checkInStudent(input);
     setPending(false);
     if ("error" in result) return setError(result.error);
     setCheckInOpen(false);
@@ -102,6 +114,13 @@ export function SickBaySection({
   async function submitCheckOut(visitId: string) {
     setPending(true);
     setError(null);
+    if (!online) {
+      await queueMutation("health", "checkOutStudent", { visitId, outcome: checkOutForm.outcome, notes: checkOutForm.notes || undefined });
+      setPending(false);
+      setCheckOutFor(null);
+      setCheckOutForm({ outcome: "returned_to_class", notes: "" });
+      return;
+    }
     const result = await checkOutStudent(visitId, checkOutForm.outcome, checkOutForm.notes || undefined);
     setPending(false);
     if ("error" in result) return setError(result.error);
@@ -114,6 +133,7 @@ export function SickBaySection({
 
   return (
     <div className="flex flex-col gap-4">
+      <HealthOfflineBanner online={online} pendingCount={pendingCount} failed={failed} syncing={syncing} sync={sync} discard={discard} />
       <div className="flex items-center justify-between">
         {canWrite && (
           <Dialog open={checkInOpen} onOpenChange={setCheckInOpen}>

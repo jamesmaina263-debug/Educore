@@ -91,6 +91,28 @@ describe("offline mutation queue", () => {
     expect(await queueMod.getPendingMutations("attendance")).toHaveLength(0);
   });
 
+  it("adapts checkOutStudent's positional-args signature correctly when replaying from the queue", async () => {
+    const checkOutStudent = vi.fn().mockResolvedValue({ success: true });
+    vi.doMock("@/app/(app)/health/actions", () => ({
+      checkInStudent: vi.fn(),
+      checkOutStudent,
+      administerMedication: vi.fn(),
+      logEmergency: vi.fn(),
+      createReferral: vi.fn(),
+    }));
+    const { queueMod } = await freshModules();
+    await queueMod.queueMutation("health", "checkOutStudent", {
+      visitId: "visit-1",
+      outcome: "sent_home",
+      notes: "Fever, parent collecting",
+    });
+
+    const result = await queueMod.syncPendingMutations("health");
+
+    expect(result).toEqual({ synced: 1, failed: 0 });
+    expect(checkOutStudent).toHaveBeenCalledWith("visit-1", "sent_home", "Fever, parent collecting");
+  });
+
   it("leaves a mutation untouched when no handler is registered for it", async () => {
     const { queueMod } = await freshModules();
     await queueMod.queueMutation("some-future-module", "someAction", { x: 1 });

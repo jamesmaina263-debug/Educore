@@ -9,6 +9,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { StatusBadge } from "@/components/status-badge";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
+import { useOfflineSync } from "@/hooks/use-offline-sync";
+import { queueMutation } from "@/lib/offline/queue";
+import { HealthOfflineBanner } from "./offline-banner";
 import type { StudentOption } from "./student-picker";
 
 export interface ReferralRow {
@@ -32,6 +35,7 @@ export function ReferralsSection({
   canWrite: boolean;
 }) {
   const router = useRouter();
+  const { online, pendingCount, failed, syncing, sync, discard } = useOfflineSync("health");
   const [open, setOpen] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -52,6 +56,13 @@ export function ReferralsSection({
     }
     setPending(true);
     setError(null);
+    if (!online) {
+      await queueMutation("health", "createReferral", form);
+      setPending(false);
+      setOpen(false);
+      setForm({ student_id: "", referred_to: "", reason: "", referral_date: new Date().toISOString().slice(0, 10), guardian_notified: false });
+      return;
+    }
     const result = await createReferral(form);
     setPending(false);
     if ("error" in result) return setError(result.error);
@@ -77,6 +88,7 @@ export function ReferralsSection({
 
   return (
     <div className="flex flex-col gap-4">
+      <HealthOfflineBanner online={online} pendingCount={pendingCount} failed={failed} syncing={syncing} sync={sync} discard={discard} />
       {canWrite && (
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild>
