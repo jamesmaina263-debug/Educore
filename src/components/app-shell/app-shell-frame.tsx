@@ -1,6 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
+import Link from "next/link";
 import { SidebarNav } from "./sidebar-nav";
 import { Topbar } from "./topbar";
 import { CommandPalette } from "./command-palette";
@@ -20,9 +21,12 @@ export function AppShellFrame({ children }: { children: ReactNode }) {
     <CommandPaletteProvider>
       <div className="flex h-screen overflow-hidden bg-background">
         <aside className="hidden w-56 shrink-0 flex-col border-r border-sidebar-border bg-sidebar lg:flex">
-          <div className="flex h-14 items-center border-b border-sidebar-border px-4 text-sm font-semibold text-sidebar-foreground">
+          <Link
+            href="/dashboard"
+            className="flex h-14 items-center border-b border-sidebar-border px-4 text-sm font-semibold text-sidebar-foreground transition-opacity hover:opacity-80"
+          >
             EduCore
-          </div>
+          </Link>
           <SidebarNav />
         </aside>
 

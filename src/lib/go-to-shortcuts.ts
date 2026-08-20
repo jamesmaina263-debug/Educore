@@ -8,6 +8,10 @@
 // picked for uniqueness once the obvious first-letters ran out. If this
 // becomes hard to remember in practice, the command palette (⌘K) already
 // lists every page by name and needs no memorization.
+//
+// "g" as the second key is a deliberate exception: "g g" ("go home", same
+// idiom as Vim's gg-to-top) jumps to the dashboard. This is the only
+// second key allowed to equal the prefix key.
 export interface GoToShortcut {
   key: string;
   href: string;
@@ -15,6 +19,7 @@ export interface GoToShortcut {
 }
 
 export const GO_TO_SHORTCUTS: GoToShortcut[] = [
+  { key: "g", href: "/dashboard", label: "Home" },
   { key: "d", href: "/dashboard", label: "Dashboard" },
   { key: "m", href: "/admissions", label: "Admissions" },
   { key: "c", href: "/academics", label: "Academics" },
@@ -43,10 +48,6 @@ export const GO_TO_SHORTCUTS: GoToShortcut[] = [
 if (process.env.NODE_ENV !== "production") {
   const seen = new Set<string>();
   for (const s of GO_TO_SHORTCUTS) {
-    if (s.key === "g") {
-      // eslint-disable-next-line no-console
-      console.warn(`[go-to-shortcuts.ts] "g" cannot be a second key -- it's the prefix key.`);
-    }
     if (seen.has(s.key)) {
       // eslint-disable-next-line no-console
       console.warn(`[go-to-shortcuts.ts] Duplicate key "${s.key}" -- shortcut collision.`);
