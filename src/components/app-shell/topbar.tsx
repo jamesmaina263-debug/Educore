@@ -23,11 +23,13 @@ export function Topbar({
   userName,
   userRole,
   onSignOut,
+  schoolName,
 }: {
   breadcrumbs: BreadcrumbItem[];
   userName: string;
   userRole?: string;
   onSignOut: () => void;
+  schoolName?: string;
 }) {
   const { setOpen } = useCommandPalette();
 
@@ -42,7 +44,7 @@ export function Topbar({
         </SheetTrigger>
         <SheetContent side="left" className="bg-sidebar p-0">
           <SheetHeader className="shrink-0 border-b border-sidebar-border p-4">
-            <SheetTitle className="text-sidebar-foreground">EduCore</SheetTitle>
+            <SheetTitle className="text-sidebar-foreground">{schoolName ?? "EduCore"}</SheetTitle>
           </SheetHeader>
           <SidebarNav />
         </SheetContent>
