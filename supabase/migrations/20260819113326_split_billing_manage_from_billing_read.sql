@@ -8,7 +8,7 @@
 -- data while closing the gap for any future grant.
 
 insert into role_permissions (role_id, school_id, permission_key, allowed)
-values ('2ac7aada-0039-4d39-ae13-3c3dc185bde7', null, 'billing.manage', true)
+select id, null, 'billing.manage', true from roles where name = 'school_owner'
 on conflict do nothing;
 
 create or replace function public.cancel_subscription(p_school_id uuid, p_reason text default null::text)
