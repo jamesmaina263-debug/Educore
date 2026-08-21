@@ -36,7 +36,8 @@ type Intent =
   | "dormitory_at_capacity"
   | "students_in_sick_bay"
   | "low_stock_inventory"
-  | "daily_summary";
+  | "daily_summary"
+  | "admissions_today";
 
 // A daily_summary answer is assembled from whichever of these sections the caller is permitted
 // to see — it has no single gating permission of its own.
@@ -69,6 +70,11 @@ const INTENTS: { key: Intent; description: string; permission: PermissionKey | n
   { key: "students_in_sick_bay", description: "Which students are currently checked into sick bay", permission: "health.read_any" },
   { key: "low_stock_inventory", description: "Which inventory items are low in stock (at or below their reorder level)", permission: "inventory.read_any" },
   { key: "daily_summary", description: "Give me a summary of the school today (a general end-of-day/status overview)", permission: null },
+  {
+    key: "admissions_today",
+    description: "How many students were admitted today, with their names and admission numbers",
+    permission: "students.read",
+  },
 ];
 
 export interface AskAIResult {
@@ -389,6 +395,45 @@ async function runIntent(
       if (low.length === 0) return "No inventory items are currently at or below their reorder level.";
       const list = low.map((i) => `${i.name} (${i.quantity} ${i.unit} left, reorder at ${i.reorder_level})`).join(", ");
       return `${low.length} item(s) low in stock: ${list}.`;
+    }
+
+    case "admissions_today": {
+      const today = todayISO();
+      const { data: students } = await supabase
+        .from("students")
+        .select("id, first_name, last_name, admission_number")
+        .eq("admission_date", today)
+        .order("created_at", { ascending: true });
+      if (!students || students.length === 0) return "No students were admitted today.";
+
+      // Gated on students.read alone (see INTENTS above), matching this intent's real minimum
+      // access requirement. finance.read is a second, narrower permission not every students.read
+      // holder has (e.g. class_teacher) — rather than refusing the whole answer or silently
+      // fabricating a number, this degrades the same way daily_summary assembles itself from
+      // whichever sections the caller can see: names/admission numbers always show, amount paid
+      // only joins in if the caller separately holds finance.read.
+      const { data: canFinance } = await supabase.rpc("auth_has_permission", { p_permission_key: "finance.read" });
+
+      const paidByStudent = new Map<string, number>();
+      if (canFinance) {
+        const { data: payments } = await supabase
+          .from("payments")
+          .select("student_id, amount")
+          .in("student_id", students.map((s) => s.id));
+        for (const p of payments ?? []) {
+          paidByStudent.set(p.student_id, (paidByStudent.get(p.student_id) ?? 0) + Number(p.amount));
+        }
+      }
+
+      const list = students
+        .map((s) => {
+          const base = `${s.first_name} ${s.last_name} (${s.admission_number})`;
+          if (!canFinance) return base;
+          const paid = paidByStudent.get(s.id) ?? 0;
+          return `${base} — KES ${paid.toLocaleString()} paid`;
+        })
+        .join(", ");
+      return `${students.length} student(s) admitted today: ${list}.`;
     }
 
     case "daily_summary": {
