@@ -122,8 +122,49 @@ export async function setStaffStatus(
   status: "active" | "inactive" | "suspended",
 ): Promise<ActionResult> {
   const supabase = await createClient();
+
+  const { data: target, error: fetchError } = await supabase
+    .from("school_users")
+    .select("auth_user_id")
+    .eq("id", schoolUserId)
+    .maybeSingle();
+  if (fetchError) return { error: fetchError.message };
+  if (!target) return { error: "Staff member not found." };
+
   const { error } = await supabase.from("school_users").update({ status }).eq("id", schoolUserId);
   if (error) return { error: error.message };
+
+  // Auth is one shared account across every school this person belongs to
+  // -- school_users.status alone only gates this one row, so someone
+  // deactivated here could previously still sign back in through a
+  // different, still-active membership at another school. Ban/unban the
+  // underlying Supabase Auth user directly so a status change here takes
+  // effect everywhere, immediately. Deliberate tradeoff (Lucy's explicit
+  // choice, 2026-08-21): reactivating here unbans globally too, even for a
+  // school that never touched this person's status -- not "locked out only
+  // once every membership is inactive."
+  try {
+    const adminClient = createAdminClient();
+    const { error: banError } = await adminClient.auth.admin.updateUserById(target.auth_user_id, {
+      // "none" clears a ban; there's no true "forever" value, so ~100 years
+      // stands in for permanent until someone explicitly reactivates.
+      ban_duration: status === "active" ? "none" : "876000h",
+    });
+    if (banError) throw banError;
+  } catch (err) {
+    // The school_users.status change (and the RLS it drives for this one
+    // school) already took effect -- don't roll that back. But don't report
+    // clean success either, since a failed ban sync silently defeats the
+    // whole point of this change.
+    console.error("Failed to sync auth ban state for", target.auth_user_id, err);
+    return {
+      error:
+        status === "active"
+          ? "Status updated, but failed to restore account-wide login access. Check server logs."
+          : "Status updated, but failed to lock account-wide login access. Check server logs.",
+    };
+  }
+
   revalidatePath("/settings", "layout");
   return { success: true };
 }

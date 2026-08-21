@@ -58,7 +58,15 @@ export async function login(
   });
 
   if (error) {
-    // Deliberately generic: don't confirm whether the email exists.
+    // Banned accounts (deactivated/suspended at any school -- see
+    // setStaffStatus in settings/actions.ts) get a specific message. This
+    // doesn't leak whether an email exists in the way a "no such account"
+    // message would -- it only fires after a password that actually
+    // authenticates against a real, banned account.
+    if (error.message?.toLowerCase().includes("banned")) {
+      return { error: "This account has been deactivated. Contact your school admin." };
+    }
+    // Deliberately generic otherwise: don't confirm whether the email exists.
     return { error: "Invalid email or password." };
   }
 
