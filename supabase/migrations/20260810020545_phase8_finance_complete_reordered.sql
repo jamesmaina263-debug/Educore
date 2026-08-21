@@ -1,8 +1,102 @@
--- Phase 8, Item 13: reversals, not deletions. A correction is recorded as an offsetting
--- transaction — the original payment and its original allocations stay visible in the ledger
--- (brief §4.7: "corrections are recorded as an offsetting reversal transaction; the original
--- stays visible"). No UPDATE/DELETE of amount_allocated is ever used for a correction.
 
+-- ============================================================
+-- STEP 1 (was file 1): Student Financial Account
+-- ============================================================
+create sequence if not exists student_payment_reference_seq;
+
+create table student_financial_accounts (
+  id uuid primary key default gen_random_uuid(),
+  school_id uuid not null references schools(id) on delete cascade,
+  student_id uuid not null unique references students(id) on delete cascade,
+  payment_reference text not null,
+  created_at timestamptz not null default now(),
+  unique (school_id, payment_reference)
+);
+comment on table student_financial_accounts is 'The Student Financial Account (brief §4.7): one per student, never a duplicate student entity. payment_reference is the identifier a parent quotes when paying — e.g. EDU00452 — distinct from admission_number, which is an academic/administrative identifier.';
+
+create index student_financial_accounts_school_id_idx on student_financial_accounts (school_id);
+
+alter table student_financial_accounts enable row level security;
+
+create policy student_financial_accounts_select on student_financial_accounts for select
+  using (
+    (school_id = auth_school_id() and auth_has_permission('finance.read'))
+    or auth_user_id_is_guardian_of(student_financial_accounts.student_id)
+    or exists (
+      select 1 from students st join school_users su on su.id = st.school_user_id
+      where st.id = student_financial_accounts.student_id and su.auth_user_id = (select auth.uid())
+    )
+  );
+
+create or replace function get_or_create_student_financial_account(p_student_id uuid)
+returns student_financial_accounts
+language plpgsql security definer set search_path = public as $$
+declare
+  v_school_id uuid;
+  v_account student_financial_accounts;
+  v_reference text;
+begin
+  select id into v_account.id from student_financial_accounts where student_id = p_student_id;
+  if v_account.id is not null then
+    select * into v_account from student_financial_accounts where student_id = p_student_id;
+    return v_account;
+  end if;
+
+  if not (auth_has_permission('finance.write') or auth_has_permission('students.write')) then
+    raise exception 'Not authorized to create a Student Financial Account.';
+  end if;
+
+  select school_id into v_school_id from students where id = p_student_id;
+  if v_school_id is null then
+    raise exception 'Student not found.';
+  end if;
+
+  v_reference := 'EDU' || lpad(nextval('student_payment_reference_seq')::text, 5, '0');
+
+  insert into student_financial_accounts (school_id, student_id, payment_reference)
+  values (v_school_id, p_student_id, v_reference)
+  returning * into v_account;
+
+  return v_account;
+end;
+$$;
+
+revoke execute on function get_or_create_student_financial_account(uuid) from public, anon;
+grant execute on function get_or_create_student_financial_account(uuid) to authenticated;
+
+
+-- ============================================================
+-- STEP 2 (moved up from file 4): add payments.status/source/etc BEFORE
+-- anything below references payments.status. This is the fix for the
+-- "column p.status does not exist" error.
+-- ============================================================
+alter table payments
+  add column status text not null default 'confirmed'
+    check (status in ('pending', 'recorded', 'confirmed', 'reversed', 'unallocated')),
+  add column source text not null default 'manual' check (source in ('manual', 'api')),
+  add column external_provider text,
+  add column purpose text,
+  add column notes text,
+  add column confirmed_at timestamptz not null default now();
+comment on column payments.status is 'confirmed = a manual entry the Finance Officer has independently verified (the default and, for now, the only real path). pending/recorded/reversed/unallocated exist so a future payment-intake API/webhook can land in the same pipeline without a redesign (brief §4.7 item 7/8) — no API produces these yet.';
+comment on column payments.source is 'manual (the only value ever written today) vs api (reserved for a future payment-intake integration — not built, no code path sets this yet).';
+comment on column payments.external_provider is 'Reserved for a future API integration (e.g. "mpesa", "equity-bank") to record which external system a payment came from. Null for every manual entry today.';
+
+alter table payments alter column student_id drop not null;
+alter table payments add constraint payments_student_id_status_consistency
+  check ((status = 'unallocated' and student_id is null) or (status <> 'unallocated' and student_id is not null));
+
+create unique index payments_school_method_reference_unique
+  on payments (school_id, method, reference)
+  where reference is not null and status <> 'reversed';
+
+create index payments_status_idx on payments (school_id, status);
+
+
+-- ============================================================
+-- STEP 3 (was file 2): reversals — now payments.status exists, so the
+-- v_student_balances view at the end of this block can reference it.
+-- ============================================================
 alter table payment_allocations add column entry_type text not null default 'allocation'
   check (entry_type in ('allocation', 'reversal'));
 comment on column payment_allocations.entry_type is '''allocation'' rows are money applied to an invoice (amount_allocated > 0, as before). ''reversal'' rows offset a prior allocation (amount_allocated < 0) when a payment is reversed — inserted, never overwriting the original row.';
@@ -10,11 +104,6 @@ comment on column payment_allocations.entry_type is '''allocation'' rows are mon
 alter table payment_allocations drop constraint payment_allocations_amount_allocated_check;
 alter table payment_allocations add constraint payment_allocations_amount_allocated_check
   check ((entry_type = 'allocation' and amount_allocated > 0) or (entry_type = 'reversal' and amount_allocated < 0));
-
--- v_student_balances.total_paid already sums payment_allocations.amount_allocated, so a reversal
--- row (negative) nets it down automatically — no formula change needed there, and the existing
--- recompute_invoice_status trigger (fires on payment_allocations insert) already recomputes the
--- affected invoice's status correctly when a reversal lands.
 
 create table payment_reversals (
   id uuid primary key default gen_random_uuid(),
@@ -42,13 +131,7 @@ create policy payment_reversals_select on payment_reversals for select
         )
     )
   );
--- No direct write policy — only reverse_payment() below.
 
--- Reverses up to p_amount of a payment. The portion that was applied to invoices is pulled back
--- (oldest allocation first) as new negative payment_allocations rows against the same invoices,
--- which pushes their balance back up via the existing recompute trigger. Any remaining reversed
--- amount that was sitting as unapplied credit simply reduces that credit (v_student_balances
--- computes credit from net-received-minus-allocated, so no separate credit ledger row is needed).
 create or replace function reverse_payment(p_payment_id uuid, p_amount numeric, p_reason text)
 returns void
 language plpgsql security definer set search_path = public as $$
@@ -86,8 +169,6 @@ begin
 
   insert into payment_reversals (payment_id, amount, reason, reversed_by) values (p_payment_id, p_amount, p_reason, v_actor);
 
-  -- How much of THIS payment is currently applied to invoices (allocation rows minus any prior
-  -- reversal rows already pulled back), that we can still claw back.
   select coalesce(sum(amount_allocated), 0) into v_already_allocated
     from payment_allocations where payment_id = p_payment_id;
   v_to_pull_back := least(p_amount, greatest(v_already_allocated, 0));
@@ -115,14 +196,6 @@ $$;
 revoke execute on function reverse_payment(uuid, numeric, text) from public, anon;
 grant execute on function reverse_payment(uuid, numeric, text) to authenticated;
 
--- credit_balance: money received (net of reversals) that hasn't been applied to any invoice —
--- overpayment credit that stays attached to the account (brief §4.7 item 12), never lost, and
--- computed on read like every other balance figure here (never hand-edited).
--- create or replace (not drop+create): v_at_risk_students (an earlier phase) depends on this
--- view, and a bare DROP fails on that dependency. CREATE OR REPLACE is safe here because every
--- existing column (student_id, school_id, stream_id, total_invoiced, total_discounted,
--- total_paid, balance) keeps its exact name, position, and type — credit_balance is only ever
--- appended at the end, which Postgres allows without touching dependent views.
 create or replace view v_student_balances
 with (security_invoker = true) as
 select

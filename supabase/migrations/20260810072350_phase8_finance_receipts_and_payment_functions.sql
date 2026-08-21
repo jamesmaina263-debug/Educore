@@ -1,43 +1,72 @@
--- Phase 8, Items 5-11: payment status model, future-API-readiness columns, manual payment
--- workflow extensions, unallocated payments, duplicate protection. Structural only — no outbound
--- HTTP calls, no mock provider, no simulated webhook (brief §4.7 / build plan Phase 8 explicitly
--- forbids building the API itself).
 
--- id already serves as the internal transaction id (every payment already has a stable uuid) —
--- deliberately not duplicating it into a second column.
-alter table payments
-  add column status text not null default 'confirmed'
-    check (status in ('pending', 'recorded', 'confirmed', 'reversed', 'unallocated')),
-  add column source text not null default 'manual' check (source in ('manual', 'api')),
-  add column external_provider text,
-  add column purpose text,
-  add column notes text,
-  add column confirmed_at timestamptz not null default now();
-comment on column payments.status is 'confirmed = a manual entry the Finance Officer has independently verified (the default and, for now, the only real path). pending/recorded/reversed/unallocated exist so a future payment-intake API/webhook can land in the same pipeline without a redesign (brief §4.7 item 7/8) — no API produces these yet.';
-comment on column payments.source is 'manual (the only value ever written today) vs api (reserved for a future payment-intake integration — not built, no code path sets this yet).';
-comment on column payments.external_provider is 'Reserved for a future API integration (e.g. "mpesa", "equity-bank") to record which external system a payment came from. Null for every manual entry today.';
+-- ============================================================
+-- STEP 4 (was file 3): Receipts
+-- ============================================================
+create sequence if not exists receipt_number_seq;
 
--- student_id becomes nullable to support the Unallocated Payments queue (brief §4.7 item 9) —
--- a payment that cannot be confidently matched to a student on entry.
-alter table payments alter column student_id drop not null;
-alter table payments add constraint payments_student_id_status_consistency
-  check ((status = 'unallocated' and student_id is null) or (status <> 'unallocated' and student_id is not null));
+create table receipts (
+  id uuid primary key default gen_random_uuid(),
+  school_id uuid not null references schools(id) on delete cascade,
+  payment_id uuid not null unique references payments(id) on delete cascade,
+  student_id uuid not null references students(id) on delete cascade,
+  receipt_number text not null,
+  issued_at timestamptz not null default now(),
+  unique (school_id, receipt_number)
+);
+comment on table receipts is 'One receipt per confirmed, student-allocated payment (unique on payment_id — never a second receipt for the same payment, satisfying "one receipt system, not two"). Generated automatically by generate_receipt(), called from record_payment() and allocate_unallocated_payment().';
 
--- Duplicate protection (brief §4.7 item 11): the same external reference for the same method
--- should never be recorded twice. Partial so a reversed payment's reference can legitimately be
--- re-entered if the school genuinely re-receives that same payment later.
-create unique index payments_school_method_reference_unique
-  on payments (school_id, method, reference)
-  where reference is not null and status <> 'reversed';
+create index receipts_student_id_idx on receipts (student_id);
+create index receipts_school_id_idx on receipts (school_id);
 
-create index payments_status_idx on payments (school_id, status);
+alter table receipts enable row level security;
 
--- Records a manual payment already confirmed by the Finance Officer (per-invoice allocation or
--- FIFO, unchanged from the original function) — now also stamping status/source/purpose/notes
--- and guaranteeing the student has a Financial Account before the payment lands, and generating
--- a receipt. Two new trailing params (p_purpose, p_notes) means this is a distinct overload in
--- Postgres, not an in-place replace — drop the original 7-arg signature explicitly so no caller
--- can silently keep hitting the old function that skips status/receipt generation.
+create policy receipts_select on receipts for select
+  using (
+    (school_id = auth_school_id() and auth_has_permission('finance.read'))
+    or auth_user_id_is_guardian_of(receipts.student_id)
+    or exists (
+      select 1 from students st join school_users su on su.id = st.school_user_id
+      where st.id = receipts.student_id and su.auth_user_id = (select auth.uid())
+    )
+  );
+
+create or replace function generate_receipt(p_payment_id uuid)
+returns receipts
+language plpgsql security definer set search_path = public as $$
+declare
+  v_receipt receipts;
+  v_school_id uuid;
+  v_student_id uuid;
+  v_number text;
+begin
+  select * into v_receipt from receipts where payment_id = p_payment_id;
+  if v_receipt.id is not null then
+    return v_receipt;
+  end if;
+
+  select school_id, student_id into v_school_id, v_student_id from payments where id = p_payment_id;
+  if v_student_id is null then
+    return null;
+  end if;
+
+  v_number := 'RCT-' || to_char(now(), 'YYYY') || '-' || lpad(nextval('receipt_number_seq')::text, 6, '0');
+
+  insert into receipts (school_id, payment_id, student_id, receipt_number)
+  values (v_school_id, p_payment_id, v_student_id, v_number)
+  returning * into v_receipt;
+
+  return v_receipt;
+end;
+$$;
+
+revoke execute on function generate_receipt(uuid) from public, anon;
+grant execute on function generate_receipt(uuid) to authenticated;
+
+
+-- ============================================================
+-- STEP 5 (remainder of file 4): payment recording functions.
+-- entry_type (step 3) and generate_receipt() (step 4) now both exist.
+-- ============================================================
 drop function if exists record_payment(uuid, text, numeric, text, text, text, jsonb);
 
 create or replace function record_payment(
@@ -69,9 +98,6 @@ begin
     raise exception 'Student not found in your school.';
   end if;
 
-  -- Every enrolled student paying anything needs a Financial Account; create it here if this
-  -- is somehow the first Finance touchpoint for this student (defensive — the Admissions
-  -- enrollment hook is the normal creation point).
   perform get_or_create_student_financial_account(p_student_id);
 
   select id into v_recorded_by from school_users where auth_user_id = auth.uid();
@@ -110,9 +136,6 @@ begin
         v_remaining := v_remaining - v_apply;
       end;
     end loop;
-    -- Any remainder is overpayment: it stays on the account as unapplied credit (never lost,
-    -- brief §4.7 item 12) — v_student_balances.credit_balance surfaces it, and future invoices
-    -- can be paid down using it via the credit-application path in allocate_unallocated_payment.
   end if;
 
   insert into audit_log (school_id, actor_school_user_id, table_name, record_id, action, new_data)
@@ -128,8 +151,6 @@ $$;
 revoke execute on function record_payment(uuid, text, numeric, text, text, text, jsonb, text, text) from public, anon;
 grant execute on function record_payment(uuid, text, numeric, text, text, text, jsonb, text, text) to authenticated;
 
--- Records a payment that cannot be confidently matched to a student on entry (brief §4.7 item 9)
--- — lands in the Unallocated Payments queue instead of being guessed at.
 create or replace function record_unallocated_payment(
   p_method text,
   p_amount numeric,
@@ -165,10 +186,6 @@ $$;
 revoke execute on function record_unallocated_payment(text, numeric, text, text, text, text) from public, anon;
 grant execute on function record_unallocated_payment(text, numeric, text, text, text, text) to authenticated;
 
--- An authorized Finance Officer investigates an Unallocated payment and allocates it to the
--- correct student — the allocation itself is audited (brief §4.7 item 9), and the original
--- payment row (method/amount/reference/recorded_at) is never altered, only its student_id and
--- status, preserving the original payment data unchanged.
 create or replace function allocate_unallocated_payment(
   p_payment_id uuid,
   p_student_id uuid,

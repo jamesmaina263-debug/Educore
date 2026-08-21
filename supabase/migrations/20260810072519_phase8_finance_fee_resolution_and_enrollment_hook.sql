@@ -1,21 +1,13 @@
--- Phase 8, Item 2: fee structure engine stays the single calculation engine — extended, not
--- duplicated, to actually resolve boarding_type (previously hard-coded to 'day' — see the
--- original migration's own comment: "no students.boarding_type field yet to pick the right one
--- per student — that's Hostel-module territory (deferred)") now that Boarding (Phase 5) and
--- Transport (Phase 6) are built. A student's boarding_type is derived from whether they hold an
--- active bed allocation — never a stored column that could drift out of sync with Boarding's own
--- authoritative allocation records.
 
+-- ============================================================
+-- STEP 6 (was file 5): fee structure engine — boarding/transport-aware
+-- ============================================================
 alter table fee_structures add column fee_category text not null default 'core'
   check (fee_category in ('core', 'transport'));
 comment on column fee_structures.fee_category is '''core'' = the day/boarder tuition-and-related structure (boarding_type applies). ''transport'' = an add-on structure whose fee_items get merged into the same single per-term invoice when a student holds an active transport assignment — never a second invoice (invoices keeps its unique(student_id, term_id) constraint).';
 
 create index fee_structures_fee_category_idx on fee_structures (fee_category);
 
--- Read-only preview of what a student would be charged for a term, using the exact same
--- resolution the real invoice-generation functions use below — reused so there is never a
--- second calculation engine (brief §4.7 item 2), including by the Admissions Step 9 charge
--- preview once the onboarding wizard is built.
 create or replace function resolve_fee_charges_for_student(p_student_id uuid, p_term_id uuid)
 returns table (item_name text, amount numeric, fee_category text)
 language plpgsql security definer set search_path = public as $$
@@ -79,8 +71,6 @@ $$;
 revoke execute on function resolve_fee_charges_for_student(uuid, uuid) from public, anon;
 grant execute on function resolve_fee_charges_for_student(uuid, uuid) to authenticated;
 
--- Batch generation (Fee Structures tab's existing "Generate invoices" action), now boarding- and
--- transport-aware via the same resolution as above, still one invoice per student per term.
 create or replace function generate_invoices(p_term_id uuid, p_class_id uuid default null) returns integer
 language plpgsql security definer set search_path = public as $$
 declare
@@ -126,7 +116,7 @@ begin
         limit 1;
     end if;
     if v_structure_id is null then
-      continue; -- no fee structure configured for this student's grade/boarding-type or school-wide default; skip, don't fail the whole batch
+      continue;
     end if;
 
     select coalesce(sum(amount), 0) into v_total from fee_items where fee_structure_id = v_structure_id;
@@ -186,10 +176,6 @@ begin
 end;
 $$;
 
--- Single-student, idempotent equivalent of generate_invoices — the function the (future)
--- Admissions enrollment hook and the Finance reconciliation UI call for one student at a time.
--- If an invoice already exists for this student+term it is returned as-is, never duplicated
--- (invoices.unique(student_id, term_id) also enforces this at the DB level).
 create or replace function create_or_get_invoice_for_student(p_student_id uuid, p_term_id uuid)
 returns uuid
 language plpgsql security definer set search_path = public as $$
@@ -296,3 +282,48 @@ $$;
 
 revoke execute on function create_or_get_invoice_for_student(uuid, uuid) from public, anon;
 grant execute on function create_or_get_invoice_for_student(uuid, uuid) to authenticated;
+
+
+-- ============================================================
+-- STEP 7 (was file 6): Admissions enrollment hook
+-- ============================================================
+create or replace function finance_on_student_enrolled(p_student_id uuid)
+returns table (payment_reference text, invoice_id uuid, total_amount numeric)
+language plpgsql security definer set search_path = public as $$
+declare
+  v_school_id uuid := auth_school_id();
+  v_account student_financial_accounts;
+  v_active_term_id uuid;
+  v_invoice_id uuid;
+  v_total numeric;
+begin
+  if not auth_has_permission('students.write') then
+    raise exception 'Not authorized to complete enrollment.';
+  end if;
+  if not exists (select 1 from students where id = p_student_id and school_id = v_school_id) then
+    raise exception 'Student not found in your school.';
+  end if;
+
+  v_account := get_or_create_student_financial_account(p_student_id);
+
+  select t.id into v_active_term_id from terms t
+    join academic_years ay on ay.id = t.academic_year_id
+    where ay.school_id = v_school_id and t.status = 'active'
+    limit 1;
+
+  if v_active_term_id is not null then
+    begin
+      v_invoice_id := create_or_get_invoice_for_student(p_student_id, v_active_term_id);
+      select total_amount into v_total from invoices where id = v_invoice_id;
+    exception when others then
+      v_invoice_id := null;
+      v_total := null;
+    end;
+  end if;
+
+  return query select v_account.payment_reference, v_invoice_id, v_total;
+end;
+$$;
+
+revoke execute on function finance_on_student_enrolled(uuid) from public, anon;
+grant execute on function finance_on_student_enrolled(uuid) to authenticated;
