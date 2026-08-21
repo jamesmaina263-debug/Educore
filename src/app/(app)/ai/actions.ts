@@ -38,7 +38,10 @@ type Intent =
   | "low_stock_inventory"
   | "daily_summary"
   | "admissions_today"
-  | "admissions_this_month";
+  | "admissions_this_month"
+  | "students_admitted_this_term"
+  | "top_fee_defaulters"
+  | "attendance_trend_this_week";
 
 // A daily_summary answer is assembled from whichever of these sections the caller is permitted
 // to see — it has no single gating permission of its own.
@@ -81,6 +84,21 @@ const INTENTS: { key: Intent; description: string; permission: PermissionKey | n
     description: "How many students were admitted this calendar month, with their names and admission numbers",
     permission: "students.read",
   },
+  {
+    key: "students_admitted_this_term",
+    description: "How many students were admitted during the current active term, with their names and admission numbers",
+    permission: "students.read",
+  },
+  {
+    key: "top_fee_defaulters",
+    description: "Which students have the largest outstanding fee balances",
+    permission: "finance.read",
+  },
+  {
+    key: "attendance_trend_this_week",
+    description: "How the daily attendance rate has trended so far this week",
+    permission: "attendance.read",
+  },
 ];
 
 export interface AskAIResult {
@@ -95,6 +113,15 @@ function todayISO() {
 function monthStartISO() {
   const now = new Date();
   return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString().slice(0, 10);
+}
+
+function weekStartISO() {
+  const now = new Date();
+  const day = now.getUTCDay(); // 0=Sun..6=Sat
+  const diffToMonday = day === 0 ? 6 : day - 1;
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - diffToMonday))
+    .toISOString()
+    .slice(0, 10);
 }
 
 async function classifyIntent(question: string): Promise<Intent | null> {
@@ -488,6 +515,119 @@ async function runIntent(
       const remainder = students.length - shown.length;
       const suffix = remainder > 0 ? `, and ${remainder} more` : "";
       return `${students.length} student(s) admitted this month: ${list}${suffix}.`;
+    }
+
+    case "students_admitted_this_term": {
+      // terms is RLS-gated on academics.read, a permission not every students.read holder is
+      // guaranteed to have (they happen to overlap in current seed data, but that's not a
+      // constraint) — checked explicitly so a caller missing it gets an honest refusal instead of
+      // a silently-empty/wrong "no active term" result. Same anti-pattern Module 19 already fixed
+      // for v_fee_collection_forecast/v_at_risk_students: a confident empty result is worse than
+      // a stated "you don't have access."
+      const { data: canAcademics } = await supabase.rpc("auth_has_permission", { p_permission_key: "academics.read" });
+      if (!canAcademics) {
+        return "I can't determine the current term without access to academics data, so I can't answer that.";
+      }
+
+      const { data: term } = await supabase
+        .from("terms")
+        .select("name, start_date")
+        .eq("status", "active")
+        .maybeSingle();
+      if (!term) return "No term is currently marked active.";
+
+      const today = todayISO();
+      const { data: students } = await supabase
+        .from("students")
+        .select("id, first_name, last_name, admission_number")
+        .gte("admission_date", term.start_date)
+        .lte("admission_date", today)
+        .order("admission_date", { ascending: true });
+      if (!students || students.length === 0) return `No students have been admitted yet during ${term.name}.`;
+
+      const { data: canFinance } = await supabase.rpc("auth_has_permission", { p_permission_key: "finance.read" });
+      const DISPLAY_CAP = 15;
+      const shown = students.slice(0, DISPLAY_CAP);
+      const paidByStudent = new Map<string, number>();
+      if (canFinance) {
+        const { data: payments } = await supabase
+          .from("payments")
+          .select("student_id, amount")
+          .in("student_id", shown.map((s) => s.id));
+        for (const p of payments ?? []) {
+          paidByStudent.set(p.student_id, (paidByStudent.get(p.student_id) ?? 0) + Number(p.amount));
+        }
+      }
+      const list = shown
+        .map((s) => {
+          const base = `${s.first_name} ${s.last_name} (${s.admission_number})`;
+          if (!canFinance) return base;
+          const paid = paidByStudent.get(s.id) ?? 0;
+          return `${base} — KES ${paid.toLocaleString()} paid`;
+        })
+        .join(", ");
+      const remainder = students.length - shown.length;
+      const suffix = remainder > 0 ? `, and ${remainder} more` : "";
+      return `${students.length} student(s) admitted during ${term.name}: ${list}${suffix}.`;
+    }
+
+    case "top_fee_defaulters": {
+      const { data: balances } = await supabase
+        .from("v_student_balances")
+        .select("student_id, balance")
+        .gt("balance", 0)
+        .order("balance", { ascending: false })
+        .limit(5);
+      if (!balances || balances.length === 0) return "No students currently have an outstanding fee balance.";
+
+      // v_student_balances has no name columns (confirmed against every other caller in the app —
+      // finance/_data.ts, students/[id]/page.tsx, dashboard/page.tsx, portal/page.tsx — none embed
+      // a students() join on it either, so this two-query join is the app's own established
+      // pattern, not something invented here).
+      const { data: students } = await supabase
+        .from("students")
+        .select("id, first_name, last_name, admission_number")
+        .in("id", balances.map((b) => b.student_id));
+      const studentById = new Map((students ?? []).map((s) => [s.id, s]));
+
+      const list = balances
+        .map((b) => {
+          const s = studentById.get(b.student_id);
+          const name = s ? `${s.first_name} ${s.last_name} (${s.admission_number})` : "a student you don't have access to";
+          return `${name} — KES ${Number(b.balance).toLocaleString()}`;
+        })
+        .join(", ");
+      return `Largest outstanding balances: ${list}.`;
+    }
+
+    case "attendance_trend_this_week": {
+      const weekStart = weekStartISO();
+      const today = todayISO();
+      const { data } = await supabase
+        .from("student_attendance")
+        .select("attendance_date, status")
+        .eq("session", "class")
+        .gte("attendance_date", weekStart)
+        .lte("attendance_date", today);
+      if (!data || data.length === 0) return "No attendance has been marked yet this week.";
+
+      const byDate = new Map<string, { present: number; total: number }>();
+      for (const r of data) {
+        const entry = byDate.get(r.attendance_date) ?? { present: 0, total: 0 };
+        entry.total += 1;
+        if (r.status === "present") entry.present += 1;
+        byDate.set(r.attendance_date, entry);
+      }
+      const dayLabels = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+      const parts = Array.from(byDate.keys())
+        .sort()
+        .map((d) => {
+          const { present, total } = byDate.get(d)!;
+          const rate = total > 0 ? Math.round((100 * present) / total) : 0;
+          const label = dayLabels[new Date(`${d}T00:00:00Z`).getUTCDay()];
+          return `${label} ${rate}%`;
+        });
+      return `Attendance this week so far: ${parts.join(", ")}.`;
     }
 
     case "daily_summary": {
