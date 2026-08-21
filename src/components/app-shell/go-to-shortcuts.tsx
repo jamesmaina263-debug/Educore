@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { GO_TO_SHORTCUTS } from "@/lib/go-to-shortcuts";
 import { useCommandPalette } from "./command-palette-context";
+import { useOnlineStatus } from "@/hooks/use-online-status";
 
 const SEQUENCE_TIMEOUT_MS = 1200;
 
@@ -32,6 +33,7 @@ function isShortcutBlockedTarget(el: EventTarget | null): boolean {
 export function GoToShortcuts() {
   const { open: paletteOpen } = useCommandPalette();
   const router = useRouter();
+  const online = useOnlineStatus();
   const awaitingSecondKey = useRef(false);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -76,7 +78,12 @@ export function GoToShortcuts() {
       const match = GO_TO_SHORTCUTS.find((s) => s.key === key);
       if (match) {
         e.preventDefault();
-        router.push(match.href);
+        // Same offline-forces-hard-navigation reasoning as sidebar-nav.tsx.
+        if (!online) {
+          window.location.href = match.href;
+        } else {
+          router.push(match.href);
+        }
       }
     };
 
@@ -85,7 +92,7 @@ export function GoToShortcuts() {
       document.removeEventListener("keydown", handleKeyDown);
       clearPending();
     };
-  }, [paletteOpen, router]);
+  }, [paletteOpen, router, online]);
 
   return null;
 }

@@ -17,6 +17,7 @@ import { NotificationBell } from "./notification-bell";
 import { useCommandPalette } from "./command-palette-context";
 import type { BreadcrumbItem } from "./breadcrumbs";
 import { Breadcrumbs } from "./breadcrumbs";
+import { clearOfflineCaches } from "@/lib/offline/clear-on-logout";
 
 export function Topbar({
   breadcrumbs,
@@ -32,6 +33,15 @@ export function Topbar({
   schoolName?: string;
 }) {
   const { setOpen } = useCommandPalette();
+
+  // Wipe this session's offline-cached pages before the actual sign-out
+  // Server Action runs, so a different person signing in on this device
+  // afterward can never be served a stale cached page from this session.
+  // See clearOfflineCaches() for exactly what is/isn't cleared.
+  function handleSignOut() {
+    void clearOfflineCaches();
+    onSignOut();
+  }
 
   return (
     <header className="flex h-14 shrink-0 items-center gap-3 border-b border-border bg-surface px-4">
@@ -92,7 +102,7 @@ export function Topbar({
               </div>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onSelect={onSignOut}>Sign out</DropdownMenuItem>
+            <DropdownMenuItem onSelect={handleSignOut}>Sign out</DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>

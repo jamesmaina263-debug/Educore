@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useOnlineStatus } from "@/hooks/use-online-status";
 import { navGroups, type NavItem } from "./nav-items";
 
 function isActive(pathname: string, href: string) {
@@ -14,17 +15,35 @@ function isActive(pathname: string, href: string) {
 function NavRow({
   item,
   active,
+  online,
   onNavigate,
 }: {
   item: NavItem;
   active: boolean;
+  online: boolean;
   onNavigate?: () => void;
 }) {
   const Icon = item.icon;
   return (
     <Link
       href={item.href}
-      onClick={onNavigate}
+      onClick={(e) => {
+        // Next's normal <Link> click does a client-side transition, which
+        // fetches the destination's RSC payload straight from the server --
+        // there's no cache in front of that fetch (deliberately -- see
+        // public/sw.js), so it just fails silently while offline and the
+        // click appears to do nothing. Forcing a real browser navigation
+        // instead routes the request through the service worker's `fetch`
+        // handler, which can serve a previously-cached copy of that page.
+        // Online, this branch never runs -- soft navigation stays as snappy
+        // as it already was.
+        if (!online) {
+          e.preventDefault();
+          window.location.href = item.href;
+          return;
+        }
+        onNavigate?.();
+      }}
       className={cn(
         "flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-sm font-medium transition-colors",
         active
@@ -40,6 +59,7 @@ function NavRow({
 
 export function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
+  const online = useOnlineStatus();
   const [manuallyOpen, setManuallyOpen] = useState<Record<string, boolean>>({});
 
   return (
@@ -56,7 +76,7 @@ export function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
 
             if (!hasChildren) {
               return (
-                <NavRow key={item.href} item={item} active={parentActive} onNavigate={onNavigate} />
+                <NavRow key={item.href} item={item} active={parentActive} online={online} onNavigate={onNavigate} />
               );
             }
 
@@ -90,7 +110,16 @@ export function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
                         <Link
                           key={child.href}
                           href={child.href}
-                          onClick={onNavigate}
+                          onClick={(e) => {
+                            // Same offline-forces-hard-navigation reasoning
+                            // as NavRow above.
+                            if (!online) {
+                              e.preventDefault();
+                              window.location.href = child.href;
+                              return;
+                            }
+                            onNavigate?.();
+                          }}
                           className={cn(
                             "flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-sm transition-colors",
                             childActive

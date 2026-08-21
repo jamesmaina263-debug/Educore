@@ -158,3 +158,13 @@ export async function idbDelete(store: string, key: IDBValidKey): Promise<void> 
     tx.onerror = () => reject(tx.error ?? new Error(`Failed to delete from ${store}.`));
   });
 }
+
+export async function idbClear(store: string): Promise<void> {
+  const db = await openDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(store, "readwrite");
+    tx.objectStore(store).clear();
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error ?? new Error(`Failed to clear ${store}.`));
+  });
+}

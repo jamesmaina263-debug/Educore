@@ -1,5 +1,74 @@
 # Offline support rollout
 
+## Cross-module offline navigation (this pass)
+
+Every module above solved *writing* while offline. This pass solves a
+different problem: **before this, you could only stay on the one page you
+had open when you went offline -- clicking any sidebar link, breadcrumb,
+the command palette, or a `g <letter>` shortcut just silently failed**,
+because they all did Next.js's normal client-side "soft" navigation, which
+fetches an RSC payload straight from the server. There's no cache in front
+of that fetch, by design (see `public/sw.js`'s original scope note), so it
+had nothing to fall back to.
+
+Two changes, kept deliberately separate so the risky part (caching
+per-school/per-user data) stays small and easy to reason about:
+
+- **`public/sw.js`** now caches two different things, on two different
+  strategies:
+  - Full-document page navigations (`RUNTIME_CACHE`) -- network-first, so
+    the freshest copy is always used when online, falling back to the last
+    successful visit when offline. This **does** contain rendered
+    per-school/per-user data (whatever that page's Server Component fetched
+    at cache time).
+  - `/_next/static/*` build chunks (`STATIC_CACHE`) -- cache-first. These
+    are content-hashed by Next's build and contain no tenant data at all, so
+    caching them aggressively and keeping them across sign-outs is safe;
+    it's also what lets a cached page actually hydrate (be interactive, not
+    just display static HTML) while offline.
+  - `CACHE_VERSION` bumped (`v2` -> `v3`) so every device's old caches are
+    wiped on next activate, rather than mixing old and new caching logic.
+- **`src/lib/offline/clear-on-logout.ts`** -- wipes `RUNTIME_CACHE` (via a
+  `postMessage` to the service worker) and the `cached_reads` IndexedDB
+  store on every sign-out. Wired into the one place `onSignOut` is actually
+  invoked (`topbar.tsx`'s dropdown), so every page that renders `AppShell`
+  is covered without touching two dozen call sites individually. This is
+  the actual answer to "won't this leak data across schools/users on a
+  shared device" -- a cached page cannot outlive the session that cached it.
+  Deliberately does **not** touch `pending_mutations` -- a queued offline
+  write belongs to the device, not the session, and discarding it on
+  sign-out would be a data-loss bug, not a safety fix.
+- **Navigation call sites forced to a hard (real) browser navigation while
+  offline**, since only a real navigation goes through the service worker's
+  `fetch` handler above (a soft `<Link>`/`router.push()` transition never
+  does): `sidebar-nav.tsx` (both top-level and nested items),
+  `breadcrumbs.tsx`, `command-palette.tsx`, `go-to-shortcuts.tsx` (the
+  `g <letter>` shortcuts), and the sidebar's school-name/logo link in
+  `app-shell-frame.tsx`. Online, every one of these is completely
+  unchanged -- soft navigation stays as fast as it already was; the hard-
+  navigation branch only runs when `useOnlineStatus()` reports offline.
+- **`app-shell-frame.tsx`** shows one app-wide "you're offline, pages may
+  not show the latest data" banner (distinct from each module's own
+  offline-*write* banner, e.g. attendance/exams -- this one is about what
+  you're *reading*, not what you're about to submit).
+
+**What this does not do:** it doesn't make an unvisited page reachable
+offline (there's nothing to serve a cache miss from), and it doesn't
+background-prefetch every module preemptively -- a page becomes available
+offline only after being visited at least once while online. It also
+doesn't yet expose "cached as of [time]" per page; the app-wide banner is a
+blunter signal for now. Both are reasonable, scoped follow-ups if staleness
+turns out to be confusing in practice.
+
+Verified: `tsc --noEmit`, `eslint`, and `vitest run` all pass on the
+touched files. Not yet verified: an actual airplane-mode walkthrough in a
+real browser (visit a few modules online, go offline, confirm navigation
+between them works and stale-page warning shows, sign out, confirm a
+second sign-in doesn't see the first user's cached pages) -- recommended
+before relying on this in production, since service worker caching
+behavior is one of the harder things to fully verify without a real
+browser.
+
 ## What changed in this pass
 
 Attendance was the only module with offline support, and it was built as a
