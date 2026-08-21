@@ -37,7 +37,8 @@ type Intent =
   | "students_in_sick_bay"
   | "low_stock_inventory"
   | "daily_summary"
-  | "admissions_today";
+  | "admissions_today"
+  | "admissions_this_month";
 
 // A daily_summary answer is assembled from whichever of these sections the caller is permitted
 // to see — it has no single gating permission of its own.
@@ -75,6 +76,11 @@ const INTENTS: { key: Intent; description: string; permission: PermissionKey | n
     description: "How many students were admitted today, with their names and admission numbers",
     permission: "students.read",
   },
+  {
+    key: "admissions_this_month",
+    description: "How many students were admitted this calendar month, with their names and admission numbers",
+    permission: "students.read",
+  },
 ];
 
 export interface AskAIResult {
@@ -84,6 +90,11 @@ export interface AskAIResult {
 
 function todayISO() {
   return new Date().toISOString().slice(0, 10);
+}
+
+function monthStartISO() {
+  const now = new Date();
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString().slice(0, 10);
 }
 
 async function classifyIntent(question: string): Promise<Intent | null> {
@@ -434,6 +445,49 @@ async function runIntent(
         })
         .join(", ");
       return `${students.length} student(s) admitted today: ${list}.`;
+    }
+
+    case "admissions_this_month": {
+      const monthStart = monthStartISO();
+      const today = todayISO();
+      const { data: students } = await supabase
+        .from("students")
+        .select("id, first_name, last_name, admission_number")
+        .gte("admission_date", monthStart)
+        .lte("admission_date", today)
+        .order("admission_date", { ascending: true });
+      if (!students || students.length === 0) return "No students have been admitted this month yet.";
+
+      // Same students.read / finance.read graceful-degradation as admissions_today.
+      const { data: canFinance } = await supabase.rpc("auth_has_permission", { p_permission_key: "finance.read" });
+
+      // A month can hold far more admissions than a single day — cap the named list so the
+      // answer stays readable, same reasoning as low_attendance_students' existing .limit(10).
+      const DISPLAY_CAP = 15;
+      const shown = students.slice(0, DISPLAY_CAP);
+
+      const paidByStudent = new Map<string, number>();
+      if (canFinance) {
+        const { data: payments } = await supabase
+          .from("payments")
+          .select("student_id, amount")
+          .in("student_id", shown.map((s) => s.id));
+        for (const p of payments ?? []) {
+          paidByStudent.set(p.student_id, (paidByStudent.get(p.student_id) ?? 0) + Number(p.amount));
+        }
+      }
+
+      const list = shown
+        .map((s) => {
+          const base = `${s.first_name} ${s.last_name} (${s.admission_number})`;
+          if (!canFinance) return base;
+          const paid = paidByStudent.get(s.id) ?? 0;
+          return `${base} — KES ${paid.toLocaleString()} paid`;
+        })
+        .join(", ");
+      const remainder = students.length - shown.length;
+      const suffix = remainder > 0 ? `, and ${remainder} more` : "";
+      return `${students.length} student(s) admitted this month: ${list}${suffix}.`;
     }
 
     case "daily_summary": {
