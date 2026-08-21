@@ -44,7 +44,10 @@ type Intent =
   | "attendance_trend_this_week"
   | "staff_on_leave_today"
   | "overdue_library_books"
-  | "transport_route_capacity";
+  | "transport_route_capacity"
+  | "students_without_primary_guardian"
+  | "open_discipline_cases"
+  | "upcoming_pt_meetings";
 
 // A daily_summary answer is assembled from whichever of these sections the caller is permitted
 // to see — it has no single gating permission of its own.
@@ -58,7 +61,8 @@ type PermissionKey =
   | "inventory.read_any"
   | "staff.read"
   | "library.read_any"
-  | "transport.read_any";
+  | "transport.read_any"
+  | "discipline.read_any";
 
 const INTENTS: { key: Intent; description: string; permission: PermissionKey | null }[] = [
   { key: "total_students", description: "How many active students are enrolled", permission: "students.read" },
@@ -112,6 +116,17 @@ const INTENTS: { key: Intent; description: string; permission: PermissionKey | n
     description: "Which transport routes are near or at full capacity",
     permission: "transport.read_any",
   },
+  {
+    key: "students_without_primary_guardian",
+    description: "Which students are missing a primary-contact guardian on file",
+    permission: "students.read",
+  },
+  {
+    key: "open_discipline_cases",
+    description: "How many discipline cases are currently open, and their titles",
+    permission: "discipline.read_any",
+  },
+  { key: "upcoming_pt_meetings", description: "What parent-teacher meeting slots are coming up", permission: null },
 ];
 
 export interface AskAIResult {
@@ -193,6 +208,7 @@ const PERMISSION_LABEL: Record<PermissionKey, string> = {
   "staff.read": "staff",
   "library.read_any": "library",
   "transport.read_any": "transport",
+  "discipline.read_any": "discipline",
 };
 
 export async function askEducoreAI(question: string): Promise<AskAIResult> {
@@ -699,6 +715,79 @@ async function runIntent(
       if (atCapacity.length === 0) return `No route is at or over capacity. Current usage: ${list}.`;
       const atCapNames = atCapacity.map((r) => r.route_name).join(", ");
       return `${atCapacity.length} route(s) at or over capacity: ${atCapNames}. Current usage: ${list}.`;
+    }
+
+    case "students_without_primary_guardian": {
+      // Relevant to applied/active students specifically — this is the exact gap
+      // enforce_student_has_primary_guardian() blocks at activation time, so it's a
+      // find-it-before-it-bites-you check, not a general audit of every historical student.
+      const { data: students } = await supabase
+        .from("students")
+        .select("id, first_name, last_name, admission_number")
+        .in("status", ["applied", "active"]);
+      if (!students || students.length === 0) return "No applied or active students found.";
+
+      const { data: guardianLinks } = await supabase
+        .from("student_guardians")
+        .select("student_id")
+        .eq("primary_contact", true)
+        .in("student_id", students.map((s) => s.id));
+      const hasPrimary = new Set((guardianLinks ?? []).map((g) => g.student_id));
+
+      const missing = students.filter((s) => !hasPrimary.has(s.id));
+      if (missing.length === 0) return "Every applied or active student has a primary-contact guardian on file.";
+
+      const DISPLAY_CAP = 15;
+      const shown = missing.slice(0, DISPLAY_CAP);
+      const list = shown.map((s) => `${s.first_name} ${s.last_name} (${s.admission_number})`).join(", ");
+      const remainder = missing.length - shown.length;
+      const suffix = remainder > 0 ? `, and ${remainder} more` : "";
+      return `${missing.length} student(s) missing a primary-contact guardian: ${list}${suffix}.`;
+    }
+
+    case "open_discipline_cases": {
+      // Titles only, never investigation_notes/follow_up_notes/resolution — those are
+      // sensitive case detail, not summary-level data an AI answer should surface.
+      const { data } = await supabase
+        .from("discipline_cases")
+        .select("title, status")
+        .in("status", ["open", "investigating", "pending_action"])
+        .order("opened_at", { ascending: true })
+        .limit(10);
+      if (!data || data.length === 0) return "No discipline cases are currently open.";
+      const list = data.map((c) => `${c.title} (${c.status})`).join(", ");
+      return `${data.length} open discipline case(s): ${list}.`;
+    }
+
+    case "upcoming_pt_meetings": {
+      const today = todayISO();
+      const { data: slots } = await supabase
+        .from("pt_meeting_slots")
+        .select("id, slot_date, start_time, capacity, school_users(full_name)")
+        .gte("slot_date", today)
+        .order("slot_date", { ascending: true })
+        .limit(10);
+      if (!slots || slots.length === 0) return "No upcoming parent-teacher meeting slots are scheduled.";
+
+      const { data: bookings } = await supabase
+        .from("pt_meeting_bookings")
+        .select("slot_id")
+        .eq("status", "booked")
+        .in("slot_id", slots.map((s) => s.id));
+      const bookedCount = new Map<string, number>();
+      for (const b of bookings ?? []) {
+        bookedCount.set(b.slot_id, (bookedCount.get(b.slot_id) ?? 0) + 1);
+      }
+
+      const list = slots
+        .map((s) => {
+          const teacher = s.school_users as unknown as { full_name: string } | null;
+          const booked = bookedCount.get(s.id) ?? 0;
+          const teacherName = teacher?.full_name ?? "an unassigned teacher";
+          return `${s.slot_date} ${s.start_time} with ${teacherName} (${booked}/${s.capacity} booked)`;
+        })
+        .join(", ");
+      return `${slots.length} upcoming slot(s): ${list}.`;
     }
 
     case "daily_summary": {
