@@ -41,7 +41,10 @@ type Intent =
   | "admissions_this_month"
   | "students_admitted_this_term"
   | "top_fee_defaulters"
-  | "attendance_trend_this_week";
+  | "attendance_trend_this_week"
+  | "staff_on_leave_today"
+  | "overdue_library_books"
+  | "transport_route_capacity";
 
 // A daily_summary answer is assembled from whichever of these sections the caller is permitted
 // to see — it has no single gating permission of its own.
@@ -52,7 +55,10 @@ type PermissionKey =
   | "exams.read"
   | "hostel.read_any"
   | "health.read_any"
-  | "inventory.read_any";
+  | "inventory.read_any"
+  | "staff.read"
+  | "library.read_any"
+  | "transport.read_any";
 
 const INTENTS: { key: Intent; description: string; permission: PermissionKey | null }[] = [
   { key: "total_students", description: "How many active students are enrolled", permission: "students.read" },
@@ -98,6 +104,13 @@ const INTENTS: { key: Intent; description: string; permission: PermissionKey | n
     key: "attendance_trend_this_week",
     description: "How the daily attendance rate has trended so far this week",
     permission: "attendance.read",
+  },
+  { key: "staff_on_leave_today", description: "Which staff members are on approved leave today", permission: "staff.read" },
+  { key: "overdue_library_books", description: "Which library books are overdue and who is holding them", permission: "library.read_any" },
+  {
+    key: "transport_route_capacity",
+    description: "Which transport routes are near or at full capacity",
+    permission: "transport.read_any",
   },
 ];
 
@@ -177,6 +190,9 @@ const PERMISSION_LABEL: Record<PermissionKey, string> = {
   "hostel.read_any": "boarding",
   "health.read_any": "health/sick bay",
   "inventory.read_any": "inventory",
+  "staff.read": "staff",
+  "library.read_any": "library",
+  "transport.read_any": "transport",
 };
 
 export async function askEducoreAI(question: string): Promise<AskAIResult> {
@@ -628,6 +644,61 @@ async function runIntent(
           return `${label} ${rate}%`;
         });
       return `Attendance this week so far: ${parts.join(", ")}.`;
+    }
+
+    case "staff_on_leave_today": {
+      const today = todayISO();
+      const { data } = await supabase
+        .from("leave_requests")
+        .select("staff_id, school_users(full_name), leave_types(name)")
+        .eq("status", "approved")
+        .lte("start_date", today)
+        .gte("end_date", today);
+      if (!data || data.length === 0) return "No staff members are on approved leave today.";
+      const list = data
+        .map((r) => {
+          const staff = r.school_users as unknown as { full_name: string } | null;
+          const leaveType = r.leave_types as unknown as { name: string } | null;
+          const name = staff?.full_name ?? "Unknown staff member";
+          return leaveType?.name ? `${name} (${leaveType.name})` : name;
+        })
+        .join(", ");
+      return `${data.length} staff member(s) on approved leave today: ${list}.`;
+    }
+
+    case "overdue_library_books": {
+      const today = todayISO();
+      const { data } = await supabase
+        .from("library_loans")
+        .select("due_date, library_items(title), students(first_name, last_name)")
+        .eq("status", "borrowed")
+        .lt("due_date", today)
+        .order("due_date", { ascending: true })
+        .limit(10);
+      if (!data || data.length === 0) return "No library books are currently overdue.";
+      const list = data
+        .map((r) => {
+          const item = r.library_items as unknown as { title: string } | null;
+          const s = r.students as unknown as { first_name: string; last_name: string } | null;
+          const title = item?.title ?? "Unknown title";
+          const holder = s ? `${s.first_name} ${s.last_name}` : "Unknown borrower";
+          return `${title} (held by ${holder}, due ${r.due_date})`;
+        })
+        .join(", ");
+      return `${data.length} overdue book(s): ${list}.`;
+    }
+
+    case "transport_route_capacity": {
+      const { data } = await supabase
+        .from("v_transport_route_capacity")
+        .select("route_name, capacity, allocated, available")
+        .order("allocated", { ascending: false });
+      if (!data || data.length === 0) return "No transport routes have been set up yet.";
+      const list = data.map((r) => `${r.route_name} (${r.allocated}/${r.capacity})`).join(", ");
+      const atCapacity = data.filter((r) => r.capacity > 0 && r.available <= 0);
+      if (atCapacity.length === 0) return `No route is at or over capacity. Current usage: ${list}.`;
+      const atCapNames = atCapacity.map((r) => r.route_name).join(", ");
+      return `${atCapacity.length} route(s) at or over capacity: ${atCapNames}. Current usage: ${list}.`;
     }
 
     case "daily_summary": {
