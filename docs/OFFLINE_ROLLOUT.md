@@ -256,6 +256,31 @@ This is exactly what attendance already does -- copy the pattern:
   noting since it shows the audit process finds real wins, not just
   exclusions.
 
+- [x] **Exams -- marks entry.** Queues `submitMarks` (numeric/CBC subject
+  marks, `marks-entry-form.tsx`) and `submitCompetencyMarks` (sub-strand
+  ratings, `competency-marks-section.tsx`). Both are exactly the "teacher in
+  a classroom or exam hall, entering results with unreliable Wi-Fi"
+  scenario this rollout targets. Both write forms share one `"exams"` queue
+  and one banner (`components/exams/offline-banner.tsx`, same shape as
+  health's), so a teacher moving between the numeric-marks table and the
+  CBC competency grid on the same page sees one consistent pending/failed
+  count. Same queued-state-separate-from-draft UX as attendance and staff
+  attendance: a row submitted offline shows "Saved offline" and drops out
+  of "to enter" without claiming to be server-confirmed until the roster
+  refresh after sync picks it up as `existing`.
+
+  Deliberately **not** queued: `editMark` / `editCompetencyMark`
+  (corrections -- desk follow-up, same category as every other
+  `edit`/`update` action excluded elsewhere), and the exam/grading-scale/
+  schedule/curriculum-strand setup actions (`createExam`, `closeExam`,
+  `reopenExam`, `createGradingScale`, `setClassGradingScale`,
+  `saveExamSchedule`, `deleteExamSchedule`, `createCurriculumStrand`,
+  `createCurriculumSubStrand`, `approveMarks`) -- all desk-based admin
+  configuration, not the classroom/exam-hall marks entry the two handlers
+  above cover. If a closed exam needs a correction while offline, the UI
+  now says so explicitly rather than silently dropping it or queuing
+  something that would need a reason prompt it can't safely defer.
+
 ## Next up
 
 Given "both spotty connections and full dead zones happen regularly," the
@@ -278,14 +303,14 @@ away from a router doing time-sensitive data entry:
    applied to every module above, none of these qualify. **Don't re-audit
    this one** unless a real trip-logging feature gets added later.
 7. ~~Staff attendance~~ -- done, see above (added alongside this entry).
+8. ~~Exams -- marks entry~~ -- done, see above.
 
-Not yet reviewed: academics, exams, finance, homework, payroll,
-performance, pt-meetings, reports, students, communication, campuses,
-settings, admin, ai, dashboard. **Exams marks entry** is the next
-plausible "field, time-pressured" candidate, but hasn't been audited the
-way the modules above were -- don't assume it fits the simple pattern
-until that's actually done. Transport looked promising from the module
-name too, until the audit showed otherwise.
+Not yet reviewed: academics, finance, homework, payroll, performance,
+pt-meetings, reports, students, communication, campuses, settings, admin,
+ai, dashboard. None of these have an obviously-field time-pressured
+candidate the way marks entry or roll call did -- each still needs its own
+audit rather than an assumption either way. Transport looked promising
+from the module name too, until the audit showed otherwise.
 
 Each module should get its own review pass (this checklist, then a real
 device/offline test) rather than being batch-applied -- that's what keeps

@@ -12,6 +12,9 @@ import {
   submitCompetencyMarks,
   editCompetencyMark,
 } from "@/app/(app)/exams/actions";
+import { useOfflineSync } from "@/hooks/use-offline-sync";
+import { queueMutation } from "@/lib/offline/queue";
+import { ExamsOfflineBanner } from "./offline-banner";
 
 export interface StrandOption {
   id: string;
@@ -56,11 +59,16 @@ export function CompetencyMarksSection({
   subjectId,
 }: Props) {
   const router = useRouter();
+  const { online, pendingCount, failed, syncing, sync, discard } = useOfflineSync("exams");
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [ratings, setRatings] = useState<Map<string, string>>(
     new Map(existingRatings.map((r) => [`${r.student_id}:${r.sub_strand_id}`, r.band_id])),
   );
+  // Ratings queued while offline, keyed the same way as `ratings` -- kept
+  // separate so they render distinctly and aren't re-submitted before the
+  // sync confirms them. Mirrors marks-entry-form.tsx.
+  const [queued, setQueued] = useState<Map<string, string>>(new Map());
   const [newStrandName, setNewStrandName] = useState("");
   const [newSubStrand, setNewSubStrand] = useState<Record<string, string>>({});
 
@@ -77,12 +85,35 @@ export function CompetencyMarksSection({
     const toEdit: { student_id: string; sub_strand_id: string; band_id: string }[] = [];
 
     for (const [key, band_id] of ratings.entries()) {
+      if (queued.has(key)) continue; // already queued offline, not re-submitted
       const [student_id, sub_strand_id] = key.split(":");
       if (examStatus === "closed" && existingKeys.has(key)) {
         toEdit.push({ student_id, sub_strand_id, band_id });
       } else {
         toSubmit.push({ student_id, sub_strand_id, band_id });
       }
+    }
+
+    if (!online) {
+      // Corrections to a closed exam need a live connection, same as
+      // editMark elsewhere -- only fresh ratings can be queued.
+      if (toEdit.length > 0) {
+        setError("You're offline. Corrections to a closed exam need a connection — new ratings below were still saved offline.");
+      }
+      if (toSubmit.length === 0) return;
+      startTransition(async () => {
+        try {
+          await queueMutation("exams", "submitCompetencyMarks", { exam_id: examId, class_id: classId, ratings: toSubmit });
+          setQueued((prev) => {
+            const next = new Map(prev);
+            for (const r of toSubmit) next.set(`${r.student_id}:${r.sub_strand_id}`, r.band_id);
+            return next;
+          });
+        } catch {
+          setError("Couldn't save offline either — try again in a moment.");
+        }
+      });
+      return;
     }
 
     startTransition(async () => {
@@ -136,6 +167,7 @@ export function CompetencyMarksSection({
           overall subject-level competency above.
         </p>
       </div>
+      <ExamsOfflineBanner online={online} pendingCount={pendingCount} failed={failed} syncing={syncing} sync={sync} discard={discard} />
       {error && <p className="text-sm text-danger">{error}</p>}
 
       {canManageCurriculum && (
@@ -192,12 +224,13 @@ export function CompetencyMarksSection({
                     <TableCell className="font-medium">{r.full_name}</TableCell>
                     {subStrandList.map((ss) => {
                       const key = `${r.student_id}:${ss.id}`;
+                      const isQueued = queued.has(key);
                       return (
                         <TableCell key={ss.id}>
                           <Select
                             value={ratings.get(key) ?? ""}
                             onValueChange={(v) => setRating(r.student_id, ss.id, v)}
-                            disabled={!canEnter}
+                            disabled={!canEnter || isQueued}
                           >
                             <SelectTrigger className="w-32">
                               <SelectValue placeholder="—" />
@@ -210,6 +243,7 @@ export function CompetencyMarksSection({
                               ))}
                             </SelectContent>
                           </Select>
+                          {isQueued && <p className="mt-1 text-[0.625rem] text-muted-foreground">Saved offline</p>}
                         </TableCell>
                       );
                     })}
@@ -220,7 +254,7 @@ export function CompetencyMarksSection({
           </div>
           {canEnter && (
             <Button disabled={pending} onClick={handleSave} className="mt-3 w-fit">
-              {pending ? "Saving…" : "Save competency marks"}
+              {pending ? (online ? "Saving…" : "Saving offline…") : online ? "Save competency marks" : "Save offline"}
             </Button>
           )}
         </>

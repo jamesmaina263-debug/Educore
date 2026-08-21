@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { WifiOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -10,6 +11,9 @@ import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { submitMarks, editMark } from "@/app/(app)/exams/actions";
+import { useOfflineSync } from "@/hooks/use-offline-sync";
+import { queueMutation } from "@/lib/offline/queue";
+import { ExamsOfflineBanner } from "./offline-banner";
 
 export interface MarksRosterRow {
   student_id: string;
@@ -44,6 +48,7 @@ export function MarksEntryForm({
   canEnter: boolean;
 }) {
   const router = useRouter();
+  const { online, pendingCount, failed, syncing, sync, discard } = useOfflineSync("exams");
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [draft, setDraft] = useState<Record<string, string>>(
@@ -54,9 +59,30 @@ export function MarksEntryForm({
       ]),
     ),
   );
+  // Marks submitted while offline: queued locally, not yet confirmed by the
+  // server. Kept separate from `draft` so they render distinctly and can't
+  // be edited or re-submitted while a sync is still pending. Mirrors
+  // attendance's register-form.tsx.
+  const [queued, setQueued] = useState<Record<string, string>>({});
   const [correctTarget, setCorrectTarget] = useState<MarksRosterRow | null>(null);
   const [correctValue, setCorrectValue] = useState("");
   const [correctReason, setCorrectReason] = useState("");
+
+  // Derived, not stored: once a queued student's row shows up as `existing`
+  // (confirmed by the server after a refresh), it drops out of view here
+  // automatically.
+  const visibleQueued = Object.fromEntries(
+    Object.entries(queued).filter(([studentId]) => !roster.find((r) => r.student_id === studentId)?.existing),
+  );
+  const queuedCount = Object.keys(visibleQueued).length;
+
+  // Once this class/subject's queued marks are confirmed by the server, pull
+  // the authoritative roster so "queued" rows become real "existing" rows.
+  useEffect(() => {
+    if (online && queuedCount > 0 && pendingCount === 0 && !syncing && !pending) {
+      router.refresh();
+    }
+  }, [online, queuedCount, pendingCount, syncing, pending, router]);
 
   if (roster.length === 0) {
     return (
@@ -69,15 +95,35 @@ export function MarksEntryForm({
   async function handleSaveAll() {
     setPending(true);
     setError(null);
-    const marks = roster
-      .filter((r) => !r.existing) // bulk save only fills in students without a mark yet; use Correct for existing ones
-      .map((r) => {
-        const v = draft[r.student_id];
-        if (!v) return null;
-        return gradingModel === "numeric" ? { student_id: r.student_id, raw_score: Number(v) } : { student_id: r.student_id, band_id: v };
-      })
-      .filter((m): m is NonNullable<typeof m> => m !== null);
+    // bulk save only fills in students without a mark yet and not already
+    // queued; use Correct for existing ones.
+    const rows = roster
+      .filter((r) => !r.existing && !(r.student_id in visibleQueued))
+      .map((r) => ({ student_id: r.student_id, value: draft[r.student_id] }))
+      .filter((r) => !!r.value);
 
+    if (rows.length === 0) {
+      setPending(false);
+      return;
+    }
+
+    if (!online) {
+      try {
+        const marks = rows.map((r) =>
+          gradingModel === "numeric" ? { student_id: r.student_id, raw_score: Number(r.value) } : { student_id: r.student_id, band_id: r.value },
+        );
+        await queueMutation("exams", "submitMarks", { exam_id: examId, class_id: classId, subject_id: subjectId, marks });
+        setQueued((q) => ({ ...q, ...Object.fromEntries(rows.map((r) => [r.student_id, r.value])) }));
+      } catch {
+        setError("Couldn't save offline either — try again in a moment.");
+      }
+      setPending(false);
+      return;
+    }
+
+    const marks = rows.map((r) =>
+      gradingModel === "numeric" ? { student_id: r.student_id, raw_score: Number(r.value) } : { student_id: r.student_id, band_id: r.value },
+    );
     const result = await submitMarks({ exam_id: examId, class_id: classId, subject_id: subjectId, marks });
     setPending(false);
     if ("error" in result) return setError(result.error);
@@ -102,17 +148,19 @@ export function MarksEntryForm({
     router.refresh();
   }
 
-  const unmarked = roster.filter((r) => !r.existing);
+  const unmarkedAll = roster.filter((r) => !r.existing);
+  const unmarked = unmarkedAll.filter((r) => !(r.student_id in visibleQueued));
   const marked = roster.filter((r) => r.existing);
 
   return (
     <div className="flex flex-col gap-4">
+      <ExamsOfflineBanner online={online} pendingCount={pendingCount} failed={failed} syncing={syncing} sync={sync} discard={discard} />
       {error && <p className="text-sm text-danger">{error}</p>}
 
-      {unmarked.length > 0 && (
+      {unmarkedAll.length > 0 && (
         <div className="panel">
           <header className="border-b border-border px-4 py-2.5">
-            <h2 className="text-[0.8125rem] font-semibold">To enter · {unmarked.length} students</h2>
+            <h2 className="text-[0.8125rem] font-semibold">To enter · {unmarkedAll.length} students</h2>
           </header>
           <div className="overflow-x-auto">
             <Table className="table-dense">
@@ -123,11 +171,13 @@ export function MarksEntryForm({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {unmarked.map((r) => (
+              {unmarkedAll.map((r) => {
+                const isQueued = r.student_id in visibleQueued;
+                return (
                 <TableRow key={r.student_id}>
                   <TableCell className="font-medium">{r.full_name}</TableCell>
                   <TableCell>
-                    {canEnter ? (
+                    {canEnter && !isQueued ? (
                       gradingModel === "numeric" ? (
                         <Input
                           type="number"
@@ -153,19 +203,33 @@ export function MarksEntryForm({
                           </SelectContent>
                         </Select>
                       )
+                    ) : isQueued ? (
+                      gradingModel === "numeric" ? visibleQueued[r.student_id] : (bandOptions.find((b) => b.id === visibleQueued[r.student_id])?.label ?? visibleQueued[r.student_id])
                     ) : (
                       "—"
                     )}
+                    {isQueued && (
+                      <p className="mt-1 flex items-center gap-1 text-[0.625rem] text-muted-foreground">
+                        <WifiOff className="size-3" aria-hidden /> Saved offline — will sync automatically
+                      </p>
+                    )}
                   </TableCell>
                 </TableRow>
-              ))}
+                );
+              })}
             </TableBody>
           </Table>
           </div>
-          {canEnter && examStatus === "open" && (
+          {canEnter && examStatus === "open" && unmarked.length > 0 && (
             <div className="flex justify-end border-t border-border px-4 py-2.5">
               <Button onClick={handleSaveAll} disabled={pending}>
-                {pending ? "Saving…" : `Save ${unmarked.length} marks`}
+                {pending
+                  ? online
+                    ? "Saving…"
+                    : "Saving offline…"
+                  : online
+                    ? `Save ${unmarked.length} marks`
+                    : `Save offline (${unmarked.length})`}
               </Button>
             </div>
           )}

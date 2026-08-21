@@ -33,6 +33,7 @@ import {
 } from "@/app/(app)/discipline/actions";
 import { objectToFormData } from "./form-data";
 import { submitStaffAttendance } from "@/app/(app)/staff/actions";
+import { submitMarks, submitCompetencyMarks } from "@/app/(app)/exams/actions";
 
 export type MutationResult = { error: string } | { success: true } | Record<string, unknown>;
 export type MutationHandler = (payload: never) => Promise<MutationResult>;
@@ -167,4 +168,13 @@ export const mutationHandlers: Record<string, MutationHandler> = {
   // editStaffAttendanceRecord is deliberately not queued -- a correction,
   // desk follow-up like every other *record/*Status update excluded
   // elsewhere. See docs/OFFLINE_ROLLOUT.md.
+
+  "exams:submitMarks": submitMarks as MutationHandler,
+  "exams:submitCompetencyMarks": submitCompetencyMarks as MutationHandler,
+  // Deliberately not queued: editMark / editCompetencyMark (corrections --
+  // desk follow-up, same category as editAttendanceRecord /
+  // updateReferralOutcome / updateIncidentStatus elsewhere in this rollout),
+  // and the exam/grading-scale/schedule/curriculum-strand setup actions
+  // (desk-based admin, not the classroom/exam-hall marks entry the two
+  // handlers above cover). See docs/OFFLINE_ROLLOUT.md.
 };
