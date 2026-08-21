@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { buildReportCardCommentPrompt, geminiGenerateContentUrl, parseGeminiCommentResponse } from "@/lib/ai/report-card-comment";
 
 type ActionResult = { error: string } | { success: true };
 
@@ -84,48 +85,39 @@ export async function draftCommentWithAI(input: {
     .eq("exam_id", input.exam_id)
     .eq("student_id", input.student_id);
 
-  const lines = (marks ?? [])
-    .map((m) => {
-      const subject = (m.subjects as unknown as { name: string } | null)?.name ?? "Subject";
-      const band = (m.grading_scale_bands as unknown as { label: string } | null)?.label;
-      return m.raw_score !== null ? `${subject}: ${m.raw_score} (${band})` : `${subject}: ${band}`;
-    })
-    .join("\n");
-
-  const prompt = `You are helping a Kenyan primary/secondary school teacher draft a short report card comment.
-Student: ${input.student_name}
-Results this exam:
-${lines || "No subject results recorded."}
-
-Write a warm, specific, 2-3 sentence comment on this student's academic performance for the term. Mention at least one specific subject or result. Avoid generic filler. Do not mention numeric scores directly in the prose (refer to strengths/areas to improve instead). Output only the comment text, no preamble.`;
+  const prompt = buildReportCardCommentPrompt(
+    input.student_name,
+    (marks ?? []).map((m) => ({
+      raw_score: m.raw_score,
+      subject_name: (m.subjects as unknown as { name: string } | null)?.name ?? "Subject",
+      band_label: (m.grading_scale_bands as unknown as { label: string } | null)?.label ?? null,
+    })),
+  );
 
   try {
-    const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent?key=${apiKey}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: { maxOutputTokens: 200 },
-        }),
-      },
-    );
+    const res = await fetch(geminiGenerateContentUrl(apiKey), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: { maxOutputTokens: 200 },
+      }),
+    });
     if (!res.ok) {
       const body = await res.text();
       console.error(`draftCommentWithAI: Gemini returned ${res.status}: ${body.slice(0, 500)}`);
       return { error: `AI drafting failed (${res.status}): ${body.slice(0, 200)}` };
     }
     const data = await res.json();
-    const draft: string | undefined = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-    if (!draft) {
+    const parsed = parseGeminiCommentResponse(data);
+    if ("error" in parsed) {
       console.error("draftCommentWithAI: Gemini response had no text", JSON.stringify(data).slice(0, 500));
-      return { error: "AI drafting returned no text." };
+      return { error: parsed.error };
     }
 
     const { error } = await supabase
       .from("report_cards")
-      .update({ comment: draft.trim(), comment_source: "ai", approved_by: null, approved_at: null })
+      .update({ comment: parsed.comment, comment_source: "ai", approved_by: null, approved_at: null })
       .eq("exam_id", input.exam_id)
       .eq("student_id", input.student_id);
     if (error) return { error: error.message };
