@@ -49,7 +49,9 @@ type Intent =
   | "open_discipline_cases"
   | "upcoming_pt_meetings"
   | "assignments_due_this_week"
-  | "pending_asset_maintenance";
+  | "pending_asset_maintenance"
+  | "certificates_this_term"
+  | "ungraded_submissions";
 
 // A daily_summary answer is assembled from whichever of these sections the caller is permitted
 // to see — it has no single gating permission of its own.
@@ -139,6 +141,16 @@ const INTENTS: { key: Intent; description: string; permission: PermissionKey | n
     key: "pending_asset_maintenance",
     description: "Which assets currently have a maintenance request pending or in progress",
     permission: "inventory.read_any",
+  },
+  {
+    key: "certificates_this_term",
+    description: "Which students have been issued a certificate this term, and what kind",
+    permission: "students.read",
+  },
+  {
+    key: "ungraded_submissions",
+    description: "How many homework/assignment submissions are still waiting to be graded",
+    permission: "academics.read",
   },
 ];
 
@@ -841,6 +853,44 @@ async function runIntent(
         })
         .join(", ");
       return `${data.length} asset(s) with pending maintenance: ${list}.`;
+    }
+
+    case "certificates_this_term": {
+      // terms is RLS-gated on academics.read, same dependency as students_admitted_this_term —
+      // checked explicitly rather than assumed, same reasoning as that intent's comment.
+      const { data: canAcademics } = await supabase.rpc("auth_has_permission", { p_permission_key: "academics.read" });
+      if (!canAcademics) {
+        return "I can't determine the current term without access to academics data, so I can't answer that.";
+      }
+      const { data: term } = await supabase.from("terms").select("name, start_date").eq("status", "active").maybeSingle();
+      if (!term) return "No term is currently marked active.";
+
+      const today = todayISO();
+      const { data } = await supabase
+        .from("certificates")
+        .select("certificate_type, title, students(first_name, last_name)")
+        .gte("issued_date", term.start_date)
+        .lte("issued_date", today)
+        .order("issued_date", { ascending: false })
+        .limit(10);
+      if (!data || data.length === 0) return `No certificates have been issued yet during ${term.name}.`;
+      const list = data
+        .map((c) => {
+          const s = c.students as unknown as { first_name: string; last_name: string } | null;
+          const name = s ? `${s.first_name} ${s.last_name}` : "Unknown student";
+          return `${name} — ${c.title} (${c.certificate_type})`;
+        })
+        .join(", ");
+      return `${data.length} certificate(s) issued during ${term.name}: ${list}.`;
+    }
+
+    case "ungraded_submissions": {
+      const { count } = await supabase
+        .from("assignment_submissions")
+        .select("id", { count: "exact", head: true })
+        .eq("status", "submitted");
+      if (!count || count === 0) return "No submissions are currently waiting to be graded.";
+      return `${count} submission(s) are waiting to be graded.`;
     }
 
     case "daily_summary": {
