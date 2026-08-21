@@ -47,7 +47,9 @@ type Intent =
   | "transport_route_capacity"
   | "students_without_primary_guardian"
   | "open_discipline_cases"
-  | "upcoming_pt_meetings";
+  | "upcoming_pt_meetings"
+  | "assignments_due_this_week"
+  | "pending_asset_maintenance";
 
 // A daily_summary answer is assembled from whichever of these sections the caller is permitted
 // to see — it has no single gating permission of its own.
@@ -62,7 +64,8 @@ type PermissionKey =
   | "staff.read"
   | "library.read_any"
   | "transport.read_any"
-  | "discipline.read_any";
+  | "discipline.read_any"
+  | "academics.read";
 
 const INTENTS: { key: Intent; description: string; permission: PermissionKey | null }[] = [
   { key: "total_students", description: "How many active students are enrolled", permission: "students.read" },
@@ -127,6 +130,16 @@ const INTENTS: { key: Intent; description: string; permission: PermissionKey | n
     permission: "discipline.read_any",
   },
   { key: "upcoming_pt_meetings", description: "What parent-teacher meeting slots are coming up", permission: null },
+  {
+    key: "assignments_due_this_week",
+    description: "Which homework/assignments are due this week, and for which subject/class",
+    permission: "academics.read",
+  },
+  {
+    key: "pending_asset_maintenance",
+    description: "Which assets currently have a maintenance request pending or in progress",
+    permission: "inventory.read_any",
+  },
 ];
 
 export interface AskAIResult {
@@ -209,6 +222,7 @@ const PERMISSION_LABEL: Record<PermissionKey, string> = {
   "library.read_any": "library",
   "transport.read_any": "transport",
   "discipline.read_any": "discipline",
+  "academics.read": "academics",
 };
 
 export async function askEducoreAI(question: string): Promise<AskAIResult> {
@@ -788,6 +802,45 @@ async function runIntent(
         })
         .join(", ");
       return `${slots.length} upcoming slot(s): ${list}.`;
+    }
+
+    case "assignments_due_this_week": {
+      const today = todayISO();
+      const weekEnd = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+      const { data } = await supabase
+        .from("assignments")
+        .select("title, due_date, subjects(name), streams(name)")
+        .gte("due_date", today)
+        .lte("due_date", weekEnd)
+        .order("due_date", { ascending: true })
+        .limit(10);
+      if (!data || data.length === 0) return "No assignments are due in the next 7 days.";
+      const list = data
+        .map((a) => {
+          const subject = a.subjects as unknown as { name: string } | null;
+          const stream = a.streams as unknown as { name: string } | null;
+          const context = [subject?.name, stream?.name].filter(Boolean).join(" — ");
+          return context ? `${a.title} (${context}, due ${a.due_date})` : `${a.title} (due ${a.due_date})`;
+        })
+        .join(", ");
+      return `${data.length} assignment(s) due in the next 7 days: ${list}.`;
+    }
+
+    case "pending_asset_maintenance": {
+      const { data } = await supabase
+        .from("asset_maintenance_records")
+        .select("description, status, assets(name)")
+        .in("status", ["requested", "in_progress"])
+        .order("request_date", { ascending: true })
+        .limit(10);
+      if (!data || data.length === 0) return "No assets currently have a pending maintenance request.";
+      const list = data
+        .map((r) => {
+          const asset = r.assets as unknown as { name: string } | null;
+          return `${asset?.name ?? "Unknown asset"} — ${r.description} (${r.status})`;
+        })
+        .join(", ");
+      return `${data.length} asset(s) with pending maintenance: ${list}.`;
     }
 
     case "daily_summary": {
