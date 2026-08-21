@@ -51,7 +51,9 @@ type Intent =
   | "assignments_due_this_week"
   | "pending_asset_maintenance"
   | "certificates_this_term"
-  | "ungraded_submissions";
+  | "ungraded_submissions"
+  | "exam_subject_breakdown"
+  | "staff_headcount_by_role";
 
 // A daily_summary answer is assembled from whichever of these sections the caller is permitted
 // to see — it has no single gating permission of its own.
@@ -152,6 +154,12 @@ const INTENTS: { key: Intent; description: string; permission: PermissionKey | n
     description: "How many homework/assignment submissions are still waiting to be graded",
     permission: "academics.read",
   },
+  {
+    key: "exam_subject_breakdown",
+    description: "What is the average score per subject for the most recent closed exam",
+    permission: "exams.read",
+  },
+  { key: "staff_headcount_by_role", description: "How many active staff members are in each role", permission: "staff.read" },
 ];
 
 export interface AskAIResult {
@@ -891,6 +899,63 @@ async function runIntent(
         .eq("status", "submitted");
       if (!count || count === 0) return "No submissions are currently waiting to be graded.";
       return `${count} submission(s) are waiting to be graded.`;
+    }
+
+    case "exam_subject_breakdown": {
+      const { data: exam } = await supabase
+        .from("exams")
+        .select("id, name")
+        .eq("status", "closed")
+        .order("closed_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (!exam) return "No closed exam was found for the current term.";
+
+      // Numeric raw_score only — a class on the CBC (band-based) grading model has null
+      // raw_score by design (see marks table comment), same scope limitation exam_average
+      // already has, not something new introduced here.
+      const { data: marks } = await supabase
+        .from("marks")
+        .select("subject_id, raw_score, subjects(name)")
+        .eq("exam_id", exam.id)
+        .not("raw_score", "is", null);
+      if (!marks || marks.length === 0) return `${exam.name}: no numeric marks have been recorded yet.`;
+
+      const bySubject = new Map<string, { name: string; sum: number; count: number }>();
+      for (const m of marks) {
+        const subject = m.subjects as unknown as { name: string } | null;
+        const entry = bySubject.get(m.subject_id) ?? { name: subject?.name ?? "Unknown subject", sum: 0, count: 0 };
+        entry.sum += Number(m.raw_score);
+        entry.count += 1;
+        bySubject.set(m.subject_id, entry);
+      }
+      const list = Array.from(bySubject.values())
+        .map((s) => `${s.name} ${(s.sum / s.count).toFixed(1)}`)
+        .join(", ");
+      return `${exam.name} average score by subject: ${list}.`;
+    }
+
+    case "staff_headcount_by_role": {
+      // Same exclusion list as the real Staff list page (src/app/(app)/staff/page.tsx) — reused
+      // exactly rather than re-derived, so this can't silently drift into counting parent/student/
+      // super_admin accounts as "staff."
+      const { data } = await supabase
+        .from("school_users")
+        .select("id, roles!inner(display_name, name)")
+        .eq("status", "active")
+        .not("roles.name", "in", "(parent,student,super_admin)");
+      if (!data || data.length === 0) return "No active staff members found.";
+
+      const byRole = new Map<string, number>();
+      for (const r of data) {
+        const role = r.roles as unknown as { display_name: string } | null;
+        const name = role?.display_name ?? "Unknown role";
+        byRole.set(name, (byRole.get(name) ?? 0) + 1);
+      }
+      const list = Array.from(byRole.entries())
+        .map(([name, count]) => `${name}: ${count}`)
+        .join(", ");
+      return `${data.length} active staff member(s) — ${list}.`;
     }
 
     case "daily_summary": {
