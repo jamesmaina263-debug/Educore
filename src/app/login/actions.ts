@@ -77,9 +77,23 @@ export async function login(
   if (signInData.user) {
     const { data: schoolUser } = await supabase
       .from("school_users")
-      .select("must_change_password, temp_password_expires_at")
+      .select("status, must_change_password, temp_password_expires_at")
       .eq("auth_user_id", signInData.user.id)
       .maybeSingle();
+
+    // Deactivation gate. Supabase Auth has no idea this person was
+    // deactivated -- their credentials still verify fine -- so this is the
+    // only place that actually stops a deactivated/suspended school_users
+    // row from getting a live session. RLS still hides data from them even
+    // without this check, but silently landing on an empty dashboard is
+    // confusing and isn't the same as being kept out. Sign the session back
+    // out immediately, same as the expired-temp-password case below.
+    if (schoolUser && schoolUser.status !== "active") {
+      await supabase.auth.signOut();
+      return {
+        error: "Your account has been deactivated. Contact your school admin.",
+      };
+    }
 
     if (schoolUser?.must_change_password) {
       const expiresAt = schoolUser.temp_password_expires_at

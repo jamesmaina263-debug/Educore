@@ -56,7 +56,13 @@ export async function loadHealthContext(): Promise<HealthContext> {
 
   const base = { userName, userRole: roleName, schoolName, canReadAny: canReadAny === true, canReadMedicalRecords, canWrite };
 
-  if (canReadAny !== true) {
+  // health.read_any gates the bulk of this module's SELECT queries below, but
+  // a user granted only health.write (e.g. a nurse-assigned helper who should
+  // be able to log sick-bay visits/medication but not browse everyone's
+  // history) shouldn't be locked out of the module shell entirely -- RLS on
+  // each table (sick_bay_visits_insert etc.) already governs what they can
+  // actually write, independent of this check.
+  if (canReadAny !== true && canWrite !== true) {
     return {
       ...base,
       studentOptions: [],

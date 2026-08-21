@@ -13,7 +13,7 @@ export default async function HealthInventoryPage() {
       moduleHref="/health/dashboard"
       section="Inventory"
       title="Inventory"
-      noAccess={!ctx.canReadAny}
+      noAccess={!(ctx.canReadAny || ctx.canWrite)}
     >
       <InventorySection items={ctx.medicalItems} medicalCategoryId={ctx.medicalCategoryId} pendingTransfers={ctx.pendingTransfers} canWrite={ctx.canWrite} />
     </ModulePageShell>
