@@ -62,6 +62,8 @@ import {
   History,
   Palette,
   ScrollText,
+  Landmark,
+  Smartphone,
 } from "lucide-react";
 
 export interface NavChild {
@@ -165,6 +167,11 @@ const campusesChildren: NavChild[] = [
   { label: "API Keys", href: "/campuses/api-keys", icon: KeyRound },
 ];
 
+const integrationsChildren: NavChild[] = [
+  { label: "NEMIS", href: "/integrations/nemis", icon: Landmark },
+  { label: "M-Pesa", href: "/integrations/mpesa", icon: Smartphone },
+];
+
 const settingsChildren: NavChild[] = [
   { label: "General", href: "/settings/general", icon: Settings },
   { label: "Branding", href: "/settings/branding", icon: Palette },
@@ -212,6 +219,7 @@ export const navGroups: NavGroup[] = [
       { label: "Educore AI", href: "/ai", icon: Sparkles },
       { label: "Reports", href: "/reports", icon: BarChart3 },
       { label: "Campuses", href: "/campuses", icon: Building2, children: campusesChildren },
+      { label: "Integrations", href: "/integrations", icon: Landmark, children: integrationsChildren },
       { label: "Settings", href: "/settings", icon: Settings, children: settingsChildren },
     ],
   },

@@ -11,6 +11,7 @@ import { MedicalTab } from "./medical-tab";
 import { CertificatesTab, type CertificateRow } from "./certificates-tab";
 import { DisciplineTab, type DisciplineRow } from "./discipline-tab";
 import { StudentStatusControl } from "@/components/students/student-status-control";
+import { NemisIdentifiersCard } from "@/components/students/nemis-identifiers-card";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 
@@ -36,7 +37,7 @@ export default async function StudentProfilePage({
   const { data: student } = await supabase
     .from("students")
     .select(
-      "id, admission_number, upi_number, first_name, last_name, other_names, date_of_birth, gender, status, admission_date, streams(name, classes(name))",
+      "id, admission_number, upi_number, birth_certificate_number, nemis_sync_status, nemis_synced_at, nemis_notes, first_name, last_name, other_names, date_of_birth, gender, status, admission_date, streams(name, classes(name))",
     )
     .eq("id", id)
     .maybeSingle();
@@ -286,6 +287,16 @@ export default async function StudentProfilePage({
                 </p>
               )}
             </div>
+
+            <NemisIdentifiersCard
+              studentId={id}
+              upiNumber={student.upi_number}
+              birthCertificateNumber={student.birth_certificate_number}
+              syncStatus={student.nemis_sync_status}
+              syncedAt={student.nemis_synced_at}
+              notes={student.nemis_notes}
+              canManage={canManageStudents}
+            />
           </TabsContent>
 
           <TabsContent value="guardians">

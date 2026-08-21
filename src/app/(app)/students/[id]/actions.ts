@@ -111,6 +111,29 @@ export async function addGuardian(
   return linkGuardian(studentId, guardian.id, input.relationship, input.primary_contact);
 }
 
+// UPI/birth certificate are captured at admission time (Admissions wizard) but a school
+// often only receives them later -- this lets a students.write holder fill them in
+// retroactively. Deliberately not gated on nemis.manage: these are ordinary student
+// demographic fields (upi_number existed since Phase 1), NEMIS just happens to need them.
+export async function updateStudentNemisIdentifiers(
+  studentId: string,
+  input: { upi_number?: string; birth_certificate_number?: string },
+): Promise<{ error: string } | { success: true }> {
+  const supabase = await createClient();
+
+  const { error } = await supabase
+    .from("students")
+    .update({
+      upi_number: input.upi_number?.trim() || null,
+      birth_certificate_number: input.birth_certificate_number?.trim() || null,
+    })
+    .eq("id", studentId);
+  if (error) return { error: error.message };
+
+  revalidatePath(`/students/${studentId}`);
+  return { success: true as const };
+}
+
 export type StudentStatus = "active" | "withdrawn" | "transferred" | "graduated";
 
 // Withdraw/transfer/graduate a student, or reactivate one. The RPC (not a plain

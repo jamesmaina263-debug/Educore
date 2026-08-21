@@ -9,7 +9,7 @@ import { SCHOOL_SLUG_COOKIE } from "@/lib/school-slug-cookie";
 export const APP_ROUTE_SEGMENTS = new Set([
   "academics", "admin", "admissions", "ai", "attendance", "boarding", "campuses",
   "communication", "dashboard", "discipline", "exams", "finance", "health",
-  "homework", "inventory", "library", "parents", "payroll", "performance", "pt-meetings",
+  "homework", "integrations", "inventory", "library", "parents", "payroll", "performance", "pt-meetings",
   "reports", "settings", "staff", "students", "transport",
 ]);
 
