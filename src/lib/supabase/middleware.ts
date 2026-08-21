@@ -53,16 +53,24 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
-  // Defense in depth for forced password change: the login action already
-  // redirects here right after sign-in, but this catches anyone who still
-  // has a live session with must_change_password set and lands on a
-  // protected route another way (bookmark, deep link, back button).
+  // Defense in depth for forced password change / deactivation: the login
+  // action already handles both cases right after sign-in, but this catches
+  // anyone who still has a live session (deactivated mid-session, or landed
+  // on a protected route another way -- bookmark, deep link, back button).
   if (isProtected && user && !isChangePasswordPath(request.nextUrl.pathname)) {
     const { data: schoolUser } = await supabase
       .from("school_users")
-      .select("must_change_password")
+      .select("status, must_change_password")
       .eq("auth_user_id", user.id)
       .maybeSingle();
+
+    if (schoolUser && schoolUser.status !== "active") {
+      await supabase.auth.signOut();
+      const loginUrl = request.nextUrl.clone();
+      loginUrl.pathname = "/login";
+      loginUrl.searchParams.set("deactivated", "1");
+      return NextResponse.redirect(loginUrl);
+    }
 
     if (schoolUser?.must_change_password) {
       const changePasswordUrl = request.nextUrl.clone();

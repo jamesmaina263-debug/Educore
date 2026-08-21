@@ -1,6 +1,7 @@
 "use client";
 
-import { useActionState } from "react";
+import { Suspense, useActionState } from "react";
+import { useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -9,7 +10,17 @@ import { login, type LoginState } from "./actions";
 const initialState: LoginState = { error: null };
 
 export default function LoginPage() {
+  return (
+    <Suspense fallback={null}>
+      <LoginForm />
+    </Suspense>
+  );
+}
+
+function LoginForm() {
   const [state, formAction, pending] = useActionState(login, initialState);
+  const searchParams = useSearchParams();
+  const wasDeactivated = searchParams.get("deactivated") === "1";
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
@@ -39,6 +50,12 @@ export default function LoginPage() {
             autoComplete="current-password"
           />
         </div>
+
+        {wasDeactivated && !state.error && (
+          <p role="alert" className="text-sm text-danger">
+            Your account has been deactivated. Contact your school admin.
+          </p>
+        )}
 
         {state.error && (
           <p role="alert" className="text-sm text-danger">

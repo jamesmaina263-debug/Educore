@@ -13,7 +13,7 @@ export default async function HealthRecordsPage() {
       moduleHref="/health/dashboard"
       section="Medical Records"
       title="Medical Records"
-      noAccess={!ctx.canReadAny}
+      noAccess={!(ctx.canReadAny || ctx.canWrite)}
     >
       <MedicalRecordsSection rows={ctx.medicalRecordRows} />
     </ModulePageShell>

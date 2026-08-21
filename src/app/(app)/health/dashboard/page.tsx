@@ -14,7 +14,7 @@ export default async function HealthDashboardPage() {
       section="Dashboard"
       title="Health"
       subtitle="Clinic, sick bay, medication, and medical records."
-      noAccess={!ctx.canReadAny}
+      noAccess={!(ctx.canReadAny || ctx.canWrite)}
     >
       <DashboardSection stats={ctx.dashboardStats} />
     </ModulePageShell>
