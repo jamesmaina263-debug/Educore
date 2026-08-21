@@ -22,18 +22,41 @@
 -- those call sites across every role, would risk breaking far more than it fixes.
 --
 -- Two layers, so this can't be bypassed by simply not using the RPC:
---   1. Column-level REVOKE: blocks reading these 4 columns via the standard PostgREST
+--   1. Column-level restriction: blocks reading these 4 columns via the standard PostgREST
 --      request/embedded-join path entirely, for every role, regardless of RLS. This is what
 --      actually closes the leak.
 --   2. A SECURITY DEFINER function (which runs as its owner and isn't subject to the column
 --      grant) provides the one legitimate way to read them: your own row, or any row if you
 --      hold payroll.read_any -- mirroring update_staff_statutory_numbers()'s payroll.write gate
 --      exactly.
+--
+-- IMPORTANT Postgres gotcha, learned the hard way verifying this against the live database:
+-- `revoke select (col1, col2) on t from role` can ONLY undo a privilege that was explicitly
+-- granted at the column level. It has no effect on access implied by a table-wide `grant
+-- select on t to role` (which is what Supabase's default project setup actually did for
+-- school_users) -- that access lives in a separate ACL entry (pg_class.relacl vs
+-- pg_attribute.attacl) that a column-level revoke never touches. A first version of this
+-- migration used exactly that column-level revoke, reported success, and was a complete
+-- no-op -- confirmed via information_schema.column_privileges still showing SELECT for
+-- authenticated/anon on all 4 columns after running it, then reproduced directly with `set
+-- role authenticated; select kra_pin from school_users;` succeeding when it should have been
+-- rejected. The only reliable way to carve columns out of an existing table-wide grant is to
+-- revoke the table-wide grant entirely and re-grant SELECT explicitly on just the columns
+-- that should remain readable -- which is what this migration actually does below. Re-verified
+-- after this correction: the same direct query now fails with `permission denied for table
+-- school_users`, and every other column (full_name, email, phone, department, gender, etc.)
+-- still reads correctly, confirming nothing else on this widely-joined table broke.
 
-revoke select (kra_pin, nssf_number, shif_number, staff_number) on public.school_users from authenticated, anon;
+revoke select on public.school_users from authenticated, anon;
+
+grant select (
+  id, auth_user_id, school_id, school_group_id, role_id, full_name, email, phone, status,
+  created_at, updated_at, position, department, hire_date, contract_type, contract_end_date,
+  must_change_password, temp_password_expires_at, password_changed_at, gender
+) on public.school_users to authenticated, anon;
 
 comment on column public.school_users.kra_pin is
-  'Staff KRA PIN. SELECT revoked from authenticated/anon at the column level -- read only via get_staff_statutory_numbers() (self or payroll.read_any), write only via update_staff_statutory_numbers() (payroll.write). Never select this column directly or embed it in a school_users(...) join; both will now return null/be filtered rather than erroring, which can look like a working-but-empty leak if scripted around instead of using the RPC.';
+  'Staff KRA PIN. Excluded from the table''s column-level SELECT grant to authenticated/anon (see the migration this column-level restriction was added in) -- read only via get_staff_statutory_numbers() (self or payroll.read_any), write only via update_staff_statutory_numbers() (payroll.write). Never select this column directly or embed it in a school_users(...) join -- both now fail with a permission-denied error rather than silently returning null, so a caller relying on it will find out immediately rather than shipping a working-but-empty read.';
 comment on column public.school_users.nssf_number is 'See kra_pin comment on this table -- same access pattern.';
 comment on column public.school_users.shif_number is 'See kra_pin comment on this table -- same access pattern.';
 comment on column public.school_users.staff_number is 'See kra_pin comment on this table -- same access pattern.';
@@ -70,4 +93,4 @@ end;
 $$;
 
 comment on function public.get_staff_statutory_numbers is
-  'The only sanctioned read path for school_users.{kra_pin,nssf_number,shif_number,staff_number} -- see the column-level REVOKE above. Returns a row only for staff_ids the caller may see: their own, or any (within their school) if they hold payroll.read_any. Silently omits ids the caller can''t see rather than erroring, matching RLS-filter semantics elsewhere in this schema.';
+  'The only sanctioned read path for school_users.{kra_pin,nssf_number,shif_number,staff_number} -- see the column-level SELECT grant above (these 4 are deliberately excluded from it). Returns a row only for staff_ids the caller may see: their own, or any (within their school) if they hold payroll.read_any. Silently omits ids the caller can''t see rather than erroring, matching RLS-filter semantics elsewhere in this schema.';
