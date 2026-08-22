@@ -2,6 +2,10 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "crons": [
     {
+      "path": "/api/cron/risk-scoring",
+      "schedule": "0 2 * * *"
+    },
+    {
       "path": "/api/cron/billing",
       "schedule": "0 3 * * *"
     },

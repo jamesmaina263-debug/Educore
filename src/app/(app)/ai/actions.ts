@@ -30,6 +30,7 @@ type Intent =
   | "fees_collected_this_term"
   | "outstanding_balance_total"
   | "at_risk_count"
+  | "predicted_at_risk_students"
   | "exam_average"
   | "classes_below_average"
   | "beds_available"
@@ -84,6 +85,12 @@ const INTENTS: { key: Intent; description: string; permission: PermissionKey | n
   { key: "fees_collected_this_term", description: "How much money has been collected this term (a KES figure, not a percentage)", permission: "finance.read" },
   { key: "outstanding_balance_total", description: "The total outstanding (unpaid) fee balance across all students", permission: "finance.read" },
   { key: "at_risk_count", description: "How many students are currently flagged at-risk, and why", permission: "students.read" },
+  {
+    key: "predicted_at_risk_students",
+    description:
+      "A model-based risk ranking of students, using a weighted score (attendance trend, exam trend, payment lateness, discipline cases) rather than a simple rule count",
+    permission: "students.read",
+  },
   { key: "exam_average", description: "The school-wide average exam score for the most recent closed exam this term", permission: "exams.read" },
   { key: "classes_below_average", description: "Which classes/streams are performing below the school average in the most recent exam", permission: "exams.read" },
   { key: "beds_available", description: "How many boarding beds are currently available", permission: "hostel.read_any" },
@@ -396,6 +403,21 @@ async function runIntent(
       if (!data || data.length === 0) return "No students are currently flagged at-risk.";
       const names = data.map((s) => `${s.first_name} ${s.last_name}`).join(", ");
       return `${data.length} student(s) currently flagged at-risk, most concerning first: ${names}.`;
+    }
+
+    case "predicted_at_risk_students": {
+      const { data } = await supabase
+        .from("v_predicted_at_risk_students")
+        .select("first_name, last_name, risk_score, risk_band")
+        .limit(5);
+      if (!data || data.length === 0) return "No students currently score medium or high risk on the weighted model.";
+      const list = data
+        .map((s) => `${s.first_name} ${s.last_name} (${s.risk_band}, score ${s.risk_score})`)
+        .join(", ");
+      // Deliberately worded differently from at_risk_count's answer: this is a hand-weighted
+      // model score, not a plain rule count, and the wording should not blur that distinction —
+      // same "never dressed up as more sophisticated than it is" rule as the fee forecast.
+      return `${data.length} student(s) flagged medium/high risk by the weighted model, highest first: ${list}. (Hand-weighted score, not a trained model — see risk_model_versions.)`;
     }
 
     case "exam_average": {
