@@ -28,14 +28,39 @@ export async function generatePayrollAction(input: {
   });
   if (error) return { error: error.message };
   revalidatePath("/payroll", "layout");
+
+  // Best-effort: let everyone who can approve payroll know a record is
+  // waiting on them. Never block generation on this.
+  const { data: teacher } = await supabase.from("school_users").select("full_name").eq("id", input.teacher_id).maybeSingle();
+  await supabase.rpc("notify_users_with_permission", {
+    p_permission_key: "payroll.approve",
+    p_subject: "Payroll record needs approval",
+    p_body: `Payroll for ${teacher?.full_name ?? "a staff member"} (${input.period_month}/${input.period_year}) is ready for review.`,
+    p_action_url: "/payroll/runs",
+    p_category: "other",
+  });
+
   return { success: true };
 }
 
 export async function approvePayrollAction(id: string): Promise<ActionResult> {
   const supabase = await createClient();
+  const { data: record } = await supabase.from("payroll_records").select("generated_by").eq("id", id).maybeSingle();
   const { error } = await supabase.rpc("approve_payroll_record", { p_id: id });
   if (error) return { error: error.message };
   revalidatePath("/payroll", "layout");
+
+  // Best-effort: tell whoever generated it that it's now approved. Never block on this.
+  if (record?.generated_by) {
+    await supabase.rpc("notify_school_user", {
+      p_recipient_id: record.generated_by,
+      p_subject: "Payroll record approved",
+      p_body: "A payroll record you generated has been approved.",
+      p_action_url: "/payroll/runs",
+      p_category: "other",
+    });
+  }
+
   return { success: true };
 }
 

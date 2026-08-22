@@ -90,7 +90,7 @@ async function currentSchoolUser() {
   if (!user) return { supabase, schoolUser: null };
   const { data: schoolUser } = await supabase
     .from("school_users")
-    .select("id, school_id")
+    .select("id, school_id, full_name")
     .eq("auth_user_id", user.id)
     .maybeSingle();
   return { supabase, schoolUser };
@@ -268,6 +268,17 @@ export async function createRequisitionAction(formData: FormData): Promise<Actio
   }
 
   revalidatePath("/inventory", "layout");
+
+  // Best-effort: let everyone who can approve procurement know a requisition
+  // is waiting on them. Never block the requisition itself on this.
+  await supabase.rpc("notify_users_with_permission", {
+    p_permission_key: "inventory.procurement.approve",
+    p_subject: "Procurement requisition needs approval",
+    p_body: `${schoolUser.full_name ?? "Someone"} requested: ${itemDescription} (qty ${quantity}) — ${purpose}.`,
+    p_action_url: "/inventory/procurement",
+    p_category: "other",
+  });
+
   return { success: true };
 }
 
@@ -279,12 +290,33 @@ export async function decideRequisitionAction(formData: FormData): Promise<Actio
   const decision = String(formData.get("decision") ?? "");
   if (!requisitionId || !["approved", "rejected"].includes(decision)) return { error: "Missing requisition or decision." };
 
+  const { data: requisition } = await supabase
+    .from("purchase_requisitions")
+    .select("requested_by, purpose")
+    .eq("id", requisitionId)
+    .maybeSingle();
+
   const { error } = await supabase
     .from("purchase_requisitions")
     .update({ status: decision, approved_by: schoolUser.id, approved_at: new Date().toISOString(), updated_at: new Date().toISOString() })
     .eq("id", requisitionId);
   if (error) return { error: error.message };
   revalidatePath("/inventory", "layout");
+
+  // Best-effort: tell the requester the outcome. Never block the decision on this.
+  if (requisition?.requested_by) {
+    await supabase.rpc("notify_school_user", {
+      p_recipient_id: requisition.requested_by,
+      p_subject: decision === "approved" ? "Requisition approved" : "Requisition rejected",
+      p_body:
+        decision === "approved"
+          ? `Your requisition for "${requisition.purpose}" was approved.`
+          : `Your requisition for "${requisition.purpose}" was not approved.`,
+      p_action_url: "/inventory/procurement",
+      p_category: "other",
+    });
+  }
+
   return { success: true };
 }
 

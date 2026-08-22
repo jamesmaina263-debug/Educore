@@ -218,7 +218,33 @@ export async function requestDiscountAction(input: {
   });
   if (error) return { error: error.message };
   revalidatePath("/finance", "layout");
+
+  // Best-effort: let everyone who can approve discounts know one is waiting. Never block on this.
+  const { data: student } = await supabase.from("students").select("first_name, last_name").eq("id", input.student_id).maybeSingle();
+  await supabase.rpc("notify_users_with_permission", {
+    p_permission_key: "discounts.approve",
+    p_subject: "Fee discount needs approval",
+    p_body: `A discount of ${input.amount} was requested for ${student ? `${student.first_name} ${student.last_name}` : "a student"}.`,
+    p_action_url: "/finance",
+    p_category: "other",
+  });
+
   return { success: true };
+}
+
+async function notifyDiscountOutcome(supabase: Awaited<ReturnType<typeof createClient>>, discountId: string, decision: "approved" | "rejected") {
+  const { data: discount } = await supabase.from("discounts").select("requested_by, amount").eq("id", discountId).maybeSingle();
+  if (!discount?.requested_by) return;
+  await supabase.rpc("notify_school_user", {
+    p_recipient_id: discount.requested_by,
+    p_subject: decision === "approved" ? "Fee discount approved" : "Fee discount rejected",
+    p_body:
+      decision === "approved"
+        ? `Your discount request for ${discount.amount} was approved.`
+        : `Your discount request for ${discount.amount} was not approved.`,
+    p_action_url: "/finance",
+    p_category: "other",
+  });
 }
 
 export async function approveDiscountAction(discountId: string): Promise<ActionResult> {
@@ -226,6 +252,7 @@ export async function approveDiscountAction(discountId: string): Promise<ActionR
   const { error } = await supabase.rpc("approve_discount", { p_discount_id: discountId });
   if (error) return { error: error.message };
   revalidatePath("/finance", "layout");
+  await notifyDiscountOutcome(supabase, discountId, "approved");
   return { success: true };
 }
 
@@ -234,6 +261,7 @@ export async function rejectDiscountAction(discountId: string): Promise<ActionRe
   const { error } = await supabase.rpc("reject_discount", { p_discount_id: discountId });
   if (error) return { error: error.message };
   revalidatePath("/finance", "layout");
+  await notifyDiscountOutcome(supabase, discountId, "rejected");
   return { success: true };
 }
 
@@ -296,7 +324,32 @@ export async function raiseExpenseAction(input: {
   });
   if (error) return { error: error.message };
   revalidatePath("/finance", "layout");
+
+  // Best-effort: let everyone who can approve expenses know one is waiting. Never block on this.
+  await supabase.rpc("notify_users_with_permission", {
+    p_permission_key: "expenses.approve",
+    p_subject: "Expense claim needs approval",
+    p_body: `An expense of ${input.amount} to ${input.vendor} (${input.category}) needs approval.`,
+    p_action_url: "/finance",
+    p_category: "other",
+  });
+
   return { success: true };
+}
+
+async function notifyExpenseOutcome(supabase: Awaited<ReturnType<typeof createClient>>, expenseId: string, decision: "approved" | "rejected") {
+  const { data: expense } = await supabase.from("expenses").select("requested_by, amount, vendor").eq("id", expenseId).maybeSingle();
+  if (!expense?.requested_by) return;
+  await supabase.rpc("notify_school_user", {
+    p_recipient_id: expense.requested_by,
+    p_subject: decision === "approved" ? "Expense claim approved" : "Expense claim rejected",
+    p_body:
+      decision === "approved"
+        ? `Your expense of ${expense.amount} to ${expense.vendor} was approved.`
+        : `Your expense of ${expense.amount} to ${expense.vendor} was not approved.`,
+    p_action_url: "/finance",
+    p_category: "other",
+  });
 }
 
 export async function approveExpenseAction(expenseId: string): Promise<ActionResult> {
@@ -304,6 +357,7 @@ export async function approveExpenseAction(expenseId: string): Promise<ActionRes
   const { error } = await supabase.rpc("approve_expense", { p_expense_id: expenseId });
   if (error) return { error: error.message };
   revalidatePath("/finance", "layout");
+  await notifyExpenseOutcome(supabase, expenseId, "approved");
   return { success: true };
 }
 
@@ -312,6 +366,7 @@ export async function rejectExpenseAction(expenseId: string): Promise<ActionResu
   const { error } = await supabase.rpc("reject_expense", { p_expense_id: expenseId });
   if (error) return { error: error.message };
   revalidatePath("/finance", "layout");
+  await notifyExpenseOutcome(supabase, expenseId, "rejected");
   return { success: true };
 }
 

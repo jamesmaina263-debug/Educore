@@ -89,6 +89,19 @@ export async function editAttendanceRecord(
     return { error: "You don't have permission to edit this record." };
   }
   revalidatePath("/attendance");
+
+  // Best-effort: let everyone who can review corrections know one is pending. Never block on this.
+  const { data: requesterName } = me?.id
+    ? await supabase.from("school_users").select("full_name").eq("id", me.id).maybeSingle()
+    : { data: null };
+  await supabase.rpc("notify_users_with_permission", {
+    p_permission_key: "attendance.approve_correction",
+    p_subject: "Attendance correction needs review",
+    p_body: `${requesterName?.full_name ?? "Someone"} corrected an attendance record to "${status}": ${edit_reason}`,
+    p_action_url: "/attendance",
+    p_category: "other",
+  });
+
   return { success: true };
 }
 
@@ -102,6 +115,8 @@ export async function reviewAttendanceCorrection(id: string, decision: "approved
   } = await supabase.auth.getUser();
   const { data: me } = await supabase.from("school_users").select("id").eq("auth_user_id", user?.id ?? "").maybeSingle();
 
+  const { data: record } = await supabase.from("student_attendance").select("requested_by").eq("id", id).maybeSingle();
+
   const update: Record<string, unknown> = {
     correction_status: decision,
     reviewed_by: me?.id ?? null,
@@ -110,13 +125,13 @@ export async function reviewAttendanceCorrection(id: string, decision: "approved
   };
   if (decision === "rejected") {
     // Restore what the record said before the disputed correction was applied.
-    const { data: record } = await supabase
+    const { data: previous } = await supabase
       .from("student_attendance")
       .select("previous_status")
       .eq("id", id)
       .single();
-    if (record?.previous_status) {
-      update.status = record.previous_status;
+    if (previous?.previous_status) {
+      update.status = previous.previous_status;
     }
   }
 
@@ -136,5 +151,20 @@ export async function reviewAttendanceCorrection(id: string, decision: "approved
     return { error: "You don't have permission to review this correction, or it was already reviewed." };
   }
   revalidatePath("/attendance");
+
+  // Best-effort: tell whoever requested the correction the outcome. Never block on this.
+  if (record?.requested_by) {
+    await supabase.rpc("notify_school_user", {
+      p_recipient_id: record.requested_by,
+      p_subject: decision === "approved" ? "Attendance correction approved" : "Attendance correction rejected",
+      p_body:
+        decision === "approved"
+          ? "Your attendance correction was approved."
+          : "Your attendance correction was rejected and the original record was restored.",
+      p_action_url: "/attendance",
+      p_category: "other",
+    });
+  }
+
   return { success: true };
 }
