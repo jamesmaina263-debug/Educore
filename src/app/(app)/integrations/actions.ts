@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { extractEdgeFunctionError } from "@/lib/edge-function-error";
 
 type ActionResult = { error: string } | { success: true };
 
@@ -118,8 +119,11 @@ export async function initiateMpesaPush(input: {
   const { data: invokeData, error: invokeError } = await supabase.functions.invoke("mpesa-stk-push", {
     body: { request_id: requestId },
   });
-  if (invokeError || invokeData?.error) {
-    return { error: invokeData?.error ?? invokeError?.message ?? "Failed to send the STK push." };
+  if (invokeError) {
+    return { error: await extractEdgeFunctionError(invokeError, "Failed to send the STK push.") };
+  }
+  if (invokeData?.error) {
+    return { error: invokeData.error as string };
   }
 
   revalidatePath("/integrations/mpesa");

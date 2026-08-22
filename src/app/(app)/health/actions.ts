@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { extractEdgeFunctionError } from "@/lib/edge-function-error";
 
 type ActionResult = { error: string } | { success: true };
 
@@ -272,7 +273,7 @@ export async function sendHealthAlertAction(input: {
   const { data, error } = await supabase.functions.invoke("send-communication", {
     headers: { Authorization: `Bearer ${session.access_token}` },
   });
-  if (error) return { error: error.message };
+  if (error) return { error: await extractEdgeFunctionError(error, "Failed to send.") };
 
   revalidatePath("/health", "layout");
   return { success: true, sent: data.sent };
