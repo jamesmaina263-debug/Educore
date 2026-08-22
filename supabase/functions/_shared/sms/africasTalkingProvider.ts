@@ -15,7 +15,12 @@ export class AfricasTalkingProvider implements SmsProvider {
       ...(this.senderId ? { from: this.senderId } : {}),
     });
 
-    const res = await fetch("https://api.africastalking.com/version1/messaging", {
+    // Sandbox and live are entirely separate hosts at Africa's Talking — a
+    // sandbox API key is rejected with a 401 ("supplied authentication is
+    // invalid") if sent to the live host, and vice versa. username=sandbox
+    // is the one reliable signal we have for which environment we're in.
+    const host = this.username === "sandbox" ? "api.sandbox.africastalking.com" : "api.africastalking.com";
+    const res = await fetch(`https://${host}/version1/messaging`, {
       method: "POST",
       headers: {
         apiKey: this.apiKey,

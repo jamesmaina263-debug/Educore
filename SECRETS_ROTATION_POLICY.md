@@ -11,7 +11,7 @@ program.
 | `SUPABASE_SERVICE_ROLE_KEY` | Vercel env vars | Server-side admin operations (signup, cron) | Auto-injected by Supabase for Edge Functions; Vercel copy status unconfirmed (Gap #5) |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Vercel env vars | Client-side RLS-respecting requests | Unconfirmed (Gap #5) |
 | `GEMINI_API_KEY` | Vercel env vars | AI report-card drafting, Ask Trimora AI | Unconfirmed since Phase 2 |
-| `AT_USERNAME` / `AT_API_KEY` | Supabase Edge Function secrets | SMS (Africa's Talking) | Not set — no provider account yet |
+| `AT_USERNAME` / `AT_API_KEY` | Supabase Edge Function secrets | SMS (Africa's Talking) | Set and confirmed working (2026-08-22) — currently sandbox credentials (`AT_USERNAME=sandbox`), which only deliver to the Sandbox Simulator, not real phones; move to a Live team + top-up before production launch |
 | `RESEND_API_KEY` / `RESEND_FROM_ADDRESS` | Supabase Edge Function secrets | Email | Set and confirmed working (2026-08-22) — `RESEND_FROM_ADDRESS` is currently Resend's shared test sender (`onboarding@resend.dev`), which only delivers to the email address on the Resend account itself; buy a domain and swap to a verified custom-domain address before production launch |
 | `TWILIO_ACCOUNT_SID` / `TWILIO_AUTH_TOKEN` / `TWILIO_WHATSAPP_FROM` | Supabase Edge Function secrets | WhatsApp | Not set — no provider account yet |
 | `CRON_SECRET` | Vercel env vars | Authenticates Vercel Cron calls to `/api/cron/billing` | Unconfirmed — needs manual set (see billing session handover) |
