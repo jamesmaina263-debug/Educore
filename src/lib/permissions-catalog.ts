@@ -204,6 +204,7 @@ export const PERMISSION_CATALOG: PermissionGroup[] = [
     permissions: [
       { key: "communication.read", label: "View messages / newsletters" },
       { key: "communication.write", label: "Send messages / newsletters" },
+      { key: "communication.supplier", label: "Message suppliers only (Procurement)" },
     ],
   },
   {

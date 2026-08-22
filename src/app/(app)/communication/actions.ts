@@ -108,3 +108,28 @@ export async function dispatchPending(): Promise<{ error: string } | { success: 
   revalidatePath("/communication");
   return { success: true, sent: data.sent, failed: data.failed, total: data.total };
 }
+
+// One-off email to a single supplier. Distinct from composeAndSendAction/queue_communication —
+// gated on communication.supplier (or communication.write), never on communication.write alone —
+// so a procurement officer with only the narrower permission can use this without also being able
+// to reach the guardian/student/staff broadcast path.
+export async function sendSupplierMessageAction(input: { supplier_id: string; subject: string; body: string }): Promise<ActionResult> {
+  const supabase = await createClient();
+
+  const { error: queueError } = await supabase.rpc("queue_supplier_message", {
+    p_supplier_id: input.supplier_id,
+    p_subject: input.subject,
+    p_body: input.body,
+  });
+  if (queueError) return { error: queueError.message };
+
+  const dispatchResult = await dispatchPending();
+  if ("error" in dispatchResult) {
+    // The email is safely queued even if this immediate dispatch attempt failed (e.g. provider
+    // hiccup) — it'll go out next time anyone with communication.write/supplier visits this page.
+    return { error: `Queued, but sending failed: ${dispatchResult.error}` };
+  }
+
+  revalidatePath("/communication");
+  return { success: true };
+}
