@@ -5,12 +5,12 @@ const DAYS = [1, 2, 3, 4, 5]; // Mon-Fri
 const PERIODS = [1, 2, 4, 5, 6, 8, 9, 10]; // teaching periods only (3 and 7 are breaks)
 
 describe("buildGrid", () => {
-  it("produces one cell per (day, period) pair, day-major", () => {
+  it("produces one cell per (day, period) pair, period-major", () => {
     const grid = buildGrid([1, 2], [1, 2]);
     expect(grid).toEqual([
       { day: 1, period: 1 },
-      { day: 1, period: 2 },
       { day: 2, period: 1 },
+      { day: 1, period: 2 },
       { day: 2, period: 2 },
     ]);
   });
@@ -130,6 +130,24 @@ describe("generateTimetableSlots", () => {
     const result = generateTimetableSlots({ grid, requirements: [], existingStreamCells: [], existingTeacherCells: [] });
     expect(result.placements).toEqual([]);
     expect(result.unplaced).toEqual([]);
+  });
+
+  it("spreads a subject needing more periods than one day has across multiple days, instead of clustering (regression: Gititu High School reported 5+ periods of the same subject stacked on Monday)", () => {
+    const grid = buildGrid(DAYS, PERIODS); // 5 days x 8 teaching periods = 40 cells
+    const result = generateTimetableSlots({
+      grid,
+      requirements: [{ subject_id: "english", teacher_id: "t1", periods_per_week: 10 }],
+      existingStreamCells: [],
+      existingTeacherCells: [],
+    });
+    expect(result.placements).toHaveLength(10);
+    const perDay = new Map<number, number>();
+    for (const p of result.placements) {
+      perDay.set(p.day, (perDay.get(p.day) ?? 0) + 1);
+    }
+    // 10 periods across 5 days should land at 2/day, not 8+2 clustered onto two days.
+    expect(Math.max(...perDay.values())).toBeLessThanOrEqual(2);
+    expect(perDay.size).toBe(5);
   });
 
   it("handles a requirement asking for more periods than exist in the whole grid", () => {

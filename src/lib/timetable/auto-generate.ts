@@ -67,12 +67,20 @@ function teacherCellKey(teacherId: string, day: number, period: number): string 
 
 /**
  * Builds the full list of schedulable (day, period) cells, teaching periods
- * only, in day-major order (all periods for day 1, then day 2, ...).
+ * only, in period-major order (all days for period 1, then all days for
+ * period 2, ...). This ordering matters: generateTimetableSlots walks the
+ * grid sequentially for each requirement, so period-major means a single
+ * subject naturally gets spread across every day before ever repeating a
+ * period-slot on the same day. Day-major would instead fill one entire day
+ * before touching the next -- fine for a subject needing 2-3 periods/week,
+ * but for anything approaching or exceeding one day's period count it
+ * clusters most or all of the week's periods onto one or two days, which is
+ * not a school anyone would actually run.
  */
 export function buildGrid(days: number[], teachingPeriodNumbers: number[]): TimetableGridCell[] {
   const grid: TimetableGridCell[] = [];
-  for (const day of days) {
-    for (const period of teachingPeriodNumbers) {
+  for (const period of teachingPeriodNumbers) {
+    for (const day of days) {
       grid.push({ day, period });
     }
   }
