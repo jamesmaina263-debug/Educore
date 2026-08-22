@@ -128,6 +128,7 @@ const healthChildren: NavChild[] = [
 
 const examsChildren: NavChild[] = [
   { label: "Overview", href: "/exams/overview", icon: Gauge },
+  { label: "Report Cards", href: "/exams/report-cards", icon: BookOpenCheck },
   { label: "Grading Scales", href: "/exams/grading", icon: Scale },
 ];
 
