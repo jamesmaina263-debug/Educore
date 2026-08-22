@@ -8,6 +8,12 @@ declare
   v_visit2 uuid;
   v_med_category_id uuid;
 begin
+  -- "Alex" (v_alex) is created by 20260808195549_create_test_parent_and_teacher_demo_academy.sql.
+  -- "Ethan" (v_ethan) is only used here, so create it idempotently with a fixed id.
+  insert into students (id, school_id, admission_number, first_name, last_name, date_of_birth, gender, status)
+  values (v_ethan, v_school_id, 'DEMO-ETHAN-001', 'Ethan', 'Demo', '2014-11-02', 'male', 'active')
+  on conflict (id) do nothing;
+
   select id into v_nurse_su_id from public.school_users where email = 'nurse.demo@educore.app';
   select id into v_med_category_id from public.inventory_categories where school_id = v_school_id and name = 'Medical Supplies';
 
