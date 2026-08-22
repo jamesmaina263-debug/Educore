@@ -326,22 +326,24 @@ export async function createPurchaseOrderAction(formData: FormData): Promise<Act
 
   const requisitionId = String(formData.get("requisition_id") ?? "") || null;
   const supplierId = String(formData.get("supplier_id") ?? "");
-  const poNumber = String(formData.get("po_number") ?? "").trim();
+  const inventoryItemId = String(formData.get("inventory_item_id") ?? "") || null;
   const itemDescription = String(formData.get("item_description") ?? "").trim();
   const quantity = String(formData.get("quantity") ?? "");
   const unitCost = String(formData.get("unit_cost") ?? "");
   const expectedDate = String(formData.get("expected_date") ?? "") || null;
-  if (!supplierId || !poNumber || !itemDescription || !quantity || !unitCost) {
-    return { error: "Supplier, PO number, item, quantity, and unit cost are required." };
+  if (!supplierId || !itemDescription || !quantity || !unitCost) {
+    return { error: "Supplier, item, quantity, and unit cost are required." };
   }
 
+  // po_number is not set here -- it comes from the column default (a DB
+  // sequence), so every PO gets one automatically regardless of who or what
+  // creates the row (this action, or the low-stock auto-reorder trigger).
   const { data: po, error } = await supabase
     .from("purchase_orders")
     .insert({
       school_id: schoolUser.school_id,
       requisition_id: requisitionId,
       supplier_id: supplierId,
-      po_number: poNumber,
       status: "sent",
       expected_date: expectedDate,
       created_by: schoolUser.id,
@@ -357,6 +359,7 @@ export async function createPurchaseOrderAction(formData: FormData): Promise<Act
       item_description: itemDescription,
       quantity,
       unit_cost: unitCost,
+      inventory_item_id: inventoryItemId,
     });
     if (itemError) {
       // Don't leave an itemless PO behind claiming success -- roll the header back, and
@@ -367,8 +370,35 @@ export async function createPurchaseOrderAction(formData: FormData): Promise<Act
     if (requisitionId) {
       await supabase.from("purchase_requisitions").update({ status: "converted", updated_at: new Date().toISOString() }).eq("id", requisitionId);
     }
+
+    // Best-effort: email the supplier now that the PO (with its number and
+    // line items) actually exists. Never block "the PO was issued" on this --
+    // a missing supplier email address, for instance, is not a failure.
+    const { error: emailError } = await supabase.rpc("queue_supplier_po_email", { p_po_id: po.id });
+    if (emailError) {
+      revalidatePath("/inventory", "layout");
+      return { error: `Purchase order issued, but the supplier email could not be queued: ${emailError.message}` };
+    }
   }
 
+  revalidatePath("/inventory", "layout");
+  return { success: true };
+}
+
+export async function updatePurchaseOrderItemAction(formData: FormData): Promise<ActionResult> {
+  const { supabase } = await currentSchoolUser();
+
+  const poItemId = String(formData.get("po_item_id") ?? "");
+  const quantity = String(formData.get("quantity") ?? "");
+  const unitCost = String(formData.get("unit_cost") ?? "") || null;
+  if (!poItemId || !quantity) return { error: "Missing item or quantity." };
+
+  const { error } = await supabase.rpc("update_purchase_order_item", {
+    p_po_item_id: poItemId,
+    p_quantity: quantity,
+    p_unit_cost: unitCost,
+  });
+  if (error) return { error: error.message };
   revalidatePath("/inventory", "layout");
   return { success: true };
 }

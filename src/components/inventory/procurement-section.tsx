@@ -15,6 +15,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { StatusBadge } from "@/components/status-badge";
+import type { ItemRow } from "@/components/inventory/inventory-section";
 import {
   completeAssetMaintenanceAction,
   createAssetAction,
@@ -27,6 +28,7 @@ import {
   receiveGoodsAction,
   requestAssetMaintenanceAction,
   updateAssetStatusAction,
+  updatePurchaseOrderItemAction,
 } from "@/app/(app)/inventory/actions";
 
 export interface AssetRow {
@@ -68,7 +70,7 @@ export interface PurchaseOrderRow {
   status: "draft" | "sent" | "partially_received" | "received" | "cancelled";
   supplier_name: string;
   order_date: string;
-  items: { id: string; item_description: string; quantity: number; quantity_received: number }[];
+  items: { id: string; item_description: string; quantity: number; quantity_received: number; unit_cost: number | null; inventory_item_id: string | null }[];
 }
 export interface SupplierInvoiceRow {
   id: string;
@@ -446,12 +448,14 @@ export function ProcurementPanel({
   requisitions,
   purchaseOrders,
   suppliers,
+  items,
   canWrite,
   canApprove,
 }: {
   requisitions: RequisitionRow[];
   purchaseOrders: PurchaseOrderRow[];
   suppliers: SupplierRow[];
+  items: ItemRow[];
   canWrite: boolean;
   canApprove: boolean;
 }) {
@@ -459,6 +463,8 @@ export function ProcurementPanel({
   const [reqOpen, setReqOpen] = useState(false);
   const [poOpen, setPoOpen] = useState(false);
   const [receiveOpen, setReceiveOpen] = useState<string | null>(null);
+  const [editItemOpen, setEditItemOpen] = useState<{ id: string; quantity: number; unit_cost: number | null } | null>(null);
+  const [poItemMode, setPoItemMode] = useState<string>("__custom__");
 
   return (
     <div className="flex flex-col gap-4">
@@ -500,7 +506,13 @@ export function ProcurementPanel({
           </Dialog>
         )}
         {canApprove && (
-          <Dialog open={poOpen} onOpenChange={setPoOpen}>
+          <Dialog
+            open={poOpen}
+            onOpenChange={(o) => {
+              setPoOpen(o);
+              if (!o) setPoItemMode("__custom__");
+            }}
+          >
             <DialogTrigger asChild>
               <Button size="sm">Issue Purchase Order</Button>
             </DialogTrigger>
@@ -535,19 +547,34 @@ export function ProcurementPanel({
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="flex flex-col gap-1.5">
-                    <Label>PO Number</Label>
-                    <Input name="po_number" required />
-                  </div>
-                  <div className="flex flex-col gap-1.5">
-                    <Label>Expected Date</Label>
-                    <Input type="date" name="expected_date" />
-                  </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label>Expected Date</Label>
+                  <Input type="date" name="expected_date" />
                 </div>
+                <p className="text-[0.6875rem] text-muted-foreground">PO number is generated automatically when this is issued.</p>
                 <div className="flex flex-col gap-1.5">
                   <Label>Item</Label>
-                  <Input name="item_description" required />
+                  <Select value={poItemMode} onValueChange={setPoItemMode}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select a stock item, or enter a custom item below" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__custom__">Custom item (not in stock catalog)</SelectItem>
+                      {items.map((i) => (
+                        <SelectItem key={i.id} value={i.id}>{i.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                {poItemMode !== "__custom__" && <input type="hidden" name="inventory_item_id" value={poItemMode} />}
+                <div className="flex flex-col gap-1.5">
+                  <Label>Item Description</Label>
+                  <Input
+                    name="item_description"
+                    required
+                    defaultValue={poItemMode === "__custom__" ? "" : items.find((i) => i.id === poItemMode)?.name ?? ""}
+                    key={poItemMode}
+                  />
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div className="flex flex-col gap-1.5">
@@ -645,7 +672,22 @@ export function ProcurementPanel({
                     <td className="font-medium">{po.po_number}</td>
                     <td className="text-muted-foreground">{po.supplier_name}</td>
                     <td className="text-muted-foreground">
-                      {po.items.map((i) => `${i.item_description} (${i.quantity_received}/${i.quantity})`).join(", ")}
+                      <div className="flex flex-col gap-1">
+                        {po.items.map((i) => (
+                          <div key={i.id} className="flex items-center gap-1.5">
+                            <span>{i.item_description} ({i.quantity_received}/{i.quantity})</span>
+                            {canApprove && i.quantity_received === 0 && (
+                              <button
+                                type="button"
+                                className="text-[0.6875rem] text-primary underline underline-offset-2"
+                                onClick={() => setEditItemOpen({ id: i.id, quantity: i.quantity, unit_cost: i.unit_cost })}
+                              >
+                                Edit
+                              </button>
+                            )}
+                          </div>
+                        ))}
+                      </div>
                     </td>
                     <td>
                       <StatusBadge tone={PO_STATUS_TONE[po.status]} label={po.status.replace("_", " ")} />
@@ -702,6 +744,33 @@ export function ProcurementPanel({
           </div>
         )}
       </div>
+
+      <Dialog open={editItemOpen !== null} onOpenChange={(o) => !o && setEditItemOpen(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Purchase Order Item</DialogTitle>
+          </DialogHeader>
+          {editItemOpen && (
+            <form
+              className="flex flex-col gap-3"
+              action={(fd) => run(updatePurchaseOrderItemAction, fd, () => setEditItemOpen(null))}
+            >
+              <input type="hidden" name="po_item_id" value={editItemOpen.id} />
+              <div className="flex flex-col gap-1.5">
+                <Label>Quantity</Label>
+                <Input type="number" step="0.01" name="quantity" defaultValue={editItemOpen.quantity} required />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label>Unit Cost</Label>
+                <Input type="number" step="0.01" name="unit_cost" defaultValue={editItemOpen.unit_cost ?? undefined} />
+              </div>
+              <DialogFooter>
+                <Button type="submit" disabled={isPending}>Save</Button>
+              </DialogFooter>
+            </form>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

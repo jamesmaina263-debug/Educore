@@ -19,6 +19,7 @@ export default async function InventoryProcurementPage() {
         requisitions={ctx.requisitions}
         purchaseOrders={ctx.purchaseOrders}
         suppliers={ctx.suppliers}
+        items={ctx.items}
         canWrite={ctx.canWrite}
         canApprove={ctx.canApprove}
       />

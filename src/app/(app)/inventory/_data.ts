@@ -96,7 +96,7 @@ export async function loadInventoryContext(): Promise<InventoryContext> {
       .order("created_at", { ascending: false }),
     supabase
       .from("purchase_orders")
-      .select("id, po_number, status, order_date, suppliers(name), purchase_order_items(id, item_description, quantity, quantity_received)")
+      .select("id, po_number, status, order_date, suppliers(name), purchase_order_items(id, item_description, quantity, quantity_received, unit_cost, inventory_item_id)")
       .order("order_date", { ascending: false }),
     supabase.from("supplier_invoices").select("id, invoice_number, invoice_date, amount, status, suppliers(name)").order("invoice_date", { ascending: false }),
     supabase
