@@ -47,7 +47,6 @@ export async function loadWizardStepData(supabase: SupabaseClient, applicationId
     { data: canWriteMedical },
     { data: canWriteFinance },
     { data: requirements },
-    { data: documents },
   ] = await Promise.all([
     supabase
       .from("applications")
@@ -59,10 +58,23 @@ export async function loadWizardStepData(supabase: SupabaseClient, applicationId
     supabase.rpc("auth_has_permission", { p_permission_key: "students.medical.write" }),
     supabase.rpc("auth_has_permission", { p_permission_key: "finance.write" }),
     supabase.from("application_document_requirements").select("category, label, required").eq("school_id", schoolId).order("display_order"),
-    supabase.from("documents").select("id, category, file_name, verification_status, verification_comment").eq("application_id", applicationId),
   ]);
 
   const studentId = application?.resulting_student_id ?? null;
+
+  // Bug fix: complete_enrollment() reassigns verified documents from application_id to
+  // student_id (and nulls application_id) once enrollment finishes. Filtering by
+  // application_id alone made a completed admission's Documents step show everything as
+  // "Not uploaded" even when it genuinely wasn't -- the rows had just moved to the student.
+  const { data: documents } = studentId
+    ? await supabase
+        .from("documents")
+        .select("id, category, file_name, verification_status, verification_comment")
+        .or(`application_id.eq.${applicationId},student_id.eq.${studentId}`)
+    : await supabase
+        .from("documents")
+        .select("id, category, file_name, verification_status, verification_comment")
+        .eq("application_id", applicationId);
 
   let currentStreamId: string | null = null;
   let currentBedId: string | null = null;

@@ -25,21 +25,30 @@ export async function getApplicationByToken(
 
   const { data: application } = await admin
     .from("applications")
-    .select("id, school_id, application_number, status, first_name, last_name, submitted_at, decision_notes, schools(name)")
+    .select("id, school_id, application_number, status, first_name, last_name, submitted_at, decision_notes, resulting_student_id, schools(name)")
     .eq("access_token", token)
     .maybeSingle();
   if (!application) return { error: "We couldn't find an application with this link." };
 
+  // Bug fix: complete_enrollment() reassigns verified documents from application_id to
+  // student_id (and nulls application_id) once enrollment finishes. Filtering by
+  // application_id alone made a parent's status page show every document as "Not uploaded"
+  // once their child was actually enrolled -- the rows had just moved to the student.
   const [{ data: requirements }, { data: documents }] = await Promise.all([
     admin
       .from("application_document_requirements")
       .select("category, label, required")
       .eq("school_id", application.school_id)
       .order("display_order"),
-    admin
-      .from("documents")
-      .select("id, category, file_name, verification_status, verification_comment")
-      .eq("application_id", application.id),
+    application.resulting_student_id
+      ? admin
+          .from("documents")
+          .select("id, category, file_name, verification_status, verification_comment")
+          .or(`application_id.eq.${application.id},student_id.eq.${application.resulting_student_id}`)
+      : admin
+          .from("documents")
+          .select("id, category, file_name, verification_status, verification_comment")
+          .eq("application_id", application.id),
   ]);
 
   const docsByCategory = new Map((documents ?? []).map((d) => [d.category, d]));

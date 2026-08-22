@@ -38,9 +38,24 @@ export default async function AdmissionReviewPage({ params }: { params: Promise<
     ? await supabase.from("students").select("admission_number").eq("id", application.resulting_student_id).maybeSingle()
     : { data: null };
 
+  // Bug fix: complete_enrollment() intentionally reassigns verified documents from
+  // application_id to student_id (and nulls application_id) once enrollment finishes — see
+  // that function's migration. This page used to filter by application_id only, so any
+  // already-completed admission's documents always showed as "Not uploaded" here even
+  // though they genuinely were uploaded and verified; they'd just moved to the student
+  // record. Checking both columns (via an OR) covers a document at either stage: still
+  // pending on the application, or already reassigned to the enrolled student.
   const [{ data: requirementRows }, { data: documentRows }] = await Promise.all([
     supabase.from("application_document_requirements").select("category, label, required, display_order").eq("school_id", application.school_id).order("display_order"),
-    supabase.from("documents").select("id, category, file_name, storage_path, verification_status, verification_comment, created_at").eq("application_id", id),
+    application.resulting_student_id
+      ? supabase
+          .from("documents")
+          .select("id, category, file_name, storage_path, verification_status, verification_comment, created_at")
+          .or(`application_id.eq.${id},student_id.eq.${application.resulting_student_id}`)
+      : supabase
+          .from("documents")
+          .select("id, category, file_name, storage_path, verification_status, verification_comment, created_at")
+          .eq("application_id", id),
   ]);
 
   const documentsByCategory = new Map((documentRows ?? []).map((d) => [d.category, d]));
