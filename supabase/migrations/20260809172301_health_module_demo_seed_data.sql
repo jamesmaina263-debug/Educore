@@ -9,10 +9,23 @@ declare
   v_med_category_id uuid;
 begin
   -- "Alex" (v_alex) is created by 20260808195549_create_test_parent_and_teacher_demo_academy.sql.
-  -- "Ethan" (v_ethan) is only used here, so create it idempotently with a fixed id.
+  -- "Ethan" (v_ethan) is only used here, so create it idempotently with a fixed id, linked
+  -- to the same demo parent as a second child. A trigger requires status to be 'applied'
+  -- until a primary-contact guardian exists, and transitions are restricted
+  -- (applied -> approved -> enrolled -> active), so walk the chain after linking the guardian.
   insert into students (id, school_id, admission_number, first_name, last_name, date_of_birth, gender, status)
-  values (v_ethan, v_school_id, 'DEMO-ETHAN-001', 'Ethan', 'Demo', '2014-11-02', 'male', 'active')
+  values (v_ethan, v_school_id, 'DEMO-ETHAN-001', 'Ethan', 'Demo', '2014-11-02', 'male', 'applied')
   on conflict (id) do nothing;
+
+  insert into student_guardians (student_id, guardian_user_id, relationship, primary_contact)
+  select v_ethan, su.id, 'guardian', true
+  from public.school_users su
+  where su.email = 'parent.demo@educore.test'
+  and not exists (select 1 from student_guardians where student_id = v_ethan);
+
+  update students set status = 'approved' where id = v_ethan and status = 'applied';
+  update students set status = 'enrolled' where id = v_ethan and status = 'approved';
+  update students set status = 'active' where id = v_ethan and status = 'enrolled';
 
   select id into v_nurse_su_id from public.school_users where email = 'nurse.demo@educore.app';
   select id into v_med_category_id from public.inventory_categories where school_id = v_school_id and name = 'Medical Supplies';
