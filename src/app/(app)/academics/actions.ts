@@ -248,6 +248,31 @@ export async function assignSubjectTeacher(
   return { success: true };
 }
 
+export async function setSubjectPeriodsPerWeek(
+  streamId: string,
+  subjectId: string,
+  periodsPerWeek: number | null,
+): Promise<ActionResult> {
+  if (periodsPerWeek !== null && (!Number.isInteger(periodsPerWeek) || periodsPerWeek < 1 || periodsPerWeek > 20)) {
+    return { error: "Periods/week must be a whole number between 1 and 20." };
+  }
+  const supabase = await createClient();
+  try {
+    const school_id = await schoolId(supabase);
+    const { error } = await supabase
+      .from("class_subjects")
+      .upsert(
+        { school_id, stream_id: streamId, subject_id: subjectId, periods_per_week: periodsPerWeek },
+        { onConflict: "stream_id,subject_id" },
+      );
+    if (error) return { error: error.message };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Could not update periods/week." };
+  }
+  revalidatePath("/academics", "layout");
+  return { success: true };
+}
+
 export async function createTimetableSlot(input: {
   stream_id: string;
   subject_id: string;

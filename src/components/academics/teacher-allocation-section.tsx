@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { assignSubjectTeacher } from "@/app/(app)/academics/actions";
+import { assignSubjectTeacher, setSubjectPeriodsPerWeek } from "@/app/(app)/academics/actions";
 import {
   Select,
   SelectTrigger,
@@ -17,6 +17,7 @@ export interface ClassSubjectRow {
   stream_id: string;
   subject_id: string;
   teacher_id: string | null;
+  periods_per_week: number | null;
 }
 
 export function TeacherAllocationSection({
@@ -39,6 +40,7 @@ export function TeacherAllocationSection({
   const [error, setError] = useState<string | null>(null);
 
   const allocationMap = new Map(allocations.map((a) => [`${a.stream_id}:${a.subject_id}`, a.teacher_id]));
+  const periodsMap = new Map(allocations.map((a) => [`${a.stream_id}:${a.subject_id}`, a.periods_per_week]));
   // Only offer subjects the school currently has active -- but keep showing a row for a
   // since-deactivated subject if it still has an allocation on record, so existing
   // assignments stay visible rather than silently disappearing from the matrix.
@@ -50,6 +52,20 @@ export function TeacherAllocationSection({
     setPendingKey(key);
     setError(null);
     const result = await assignSubjectTeacher(streamId, subjectId, teacherId === "none" ? null : teacherId);
+    setPendingKey(null);
+    if ("error" in result) {
+      setError(result.error);
+      return;
+    }
+    router.refresh();
+  }
+
+  async function setPeriods(streamId: string, subjectId: string, raw: string) {
+    const key = `${streamId}:${subjectId}:periods`;
+    const value = raw.trim() === "" ? null : Number(raw);
+    setPendingKey(key);
+    setError(null);
+    const result = await setSubjectPeriodsPerWeek(streamId, subjectId, value);
     setPendingKey(null);
     if ("error" in result) {
       setError(result.error);
@@ -97,29 +113,45 @@ export function TeacherAllocationSection({
                         {classStreams.map((s) => {
                           const key = `${s.id}:${subj.id}`;
                           const currentTeacher = allocationMap.get(key) ?? "none";
+                          const currentPeriods = periodsMap.get(key);
                           return (
                             <td key={s.id}>
                               {canWrite ? (
-                                <Select
-                                  value={currentTeacher ?? "none"}
-                                  onValueChange={(v) => assign(s.id, subj.id, v)}
-                                  disabled={pendingKey === key}
-                                >
-                                  <SelectTrigger className="h-8 w-40">
-                                    <SelectValue placeholder="Unassigned" />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    <SelectItem value="none">Unassigned</SelectItem>
-                                    {teachers.map((t) => (
-                                      <SelectItem key={t.id} value={t.id}>
-                                        {t.full_name}
-                                      </SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
+                                <div className="flex items-center gap-2">
+                                  <Select
+                                    value={currentTeacher ?? "none"}
+                                    onValueChange={(v) => assign(s.id, subj.id, v)}
+                                    disabled={pendingKey === key}
+                                  >
+                                    <SelectTrigger className="h-8 w-40">
+                                      <SelectValue placeholder="Unassigned" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="none">Unassigned</SelectItem>
+                                      {teachers.map((t) => (
+                                        <SelectItem key={t.id} value={t.id}>
+                                          {t.full_name}
+                                        </SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                  <input
+                                    type="number"
+                                    min={1}
+                                    max={20}
+                                    step={1}
+                                    placeholder="Pds/wk"
+                                    defaultValue={currentPeriods ?? ""}
+                                    onBlur={(e) => setPeriods(s.id, subj.id, e.target.value)}
+                                    disabled={pendingKey === `${key}:periods`}
+                                    className="h-8 w-16 rounded-md border border-input bg-background px-2 text-sm"
+                                    title="Periods per week"
+                                  />
+                                </div>
                               ) : (
                                 <span className="text-muted-foreground">
                                   {teachers.find((t) => t.id === currentTeacher)?.full_name ?? "Unassigned"}
+                                  {currentPeriods ? ` — ${currentPeriods} pds/wk` : ""}
                                 </span>
                               )}
                             </td>

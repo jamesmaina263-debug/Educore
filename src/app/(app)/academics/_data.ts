@@ -82,7 +82,7 @@ export async function loadAcademicsContext(): Promise<AcademicsContext> {
       .select("id, stream_id, subject_id, teacher_id, day_of_week, period_number, start_time, end_time")
       .order("day_of_week")
       .order("period_number"),
-    supabase.from("class_subjects").select("stream_id, subject_id, teacher_id"),
+    supabase.from("class_subjects").select("stream_id, subject_id, teacher_id, periods_per_week"),
   ]);
 
   const canWrite = canWriteData === true;
