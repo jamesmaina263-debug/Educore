@@ -12,7 +12,7 @@ program.
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Vercel env vars | Client-side RLS-respecting requests | Unconfirmed (Gap #5) |
 | `GEMINI_API_KEY` | Vercel env vars | AI report-card drafting, Ask Trimora AI | Unconfirmed since Phase 2 |
 | `AT_USERNAME` / `AT_API_KEY` | Supabase Edge Function secrets | SMS (Africa's Talking) | Not set — no provider account yet |
-| `RESEND_API_KEY` / `RESEND_FROM_ADDRESS` | Supabase Edge Function secrets | Email | Set (2026-08-22) — `RESEND_FROM_ADDRESS` is currently Resend's shared test sender (`onboarding@resend.com`); swap to a verified custom-domain address before production launch |
+| `RESEND_API_KEY` / `RESEND_FROM_ADDRESS` | Supabase Edge Function secrets | Email | Set and confirmed working (2026-08-22) — `RESEND_FROM_ADDRESS` is currently Resend's shared test sender (`onboarding@resend.dev`), which only delivers to the email address on the Resend account itself; buy a domain and swap to a verified custom-domain address before production launch |
 | `TWILIO_ACCOUNT_SID` / `TWILIO_AUTH_TOKEN` / `TWILIO_WHATSAPP_FROM` | Supabase Edge Function secrets | WhatsApp | Not set — no provider account yet |
 | `CRON_SECRET` | Vercel env vars | Authenticates Vercel Cron calls to `/api/cron/billing` | Unconfirmed — needs manual set (see billing session handover) |
 | `ALLOWED_ORIGINS` | Supabase Edge Function secrets | CORS allowlist for `request-otp`/`verify-otp`/`send-communication`/`api-v1` (comma-separated production/staging origins) | **Not yet set — must be set before launch, see pre-launch security audit report.** Unset means every cross-origin browser request is rejected (fails closed, not open), so the app-facing symptom of forgetting this is broken OTP login, not an open CORS hole. |
