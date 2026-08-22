@@ -20,6 +20,16 @@ import { useEffect, useRef, useState } from "react";
  * Coming back online is still reported immediately on the 'online' event
  * with no probe -- there's no flicker risk in that direction, and no
  * reason to delay good news behind a network round trip.
+ *
+ * The *initial* read on mount goes through this same debounce+probe
+ * pipeline rather than trusting navigator.onLine directly -- a raw initial
+ * read was the actual cause of a reported appear-then-vanish flash: right
+ * after a page load, navigator.onLine can briefly report false before the
+ * browser's own connectivity detection settles, which showed the banner
+ * immediately (no debounce applies to a synchronous initial value) and
+ * then cleared it a moment later once an 'online' event caught up. State
+ * always starts `true`; if the device is truly offline, handleOffline
+ * below runs on mount just like it would from a real event.
  */
 const OFFLINE_DEBOUNCE_MS = 2000;
 const PROBE_TIMEOUT_MS = 4000;
@@ -46,11 +56,11 @@ async function probeConnectivity(): Promise<boolean> {
 }
 
 export function useOnlineStatus(): boolean {
-  // Read the real value during the initial render (lazy initializer) rather
-  // than setState-ing it inside a mount effect. `navigator` doesn't exist
-  // during server rendering, hence the guard -- corrected on the client's
-  // first render before paint.
-  const [online, setOnline] = useState(() => (typeof navigator === "undefined" ? true : navigator.onLine));
+  // Always start optimistic -- see the file header on why the initial
+  // value is never read directly from navigator.onLine. Corrected within
+  // OFFLINE_DEBOUNCE_MS + a probe round trip if the device turns out to
+  // actually be offline at mount.
+  const [online, setOnline] = useState(true);
   const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const recheckTimer = useRef<ReturnType<typeof setInterval> | null>(null);
   // Guards against a slow probe resolving after a newer event already
@@ -103,6 +113,14 @@ export function useOnlineStatus(): boolean {
 
     window.addEventListener("online", handleOnline);
     window.addEventListener("offline", handleOffline);
+
+    // Mirrors a real 'offline' event -- goes through the same
+    // debounce+probe pipeline instead of trusting the flag directly, for
+    // exactly the reason explained in the file header.
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      handleOffline();
+    }
+
     return () => {
       generation.current += 1;
       clearAllTimers();
