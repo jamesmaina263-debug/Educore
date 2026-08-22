@@ -6,7 +6,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { ComposeSection, type TemplateOption, type RosterEntry } from "@/components/communication/compose-section";
 import { TemplatesSection, type TemplateRow } from "@/components/communication/templates-section";
 import { HistorySection, type LogRow } from "@/components/communication/history-section";
-import { SupplierComposeSection, type SupplierOption } from "@/components/communication/supplier-compose-section";
+import { SupplierComposeSection, type SupplierOption, type SupplierPoOption } from "@/components/communication/supplier-compose-section";
 
 export default async function CommunicationPage() {
   const supabase = await createClient();
@@ -44,13 +44,19 @@ export default async function CommunicationPage() {
   // supplier-typed rows for them — see notification_logs_select) -- no guardian roster, no
   // templates, no tabs for anything outside Procurement's remit.
   if (!canWrite) {
-    const [{ data: suppliers }, { data: logs }] = await Promise.all([
+    const [{ data: suppliers }, { data: logs }, { data: purchaseOrders }] = await Promise.all([
       supabase.from("suppliers").select("id, name, email").eq("active", true).order("name"),
       supabase
         .from("notification_logs")
         .select("id, channel, recipient_phone, recipient_email, subject, body, status, provider_response, read_at, created_at, students(first_name, last_name)")
         .order("created_at", { ascending: false })
         .limit(200),
+      supabase
+        .from("purchase_orders")
+        .select("id, po_number, status, supplier_id")
+        .neq("status", "cancelled")
+        .order("order_date", { ascending: false })
+        .limit(100),
     ]);
 
     const logRows: LogRow[] = (logs ?? []).map((l) => ({
@@ -79,14 +85,14 @@ export default async function CommunicationPage() {
             <h1 className="text-lg font-semibold">Supplier Communication</h1>
             <p className="text-sm text-muted-foreground">Email suppliers about purchase orders and deliveries.</p>
           </div>
-          <SupplierComposeSection suppliers={(suppliers ?? []) as SupplierOption[]} />
+          <SupplierComposeSection suppliers={(suppliers ?? []) as SupplierOption[]} purchaseOrders={(purchaseOrders ?? []) as SupplierPoOption[]} />
           <HistorySection logs={logRows} />
         </div>
       </AppShell>
     );
   }
 
-  const [{ data: templates }, { data: logs }, { data: students }, { data: classes }, { data: suppliers }] = await Promise.all([
+  const [{ data: templates }, { data: logs }, { data: students }, { data: classes }, { data: suppliers }, { data: purchaseOrders }] = await Promise.all([
     supabase.from("communication_templates").select("id, name, category, body, channel").order("created_at", { ascending: false }),
     supabase
       .from("notification_logs")
@@ -99,6 +105,12 @@ export default async function CommunicationPage() {
       .eq("status", "active"),
     supabase.from("classes").select("id, name").order("level_order"),
     supabase.from("suppliers").select("id, name, email").eq("active", true).order("name"),
+    supabase
+      .from("purchase_orders")
+      .select("id, po_number, status, supplier_id")
+      .neq("status", "cancelled")
+      .order("order_date", { ascending: false })
+      .limit(100),
   ]);
 
   const roster: RosterEntry[] = (students ?? []).map((s) => {
@@ -159,7 +171,7 @@ export default async function CommunicationPage() {
           </TabsContent>
 
           <TabsContent value="suppliers">
-            <SupplierComposeSection suppliers={(suppliers ?? []) as SupplierOption[]} />
+            <SupplierComposeSection suppliers={(suppliers ?? []) as SupplierOption[]} purchaseOrders={(purchaseOrders ?? []) as SupplierPoOption[]} />
           </TabsContent>
 
           <TabsContent value="templates">
