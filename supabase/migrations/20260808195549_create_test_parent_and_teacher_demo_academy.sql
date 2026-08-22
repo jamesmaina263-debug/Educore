@@ -25,9 +25,11 @@ begin
 
   -- This demo student ("Alex") is also referenced by the health module demo seed
   -- migration. Create idempotently with a fixed id so both migrations stay in sync
-  -- on a fresh environment.
+  -- on a fresh environment. Inserted as 'applied' because a trigger requires a
+  -- primary-contact guardian before status can be enrolled/active, and the guardian
+  -- (Test Parent, below) doesn't exist yet at this point.
   insert into students (id, school_id, admission_number, first_name, last_name, date_of_birth, gender, status)
-  values (v_student_id, v_school_id, 'DEMO-ALEX-001', 'Alex', 'Demo', '2015-03-14', 'female', 'active')
+  values (v_student_id, v_school_id, 'DEMO-ALEX-001', 'Alex', 'Demo', '2015-03-14', 'female', 'applied')
   on conflict (id) do nothing;
 
   insert into auth.users (
@@ -56,7 +58,14 @@ begin
   returning id into v_parent_school_user_id;
 
   insert into student_guardians (student_id, guardian_user_id, relationship, primary_contact)
-  values (v_student_id, v_parent_school_user_id, 'guardian', true);
+  select v_student_id, v_parent_school_user_id, 'guardian', true
+  where not exists (select 1 from student_guardians where student_id = v_student_id);
+
+  -- Status transitions are restricted (applied -> approved -> enrolled -> active); walk
+  -- the chain now that a primary-contact guardian exists.
+  update students set status = 'approved' where id = v_student_id and status = 'applied';
+  update students set status = 'enrolled' where id = v_student_id and status = 'approved';
+  update students set status = 'active' where id = v_student_id and status = 'enrolled';
 
   insert into auth.users (
     instance_id, id, aud, role, email, encrypted_password,
