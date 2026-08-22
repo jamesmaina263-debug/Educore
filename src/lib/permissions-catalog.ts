@@ -250,6 +250,14 @@ export const PERMISSION_CATALOG: PermissionGroup[] = [
       { key: "group.reports.read", label: "View cross-campus group reports" },
     ],
   },
+  {
+    module: "integrations",
+    label: "Integrations",
+    permissions: [
+      { key: "nemis.manage", label: "Generate / confirm NEMIS submission batches" },
+      { key: "mpesa.manage", label: "Configure M-Pesa credentials & activation" },
+    ],
+  },
 ];
 
 export const ALL_PERMISSION_KEYS: string[] = PERMISSION_CATALOG.flatMap((g) => g.permissions.map((p) => p.key));
