@@ -1,10 +1,10 @@
 
 do $$
 declare
-  v_school_id uuid := '50f09948-2f38-4802-8b19-2efe073197bb';
+  v_school_id uuid;
   v_student_id uuid := 'e8810bbb-b836-4855-906b-9eb11840f80b';
-  v_parent_role_id uuid := '1a564ded-2f01-4888-ade1-296efb70844a';
-  v_teacher_role_id uuid := '81cb07b3-8280-4cb1-9b2b-a1a30dacf01e';
+  v_parent_role_id uuid;
+  v_teacher_role_id uuid;
 
   v_parent_user_id uuid := gen_random_uuid();
   v_parent_email text := 'parent.demo@educore.test';
@@ -15,6 +15,21 @@ declare
   v_teacher_email text := 'teacher.demo@educore.test';
   v_teacher_password text := 'TestTeacher!2026#';
 begin
+  -- Look up Demo Academy by its stable slug rather than assuming a hardcoded id exists.
+  select id into v_school_id from public.schools where slug = 'demo-academy';
+
+  -- roles.id is gen_random_uuid()-generated, not portable across environments;
+  -- look roles up by name instead of hardcoding their live ids.
+  select id into v_parent_role_id from public.roles where name = 'parent';
+  select id into v_teacher_role_id from public.roles where name = 'teacher';
+
+  -- This demo student ("Alex") is also referenced by the health module demo seed
+  -- migration. Create idempotently with a fixed id so both migrations stay in sync
+  -- on a fresh environment.
+  insert into students (id, school_id, admission_number, first_name, last_name, date_of_birth, gender, status)
+  values (v_student_id, v_school_id, 'DEMO-ALEX-001', 'Alex', 'Demo', '2015-03-14', 'female', 'active')
+  on conflict (id) do nothing;
+
   insert into auth.users (
     instance_id, id, aud, role, email, encrypted_password,
     email_confirmed_at, created_at, updated_at,
