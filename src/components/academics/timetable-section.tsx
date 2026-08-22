@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
-import { createTimetableSlot, deleteTimetableSlot } from "@/app/(app)/academics/actions";
+import { createTimetableSlot, deleteTimetableSlot, generateTimetableForStream } from "@/app/(app)/academics/actions";
 import { TimetableUploadDialog, downloadTimetableTemplate } from "./timetable-upload-dialog";
 import type { StreamRow } from "./classes-streams-section";
 import type { ClassRow } from "./classes-streams-section";
@@ -59,6 +59,8 @@ export function TimetableSection({
   const [teacherId, setTeacherId] = useState("");
   const [startTime, setStartTime] = useState("");
   const [endTime, setEndTime] = useState("");
+  const [generating, setGenerating] = useState(false);
+  const [generateSummary, setGenerateSummary] = useState<string | null>(null);
 
   const classNameById = useMemo(() => new Map(classes.map((c) => [c.id, c.name])), [classes]);
   const subjectNameById = useMemo(() => new Map(subjects.map((s) => [s.id, s.name])), [subjects]);
@@ -97,6 +99,32 @@ export function TimetableSection({
     });
   }
 
+  function handleGenerate() {
+    if (!streamId) return;
+    setError(null);
+    setGenerateSummary(null);
+    setGenerating(true);
+    startTransition(async () => {
+      const result = await generateTimetableForStream(streamId);
+      setGenerating(false);
+      if ("error" in result) return setError(result.error);
+      const { placed, unplacedSubjects, skippedSubjects } = result.summary;
+      const parts = [`Placed ${placed} period(s).`];
+      if (unplacedSubjects.length > 0) {
+        parts.push(
+          `Could not fully place: ${unplacedSubjects
+            .map((u) => `${u.subject_name} (${u.placed}/${u.requested} — ${u.reason})`)
+            .join(", ")}.`,
+        );
+      }
+      if (skippedSubjects.length > 0) {
+        parts.push(`Skipped (no periods/week set): ${skippedSubjects.join(", ")}.`);
+      }
+      setGenerateSummary(parts.join(" "));
+      router.refresh();
+    });
+  }
+
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
@@ -127,6 +155,11 @@ export function TimetableSection({
               Download template
             </Button>
             <TimetableUploadDialog />
+            {streamId && (
+              <Button type="button" size="sm" variant="outline" disabled={generating} onClick={handleGenerate}>
+                {generating ? "Generating…" : "Generate timetable"}
+              </Button>
+            )}
             {streamId && (
               <Dialog open={open} onOpenChange={setOpen}>
                 <DialogTrigger asChild>
@@ -218,6 +251,7 @@ export function TimetableSection({
       </div>
 
       {error && !open && <p className="text-sm text-danger">{error}</p>}
+      {generateSummary && <p className="text-sm text-muted-foreground">{generateSummary}</p>}
 
       {!streamId ? (
         <div className="panel border-dashed p-10 text-center text-sm text-muted-foreground">
