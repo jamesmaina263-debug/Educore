@@ -3,10 +3,22 @@ do $$
 declare
   v_user_id uuid := gen_random_uuid();
   v_school_id uuid := '50f09948-2f38-4802-8b19-2efe073197bb';
-  v_role_id uuid := '2ac7aada-0039-4d39-ae13-3c3dc185bde7';
+  v_role_id uuid;
   v_email text := 'owner.demo@educore.test';
   v_password text := 'TestOwner!2026#';
 begin
+  -- Demo Academy is referenced by fixed id across several later demo/seed migrations
+  -- (parent/teacher accounts, nurse account, health module seed data). Create it here
+  -- idempotently with its known live id so the whole chain replays on a fresh environment.
+  -- No-op on databases where it already exists (matches live: name/slug/status below).
+  insert into schools (id, name, slug, status)
+  values (v_school_id, 'Demo Academy', 'demo-academy', 'trial')
+  on conflict (id) do nothing;
+
+  -- roles.id is gen_random_uuid()-generated, not a stable/portable value across
+  -- environments, so look the role up by name rather than hardcoding its live id.
+  select id into v_role_id from public.roles where name = 'school_owner';
+
   insert into auth.users (
     instance_id, id, aud, role, email, encrypted_password,
     email_confirmed_at, created_at, updated_at,
