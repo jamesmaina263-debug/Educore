@@ -11,6 +11,7 @@ import { MedicalTab } from "./medical-tab";
 import { CertificatesTab, type CertificateRow } from "./certificates-tab";
 import { DisciplineTab, type DisciplineRow } from "./discipline-tab";
 import { StudentStatusControl } from "@/components/students/student-status-control";
+import { StudentDeleteControl } from "@/components/students/student-delete-control";
 import { NemisIdentifiersCard } from "@/components/students/nemis-identifiers-card";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
@@ -88,6 +89,7 @@ export default async function StudentProfilePage({
   const disciplineRecords: DisciplineRow[] = disciplineRows ?? [];
 
   const canManageStudents = (await supabase.rpc("auth_has_permission", { p_permission_key: "students.write" })).data === true;
+  const canDeleteStudents = (await supabase.rpc("auth_has_permission", { p_permission_key: "students.delete" })).data === true;
   const canUploadDocuments = (await supabase.rpc("auth_has_permission", { p_permission_key: "students.documents.write" })).data === true;
   const canReadMedical = (await supabase.rpc("auth_has_permission", { p_permission_key: "students.medical.read" })).data === true;
   const canReadDiscipline = (await supabase.rpc("auth_has_permission", { p_permission_key: "discipline.read_any" })).data === true;
@@ -176,7 +178,7 @@ export default async function StudentProfilePage({
           <div>
             <h1 className="text-lg font-semibold">{fullName}</h1>
             <p className="text-sm text-muted-foreground">
-              {student.admission_number}
+              {student.admission_number ?? "Admission number pending enrollment"}
               {student.upi_number ? ` · UPI ${student.upi_number}` : ""}
             </p>
             {originatingApplication && (
@@ -190,6 +192,9 @@ export default async function StudentProfilePage({
           />
           {canManageStudents && (
             <StudentStatusControl studentId={id} currentStatus={student.status} />
+          )}
+          {canDeleteStudents && (
+            <StudentDeleteControl studentId={id} fullName={fullName} />
           )}
           <Button asChild variant="outline" size="sm">
             <Link href={`/students/${id}/id-card`} target="_blank">

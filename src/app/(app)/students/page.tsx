@@ -19,9 +19,16 @@ export default async function StudentsPage() {
     .eq("auth_user_id", user.id)
     .maybeSingle();
 
+  // "applied" and "approved" are interim admission-in-progress statuses (student record
+  // created early in the Admissions wizard for duplicate-detection/FK-linking purposes, but
+  // Complete Enrollment hasn't run yet). This page is the school's actual student roster, so
+  // it excludes those -- a student only shows up here once admission is fully completed.
+  // Every post-enrollment status (including ones who later left) still shows; see
+  // StudentsTable's status filter for narrowing that further.
   const { data: students } = await supabase
     .from("students")
     .select("id, admission_number, first_name, last_name, status, current_class_id, streams(name, classes(name))")
+    .not("status", "in", "(applied,approved)")
     .order("last_name");
 
   const { data: primaryGuardians } = await supabase

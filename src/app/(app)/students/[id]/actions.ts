@@ -136,6 +136,26 @@ export async function updateStudentNemisIdentifiers(
 
 export type StudentStatus = "active" | "withdrawn" | "transferred" | "graduated";
 
+// Irreversible. Restricted to students.delete (school_owner/principal by default — see
+// delete_student_permanently()'s migration). The RPC purges every related record (attendance,
+// exams, discipline, health, safeguarding, library, fees, etc.) and snapshots the student to
+// audit_log first, since the row itself won't exist to look at afterward.
+export async function deleteStudentPermanently(
+  studentId: string,
+  reason?: string,
+): Promise<{ error: string } | { success: true }> {
+  const supabase = await createClient();
+
+  const { error } = await supabase.rpc("delete_student_permanently", {
+    p_student_id: studentId,
+    p_reason: reason?.trim() || null,
+  });
+  if (error) return { error: error.message };
+
+  revalidatePath("/students", "layout");
+  return { success: true as const };
+}
+
 // Withdraw/transfer/graduate a student, or reactivate one. The RPC (not a plain
 // .update()) is what actually ends any active transport assignment / boarding
 // allocation when a student leaves — see set_student_status in the migration

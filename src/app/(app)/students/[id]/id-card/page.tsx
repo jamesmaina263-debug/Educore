@@ -92,7 +92,7 @@ export default async function IdCardPage({ params }: { params: Promise<{ id: str
           </div>
           <div style={{ fontSize: 12, lineHeight: 1.6 }}>
             <p style={{ margin: 0, fontSize: 15, fontWeight: 600 }}>{fullName}</p>
-            <p style={{ margin: 0, color: "#71717a" }}>Adm. No. {student.admission_number}</p>
+            <p style={{ margin: 0, color: "#71717a" }}>Adm. No. {student.admission_number ?? "Pending"}</p>
             <p style={{ margin: 0, color: "#71717a" }}>Class: {classLabel}</p>
             <p style={{ margin: 0, color: "#71717a" }}>DOB: {student.date_of_birth}</p>
           </div>

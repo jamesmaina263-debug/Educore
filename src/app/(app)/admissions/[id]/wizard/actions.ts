@@ -190,7 +190,7 @@ export interface CreateOrLinkStudentInput {
 export async function createOrLinkStudent(
   applicationId: string,
   input: CreateOrLinkStudentInput,
-): Promise<{ error: string } | { success: true; studentId: string; admissionNumber?: string }> {
+): Promise<{ error: string } | { success: true; studentId: string; admissionNumber?: string | null }> {
   const supabase = await createClient();
 
   const { data: application } = await supabase
@@ -247,7 +247,7 @@ export async function createOrLinkStudent(
 
   revalidatePath(`/admissions/${applicationId}/wizard`);
   revalidatePath("/students");
-  return { success: true, studentId: student.id as string, admissionNumber: student.admission_number as string };
+  return { success: true, studentId: student.id as string, admissionNumber: student.admission_number as string | null };
 }
 
 // ---------- Step 3: Guardian ----------
