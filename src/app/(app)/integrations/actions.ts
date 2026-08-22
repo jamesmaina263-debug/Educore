@@ -61,7 +61,84 @@ export async function updateNemisInstitutionCode(code: string): Promise<ActionRe
   return { success: true as const };
 }
 
-// Fetches the full student rows (with snapshot identifiers) for a given batch so the
+export async function saveMpesaCredentials(input: {
+  shortcode: string;
+  shortcodeType: "paybill" | "till";
+  environment: "sandbox" | "production";
+  consumerKey: string;
+  consumerSecret: string;
+  passkey: string;
+}): Promise<ActionResult> {
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("set_mpesa_credentials", {
+    p_shortcode: input.shortcode,
+    p_shortcode_type: input.shortcodeType,
+    p_environment: input.environment,
+    p_consumer_key: input.consumerKey,
+    p_consumer_secret: input.consumerSecret,
+    p_passkey: input.passkey,
+  });
+  if (error) return { error: error.message };
+
+  revalidatePath("/integrations/mpesa");
+  return { success: true as const };
+}
+
+export async function setMpesaActive(active: boolean): Promise<ActionResult> {
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("set_mpesa_active", { p_active: active });
+  if (error) return { error: error.message };
+
+  revalidatePath("/integrations/mpesa");
+  return { success: true as const };
+}
+
+// Creates the pending request (real authorization + rate limiting happens inside the RPC),
+// then invokes the mpesa-stk-push edge function to make the actual Daraja HTTP call. The
+// edge function independently re-verifies the caller can see this specific request via RLS
+// under their own JWT before doing anything -- this action doesn't hand it any elevated trust.
+export async function initiateMpesaPush(input: {
+  studentId: string;
+  amount: number;
+  phoneNumber: string;
+  invoiceId?: string;
+  notes?: string;
+}): Promise<{ error: string } | { success: true; requestId: string }> {
+  const supabase = await createClient();
+
+  const { data: requestId, error: initError } = await supabase.rpc("initiate_mpesa_stk_request", {
+    p_student_id: input.studentId,
+    p_amount: input.amount,
+    p_phone_number: input.phoneNumber,
+    p_invoice_id: input.invoiceId ?? null,
+    p_notes: input.notes?.trim() || null,
+  });
+  if (initError) return { error: initError.message };
+
+  const { data: invokeData, error: invokeError } = await supabase.functions.invoke("mpesa-stk-push", {
+    body: { request_id: requestId },
+  });
+  if (invokeError || invokeData?.error) {
+    return { error: invokeData?.error ?? invokeError?.message ?? "Failed to send the STK push." };
+  }
+
+  revalidatePath("/integrations/mpesa");
+  return { success: true as const, requestId: requestId as string };
+}
+
+export async function getMpesaRequestStatus(
+  requestId: string,
+): Promise<{ error: string } | { success: true; status: string; resultDesc: string | null }> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("mpesa_stk_requests")
+    .select("status, result_desc")
+    .eq("id", requestId)
+    .maybeSingle();
+  if (error || !data) return { error: error?.message ?? "Request not found." };
+
+  return { success: true as const, status: data.status, resultDesc: data.result_desc };
+}
 // client can generate the NEMIS-format .xlsx download -- kept server-side since RLS on
 // nemis_sync_batch_students only allows select, and this joins in current student data
 // (class/stream) the snapshot table doesn't carry.
