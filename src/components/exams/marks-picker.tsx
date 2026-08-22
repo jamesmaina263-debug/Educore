@@ -4,12 +4,14 @@ import { useRouter } from "next/navigation";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 
 export function MarksPicker({
+  examOptions,
   examId,
   classOptions,
   subjectOptions,
   selectedClassId,
   selectedSubjectId,
 }: {
+  examOptions: { id: string; name: string }[];
   examId: string;
   classOptions: { id: string; name: string }[];
   subjectOptions: { id: string; name: string }[];
@@ -18,8 +20,9 @@ export function MarksPicker({
 }) {
   const router = useRouter();
 
-  function go(classId: string | null, subjectId: string | null) {
-    const params = new URLSearchParams({ exam: examId });
+  function go(examIdParam: string | null, classId: string | null, subjectId: string | null) {
+    const params = new URLSearchParams();
+    if (examIdParam) params.set("exam", examIdParam);
     if (classId) params.set("class", classId);
     if (subjectId) params.set("subject", subjectId);
     router.push(`/exams/marks?${params.toString()}`);
@@ -27,7 +30,20 @@ export function MarksPicker({
 
   return (
     <div className="flex gap-2">
-      <Select value={selectedClassId ?? undefined} onValueChange={(v) => go(v, null)}>
+      <Select value={examId} onValueChange={(v) => go(v, null, null)}>
+        <SelectTrigger className="w-56">
+          <SelectValue placeholder="Select exam" />
+        </SelectTrigger>
+        <SelectContent>
+          {examOptions.map((e) => (
+            <SelectItem key={e.id} value={e.id}>
+              {e.name}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+
+      <Select value={selectedClassId ?? undefined} onValueChange={(v) => go(examId, v, null)}>
         <SelectTrigger className="w-44">
           <SelectValue placeholder="Select class" />
         </SelectTrigger>
@@ -42,7 +58,7 @@ export function MarksPicker({
 
       <Select
         value={selectedSubjectId ?? undefined}
-        onValueChange={(v) => go(selectedClassId, v)}
+        onValueChange={(v) => go(examId, selectedClassId, v)}
         disabled={!selectedClassId}
       >
         <SelectTrigger className="w-44">

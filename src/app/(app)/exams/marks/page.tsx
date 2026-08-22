@@ -15,8 +15,7 @@ export default async function MarksPage({
 }: {
   searchParams: Promise<{ exam?: string; class?: string; subject?: string }>;
 }) {
-  const { exam: examId, class: classParam, subject: subjectParam } = await searchParams;
-  if (!examId) redirect("/exams");
+  const { exam: examParam, class: classParam, subject: subjectParam } = await searchParams;
 
   const supabase = await createClient();
   const {
@@ -24,27 +23,40 @@ export default async function MarksPage({
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const [{ data: schoolUser }, { data: canWriteAny }, { data: canWrite }, { data: canManageCurriculum }] = await Promise.all([
-    supabase
-      .from("school_users")
-      .select("full_name, roles(display_name), schools(name)")
-      .eq("auth_user_id", user.id)
-      .maybeSingle(),
-    supabase.rpc("auth_has_permission", { p_permission_key: "marks.write_any" }),
-    supabase.rpc("auth_has_permission", { p_permission_key: "marks.write" }),
-    supabase.rpc("auth_has_permission", { p_permission_key: "academics.write" }),
-  ]);
+  const [{ data: schoolUser }, { data: canWriteAny }, { data: canWrite }, { data: canManageCurriculum }, { data: exams }] =
+    await Promise.all([
+      supabase
+        .from("school_users")
+        .select("full_name, roles(display_name), schools(name)")
+        .eq("auth_user_id", user.id)
+        .maybeSingle(),
+      supabase.rpc("auth_has_permission", { p_permission_key: "marks.write_any" }),
+      supabase.rpc("auth_has_permission", { p_permission_key: "marks.write" }),
+      supabase.rpc("auth_has_permission", { p_permission_key: "academics.write" }),
+      // Same ordering as the Exams Overview list (most recently created first) --
+      // no status filter, since marks may still need viewing/correcting on a
+      // closed exam even if entry itself is disabled by then (MarksEntryForm
+      // gates that via examStatus).
+      supabase.from("exams").select("id, name").order("created_at", { ascending: false }),
+    ]);
 
   const roleName = (schoolUser?.roles as unknown as { display_name: string } | null)?.display_name;
   const schoolName = (schoolUser?.schools as unknown as { name: string } | null)?.name;
 
-  const { data: exam } = await supabase.from("exams").select("id, name, status").eq("id", examId).maybeSingle();
-  if (!exam) redirect("/exams");
+  const examOptions = exams ?? [];
+  const examId = examParam || examOptions[0]?.id || null;
 
-  const { data: examClassRows } = await supabase
-    .from("exam_classes")
-    .select("class_id, classes(id, name, grading_scale_id)")
-    .eq("exam_id", examId);
+  const { data: exam } = examId
+    ? await supabase.from("exams").select("id, name, status").eq("id", examId).maybeSingle()
+    : { data: null };
+  if (examParam && !exam) redirect("/exams/marks");
+
+  const { data: examClassRows } = exam
+    ? await supabase
+        .from("exam_classes")
+        .select("class_id, classes(id, name, grading_scale_id)")
+        .eq("exam_id", exam.id)
+    : { data: [] };
 
   const classOptions = (examClassRows ?? []).map((r) => {
     const c = r.classes as unknown as { id: string; name: string; grading_scale_id: string | null };
@@ -54,11 +66,11 @@ export default async function MarksPage({
   const selectedClassId = classParam || classOptions[0]?.id || null;
   const selectedClass = classOptions.find((c) => c.id === selectedClassId) ?? null;
 
-  const { data: examSubjectRows } = selectedClassId
+  const { data: examSubjectRows } = exam && selectedClassId
     ? await supabase
         .from("exam_subjects")
         .select("subject_id, max_score, subjects(id, name)")
-        .eq("exam_id", examId)
+        .eq("exam_id", exam.id)
         .eq("class_id", selectedClassId)
     : { data: [] };
 
@@ -76,7 +88,7 @@ export default async function MarksPage({
   let strandsWithSubStrands: StrandOption[] = [];
   let competencyRatings: CompetencyRatingRow[] = [];
 
-  if (selectedClass && selectedSubjectId) {
+  if (exam && selectedClass && selectedSubjectId) {
     // Resolve the class's effective grading scale: its own override, else the school default.
     const { data: scale } = selectedClass.grading_scale_id
       ? await supabase.from("grading_scales").select("id, model_type").eq("id", selectedClass.grading_scale_id).maybeSingle()
@@ -94,7 +106,7 @@ export default async function MarksPage({
 
     const [{ data: streamRows }, { data: existingMarks }] = await Promise.all([
       supabase.from("streams").select("id").eq("class_id", selectedClass.id),
-      supabase.from("marks").select("student_id, raw_score, band_id").eq("exam_id", examId).eq("subject_id", selectedSubjectId),
+      supabase.from("marks").select("student_id, raw_score, band_id").eq("exam_id", exam.id).eq("subject_id", selectedSubjectId),
     ]);
     const streamIds = (streamRows ?? []).map((s) => s.id);
 
@@ -135,7 +147,7 @@ export default async function MarksPage({
         ? await supabase
             .from("competency_marks")
             .select("student_id, sub_strand_id, band_id")
-            .eq("exam_id", examId)
+            .eq("exam_id", exam.id)
             .in("sub_strand_id", subStrandIds)
         : { data: [] };
       competencyRatings = existingCompetency ?? [];
@@ -152,12 +164,15 @@ export default async function MarksPage({
       <div className="flex flex-col gap-4">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-lg font-semibold">{exam.name}</h1>
-            <p className="text-sm text-muted-foreground">{exam.status === "open" ? "Open" : "Closed"} — marks entry</p>
+            <h1 className="text-lg font-semibold">{exam?.name ?? "Marks"}</h1>
+            <p className="text-sm text-muted-foreground">
+              {exam ? `${exam.status === "open" ? "Open" : "Closed"} — marks entry` : "Create an exam to begin entering marks"}
+            </p>
           </div>
-          {selectedClassId && (
+          {exam && (
             <MarksPicker
-              examId={examId}
+              examOptions={examOptions}
+              examId={exam.id}
               classOptions={classOptions}
               subjectOptions={subjectOptions}
               selectedClassId={selectedClassId}
@@ -166,13 +181,17 @@ export default async function MarksPage({
           )}
         </div>
 
-        {!selectedClassId || !selectedSubjectId ? (
+        {!exam ? (
+          <div className="panel border-dashed p-10 text-center text-sm text-muted-foreground">
+            No exams yet — create one under Exams &gt; Overview first.
+          </div>
+        ) : !selectedClassId || !selectedSubjectId ? (
           <div className="panel border-dashed p-10 text-center text-sm text-muted-foreground">
             This exam has no classes or subjects configured yet.
           </div>
         ) : (
           <MarksEntryForm
-            examId={examId}
+            examId={exam.id}
             classId={selectedClassId}
             subjectId={selectedSubjectId}
             gradingModel={gradingModel}
@@ -184,9 +203,9 @@ export default async function MarksPage({
           />
         )}
 
-        {selectedClassId && selectedSubjectId && gradingModel === "cbc" && (
+        {exam && selectedClassId && selectedSubjectId && gradingModel === "cbc" && (
           <CompetencyMarksSection
-            examId={examId}
+            examId={exam.id}
             classId={selectedClassId}
             subjectId={selectedSubjectId}
             strands={strandsWithSubStrands}
