@@ -1,3 +1,15 @@
+-- Fresh-replay fix: the original version of this migration used `create or
+-- replace function ... returns void`, but the function previously returned
+-- boolean -- Postgres rejects changing a function's return type via CREATE
+-- OR REPLACE, so this failed on any clean migration replay (new project /
+-- supabase db reset). Production already has this function in its final
+-- (boolean-returning, per the very next migration) state, so this drop is a
+-- no-op there; it only matters for fresh projects replaying history from
+-- scratch. Matches the same drop-then-create pattern the following
+-- migration (fix_fee_threshold_alert_silent_failure) already uses for this
+-- same function.
+drop function if exists public.send_fee_threshold_alert(uuid);
+
 create or replace function public.send_fee_threshold_alert(p_alert_id uuid)
 returns void
 language plpgsql
