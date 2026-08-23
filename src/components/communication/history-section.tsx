@@ -29,6 +29,18 @@ export function HistorySection({ logs }: { logs: LogRow[] }) {
 
   const hasQueued = logs.some((l) => l.status === "queued");
 
+  // "not configured" is the exact substring assertDevFallbackAllowed() throws with
+  // (see supabase/functions/_shared/devFallbackGuard.ts) — surfaced separately from
+  // ordinary delivery failures (bad number, provider rejected, etc.) because this one
+  // means the channel needs setup, not that any individual message was at fault.
+  const configFailuresByChannel = logs
+    .filter((l) => l.status === "failed" && l.provider_response?.includes("not configured"))
+    .reduce<Record<string, number>>((acc, l) => {
+      acc[l.channel] = (acc[l.channel] ?? 0) + 1;
+      return acc;
+    }, {});
+  const unconfiguredChannels = Object.entries(configFailuresByChannel);
+
   async function handleDispatch() {
     setPending(true);
     setError(null);
@@ -41,6 +53,21 @@ export function HistorySection({ logs }: { logs: LogRow[] }) {
   return (
     <div className="flex flex-col gap-4">
       {error && <p className="text-sm text-danger">{error}</p>}
+
+      {unconfiguredChannels.length > 0 && (
+        <div className="rounded-md border border-danger/30 bg-danger/10 p-3">
+          <p className="text-sm font-medium text-danger">
+            {unconfiguredChannels.length === 1 ? "A channel isn't" : "Some channels aren't"} set up yet
+          </p>
+          <p className="mt-0.5 text-sm text-danger/90">
+            {unconfiguredChannels
+              .map(([channel, count]) => `${CHANNEL_LABELS[channel as LogRow["channel"]]} (${count} message${count === 1 ? "" : "s"})`)
+              .join(", ")}{" "}
+            {unconfiguredChannels.length === 1 ? "has" : "have"} not actually been delivered — the provider credentials for{" "}
+            {unconfiguredChannels.length === 1 ? "it haven't" : "these haven't"} been configured yet. Contact your administrator.
+          </p>
+        </div>
+      )}
 
       {hasQueued && (
         <div className="flex items-center justify-between rounded-md border border-warning/30 bg-warning/10 p-3">
@@ -72,6 +99,7 @@ export function HistorySection({ logs }: { logs: LogRow[] }) {
                   <th>Student</th>
                   <th>Message</th>
                   <th>Status</th>
+                  <th>Reason</th>
                   <th>Read</th>
                   <th>Sent</th>
                 </tr>
@@ -96,6 +124,9 @@ export function HistorySection({ logs }: { logs: LogRow[] }) {
                         label={l.status}
                         title={l.provider_response ?? undefined}
                       />
+                    </td>
+                    <td className="max-w-[16rem] truncate text-muted-foreground" title={l.provider_response ?? undefined}>
+                      {l.status === "failed" ? (l.provider_response ?? "Unknown error") : "—"}
                     </td>
                     <td className="text-muted-foreground">
                       {l.channel === "in_app" ? (l.read_at ? <StatusBadge tone="success" label="Read" /> : <StatusBadge tone="neutral" label="Unread" />) : "—"}
