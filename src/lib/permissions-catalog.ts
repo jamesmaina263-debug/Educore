@@ -55,6 +55,13 @@ export const PERMISSION_CATALOG: PermissionGroup[] = [
     ],
   },
   {
+    module: "gate",
+    label: "Biometric Gate",
+    permissions: [
+      { key: "gate.manage", label: "Administer biometric devices/enrollments, review or manually override gate events" },
+    ],
+  },
+  {
     module: "exams",
     label: "Exams",
     permissions: [
