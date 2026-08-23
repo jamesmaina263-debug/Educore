@@ -922,6 +922,7 @@ export function FinanceStep({
 }) {
   const [charges, setCharges] = useState<FeeChargeLine[] | null>(null);
   const [total, setTotal] = useState(0);
+  const [invoiceId, setInvoiceId] = useState<string | null>(null);
   const [amount, setAmount] = useState(initial.initial_payment_amount?.toString() ?? "");
   const [method, setMethod] = useState(initial.initial_payment_method ?? "");
   const [pushPhone, setPushPhone] = useState("");
@@ -936,6 +937,7 @@ export function FinanceStep({
       if ("error" in result) { setError(result.error); return; }
       setCharges(result.charges);
       setTotal(result.total);
+      setInvoiceId(result.invoiceId);
     });
   }
 
@@ -971,7 +973,7 @@ export function FinanceStep({
   }
 
   return (
-    <StepPanel title="Finance" hint="Charges resolved from the same fee configuration Finance uses for invoicing — no invoice is created until enrollment completes.">
+    <StepPanel title="Finance" hint="Charges resolved from the same fee configuration Finance uses for invoicing. Loading them also creates this student's real invoice for the term.">
       {charges === null ? (
         <Button size="sm" variant="outline" onClick={loadPreview} disabled={pending}>{pending ? "Loading…" : "Load charges"}</Button>
       ) : (
@@ -1017,6 +1019,7 @@ export function FinanceStep({
                 studentId={resultingStudentId}
                 amount={amount}
                 phoneNumber={pushPhone}
+                invoiceId={invoiceId ?? undefined}
                 notes="Admission initial payment"
                 isActive={mpesaActive}
                 canPush={canWrite}
@@ -1024,13 +1027,12 @@ export function FinanceStep({
             </div>
           </div>
           <p className="text-xs text-muted-foreground">
-            No invoice exists for this applicant yet, so a confirmed push lands as an Unallocated Payment in Finance
-            — a Bursar should allocate it to this student&apos;s invoice once enrollment is completed, rather than
-            collecting this amount again.
+            A confirmed push applies straight to this student&apos;s invoice automatically — no further action
+            needed once Safaricom confirms it.
           </p>
         </div>
       )}
-      <p className="text-xs text-muted-foreground">Leave blank to skip payment for now — the invoice and any payment are recorded when enrollment is completed.</p>
+      <p className="text-xs text-muted-foreground">Leave blank to skip payment for now — a cash/bank/cheque payment recorded here is applied when enrollment is completed; M-Pesa applies as soon as it&apos;s confirmed.</p>
       <ErrorText error={error} />
       <div className="flex items-center gap-2">
         <Button size="sm" onClick={save} disabled={pending}>{pending ? "Saving…" : "Save"}</Button>

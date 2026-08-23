@@ -510,17 +510,22 @@ export async function saveHealthProfileForApplication(applicationId: string, inp
 }
 
 // ---------- Step 9: Finance ----------
-// Read-only preview via the exact same resolution the Finance module's own invoicing uses
-// (Phase 8's resolve_fee_charges_for_student — its own comment names this exact use case). No
-// invoice is created here; that's Phase 13's Complete Enrollment. This step only stages the
-// officer's initial-payment decision.
+// The fee structure for this term is already known and already committed to well before this
+// step is ever reached — online applicants get it emailed with their admission form on
+// acceptance, walk-ins are handed it beforehand — so the real invoice is created here rather
+// than deferred to Complete Enrollment (Brief correction, Aug 23). Idempotent:
+// create_or_get_invoice_for_student returns the same invoice on every reload of this step, and
+// Complete Enrollment's own call to it later is just a safety-net no-op. Creating the invoice
+// here (not just previewing charges) is what lets an M-Pesa push from this step resolve straight
+// onto a real invoice the instant Safaricom confirms it — no unallocated limbo, no manual
+// bursar allocation step afterward.
 export interface FeeChargeLine {
   item_name: string;
   amount: number;
   fee_category: string;
 }
 
-export async function getFeePreview(applicationId: string): Promise<{ error: string } | { success: true; charges: FeeChargeLine[]; total: number }> {
+export async function getFeePreview(applicationId: string): Promise<{ error: string } | { success: true; charges: FeeChargeLine[]; total: number; invoiceId: string | null }> {
   const supabase = await createClient();
   const { data: application } = await supabase.from("applications").select("resulting_student_id, term_id").eq("id", applicationId).maybeSingle();
   if (!application?.resulting_student_id) return { error: "Complete the Student step first." };
@@ -532,7 +537,19 @@ export async function getFeePreview(applicationId: string): Promise<{ error: str
   });
   if (error) return { error: error.message };
   const charges = (data ?? []) as FeeChargeLine[];
-  return { success: true, charges, total: charges.reduce((sum, c) => sum + Number(c.amount), 0) };
+  const total = charges.reduce((sum, c) => sum + Number(c.amount), 0);
+
+  let invoiceId: string | null = null;
+  if (charges.length > 0) {
+    const { data: invId, error: invError } = await supabase.rpc("create_or_get_invoice_for_student", {
+      p_student_id: application.resulting_student_id,
+      p_term_id: application.term_id,
+    });
+    if (invError) return { error: invError.message };
+    invoiceId = invId as string;
+  }
+
+  return { success: true, charges, total, invoiceId };
 }
 
 export async function saveFinanceDecision(

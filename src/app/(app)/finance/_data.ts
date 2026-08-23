@@ -215,7 +215,7 @@ export async function loadFinanceContext(): Promise<FinanceContext> {
     });
 
   const unallocatedRows: UnallocatedPaymentRow[] = (payments ?? [])
-    .filter((p) => p.status === "unallocated")
+    .filter((p) => p.status === "unallocated" && !p.student_id)
     .map((p) => ({
       id: p.id,
       method: p.method as UnallocatedPaymentRow["method"],
