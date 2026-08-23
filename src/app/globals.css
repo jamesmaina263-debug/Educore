@@ -148,6 +148,19 @@
   --sidebar-accent-foreground: oklch(0.21 0.014 264);
   --sidebar-border: oklch(0.916 0.005 264);
   --sidebar-ring: oklch(0.546 0.207 262.9);
+
+  /* EduCore brand tokens — sampled from the EduCore logo (deep navy +
+     graduation-tassel gold). Intentionally kept separate from the neutral
+     admin design system above: these exist only for the one branded,
+     unauthenticated surface in the product (the login page), not for use
+     inside the app shell. Fixed regardless of light/dark mode since the
+     login brand panel is a constant identity surface, not a themed one. */
+  --brand-navy-950: #060c1f;
+  --brand-navy-900: #0a1730;
+  --brand-navy-800: #132145;
+  --brand-gold-300: #f2d182;
+  --brand-gold-400: #e8bc4c;
+  --brand-gold-500: #d9a627;
 }
 
 .dark {
