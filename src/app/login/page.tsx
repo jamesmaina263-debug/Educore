@@ -69,11 +69,13 @@ function LoginForm() {
         />
 
         <div className="relative">
-          <img
-            src="/educore-logo-lockup.png"
-            alt="EduCore — School Management System"
-            className="h-16 w-auto xl:h-[4.5rem]"
-          />
+          <div className="inline-flex rounded-xl bg-white/[0.97] px-5 py-4 shadow-[0_8px_24px_-8px_rgba(0,0,0,0.35)]">
+            <img
+              src="/educore-logo-lockup.png"
+              alt="EduCore — School Management System"
+              className="h-14 w-auto xl:h-16"
+            />
+          </div>
         </div>
 
         <div className="relative max-w-md space-y-10">
@@ -113,11 +115,13 @@ function LoginForm() {
           {/* Compact brand mark — mobile/tablet only, where the brand panel
               above is hidden. */}
           <div className="mb-10 flex justify-center lg:hidden">
-            <img
-              src="/educore-logo-lockup.png"
-              alt="EduCore — School Management System"
-              className="h-11 w-auto rounded-md bg-black px-3 py-2"
-            />
+            <div className="inline-flex rounded-lg border border-border bg-white px-3 py-2 shadow-sm">
+              <img
+                src="/educore-logo-lockup.png"
+                alt="EduCore — School Management System"
+                className="h-9 w-auto"
+              />
+            </div>
           </div>
 
           <form
