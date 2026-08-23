@@ -46,8 +46,14 @@ export function InventorySection({
   const [rejectReason, setRejectReason] = useState("");
   const [rejectingId, setRejectingId] = useState<string | null>(null);
 
+  // Date.now() here only sets a display threshold (expiring-soon cutoff), recomputed once per
+  // mount via the empty deps array. The React-compiler-approved fix (moving this into a
+  // useEffect) would introduce a real regression: expired/expiring badges would flash from
+  // "not shown" to "shown" a beat after every mount, since today/thirtyDaysOut would start
+  // undefined. Not worth that trade for a cosmetic cutoff with no correctness requirement
+  // finer than "the current day".
   const { today, thirtyDaysOut } = useMemo(() => {
-    // eslint-disable-next-line react-hooks/purity -- bounded date-input default, computed once (empty deps), not reactive.
+    // eslint-disable-next-line react-hooks/purity -- see comment above useMemo
     const now = Date.now();
     return {
       today: new Date(now).toISOString().slice(0, 10),

@@ -49,7 +49,6 @@ if (process.env.NODE_ENV !== "production") {
   const seen = new Set<string>();
   for (const s of GO_TO_SHORTCUTS) {
     if (seen.has(s.key)) {
-      // eslint-disable-next-line no-console
       console.warn(`[go-to-shortcuts.ts] Duplicate key "${s.key}" -- shortcut collision.`);
     }
     seen.add(s.key);

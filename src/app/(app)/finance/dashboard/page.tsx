@@ -1,4 +1,4 @@
-import { loadFinanceContext, kes } from "../_data";
+import { loadFinanceContext, kes, ageInvoiceRows } from "../_data";
 import { FinancePageShell } from "@/components/finance/finance-page-shell";
 
 export default async function FinanceDashboardPage() {
@@ -10,17 +10,12 @@ export default async function FinanceDashboardPage() {
     .sort((a, b) => b.balance - a.balance)
     .slice(0, 6);
 
-  // eslint-disable-next-line react-hooks/purity -- Server Component: runs once per request, not a reactive render.
-  const now = Date.now();
   const buckets = { d30: 0, d60: 0, d90: 0, d90plus: 0 };
-  for (const inv of ctx.invoiceRows) {
-    const outstanding = inv.total_amount - inv.paid - inv.discounted;
-    if (outstanding <= 0) continue;
-    const ageDays = Math.floor((now - new Date(inv.created_at).getTime()) / 86400000);
-    if (ageDays <= 30) buckets.d30 += outstanding;
-    else if (ageDays <= 60) buckets.d60 += outstanding;
-    else if (ageDays <= 90) buckets.d90 += outstanding;
-    else buckets.d90plus += outstanding;
+  for (const r of ageInvoiceRows(ctx.invoiceRows)) {
+    if (r.ageDays <= 30) buckets.d30 += r.outstanding;
+    else if (r.ageDays <= 60) buckets.d60 += r.outstanding;
+    else if (r.ageDays <= 90) buckets.d90 += r.outstanding;
+    else buckets.d90plus += r.outstanding;
   }
   const totalOutstandingAging = buckets.d30 + buckets.d60 + buckets.d90 + buckets.d90plus;
 

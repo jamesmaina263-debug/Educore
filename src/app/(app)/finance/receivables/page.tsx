@@ -1,22 +1,11 @@
-import { loadFinanceContext, kes } from "../_data";
+import { loadFinanceContext, kes, ageInvoiceRows } from "../_data";
 import { FinancePageShell } from "@/components/finance/finance-page-shell";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
 export default async function FinanceReceivablesPage() {
   const ctx = await loadFinanceContext();
 
-  // eslint-disable-next-line react-hooks/purity -- Server Component: runs once per request, not a reactive render.
-  const now = Date.now();
-  type Row = { invoiceId: string; studentName: string; className: string; outstanding: number; ageDays: number; bucket: string };
-  const rows: Row[] = [];
-  for (const inv of ctx.invoiceRows) {
-    const outstanding = inv.total_amount - inv.paid - inv.discounted;
-    if (outstanding <= 0) continue;
-    const ageDays = Math.floor((now - new Date(inv.created_at).getTime()) / 86400000);
-    const bucket = ageDays <= 30 ? "0-30" : ageDays <= 60 ? "31-60" : ageDays <= 90 ? "61-90" : "90+";
-    rows.push({ invoiceId: inv.id, studentName: inv.student_name, className: inv.class_name, outstanding, ageDays, bucket });
-  }
-  rows.sort((a, b) => b.outstanding - a.outstanding);
+  const rows = ageInvoiceRows(ctx.invoiceRows).sort((a, b) => b.outstanding - a.outstanding);
   const totalReceivable = rows.reduce((sum, r) => sum + r.outstanding, 0);
 
   return (

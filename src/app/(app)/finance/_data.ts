@@ -333,3 +333,22 @@ export async function loadFinanceContext(): Promise<FinanceContext> {
 export function kes(n: number) {
   return `KES ${Math.round(n).toLocaleString()}`;
 }
+
+// Shared by the Finance Dashboard and Receivables pages. A plain helper (not a component) so
+// Date.now() isn't called directly inside a page's render body -- both pages are async Server
+// Components executed fresh per request, so this never changes runtime behavior, it just keeps
+// the "now" resolution out of the component function itself.
+export function ageInvoiceRows(
+  invoiceRows: FinanceContext["invoiceRows"],
+  nowMs: number = Date.now(),
+): { invoiceId: string; studentName: string; className: string; outstanding: number; ageDays: number; bucket: string }[] {
+  const rows: ReturnType<typeof ageInvoiceRows> = [];
+  for (const inv of invoiceRows) {
+    const outstanding = inv.total_amount - inv.paid - inv.discounted;
+    if (outstanding <= 0) continue;
+    const ageDays = Math.floor((nowMs - new Date(inv.created_at).getTime()) / 86400000);
+    const bucket = ageDays <= 30 ? "0-30" : ageDays <= 60 ? "31-60" : ageDays <= 90 ? "61-90" : "90+";
+    rows.push({ invoiceId: inv.id, studentName: inv.student_name, className: inv.class_name, outstanding, ageDays, bucket });
+  }
+  return rows;
+}
