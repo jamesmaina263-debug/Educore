@@ -70,11 +70,20 @@ Deno.serve(async (req) => {
   const toNumber = to ? normalizePhone(to) : null;
   const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 
-  const sendReply = async (phone: string, text: string) => {
+  // Returns whether the send actually succeeded (and the error, if not) instead of only
+  // logging on failure -- the pre-dispatcher early-return replies (rate-limited, unrecognized
+  // sender, ambiguous school) are best-effort by nature and stay fire-and-forget, but the bot's
+  // actual answer to a guardian's question is logged to whatsapp_messages afterward and must
+  // reflect what really happened, not always claim "sent". Same status/provider_response
+  // pattern as whatsapp-send-reply's staff-reply path.
+  const sendReply = async (phone: string, text: string): Promise<{ ok: boolean; error: string | null }> => {
     try {
       await getWhatsAppProvider().send(phone, text);
+      return { ok: true, error: null };
     } catch (err) {
-      console.error("[whatsapp-webhook] Failed to send reply:", err);
+      const message = err instanceof Error ? err.message : String(err);
+      console.error("[whatsapp-webhook] Failed to send reply:", message);
+      return { ok: false, error: message };
     }
   };
 
@@ -248,14 +257,15 @@ Deno.serve(async (req) => {
       messageText: body,
     });
 
-    await sendReply(phoneNumber, result.replyText);
+    const replyOutcome = await sendReply(phoneNumber, result.replyText);
     await supabase.from("whatsapp_messages").insert({
       conversation_id: conversationId,
       school_id: schoolId,
       direction: "outbound",
       sender_type: "bot",
       body: result.replyText,
-      status: "sent",
+      status: replyOutcome.ok ? "sent" : "failed",
+      provider_response: replyOutcome.error,
     });
     await supabase
       .from("whatsapp_conversations")
