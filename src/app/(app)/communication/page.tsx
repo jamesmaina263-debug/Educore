@@ -7,6 +7,7 @@ import { ComposeSection, type TemplateOption, type RosterEntry } from "@/compone
 import { TemplatesSection, type TemplateRow } from "@/components/communication/templates-section";
 import { HistorySection, type LogRow } from "@/components/communication/history-section";
 import { SupplierComposeSection, type SupplierOption, type SupplierPoOption } from "@/components/communication/supplier-compose-section";
+import { WhatsAppInboxSection, type ConversationRow } from "@/components/communication/whatsapp-inbox-section";
 
 export default async function CommunicationPage() {
   const supabase = await createClient();
@@ -92,7 +93,7 @@ export default async function CommunicationPage() {
     );
   }
 
-  const [{ data: templates }, { data: logs }, { data: students }, { data: classes }, { data: suppliers }, { data: purchaseOrders }] = await Promise.all([
+  const [{ data: templates }, { data: logs }, { data: students }, { data: classes }, { data: suppliers }, { data: purchaseOrders }, { data: conversations }] = await Promise.all([
     supabase.from("communication_templates").select("id, name, category, body, channel").order("created_at", { ascending: false }),
     supabase
       .from("notification_logs")
@@ -110,6 +111,14 @@ export default async function CommunicationPage() {
       .select("id, po_number, status, supplier_id")
       .neq("status", "cancelled")
       .order("order_date", { ascending: false })
+      .limit(100),
+    supabase
+      .from("whatsapp_conversations")
+      .select(
+        "id, phone_number, status, unread_count, last_message_at, last_message_preview, guardian:guardian_user_id(full_name), student:student_id(first_name, last_name), assigned:assigned_to(full_name)",
+      )
+      .neq("status", "closed")
+      .order("last_message_at", { ascending: false })
       .limit(100),
   ]);
 
@@ -145,6 +154,24 @@ export default async function CommunicationPage() {
     };
   });
 
+  const conversationRows: ConversationRow[] = (conversations ?? []).map((c) => {
+    const guardian = c.guardian as unknown as { full_name: string } | null;
+    const student = c.student as unknown as { first_name: string; last_name: string } | null;
+    const assigned = c.assigned as unknown as { full_name: string } | null;
+    return {
+      id: c.id,
+      phone_number: c.phone_number,
+      status: c.status as ConversationRow["status"],
+      unread_count: c.unread_count,
+      last_message_at: c.last_message_at,
+      last_message_preview: c.last_message_preview,
+      guardian_name: guardian?.full_name ?? null,
+      student_name: student ? `${student.first_name} ${student.last_name}` : null,
+      assigned_to_name: assigned?.full_name ?? null,
+    };
+  });
+  const escalatedCount = conversationRows.filter((c) => c.status === "escalated").length;
+
   return (
     <AppShell
       breadcrumbs={[{ label: schoolName, href: "/dashboard" }, { label: "Communication" }]}
@@ -161,6 +188,9 @@ export default async function CommunicationPage() {
         <Tabs defaultValue="compose">
           <TabsList>
             <TabsTrigger value="compose">Compose</TabsTrigger>
+            <TabsTrigger value="whatsapp">
+              WhatsApp{escalatedCount > 0 ? ` (${escalatedCount})` : ""}
+            </TabsTrigger>
             <TabsTrigger value="suppliers">Suppliers</TabsTrigger>
             <TabsTrigger value="templates">Templates</TabsTrigger>
             <TabsTrigger value="history">History</TabsTrigger>
@@ -168,6 +198,10 @@ export default async function CommunicationPage() {
 
           <TabsContent value="compose">
             <ComposeSection roster={roster} classes={(classes ?? []) as { id: string; name: string }[]} templates={(templates ?? []) as TemplateOption[]} schoolName={schoolName} />
+          </TabsContent>
+
+          <TabsContent value="whatsapp">
+            <WhatsAppInboxSection conversations={conversationRows} />
           </TabsContent>
 
           <TabsContent value="suppliers">
