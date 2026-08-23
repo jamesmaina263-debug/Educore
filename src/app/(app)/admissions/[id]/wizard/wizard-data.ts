@@ -35,6 +35,7 @@ export interface WizardStepData {
   guardian: { full_name: string; relationship: string } | null;
   financeDecision: { initial_payment_amount: number | null; initial_payment_method: string | null };
   canWriteFinance: boolean;
+  mpesaActive: boolean;
   status: string;
   enrollmentResult: { student_id: string; admission_number: string; invoice_id: string | null; payment_reference: string | null; total_amount: number | null } | null;
 }
@@ -47,6 +48,7 @@ export async function loadWizardStepData(supabase: SupabaseClient, applicationId
     { data: canWriteMedical },
     { data: canWriteFinance },
     { data: requirements },
+    { data: mpesaSettings },
   ] = await Promise.all([
     supabase
       .from("applications")
@@ -58,6 +60,7 @@ export async function loadWizardStepData(supabase: SupabaseClient, applicationId
     supabase.rpc("auth_has_permission", { p_permission_key: "students.medical.write" }),
     supabase.rpc("auth_has_permission", { p_permission_key: "finance.write" }),
     supabase.from("application_document_requirements").select("category, label, required").eq("school_id", schoolId).order("display_order"),
+    supabase.from("mpesa_settings").select("is_active").maybeSingle(),
   ]);
 
   const studentId = application?.resulting_student_id ?? null;
@@ -155,6 +158,7 @@ export async function loadWizardStepData(supabase: SupabaseClient, applicationId
       initial_payment_method: application?.initial_payment_method ?? null,
     },
     canWriteFinance: canWriteFinance === true,
+    mpesaActive: mpesaSettings?.is_active ?? false,
     status: application?.status ?? "draft",
     enrollmentResult,
   };

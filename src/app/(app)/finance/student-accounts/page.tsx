@@ -7,7 +7,13 @@ export default async function FinanceStudentAccountsPage() {
   const activeTermId = ctx.terms.find((t) => t.status === "active")?.id ?? null;
   return (
     <FinancePageShell ctx={ctx} section="Student Accounts" title="Student Accounts">
-      <BalancesSection rows={ctx.balanceRows} canWrite={ctx.canWrite} students={ctx.studentOptions} activeTermId={activeTermId} />
+      <BalancesSection
+        rows={ctx.balanceRows}
+        canWrite={ctx.canWrite}
+        students={ctx.studentOptions}
+        activeTermId={activeTermId}
+        mpesaActive={ctx.mpesaActive}
+      />
     </FinancePageShell>
   );
 }

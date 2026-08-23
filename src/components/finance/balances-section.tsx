@@ -10,6 +10,7 @@ import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { recordPaymentAction, createInvoiceForStudentAction } from "@/app/(app)/finance/actions";
+import { MpesaPushTrigger } from "@/components/finance/mpesa-push-trigger";
 import type { StudentOption } from "@/components/finance/waivers-section";
 
 export interface BalanceRow {
@@ -32,11 +33,13 @@ export function BalancesSection({
   canWrite,
   students,
   activeTermId,
+  mpesaActive,
 }: {
   rows: BalanceRow[];
   canWrite: boolean;
   students: StudentOption[];
   activeTermId: string | null;
+  mpesaActive: boolean;
 }) {
   const router = useRouter();
   const [query, setQuery] = useState("");
@@ -266,6 +269,28 @@ export function BalancesSection({
                 <div className="space-y-1.5">
                   <Label>Phone number</Label>
                   <Input placeholder="2547XXXXXXXX" value={phone} onChange={(e) => setPhone(e.target.value)} />
+                </div>
+                <div className="col-span-full flex items-center justify-between gap-3 rounded-md border border-dashed p-2">
+                  <p className="text-xs text-muted-foreground">
+                    Already have the M-Pesa code? Fill it in above and record it. Otherwise, push a live prompt to the
+                    phone number instead.
+                  </p>
+                  {target && (
+                    <MpesaPushTrigger
+                      studentId={target.student_id}
+                      amount={amount}
+                      phoneNumber={phone}
+                      notes={purpose || undefined}
+                      isActive={mpesaActive}
+                      canPush={canWrite}
+                      onResolved={(status) => {
+                        if (status === "completed") {
+                          router.refresh();
+                          setTarget(null);
+                        }
+                      }}
+                    />
+                  )}
                 </div>
               </div>
             ) : (

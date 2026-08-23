@@ -42,6 +42,7 @@ import {
 import { useOfflineSync } from "@/hooks/use-offline-sync";
 import { queueMutation } from "@/lib/offline/queue";
 import { AdmissionsOfflineBanner } from "@/components/admissions/offline-banner";
+import { MpesaPushTrigger } from "@/components/finance/mpesa-push-trigger";
 
 // Shared shell every step form renders inside, matching the wizard panel's existing look.
 function StepPanel({ title, hint, children }: { title: string; hint?: string; children: React.ReactNode }) {
@@ -909,16 +910,21 @@ export function FinanceStep({
   hasStudentAndTerm,
   canWrite,
   initial,
+  resultingStudentId,
+  mpesaActive,
 }: {
   applicationId: string;
   hasStudentAndTerm: boolean;
   canWrite: boolean;
   initial: { initial_payment_amount: number | null; initial_payment_method: string | null };
+  resultingStudentId: string | null;
+  mpesaActive: boolean;
 }) {
   const [charges, setCharges] = useState<FeeChargeLine[] | null>(null);
   const [total, setTotal] = useState(0);
   const [amount, setAmount] = useState(initial.initial_payment_amount?.toString() ?? "");
   const [method, setMethod] = useState(initial.initial_payment_method ?? "");
+  const [pushPhone, setPushPhone] = useState("");
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
@@ -999,6 +1005,31 @@ export function FinanceStep({
           </Select>
         </div>
       </div>
+      {method === "mpesa" && resultingStudentId && (
+        <div className="flex flex-col gap-2 rounded-md border border-dashed p-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="push_phone">Phone number to push to</Label>
+              <Input id="push_phone" value={pushPhone} onChange={(e) => setPushPhone(e.target.value)} placeholder="2547XXXXXXXX" />
+            </div>
+            <div className="flex items-end">
+              <MpesaPushTrigger
+                studentId={resultingStudentId}
+                amount={amount}
+                phoneNumber={pushPhone}
+                notes="Admission initial payment"
+                isActive={mpesaActive}
+                canPush={canWrite}
+              />
+            </div>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            No invoice exists for this applicant yet, so a confirmed push lands as an Unallocated Payment in Finance
+            — a Bursar should allocate it to this student&apos;s invoice once enrollment is completed, rather than
+            collecting this amount again.
+          </p>
+        </div>
+      )}
       <p className="text-xs text-muted-foreground">Leave blank to skip payment for now — the invoice and any payment are recorded when enrollment is completed.</p>
       <ErrorText error={error} />
       <div className="flex items-center gap-2">

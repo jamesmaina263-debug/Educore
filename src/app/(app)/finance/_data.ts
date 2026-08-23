@@ -19,6 +19,7 @@ export interface FinanceContext {
   canWrite: boolean;
   canApproveDiscounts: boolean;
   canApproveExpenses: boolean;
+  mpesaActive: boolean;
   activeYearId: string;
   activeTermName: string | null;
   terms: { id: string; name: string; status: string }[];
@@ -52,7 +53,7 @@ export async function loadFinanceContext(): Promise<FinanceContext> {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const [{ data: schoolUser }, { data: canRead }, { data: canWrite }, { data: canApproveDiscounts }, { data: canApproveExpenses }] =
+  const [{ data: schoolUser }, { data: canRead }, { data: canWrite }, { data: canApproveDiscounts }, { data: canApproveExpenses }, { data: mpesaSettings }] =
     await Promise.all([
       supabase
         .from("school_users")
@@ -63,6 +64,7 @@ export async function loadFinanceContext(): Promise<FinanceContext> {
       supabase.rpc("auth_has_permission", { p_permission_key: "finance.write" }),
       supabase.rpc("auth_has_permission", { p_permission_key: "discounts.approve" }),
       supabase.rpc("auth_has_permission", { p_permission_key: "expenses.approve" }),
+      supabase.from("mpesa_settings").select("is_active").maybeSingle(),
     ]);
 
   const roleName = (schoolUser?.roles as unknown as { display_name: string } | null)?.display_name;
@@ -78,6 +80,7 @@ export async function loadFinanceContext(): Promise<FinanceContext> {
     canWrite: canWrite === true,
     canApproveDiscounts: canApproveDiscounts === true,
     canApproveExpenses: canApproveExpenses === true,
+    mpesaActive: mpesaSettings?.is_active ?? false,
   };
 
   if (!canRead) {

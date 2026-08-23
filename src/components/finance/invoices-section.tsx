@@ -12,6 +12,7 @@ import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { TableExportMenu } from "@/components/shared/table-export-menu";
 import { recordPaymentAction } from "@/app/(app)/finance/actions";
+import { MpesaPushTrigger } from "@/components/finance/mpesa-push-trigger";
 
 export interface InvoiceListRow {
   id: string;
@@ -36,10 +37,12 @@ export function InvoicesSection({
   invoices,
   canWrite,
   schoolName,
+  mpesaActive,
 }: {
   invoices: InvoiceListRow[];
   canWrite: boolean;
   schoolName: string;
+  mpesaActive: boolean;
 }) {
   const router = useRouter();
   const [target, setTarget] = useState<InvoiceListRow | null>(null);
@@ -210,6 +213,27 @@ export function InvoicesSection({
                 <div className="space-y-1.5">
                   <Label>Phone number</Label>
                   <Input placeholder="2547XXXXXXXX" value={phone} onChange={(e) => setPhone(e.target.value)} />
+                </div>
+                <div className="col-span-full flex items-center justify-between gap-3 rounded-md border border-dashed p-2">
+                  <p className="text-xs text-muted-foreground">
+                    Already have the M-Pesa code? Fill it in above and record it. Otherwise, push a live prompt.
+                  </p>
+                  {target && (
+                    <MpesaPushTrigger
+                      studentId={target.student_id}
+                      amount={amount}
+                      phoneNumber={phone}
+                      invoiceId={target.id}
+                      isActive={mpesaActive}
+                      canPush={canWrite}
+                      onResolved={(status) => {
+                        if (status === "completed") {
+                          router.refresh();
+                          setTarget(null);
+                        }
+                      }}
+                    />
+                  )}
                 </div>
               </div>
             ) : (
