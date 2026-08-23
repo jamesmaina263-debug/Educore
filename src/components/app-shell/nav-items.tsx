@@ -174,6 +174,7 @@ const integrationsChildren: NavChild[] = [
 const settingsChildren: NavChild[] = [
   { label: "General", href: "/settings/general", icon: Settings },
   { label: "Branding", href: "/settings/branding", icon: Palette },
+  { label: "Admission Form", href: "/settings/admission-form", icon: FileText },
   { label: "Users & Roles", href: "/settings/staff", icon: Users },
   { label: "Permission Requests", href: "/settings/permission-requests", icon: ShieldCheck },
   { label: "Leave Types", href: "/settings/leave-types", icon: CalendarClock },

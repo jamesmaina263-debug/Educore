@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { StatusBadge } from "@/components/status-badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import {
   markUnderReviewAction,
   verifyDocumentAction,
@@ -103,11 +104,15 @@ export function ReviewScreen({
   requirements,
   canWrite,
   schoolSlug,
+  termOptions = [],
+  streamOptions = [],
 }: {
   application: ApplicationDetail;
   requirements: DocumentRequirementRow[];
   canWrite: boolean;
   schoolSlug: string;
+  termOptions?: { id: string; label: string }[];
+  streamOptions?: { id: string; label: string }[];
 }) {
   const router = useRouter();
   const [pending, setPending] = useState(false);
@@ -129,6 +134,8 @@ export function ReviewScreen({
 
   const [decisionOpen, setDecisionOpen] = useState<"accept" | "conditionally_accept" | "waitlist" | "reject" | null>(null);
   const [decisionNotes, setDecisionNotes] = useState("");
+  const [decisionTermId, setDecisionTermId] = useState("");
+  const [decisionStreamId, setDecisionStreamId] = useState("");
   const [reconsidering, setReconsidering] = useState(false);
 
   const decided = DECIDED_STATUSES.includes(application.status);
@@ -493,21 +500,58 @@ export function ReviewScreen({
               {decisionOpen === "reject" && "Reject application"}
             </DialogTitle>
           </DialogHeader>
+          {decisionOpen === "accept" && application.application_source === "online" && (
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label>Term</Label>
+                <Select value={decisionTermId} onValueChange={setDecisionTermId}>
+                  <SelectTrigger><SelectValue placeholder="Select term" /></SelectTrigger>
+                  <SelectContent>
+                    {termOptions.map((t) => <SelectItem key={t.id} value={t.id}>{t.label}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label>Class</Label>
+                <Select value={decisionStreamId} onValueChange={setDecisionStreamId}>
+                  <SelectTrigger><SelectValue placeholder="Select class" /></SelectTrigger>
+                  <SelectContent>
+                    {streamOptions.map((s) => <SelectItem key={s.id} value={s.id}>{s.label}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <p className="col-span-full text-[0.75rem] text-muted-foreground">
+                Needed now so the fee structure in the acceptance email is accurate — not deferred to enrollment.
+              </p>
+            </div>
+          )}
           <div className="space-y-1.5">
             <Label>Notes {decisionOpen === "conditionally_accept" && "(conditions)"}  {decisionOpen === "reject" && "(reason, optional)"}</Label>
             <Textarea rows={2} value={decisionNotes} onChange={(e) => setDecisionNotes(e.target.value)} />
           </div>
-          <p className="text-[0.75rem] text-muted-foreground">The guardian will be notified by SMS.</p>
+          <p className="text-[0.75rem] text-muted-foreground">
+            The guardian will be notified by SMS
+            {decisionOpen === "accept" && application.application_source === "online" && ", and emailed the admission form if one is configured"}.
+          </p>
           <DialogFooter>
             <Button
               variant={decisionOpen === "reject" ? "destructive" : "default"}
-              disabled={pending}
+              disabled={
+                pending ||
+                (decisionOpen === "accept" && application.application_source === "online" && (!decisionTermId || !decisionStreamId))
+              }
               onClick={async () => {
                 if (!decisionOpen) return;
-                const ok = await run(() => decideApplicationAction(application.id, decisionOpen, decisionNotes));
+                const admissionDetails =
+                  decisionOpen === "accept" && application.application_source === "online"
+                    ? { term_id: decisionTermId, intended_class_id: decisionStreamId }
+                    : undefined;
+                const ok = await run(() => decideApplicationAction(application.id, decisionOpen, decisionNotes, admissionDetails));
                 if (ok) {
                   setDecisionOpen(null);
                   setDecisionNotes("");
+                  setDecisionTermId("");
+                  setDecisionStreamId("");
                 }
               }}
             >

@@ -1,4 +1,4 @@
-import type { EmailProvider } from "./types.ts";
+import type { EmailProvider, EmailAttachment } from "./types.ts";
 
 export class ResendProvider implements EmailProvider {
   constructor(
@@ -6,7 +6,7 @@ export class ResendProvider implements EmailProvider {
     private fromAddress: string,
   ) {}
 
-  async send(to: string, subject: string, message: string): Promise<void> {
+  async send(to: string, subject: string, message: string, attachments?: EmailAttachment[]): Promise<void> {
     const res = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: {
@@ -18,6 +18,9 @@ export class ResendProvider implements EmailProvider {
         to: [to],
         subject,
         text: message,
+        ...(attachments && attachments.length > 0
+          ? { attachments: attachments.map((a) => ({ filename: a.filename, content: a.contentBase64 })) }
+          : {}),
       }),
     });
 
