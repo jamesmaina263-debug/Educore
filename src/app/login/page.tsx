@@ -176,6 +176,11 @@ function LoginForm() {
             >
               {pending ? "Signing in…" : "Sign in"}
             </Button>
+
+            <p className="border-t border-border pt-4 text-xs text-muted-foreground">
+              Having trouble signing in? Contact your school administrator to reset your
+              staff account.
+            </p>
           </form>
 
           <p className="mt-6 flex items-center justify-center gap-1.5 text-xs text-muted-foreground">
