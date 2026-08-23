@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { addMedicalInventoryItem, issueMedicalStock, acceptTransferAction, rejectTransferAction } from "@/app/(app)/health/actions";
 import { Button } from "@/components/ui/button";
@@ -46,8 +46,14 @@ export function InventorySection({
   const [rejectReason, setRejectReason] = useState("");
   const [rejectingId, setRejectingId] = useState<string | null>(null);
 
-  const today = new Date().toISOString().slice(0, 10);
-  const thirtyDaysOut = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const { today, thirtyDaysOut } = useMemo(() => {
+    // eslint-disable-next-line react-hooks/purity -- bounded date-input default, computed once (empty deps), not reactive.
+    const now = Date.now();
+    return {
+      today: new Date(now).toISOString().slice(0, 10),
+      thirtyDaysOut: new Date(now + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
+    };
+  }, []);
 
   async function submit() {
     if (!medicalCategoryId) {

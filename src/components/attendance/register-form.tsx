@@ -27,10 +27,6 @@ const marks: { key: Mark; label: string; icon: typeof Check }[] = [
   { key: "late", label: "Late", icon: Minus },
 ];
 
-function statusTone(status: Mark) {
-  return status === "present" ? "success" : status === "late" ? "warning" : "danger";
-}
-
 export function RegisterForm({
   streamId,
   attendanceDate,

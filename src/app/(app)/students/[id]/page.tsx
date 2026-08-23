@@ -246,12 +246,18 @@ export default async function StudentProfilePage({
 
               <div className="panel p-4">
                 <p className="label-eyebrow">Fee balance</p>
-                <p className={`mt-1 text-lg font-semibold ${(balanceRow?.balance ?? 0) > 0 ? "text-danger" : "text-success"}`}>
-                  {balanceRow ? `KES ${Number(balanceRow.balance).toLocaleString()}` : "—"}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  {financialAccount ? `Ref. ${financialAccount.payment_reference}` : "From Finance"}
-                </p>
+                {canReadFinance ? (
+                  <>
+                    <p className={`mt-1 text-lg font-semibold ${(balanceRow?.balance ?? 0) > 0 ? "text-danger" : "text-success"}`}>
+                      {balanceRow ? `KES ${Number(balanceRow.balance).toLocaleString()}` : "—"}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {financialAccount ? `Ref. ${financialAccount.payment_reference}` : "From Finance"}
+                    </p>
+                  </>
+                ) : (
+                  <p className="mt-1 text-sm text-muted-foreground">Restricted</p>
+                )}
               </div>
 
               <div className="panel p-4">

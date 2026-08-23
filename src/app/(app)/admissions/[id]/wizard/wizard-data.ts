@@ -41,7 +41,7 @@ export interface WizardStepData {
 }
 
 export async function loadWizardStepData(supabase: SupabaseClient, applicationId: string, schoolId: string): Promise<WizardStepData> {
-  const ref = await loadWizardReferenceData(supabase, schoolId);
+  const ref = await loadWizardReferenceData(supabase);
 
   const [
     { data: application },

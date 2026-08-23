@@ -5,6 +5,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 export default async function FinanceReceivablesPage() {
   const ctx = await loadFinanceContext();
 
+  // eslint-disable-next-line react-hooks/purity -- Server Component: runs once per request, not a reactive render.
   const now = Date.now();
   type Row = { invoiceId: string; studentName: string; className: string; outstanding: number; ageDays: number; bucket: string };
   const rows: Row[] = [];

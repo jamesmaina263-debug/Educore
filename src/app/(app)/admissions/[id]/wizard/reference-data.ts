@@ -4,7 +4,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 // capacity/availability rather than five separate ad-hoc queries that could disagree with each
 // other mid-wizard (Brief 4.16.9: "live capacity", "live bed availability", "live capacity" —
 // each step's own authoritative module, read the same way that module's own page reads it).
-export async function loadWizardReferenceData(supabase: SupabaseClient, schoolId: string) {
+export async function loadWizardReferenceData(supabase: SupabaseClient) {
   const [
     { data: academicYears },
     { data: terms },

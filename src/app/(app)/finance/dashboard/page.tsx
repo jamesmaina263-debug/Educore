@@ -10,6 +10,7 @@ export default async function FinanceDashboardPage() {
     .sort((a, b) => b.balance - a.balance)
     .slice(0, 6);
 
+  // eslint-disable-next-line react-hooks/purity -- Server Component: runs once per request, not a reactive render.
   const now = Date.now();
   const buckets = { d30: 0, d60: 0, d90: 0, d90plus: 0 };
   for (const inv of ctx.invoiceRows) {

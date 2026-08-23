@@ -45,7 +45,6 @@ import {
   Pill,
   Ambulance,
   Boxes,
-  Truck,
   Handshake,
   ShoppingCart,
   FileSpreadsheet,
@@ -61,7 +60,6 @@ import {
   KeyRound,
   History,
   Palette,
-  ScrollText,
   Landmark,
   Smartphone,
 } from "lucide-react";
