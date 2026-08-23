@@ -37,7 +37,9 @@ function LoginForm() {
   const wasDeactivated = searchParams.get("deactivated") === "1";
   const errorMessage =
     state.error ??
-    (wasDeactivated ? "Your account has been deactivated. Contact your school admin." : null);
+    (wasDeactivated
+      ? "Your account has been deactivated. Contact your school admin."
+      : null);
 
   return (
     <div className="grid min-h-screen w-full bg-background lg:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)]">
@@ -45,7 +47,7 @@ function LoginForm() {
           non-neutral surface in the product; see the brand-* tokens in
           globals.css. */}
       <div
-        className="relative hidden flex-col justify-between overflow-hidden px-14 py-14 lg:flex xl:px-20"
+        className="relative hidden flex-col overflow-hidden px-14 py-14 lg:flex xl:px-20"
         style={{
           background:
             "radial-gradient(1100px 620px at 8% -10%, var(--brand-navy-800) 0%, transparent 55%), linear-gradient(165deg, var(--brand-navy-900) 0%, var(--brand-navy-950) 100%)",
@@ -68,44 +70,48 @@ function LoginForm() {
           style={{ background: "var(--brand-gold-400)" }}
         />
 
-        <div className="relative">
-          <div className="inline-flex rounded-xl bg-white/[0.97] px-5 py-4 shadow-[0_8px_24px_-8px_rgba(0,0,0,0.35)]">
-            <img
-              src="/educore-logo-lockup.png"
-              alt="EduCore — School Management System"
-              className="h-14 w-auto xl:h-16"
-            />
+        <div className="relative flex flex-1 flex-col justify-center gap-14">
+          <div>
+            <div className="inline-flex rounded-xl bg-white/[0.97] px-5 py-4 shadow-[0_8px_24px_-8px_rgba(0,0,0,0.35)]">
+              <img
+                src="/educore-logo-lockup.png"
+                alt="EduCore — School Management System"
+                className="h-14 w-auto xl:h-16"
+              />
+            </div>
+          </div>
+
+          <div className="max-w-md space-y-10">
+            <p
+              className="text-lg italic leading-relaxed"
+              style={{ color: "var(--brand-gold-300)" }}
+            >
+              Smarter Schools. Brighter Futures.
+            </p>
+
+            <dl className="grid grid-cols-2 gap-x-6 gap-y-5">
+              {BRAND_HIGHLIGHTS.map(({ icon: Icon, label }) => (
+                <div key={label} className="flex items-center gap-2.5">
+                  <span
+                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border"
+                    style={{
+                      backgroundColor: "rgba(255,255,255,0.06)",
+                      borderColor: "rgba(217,166,39,0.3)",
+                      color: "var(--brand-gold-400)",
+                    }}
+                  >
+                    <Icon className="h-4 w-4" strokeWidth={1.75} />
+                  </span>
+                  <dt className="text-sm font-medium text-white/80">{label}</dt>
+                </div>
+              ))}
+            </dl>
           </div>
         </div>
 
-        <div className="relative max-w-md space-y-10">
-          <p
-            className="text-lg italic leading-relaxed"
-            style={{ color: "var(--brand-gold-300)" }}
-          >
-            Smarter Schools. Brighter Futures.
-          </p>
-
-          <dl className="grid grid-cols-2 gap-x-6 gap-y-5">
-            {BRAND_HIGHLIGHTS.map(({ icon: Icon, label }) => (
-              <div key={label} className="flex items-center gap-2.5">
-                <span
-                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md"
-                  style={{
-                    backgroundColor: "rgba(217,166,39,0.12)",
-                    color: "var(--brand-gold-400)",
-                  }}
-                >
-                  <Icon className="h-4 w-4" strokeWidth={1.75} />
-                </span>
-                <dt className="text-sm font-medium text-white/80">{label}</dt>
-              </div>
-            ))}
-          </dl>
-        </div>
-
         <p className="relative text-xs text-white/40">
-          © {new Date().getFullYear()} EduCore. Built for modern school administration.
+          © {new Date().getFullYear()} EduCore. Built for modern school
+          administration.
         </p>
       </div>
 
@@ -129,7 +135,9 @@ function LoginForm() {
             className="space-y-5 rounded-xl border border-border bg-surface p-7 shadow-raised sm:p-8"
           >
             <div className="space-y-1.5">
-              <h1 className="text-lg font-semibold tracking-tight">Staff sign in</h1>
+              <h1 className="text-lg font-semibold tracking-tight">
+                Staff sign in
+              </h1>
               <p className="text-sm text-muted-foreground">
                 Parents and students sign in with a phone number instead.
               </p>
@@ -182,13 +190,17 @@ function LoginForm() {
             </Button>
 
             <p className="border-t border-border pt-4 text-xs text-muted-foreground">
-              Having trouble signing in? Contact your school administrator to reset your
-              staff account.
+              Having trouble signing in? Contact your school administrator to
+              reset your staff account.
             </p>
           </form>
 
           <p className="mt-6 flex items-center justify-center gap-1.5 text-xs text-muted-foreground">
-            <ShieldCheck className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden />
+            <ShieldCheck
+              className="h-3.5 w-3.5"
+              strokeWidth={1.75}
+              aria-hidden
+            />
             Protected by enterprise-grade security
           </p>
         </div>
