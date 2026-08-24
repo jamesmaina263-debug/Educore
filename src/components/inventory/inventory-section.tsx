@@ -149,7 +149,12 @@ export function InventorySection({
     router.refresh();
   }
 
+  const transferItemStock = items.find((i) => i.id === transferItemId)?.quantity ?? null;
+
   async function handleCreateTransfer() {
+    if (transferItemStock !== null && Number(transferQuantity) > transferItemStock) {
+      return setError(`Main Store only has ${transferItemStock} in stock — can't transfer ${transferQuantity}.`);
+    }
     setPending(true);
     setError(null);
     const result = await createTransferAction({ item_id: transferItemId, quantity: Number(transferQuantity) });
@@ -329,7 +334,18 @@ export function InventorySection({
                 </div>
                 <div className="space-y-1.5">
                   <Label>Quantity</Label>
-                  <Input type="number" min={1} value={transferQuantity} onChange={(e) => setTransferQuantity(e.target.value)} />
+                  <Input
+                    type="number"
+                    min={1}
+                    max={transferItemStock ?? undefined}
+                    value={transferQuantity}
+                    onChange={(e) => setTransferQuantity(e.target.value)}
+                  />
+                  {transferItemId && (
+                    <p className="text-xs text-muted-foreground">
+                      {transferItemStock} in stock at Main Store — you can&apos;t transfer more than that.
+                    </p>
+                  )}
                 </div>
                 <p className="text-xs text-muted-foreground">
                   This doesn&apos;t move stock yet — the Nurse confirms what she physically received before it leaves Main Store&apos;s count.
