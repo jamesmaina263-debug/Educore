@@ -8,6 +8,7 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
 } from "@/components/ui/dropdown-menu";
+import { downloadXlsxFromObjectRows } from "@/lib/xlsx-export";
 
 // Generic Excel/PDF/CSV export for any single flat "register"-style table (Payroll, Invoices,
 // Mark sheets, etc). Rows must already be flattened into plain label -> value pairs in the
@@ -55,11 +56,7 @@ function exportCSV(rows: Record<string, string | number>[], filenameStub: string
 }
 
 async function exportExcel(rows: Record<string, string | number>[], filenameStub: string, sheetName: string) {
-  const XLSX = await import("xlsx");
-  const wb = XLSX.utils.book_new();
-  const sheet = XLSX.utils.json_to_sheet(rows);
-  XLSX.utils.book_append_sheet(wb, sheet, sheetName.slice(0, 31) || "Sheet1");
-  XLSX.writeFile(wb, `${sanitize(filenameStub)}.xlsx`);
+  await downloadXlsxFromObjectRows(rows, sheetName, `${sanitize(filenameStub)}.xlsx`);
 }
 
 async function exportPDF(

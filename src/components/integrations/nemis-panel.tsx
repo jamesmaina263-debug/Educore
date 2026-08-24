@@ -39,6 +39,7 @@ import {
   updateNemisInstitutionCode,
   getNemisBatchExportRows,
 } from "@/app/(app)/integrations/actions";
+import { downloadXlsxFromObjectRows } from "@/lib/xlsx-export";
 
 function sanitize(stub: string) {
   return stub.replace(/[^a-z0-9]+/gi, "-").toLowerCase();
@@ -61,7 +62,6 @@ async function downloadNemisExport(
   }[],
   filenameStub: string,
 ) {
-  const XLSX = await import("xlsx");
   const sheetRows = rows.map((r) => ({
     "Admission No": r.admission_number,
     UPI: r.upi_number,
@@ -73,10 +73,7 @@ async function downloadNemisExport(
     Gender: r.gender,
     Class: r.class_name,
   }));
-  const wb = XLSX.utils.book_new();
-  const sheet = XLSX.utils.json_to_sheet(sheetRows);
-  XLSX.utils.book_append_sheet(wb, sheet, "Learners");
-  XLSX.writeFile(wb, `${sanitize(filenameStub)}.xlsx`);
+  await downloadXlsxFromObjectRows(sheetRows, "Learners", `${sanitize(filenameStub)}.xlsx`);
 }
 
 export function NemisPanel({
