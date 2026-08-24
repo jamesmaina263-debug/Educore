@@ -311,6 +311,25 @@ export async function setBiometricDeviceStatus(id: string, status: "active" | "i
   return { success: true };
 }
 
+// Gate lateness thresholds. update_gate_late_thresholds() re-checks
+// biometric.devices_manage and school scope server-side (same shape as
+// issue_biometric_device_key above) rather than a direct RLS-gated update
+// on `schools`, whose blanket UPDATE policy is gated on
+// settings.branding.write -- the wrong permission for this setting.
+export async function updateGateLateThresholds(input: {
+  late_after_student: string | null; // "HH:MM" from a <input type="time">, or null to clear
+  late_after_staff: string | null;
+}): Promise<ActionResult> {
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("update_gate_late_thresholds", {
+    p_late_after_student: input.late_after_student || null,
+    p_late_after_staff: input.late_after_staff || null,
+  });
+  if (error) return { error: error.message };
+  revalidatePath("/settings", "layout");
+  return { success: true };
+}
+
 // Leave Types (Settings > Leave Types). leave_types is school-scoped and RLS-gated on
 // staff.manage for writes — see the phase3 staff-directory migration and the
 // seed_default_leave_types migration for why every school starts with a default set.

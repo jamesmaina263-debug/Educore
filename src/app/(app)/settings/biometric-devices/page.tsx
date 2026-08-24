@@ -1,7 +1,8 @@
 import { loadSettingsContext } from "../_data";
 import { ModulePageShell } from "@/components/app-shell/module-page-shell";
 import { BiometricDevicesPanel } from "@/components/settings/biometric-devices-panel";
-import { registerBiometricDevice, setBiometricDeviceStatus } from "@/app/(app)/settings/actions";
+import { GateLatenessPanel } from "@/components/settings/gate-lateness-panel";
+import { registerBiometricDevice, setBiometricDeviceStatus, updateGateLateThresholds } from "@/app/(app)/settings/actions";
 
 export default async function SettingsBiometricDevicesPage() {
   const ctx = await loadSettingsContext();
@@ -22,6 +23,7 @@ export default async function SettingsBiometricDevicesPage() {
         registerAction={registerBiometricDevice}
         setStatusAction={setBiometricDeviceStatus}
       />
+      <GateLatenessPanel initial={ctx.gateLateThresholds} canManage={ctx.canManageBiometricDevices} updateAction={updateGateLateThresholds} />
       <p className="mt-4 text-xs text-muted-foreground">
         Once a device key is issued above, open{" "}
         <a href="/biometric-kiosk" target="_blank" rel="noopener noreferrer" className="underline">

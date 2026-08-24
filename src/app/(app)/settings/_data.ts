@@ -31,6 +31,7 @@ export interface SettingsContext {
   preferenceRows: PreferenceRow[];
   apiKeyRows: ApiKeyRow[];
   biometricDeviceRows: BiometricDeviceRow[];
+  gateLateThresholds: { late_after_student: string | null; late_after_staff: string | null };
   groupBranding: { logo_url: string | null; primary_color: string | null } | null;
   brandingData: BrandingData;
   generalData: GeneralSettingsData;
@@ -58,7 +59,9 @@ export async function loadSettingsContext(): Promise<SettingsContext> {
   ] = await Promise.all([
     supabase
       .from("school_users")
-      .select("id, full_name, roles(display_name), schools(id, name, email, motto, logo_url, primary_color, school_group_id, kra_pin)")
+      .select(
+        "id, full_name, roles(display_name), schools(id, name, email, motto, logo_url, primary_color, school_group_id, kra_pin, gate_late_after_student, gate_late_after_staff)",
+      )
       .eq("auth_user_id", user.id)
       .maybeSingle(),
     supabase.rpc("auth_has_permission", { p_permission_key: "settings.branding.write" }),
@@ -83,6 +86,8 @@ export async function loadSettingsContext(): Promise<SettingsContext> {
     logo_url: string | null;
     primary_color: string | null;
     kra_pin: string | null;
+    gate_late_after_student: string | null;
+    gate_late_after_staff: string | null;
   } | null;
 
   const [{ data: staffRows }, { data: roleRows }, { data: leaveTypeRows }] = await Promise.all([
@@ -220,6 +225,10 @@ export async function loadSettingsContext(): Promise<SettingsContext> {
     preferenceRows,
     apiKeyRows,
     biometricDeviceRows,
+    gateLateThresholds: {
+      late_after_student: school?.gate_late_after_student ?? null,
+      late_after_staff: school?.gate_late_after_staff ?? null,
+    },
     groupBranding,
     brandingData,
     generalData,
