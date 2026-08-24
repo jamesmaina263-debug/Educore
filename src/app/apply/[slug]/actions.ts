@@ -1,6 +1,7 @@
 "use server";
 
 import { createAdminClient } from "@/lib/supabase/admin";
+import { safeStorageFilename } from "@/lib/storage-path";
 
 const KENYA_PHONE_RE = /^\+254\d{9}$/;
 const GUARDIAN_VERIFICATION_PURPOSE = "guardian_verification";
@@ -242,7 +243,7 @@ export async function submitApplication(
     const file = formData.get(`document_${req.category}`);
     if (!(file instanceof File) || file.size === 0) continue;
 
-    const path = `${school.id}/${application.id}/${req.category}-${Date.now()}-${file.name}`;
+    const path = `${school.id}/${application.id}/${req.category}-${Date.now()}-${safeStorageFilename(file.name)}`;
     const { error: uploadError } = await admin.storage.from("application-documents").upload(path, file);
     if (uploadError) continue;
 

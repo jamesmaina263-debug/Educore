@@ -1,6 +1,7 @@
 "use server";
 
 import { createAdminClient } from "@/lib/supabase/admin";
+import { safeStorageFilename } from "@/lib/storage-path";
 
 export interface ApplicationStatusData {
   application_number: string;
@@ -104,7 +105,7 @@ export async function uploadStatusDocument(
     return { error: "This application isn't linked to a guardian account yet — please contact the school before uploading documents." };
   }
 
-  const path = `${application.school_id}/${application.id}/${category}-${Date.now()}-${file.name}`;
+  const path = `${application.school_id}/${application.id}/${category}-${Date.now()}-${safeStorageFilename(file.name)}`;
   const { error: uploadError } = await admin.storage.from("application-documents").upload(path, file);
   if (uploadError) {
     console.error("uploadStatusDocument: storage upload failed", { applicationId: application.id, category, message: uploadError.message });
