@@ -144,6 +144,64 @@ export async function allocateUnallocatedPaymentAction(input: {
   return { success: true };
 }
 
+// ---------------------------------------------------------------------------
+// M-Pesa statement reconciliation
+// ---------------------------------------------------------------------------
+
+export interface MpesaStatementLineInput {
+  receipt_no: string;
+  transaction_time?: string | null;
+  details?: string | null;
+  amount: number;
+}
+
+export interface MpesaStatementImportSummary {
+  batch_id: string;
+  total_lines: number;
+  matched_count: number;
+  mismatched_count: number;
+  not_in_system_count: number;
+}
+
+export async function importMpesaStatementAction(input: {
+  lines: MpesaStatementLineInput[];
+  source_label?: string;
+}): Promise<{ error: string } | { success: true; summary: MpesaStatementImportSummary }> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .rpc("import_mpesa_statement", {
+      p_lines: input.lines,
+      p_source_label: input.source_label ?? null,
+    })
+    .single();
+  if (error) return { error: error.message };
+  revalidatePath("/finance", "layout");
+  return { success: true, summary: data as MpesaStatementImportSummary };
+}
+
+export interface MpesaStatementLineRow {
+  id: string;
+  receipt_no: string;
+  transaction_time: string | null;
+  details: string | null;
+  amount: number;
+  match_status: "matched" | "amount_mismatch" | "not_in_system";
+  matched_payment_id: string | null;
+}
+
+export async function getMpesaStatementBatchLinesAction(
+  batchId: string,
+): Promise<{ error: string } | { success: true; lines: MpesaStatementLineRow[] }> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("mpesa_statement_lines")
+    .select("id, receipt_no, transaction_time, details, amount, match_status, matched_payment_id")
+    .eq("batch_id", batchId)
+    .order("created_at", { ascending: true });
+  if (error) return { error: error.message };
+  return { success: true, lines: (data ?? []) as MpesaStatementLineRow[] };
+}
+
 export async function reversePaymentAction(input: {
   payment_id: string;
   amount: number;

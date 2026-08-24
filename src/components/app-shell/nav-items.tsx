@@ -89,6 +89,7 @@ const financeChildren: NavChild[] = [
   { label: "Fee Structures", href: "/finance/fee-structures", icon: FileStack },
   { label: "Invoicing", href: "/finance/invoicing", icon: Receipt },
   { label: "Payments", href: "/finance/payments", icon: CircleDollarSign },
+  { label: "Reconciliation", href: "/finance/reconciliation", icon: ArrowLeftRight },
   { label: "Receivables", href: "/finance/receivables", icon: AlertTriangle },
   { label: "Discounts & Waivers", href: "/finance/discounts-waivers", icon: Tag },
   { label: "Fee Alerts", href: "/finance/fee-alerts", icon: BellRing },
