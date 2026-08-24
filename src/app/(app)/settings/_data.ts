@@ -5,6 +5,7 @@ import type { GeneralSettingsData } from "@/components/settings/general-panel";
 import type { StaffRow, RoleOption } from "@/components/settings/staff-roles-table";
 import type { BillingData } from "@/components/settings/billing-panel";
 import type { ApiKeyRow } from "@/components/settings/api-keys-panel";
+import type { BiometricDeviceRow } from "@/components/settings/biometric-devices-panel";
 import type { LeaveTypeRow } from "@/components/settings/leave-types-panel";
 import { getMyNotificationPreferences, type PreferenceRow } from "@/app/notifications/actions";
 
@@ -19,6 +20,8 @@ export interface SettingsContext {
   canReadBilling: boolean;
   canManageBilling: boolean;
   canManageApiKeys: boolean;
+  canManageBiometricDevices: boolean;
+  canReadBiometricEvents: boolean;
   canReadAudit: boolean;
   canReadStaff: boolean;
   staff: StaffRow[];
@@ -27,6 +30,7 @@ export interface SettingsContext {
   billingData: BillingData | null;
   preferenceRows: PreferenceRow[];
   apiKeyRows: ApiKeyRow[];
+  biometricDeviceRows: BiometricDeviceRow[];
   groupBranding: { logo_url: string | null; primary_color: string | null } | null;
   brandingData: BrandingData;
   generalData: GeneralSettingsData;
@@ -47,6 +51,8 @@ export async function loadSettingsContext(): Promise<SettingsContext> {
     { data: canReadBilling },
     { data: canManageBilling },
     { data: canManageApiKeys },
+    { data: canManageBiometricDevices },
+    { data: canReadBiometricEvents },
     { data: canReadAudit },
     { data: canReadStaff },
   ] = await Promise.all([
@@ -61,6 +67,8 @@ export async function loadSettingsContext(): Promise<SettingsContext> {
     supabase.rpc("auth_has_permission", { p_permission_key: "billing.read" }),
     supabase.rpc("auth_has_permission", { p_permission_key: "billing.manage" }),
     supabase.rpc("auth_has_permission", { p_permission_key: "api.manage" }),
+    supabase.rpc("auth_has_permission", { p_permission_key: "biometric.devices_manage" }),
+    supabase.rpc("auth_has_permission", { p_permission_key: "biometric.events_read" }),
     supabase.rpc("auth_has_permission", { p_permission_key: "audit.read" }),
     supabase.rpc("auth_has_permission", { p_permission_key: "staff.read" }),
   ]);
@@ -139,6 +147,15 @@ export async function loadSettingsContext(): Promise<SettingsContext> {
     apiKeyRows = (data ?? []) as ApiKeyRow[];
   }
 
+  let biometricDeviceRows: BiometricDeviceRow[] = [];
+  if (canManageBiometricDevices === true) {
+    const { data } = await supabase
+      .from("biometric_devices")
+      .select("id, name, device_type, provider, location, api_key_prefix, status, last_seen_at, created_at")
+      .order("created_at", { ascending: false });
+    biometricDeviceRows = (data ?? []) as BiometricDeviceRow[];
+  }
+
   let groupBranding: { logo_url: string | null; primary_color: string | null } | null = null;
   if (school?.school_group_id) {
     const { data: groupRows } = await supabase.rpc("group_branding_public", {
@@ -188,6 +205,8 @@ export async function loadSettingsContext(): Promise<SettingsContext> {
     canReadBilling: canReadBilling === true,
     canManageBilling: canManageBilling === true,
     canManageApiKeys: canManageApiKeys === true,
+    canManageBiometricDevices: canManageBiometricDevices === true,
+    canReadBiometricEvents: canReadBiometricEvents === true,
     canReadAudit: canReadAudit === true,
     canReadStaff: canReadStaff === true,
     staff,
@@ -196,6 +215,7 @@ export async function loadSettingsContext(): Promise<SettingsContext> {
     billingData,
     preferenceRows,
     apiKeyRows,
+    biometricDeviceRows,
     groupBranding,
     brandingData,
     generalData,

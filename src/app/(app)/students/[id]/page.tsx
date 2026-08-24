@@ -10,6 +10,7 @@ import { DocumentsTab, type DocumentRow } from "@/components/documents-tab";
 import { MedicalTab } from "./medical-tab";
 import { CertificatesTab, type CertificateRow } from "./certificates-tab";
 import { DisciplineTab, type DisciplineRow } from "./discipline-tab";
+import { BiometricTab, type BiometricProfileRow, type BiometricCredentialRow, type BiometricDeviceOption } from "@/components/biometric/biometric-tab";
 import { StudentStatusControl } from "@/components/students/student-status-control";
 import { StudentDeleteControl } from "@/components/students/student-delete-control";
 import { NemisIdentifiersCard } from "@/components/students/nemis-identifiers-card";
@@ -96,6 +97,40 @@ export default async function StudentProfilePage({
   const canReadFinance = (await supabase.rpc("auth_has_permission", { p_permission_key: "finance.read" })).data === true;
   const canIssueCertificates = (await supabase.rpc("auth_has_permission", { p_permission_key: "certificates.write" })).data === true;
   const canWriteDiscipline = (await supabase.rpc("auth_has_permission", { p_permission_key: "discipline.write" })).data === true;
+  const canViewBiometric = (await supabase.rpc("auth_has_permission", { p_permission_key: "biometric.view" })).data === true;
+  const canEnrollBiometric = (await supabase.rpc("auth_has_permission", { p_permission_key: "biometric.enroll" })).data === true;
+  const canRevokeBiometric = (await supabase.rpc("auth_has_permission", { p_permission_key: "biometric.revoke" })).data === true;
+  const canSeeBiometricTab = canViewBiometric || canEnrollBiometric || canRevokeBiometric;
+
+  const { data: biometricProfileRow } = await supabase
+    .from("biometric_profiles")
+    .select("id, status")
+    .eq("person_type", "student")
+    .eq("person_id", id)
+    .maybeSingle();
+  const biometricProfile: BiometricProfileRow | null = biometricProfileRow as BiometricProfileRow | null;
+
+  const { data: biometricCredentialRows } = biometricProfile
+    ? await supabase
+        .from("biometric_credentials")
+        .select("id, credential_type, provider, status, enrolled_at, revoked_at, biometric_devices(name)")
+        .eq("profile_id", biometricProfile.id)
+        .order("enrolled_at", { ascending: false })
+    : { data: null };
+  const biometricCredentials: BiometricCredentialRow[] = (biometricCredentialRows ?? []).map((c) => ({
+    id: c.id,
+    credential_type: c.credential_type,
+    provider: c.provider,
+    status: c.status,
+    enrolled_at: c.enrolled_at,
+    revoked_at: c.revoked_at,
+    device_name: (c.biometric_devices as unknown as { name: string } | null)?.name ?? null,
+  }));
+
+  const { data: biometricDeviceRows } = canEnrollBiometric
+    ? await supabase.from("biometric_devices").select("id, name, location").eq("status", "active").order("name")
+    : { data: null };
+  const biometricDevices: BiometricDeviceOption[] = biometricDeviceRows ?? [];
 
   // Overview tab: display-only aggregation pulled live from each module's own
   // authoritative table (Section 5.1) — nothing here is duplicated/stored on Students.
@@ -211,6 +246,7 @@ export default async function StudentProfilePage({
             <TabsTrigger value="medical">Medical</TabsTrigger>
             <TabsTrigger value="certificates">Certificates</TabsTrigger>
             <TabsTrigger value="discipline">Discipline</TabsTrigger>
+            {canSeeBiometricTab && <TabsTrigger value="biometric">Biometric</TabsTrigger>}
           </TabsList>
 
           <TabsContent value="overview" className="flex flex-col gap-6">
@@ -329,6 +365,20 @@ export default async function StudentProfilePage({
           <TabsContent value="discipline">
             <DisciplineTab studentId={id} records={disciplineRecords} canWrite={canWriteDiscipline} />
           </TabsContent>
+
+          {canSeeBiometricTab && (
+            <TabsContent value="biometric">
+              <BiometricTab
+                personId={id}
+                personType="student"
+                profile={biometricProfile}
+                credentials={biometricCredentials}
+                devices={biometricDevices}
+                canEnroll={canEnrollBiometric}
+                canRevoke={canRevokeBiometric}
+              />
+            </TabsContent>
+          )}
         </Tabs>
       </div>
     </AppShell>

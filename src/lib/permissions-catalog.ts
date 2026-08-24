@@ -55,6 +55,17 @@ export const PERMISSION_CATALOG: PermissionGroup[] = [
     ],
   },
   {
+    module: "biometric",
+    label: "Biometric",
+    permissions: [
+      { key: "biometric.view", label: "View biometric profiles and credential status" },
+      { key: "biometric.enroll", label: "Enroll a student/staff biometric credential" },
+      { key: "biometric.revoke", label: "Revoke a biometric credential" },
+      { key: "biometric.devices_manage", label: "Register and administer biometric devices" },
+      { key: "biometric.events_read", label: "View the biometric event/verification audit log" },
+    ],
+  },
+  {
     module: "exams",
     label: "Exams",
     permissions: [

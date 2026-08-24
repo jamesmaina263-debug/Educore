@@ -273,6 +273,44 @@ export async function revokeSchoolApiKey(id: string): Promise<ActionResult> {
   return { success: true };
 }
 
+// Biometric devices. issue_biometric_device_key() re-checks biometric.devices_manage
+// and school scope server-side, same shape as issue_api_key() above -- the RPC is
+// the actual gate, this is just a clean error path.
+type RegisterBiometricDeviceResult = { error: string } | { success: true; raw_key: string; key_prefix: string };
+
+export async function registerBiometricDevice(input: {
+  name: string;
+  device_type: string;
+  provider: string;
+  location: string;
+  serial_number: string;
+}): Promise<RegisterBiometricDeviceResult> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .rpc("issue_biometric_device_key", {
+      p_name: input.name,
+      p_device_type: input.device_type,
+      p_provider: input.provider,
+      p_location: input.location || null,
+      p_serial_number: input.serial_number || null,
+    })
+    .single();
+
+  if (error || !data) return { error: error?.message ?? "Could not register the device." };
+  const issued = data as { id: string; raw_key: string; key_prefix: string };
+
+  revalidatePath("/settings", "layout");
+  return { success: true, raw_key: issued.raw_key, key_prefix: issued.key_prefix };
+}
+
+export async function setBiometricDeviceStatus(id: string, status: "active" | "inactive"): Promise<ActionResult> {
+  const supabase = await createClient();
+  const { error } = await supabase.from("biometric_devices").update({ status }).eq("id", id);
+  if (error) return { error: error.message };
+  revalidatePath("/settings", "layout");
+  return { success: true };
+}
+
 // Leave Types (Settings > Leave Types). leave_types is school-scoped and RLS-gated on
 // staff.manage for writes — see the phase3 staff-directory migration and the
 // seed_default_leave_types migration for why every school starts with a default set.

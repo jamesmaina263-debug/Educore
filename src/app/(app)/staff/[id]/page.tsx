@@ -9,6 +9,7 @@ import { DocumentsTab, type DocumentRow } from "@/components/documents-tab";
 import { EmploymentTab, type EmploymentData } from "./employment-tab";
 import { QualificationsTab, type QualificationRow } from "./qualifications-tab";
 import { LeaveTab, type LeaveTypeOption, type LeaveRequestRow } from "./leave-tab";
+import { BiometricTab, type BiometricProfileRow, type BiometricCredentialRow, type BiometricDeviceOption } from "@/components/biometric/biometric-tab";
 
 export default async function StaffProfilePage({
   params,
@@ -102,6 +103,41 @@ export default async function StaffProfilePage({
   const canManageStaff = canManage === true;
   const canReadDocuments = canManageStaff || isSelf;
 
+  const canViewBiometric = (await supabase.rpc("auth_has_permission", { p_permission_key: "biometric.view" })).data === true;
+  const canEnrollBiometric = (await supabase.rpc("auth_has_permission", { p_permission_key: "biometric.enroll" })).data === true;
+  const canRevokeBiometric = (await supabase.rpc("auth_has_permission", { p_permission_key: "biometric.revoke" })).data === true;
+  const canSeeBiometricTab = canViewBiometric || canEnrollBiometric || canRevokeBiometric;
+
+  const { data: biometricProfileRow } = await supabase
+    .from("biometric_profiles")
+    .select("id, status")
+    .eq("person_type", "staff")
+    .eq("person_id", id)
+    .maybeSingle();
+  const biometricProfile: BiometricProfileRow | null = biometricProfileRow as BiometricProfileRow | null;
+
+  const { data: biometricCredentialRows } = biometricProfile
+    ? await supabase
+        .from("biometric_credentials")
+        .select("id, credential_type, provider, status, enrolled_at, revoked_at, biometric_devices(name)")
+        .eq("profile_id", biometricProfile.id)
+        .order("enrolled_at", { ascending: false })
+    : { data: null };
+  const biometricCredentials: BiometricCredentialRow[] = (biometricCredentialRows ?? []).map((c) => ({
+    id: c.id,
+    credential_type: c.credential_type,
+    provider: c.provider,
+    status: c.status,
+    enrolled_at: c.enrolled_at,
+    revoked_at: c.revoked_at,
+    device_name: (c.biometric_devices as unknown as { name: string } | null)?.name ?? null,
+  }));
+
+  const { data: biometricDeviceRows } = canEnrollBiometric
+    ? await supabase.from("biometric_devices").select("id, name, location").eq("status", "active").order("name")
+    : { data: null };
+  const biometricDevices: BiometricDeviceOption[] = biometricDeviceRows ?? [];
+
   const viewerRoleName = (viewer?.roles as unknown as { display_name: string } | null)?.display_name;
   const schoolName = (viewer?.schools as unknown as { name: string } | null)?.name;
   const staffRoleName = (staff.roles as unknown as { display_name: string } | null)?.display_name;
@@ -154,6 +190,7 @@ export default async function StaffProfilePage({
             <TabsTrigger value="qualifications">Qualifications</TabsTrigger>
             <TabsTrigger value="leave">Leave</TabsTrigger>
             {canReadDocuments && <TabsTrigger value="documents">Documents</TabsTrigger>}
+            {canSeeBiometricTab && <TabsTrigger value="biometric">Biometric</TabsTrigger>}
           </TabsList>
 
           <TabsContent value="employment">
@@ -179,6 +216,20 @@ export default async function StaffProfilePage({
           {canReadDocuments && (
             <TabsContent value="documents">
               <DocumentsTab ownerId={id} ownerType="staff" documents={documents} canUpload={canManageStaff} />
+            </TabsContent>
+          )}
+
+          {canSeeBiometricTab && (
+            <TabsContent value="biometric">
+              <BiometricTab
+                personId={id}
+                personType="staff"
+                profile={biometricProfile}
+                credentials={biometricCredentials}
+                devices={biometricDevices}
+                canEnroll={canEnrollBiometric}
+                canRevoke={canRevokeBiometric}
+              />
             </TabsContent>
           )}
         </Tabs>
