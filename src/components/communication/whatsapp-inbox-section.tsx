@@ -4,6 +4,7 @@ import { useEffect, useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { StatusBadge } from "@/components/status-badge";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import {
   fetchWhatsAppMessages,
@@ -11,6 +12,7 @@ import {
   claimWhatsAppConversationAction,
   closeWhatsAppConversationAction,
   returnWhatsAppConversationToBotAction,
+  deleteCommunicationPermanentlyAction,
   type WhatsAppMessageRow,
 } from "@/app/(app)/communication/actions";
 
@@ -39,15 +41,49 @@ const STATUS_LABEL: Record<ConversationRow["status"], string> = {
   closed: "Closed",
 };
 
-export function WhatsAppInboxSection({ conversations }: { conversations: ConversationRow[] }) {
+export function WhatsAppInboxSection({
+  conversations,
+  archivedConversations = [],
+  canDelete = false,
+}: {
+  conversations: ConversationRow[];
+  // Threads the daily retention sweep archived (inactive 7+ days) -- excluded from the main list
+  // above so the working inbox doesn't accumulate stale threads; still browsable here until the
+  // 14-day mark, when purge_expired_communications() deletes them for good. See
+  // 20260824153119_communication_retention_archive_purge.sql.
+  archivedConversations?: ConversationRow[];
+  canDelete?: boolean;
+}) {
+  const [viewMode, setViewMode] = useState<"inbox" | "archived">("inbox");
+  const list = viewMode === "inbox" ? conversations : archivedConversations;
+
   const [selectedId, setSelectedId] = useState<string | null>(conversations[0]?.id ?? null);
   const [messages, setMessages] = useState<WhatsAppMessageRow[]>([]);
   const [loadingMessages, setLoadingMessages] = useState(false);
   const [draft, setDraft] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
-  const selected = conversations.find((c) => c.id === selectedId) ?? null;
+  const selected = list.find((c) => c.id === selectedId) ?? null;
+
+  function switchView(mode: "inbox" | "archived") {
+    setViewMode(mode);
+    const nextList = mode === "inbox" ? conversations : archivedConversations;
+    setSelectedId(nextList[0]?.id ?? null);
+  }
+
+  async function handleDeleteConversation() {
+    if (!selectedId) return;
+    setDeleting(true);
+    setError(null);
+    const result = await deleteCommunicationPermanentlyAction({ table: "whatsapp_conversations", id: selectedId });
+    setDeleting(false);
+    if ("error" in result) return setError(result.error);
+    setConfirmDelete(false);
+    setSelectedId(null);
+  }
 
   useEffect(() => {
     if (!selectedId) return;
@@ -105,7 +141,7 @@ export function WhatsAppInboxSection({ conversations }: { conversations: Convers
     });
   }
 
-  if (conversations.length === 0) {
+  if (conversations.length === 0 && archivedConversations.length === 0) {
     return (
       <p className="rounded-md border border-dashed border-border p-10 text-center text-sm text-muted-foreground">
         No WhatsApp conversations yet. Once a guardian messages your school&apos;s WhatsApp number, threads will show up here.
@@ -116,10 +152,26 @@ export function WhatsAppInboxSection({ conversations }: { conversations: Convers
   return (
     <div className="flex flex-col gap-3">
       {error && <p className="text-sm text-danger">{error}</p>}
+      <div className="flex gap-1">
+        <Button variant={viewMode === "inbox" ? "secondary" : "ghost"} size="sm" onClick={() => switchView("inbox")}>
+          Inbox ({conversations.length})
+        </Button>
+        <Button variant={viewMode === "archived" ? "secondary" : "ghost"} size="sm" onClick={() => switchView("archived")}>
+          Archived ({archivedConversations.length})
+        </Button>
+      </div>
+      {viewMode === "archived" && (
+        <p className="rounded-md border border-border bg-muted/40 px-3 py-1.5 text-xs text-muted-foreground">
+          Archived threads are auto-deleted permanently 7 days after archiving, 14 days after the last message.
+        </p>
+      )}
       <div className="flex h-[32rem] overflow-hidden rounded-xl border border-border">
         {/* Conversation list */}
         <div className="w-72 shrink-0 overflow-y-auto border-r border-border">
-          {conversations.map((c) => (
+          {list.length === 0 && (
+            <p className="p-4 text-center text-xs text-muted-foreground">Nothing here.</p>
+          )}
+          {list.map((c) => (
             <button
               key={c.id}
               onClick={() => setSelectedId(c.id)}
@@ -169,6 +221,11 @@ export function WhatsAppInboxSection({ conversations }: { conversations: Convers
                   {selected.status !== "bot" && selected.status !== "closed" && (
                     <Button size="sm" variant="outline" disabled={isPending} onClick={handleReturnToBot}>
                       Return to bot
+                    </Button>
+                  )}
+                  {canDelete && (
+                    <Button size="sm" variant="outline" className="text-destructive hover:text-destructive" onClick={() => setConfirmDelete(true)}>
+                      Delete
                     </Button>
                   )}
                 </div>
@@ -229,6 +286,27 @@ export function WhatsAppInboxSection({ conversations }: { conversations: Convers
           )}
         </div>
       </div>
+
+      <Dialog open={confirmDelete} onOpenChange={setConfirmDelete}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete this conversation permanently?</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            This immediately and permanently deletes this WhatsApp thread and all its messages with{" "}
+            {selected?.guardian_name ?? selected?.phone_number}. This cannot be undone, and it skips the normal 7/14-day archive
+            schedule.
+          </p>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirmDelete(false)} disabled={deleting}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={handleDeleteConversation} disabled={deleting}>
+              {deleting ? "Deleting…" : "Delete permanently"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

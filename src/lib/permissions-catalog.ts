@@ -217,6 +217,7 @@ export const PERMISSION_CATALOG: PermissionGroup[] = [
       { key: "communication.read", label: "View messages / newsletters" },
       { key: "communication.write", label: "Send messages / newsletters" },
       { key: "communication.supplier", label: "Message suppliers only (Procurement)" },
+      { key: "communication.delete", label: "Permanently delete communication history" },
     ],
   },
   {
