@@ -34,8 +34,19 @@
 // provider module -- not a second SMS integration, a second caller of the
 // same one. Staff events are never messaged to anyone; there's no
 // "notify someone about a staff check-in" requirement.
+//
+// GET (added alongside the offline-capable kiosk client): returns this
+// device's own roster -- which of ITS OWN active credential_reference
+// values map to which enrolled person, by name only. This is not new
+// biometric exposure: the device already knows this locally once it has
+// enrolled someone (it generated the credential_reference in the first
+// place); this endpoint just lets a browser-based kiosk client that has no
+// local template store of its own render a human-pickable list instead of
+// requiring the operator to type a raw reference string. Still
+// device-key-authenticated, still zero biometric data -- names and opaque
+// references only, same as everything else this function returns.
 
-import { createClient } from "jsr:@supabase/supabase-js@2";
+import { createClient, type SupabaseClient } from "jsr:@supabase/supabase-js@2";
 import { buildCorsHeaders } from "../_shared/cors.ts";
 import { getSmsProvider } from "../_shared/sms/index.ts";
 
@@ -72,34 +83,103 @@ function renderPlaceholders(body: string, values: Record<string, string>): strin
   return result;
 }
 
-Deno.serve(async (req) => {
-  const corsHeaders = buildCorsHeaders(req);
-  const json = (body: unknown, status = 200) =>
-    new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+interface AuthenticatedDevice {
+  id: string;
+  school_id: string;
+  name: string;
+  status: string;
+}
 
-  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
-  if (req.method !== "POST") return json({ error: "Method not allowed." }, 405);
-
-  const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
-
-  // --- Device authentication (identical pattern to api-v1's api_keys) ---
+// Shared by both the POST (verify/ingest) and GET (roster) branches below --
+// identical "prefix.secret" bearer + sha256Hex pattern as api_keys, just
+// factored out so there is exactly one place that decides whether a device
+// key is valid, rather than two copies that could drift.
+async function authenticateDevice(
+  req: Request,
+  supabase: SupabaseClient,
+): Promise<{ device: AuthenticatedDevice } | { error: string; status: number }> {
   const authHeader = req.headers.get("authorization") ?? "";
   const rawKey = authHeader.startsWith("Bearer ") ? authHeader.slice(7).trim() : null;
-  if (!rawKey || !rawKey.includes(".")) return json({ error: "Missing or malformed device key." }, 401);
+  if (!rawKey || !rawKey.includes(".")) return { error: "Missing or malformed device key.", status: 401 };
   const [keyPrefix, secret] = rawKey.split(/\.(.*)/s);
-  if (!keyPrefix || !secret) return json({ error: "Malformed device key." }, 401);
+  if (!keyPrefix || !secret) return { error: "Malformed device key.", status: 401 };
 
   const { data: device } = await supabase
     .from("biometric_devices")
     .select("id, school_id, name, api_key_hash, status")
     .eq("api_key_prefix", keyPrefix)
     .maybeSingle();
-  if (!device) return json({ error: "Unknown device." }, 401);
-  if (device.status !== "active") return json({ error: "This device has been deactivated." }, 401);
+  if (!device) return { error: "Unknown device.", status: 401 };
+  if (device.status !== "active") return { error: "This device has been deactivated.", status: 401 };
   const secretHash = await sha256Hex(secret);
-  if (!device.api_key_hash || secretHash !== device.api_key_hash) return json({ error: "Invalid device key." }, 401);
+  if (!device.api_key_hash || secretHash !== device.api_key_hash) return { error: "Invalid device key.", status: 401 };
 
   await supabase.from("biometric_devices").update({ last_seen_at: new Date().toISOString() }).eq("id", device.id);
+  return { device: { id: device.id, school_id: device.school_id, name: device.name, status: device.status } };
+}
+
+Deno.serve(async (req) => {
+  const corsHeaders = buildCorsHeaders(req);
+  const json = (body: unknown, status = 200) =>
+    new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+
+  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
+  if (req.method !== "POST" && req.method !== "GET") return json({ error: "Method not allowed." }, 405);
+
+  const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+
+  const auth = await authenticateDevice(req, supabase);
+  if ("error" in auth) return json({ error: auth.error }, auth.status);
+  const { device } = auth;
+
+  // --- GET: this device's own roster (names + opaque references only). ---
+  if (req.method === "GET") {
+    const { data: credentials } = await supabase
+      .from("biometric_credentials")
+      .select("credential_reference, credential_type, profile_id")
+      .eq("device_id", device.id)
+      .eq("status", "active");
+
+    const profileIds = [...new Set((credentials ?? []).map((c) => c.profile_id))];
+    const { data: profiles } = profileIds.length
+      ? await supabase.from("biometric_profiles").select("id, person_type, person_id").in("id", profileIds).eq("status", "active")
+      : { data: [] };
+
+    const studentIds = (profiles ?? []).filter((p) => p.person_type === "student").map((p) => p.person_id);
+    const staffIds = (profiles ?? []).filter((p) => p.person_type === "staff").map((p) => p.person_id);
+
+    const [{ data: students }, { data: staff }] = await Promise.all([
+      studentIds.length
+        ? supabase.from("students").select("id, first_name, last_name").in("id", studentIds).eq("status", "active")
+        : Promise.resolve({ data: [] as { id: string; first_name: string; last_name: string }[] }),
+      staffIds.length
+        ? supabase.from("school_users").select("id, full_name").in("id", staffIds).eq("status", "active")
+        : Promise.resolve({ data: [] as { id: string; full_name: string }[] }),
+    ]);
+
+    const nameByProfileId = new Map<string, string>();
+    for (const p of profiles ?? []) {
+      if (p.person_type === "student") {
+        const s = (students ?? []).find((row) => row.id === p.person_id);
+        if (s) nameByProfileId.set(p.id, `${s.first_name} ${s.last_name}`);
+      } else {
+        const s = (staff ?? []).find((row) => row.id === p.person_id);
+        if (s) nameByProfileId.set(p.id, s.full_name);
+      }
+    }
+    const profileTypeById = new Map((profiles ?? []).map((p) => [p.id, p.person_type]));
+
+    const roster = (credentials ?? [])
+      .filter((c) => nameByProfileId.has(c.profile_id)) // drop anyone whose person record isn't active
+      .map((c) => ({
+        credential_reference: c.credential_reference,
+        credential_type: c.credential_type,
+        person_type: profileTypeById.get(c.profile_id),
+        person_name: nameByProfileId.get(c.profile_id),
+      }));
+
+    return json({ device: { id: device.id, name: device.name }, roster });
+  }
 
   // --- Parse payload ---
   let body: ScanRequestBody;

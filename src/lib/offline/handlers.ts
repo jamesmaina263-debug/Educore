@@ -34,6 +34,7 @@ import {
 import { objectToFormData } from "./form-data";
 import { submitStaffAttendance } from "@/app/(app)/staff/actions";
 import { submitMarks, submitCompetencyMarks } from "@/app/(app)/exams/actions";
+import { submitScan as submitKioskScan, type ScanPayload as KioskScanPayload, type ScanOutcome as KioskScanOutcome } from "@/lib/biometric/kiosk-client";
 
 export type MutationResult = { error: string } | { success: true } | Record<string, unknown>;
 export type MutationHandler = (payload: never) => Promise<MutationResult>;
@@ -103,8 +104,29 @@ function formDataMutation(
   return (payload) => action(objectToFormData(payload));
 }
 
+// The kiosk's handler is a plain fetch() against the biometric-verify Edge
+// Function (see kiosk-client.ts's header comment for why this can't be a
+// Server Action like every other entry here): a kiosk authenticates with a
+// device key, not a Supabase Auth session, and needs to keep working long
+// after any staff session that paired it has expired. Everything else
+// about it -- IndexedDB storage, queuing, per-module scoping, retry-on-
+// reconnect -- is the same shared engine every other module uses, unchanged.
+async function submitKioskScanMutation(payload: KioskScanPayload): Promise<MutationResult> {
+  const result: KioskScanOutcome = await submitKioskScan(payload);
+  if ("error" in result) return { error: result.error };
+  return result;
+}
+
 export const mutationHandlers: Record<string, MutationHandler> = {
   "attendance:submitAttendance": submitAttendance as MutationHandler,
+
+  "biometric-kiosk:submitScan": submitKioskScanMutation as MutationHandler,
+  // Deliberately the ONLY biometric-kiosk entry: enrollment, device
+  // registration, and roster management are all desk-based admin actions
+  // performed by a logged-in staff member with a real session -- exactly
+  // the category excluded everywhere else in this table (see the other
+  // "Deliberately not queued" notes). The gate scan itself is the only
+  // kiosk-side action that happens unattended, away from reliable Wi-Fi.
 
   "health:checkInStudent": checkInStudent as MutationHandler,
   "health:checkOutStudent": checkOutStudentMutation as MutationHandler,

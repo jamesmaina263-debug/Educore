@@ -22,6 +22,14 @@ export default async function SettingsBiometricDevicesPage() {
         registerAction={registerBiometricDevice}
         setStatusAction={setBiometricDeviceStatus}
       />
+      <p className="mt-4 text-xs text-muted-foreground">
+        Once a device key is issued above, open{" "}
+        <a href="/biometric-kiosk" target="_blank" rel="noopener noreferrer" className="underline">
+          /biometric-kiosk
+        </a>{" "}
+        on the gate device and paste the key there to pair it. That page runs outside staff sign-in — it authenticates
+        with the device key alone, so it keeps recording scans (including while offline) even after this session ends.
+      </p>
     </ModulePageShell>
   );
 }
