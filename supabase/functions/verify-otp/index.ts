@@ -49,21 +49,47 @@ Deno.serve(async (req) => {
     // Phase 1) before they ever log in. This endpoint activates and links
     // an existing record — it never creates a school_users row out of
     // thin air.
-    const { data: schoolUser, error: lookupError } = await supabase
+    //
+    // Fetched as a plain array (not .maybeSingle()) deliberately: a unique
+    // index (uq_school_users_active_phone) now stops a second active row
+    // sharing this phone from being created, but it can't retroactively
+    // fix data that predates it. .maybeSingle() throws a raw Postgres
+    // "multiple rows returned" error in that case, which surfaced to the
+    // guardian as an opaque "Could not verify the code" 500 with no way to
+    // tell what was actually wrong (found 2026-08-23: a phone shared by two
+    // active guardian records at the same school locked that number out of
+    // login entirely). Handling the array explicitly lets that case return
+    // a clear, actionable message instead.
+    const { data: schoolUsers, error: lookupError } = await supabase
       .from("school_users")
       .select("id, auth_user_id, full_name")
       .eq("phone", phone)
-      .eq("status", "active")
-      .maybeSingle();
+      .eq("status", "active");
 
     if (lookupError) {
       console.error("school_users lookup failed", lookupError);
       return json({ error: "Could not verify the code. Try again." }, 500);
     }
 
-    if (!schoolUser) {
+    if (!schoolUsers || schoolUsers.length === 0) {
       return json({ error: "No account is registered to this phone number." }, 404);
     }
+
+    if (schoolUsers.length > 1) {
+      console.error(
+        `Ambiguous login: ${schoolUsers.length} active school_users rows share phone ${phone}`,
+        schoolUsers.map((u) => u.id),
+      );
+      return json(
+        {
+          error:
+            "This phone number is linked to more than one account. Please contact your school office to resolve this before signing in.",
+        },
+        409,
+      );
+    }
+
+    const schoolUser = schoolUsers[0];
 
     let authUserId = schoolUser.auth_user_id as string | null;
 
