@@ -83,6 +83,23 @@ function renderPlaceholders(body: string, values: Record<string, string>): strin
   return result;
 }
 
+/**
+ * present | late, purely from a wall-clock cutoff on `schools`
+ * (gate_late_after_student / gate_late_after_staff). Null threshold (the
+ * default, and the only option before this) keeps today's exact behavior:
+ * always 'present'. Uses the SAME occurredAt.toISOString() wall-clock
+ * slice already used everywhere else in this file for check_in_time/
+ * attendanceDate (see staff branch below) -- kept consistent with that
+ * existing convention rather than introducing a second time-handling
+ * approach; if that convention needs correcting for real IANA-timezone
+ * handling, that is a separate, wider-reaching change than this one.
+ */
+function resolveGateStatus(occurredAt: Date, threshold: string | null): "present" | "late" {
+  if (!threshold) return "present";
+  const timeLabel = occurredAt.toISOString().slice(11, 19);
+  return timeLabel > threshold ? "late" : "present";
+}
+
 interface AuthenticatedDevice {
   id: string;
   school_id: string;
@@ -322,9 +339,25 @@ Deno.serve(async (req) => {
   let attendanceId: string | null = null;
   const attendanceDate = occurredAt.toISOString().slice(0, 10);
 
+  // Only fetched when actually needed (a check_in that's about to insert a
+  // fresh row) -- every other path (check_out, an existing row being
+  // patched, a non-active-status short-circuit above) never touches this.
+  let gateThresholds: { gate_late_after_student: string | null; gate_late_after_staff: string | null } | null = null;
+  async function loadGateThresholds() {
+    if (gateThresholds) return gateThresholds;
+    const { data } = await supabase
+      .from("schools")
+      .select("gate_late_after_student, gate_late_after_staff")
+      .eq("id", device.school_id)
+      .single();
+    gateThresholds = data ?? { gate_late_after_student: null, gate_late_after_staff: null };
+    return gateThresholds;
+  }
+
   if (profile.person_type === "student" && event_type === "check_in") {
     const { data: student } = await supabase.from("students").select("current_class_id").eq("id", profile.person_id).single();
     if (student?.current_class_id) {
+      const thresholds = await loadGateThresholds();
       const { data: inserted, error: insertErr } = await supabase
         .from("student_attendance")
         .insert({
@@ -332,7 +365,7 @@ Deno.serve(async (req) => {
           student_id: profile.person_id,
           stream_id: student.current_class_id,
           attendance_date: attendanceDate,
-          status: "present",
+          status: resolveGateStatus(occurredAt, thresholds.gate_late_after_student),
           session: "gate",
         })
         .select("id")
@@ -366,13 +399,14 @@ Deno.serve(async (req) => {
       .maybeSingle();
 
     if (!existingRow) {
+      const thresholds = await loadGateThresholds();
       const { data: inserted, error: insertErr } = await supabase
         .from("staff_attendance")
         .insert({
           school_id: device.school_id,
           staff_id: profile.person_id,
           attendance_date: attendanceDate,
-          status: "present",
+          status: event_type === "check_in" ? resolveGateStatus(occurredAt, thresholds.gate_late_after_staff) : "present",
           check_in_time: event_type === "check_in" ? timeLabel : null,
           check_out_time: event_type === "check_out" ? timeLabel : null,
           biometric_event_id: biometricEvent.id,
