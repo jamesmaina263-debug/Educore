@@ -171,6 +171,7 @@ export const PERMISSION_CATALOG: PermissionGroup[] = [
     permissions: [
       { key: "health.read_any", label: "View any student's health records" },
       { key: "health.write", label: "Manage health records" },
+      { key: "health.procurement.request", label: "Request medical supplies (procurement)" },
     ],
   },
   {

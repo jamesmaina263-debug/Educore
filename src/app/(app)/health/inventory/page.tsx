@@ -15,7 +15,14 @@ export default async function HealthInventoryPage() {
       title="Inventory"
       noAccess={!(ctx.canReadAny || ctx.canWrite)}
     >
-      <InventorySection items={ctx.medicalItems} medicalCategoryId={ctx.medicalCategoryId} pendingTransfers={ctx.pendingTransfers} canWrite={ctx.canWrite} />
+      <InventorySection
+        items={ctx.medicalItems}
+        medicalCategoryId={ctx.medicalCategoryId}
+        pendingTransfers={ctx.pendingTransfers}
+        canWrite={ctx.canWrite}
+        canRequestSupplies={ctx.canRequestSupplies}
+        myRequisitions={ctx.myRequisitions}
+      />
     </ModulePageShell>
   );
 }

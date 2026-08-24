@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { addMedicalInventoryItem, issueMedicalStock, acceptTransferAction, rejectTransferAction } from "@/app/(app)/health/actions";
+import { addMedicalInventoryItem, issueMedicalStock, acceptTransferAction, rejectTransferAction, requestMedicalSuppliesAction } from "@/app/(app)/health/actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { StatusBadge } from "@/components/status-badge";
@@ -25,16 +25,29 @@ export interface PendingTransferRow {
   initiated_at: string;
 }
 
+export interface MyRequisitionRow {
+  id: string;
+  purpose: string;
+  status: "draft" | "submitted" | "approved" | "rejected" | "converted";
+  created_at: string;
+  item_description: string;
+  quantity: number;
+}
+
 export function InventorySection({
   items,
   medicalCategoryId,
   pendingTransfers,
   canWrite,
+  canRequestSupplies,
+  myRequisitions,
 }: {
   items: MedicalItemRow[];
   medicalCategoryId: string | null;
   pendingTransfers: PendingTransferRow[];
   canWrite: boolean;
+  canRequestSupplies: boolean;
+  myRequisitions: MyRequisitionRow[];
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -45,6 +58,10 @@ export function InventorySection({
   const [form, setForm] = useState({ name: "", unit: "pieces", reorder_level: "", expiry_date: "" });
   const [rejectReason, setRejectReason] = useState("");
   const [rejectingId, setRejectingId] = useState<string | null>(null);
+  const [requestOpen, setRequestOpen] = useState(false);
+  const [requestPending, setRequestPending] = useState(false);
+  const [requestError, setRequestError] = useState<string | null>(null);
+  const [requestForm, setRequestForm] = useState({ item_description: "", quantity: "", purpose: "", estimated_unit_cost: "" });
 
   // Date.now() here only sets a display threshold (expiring-soon cutoff), recomputed once per
   // mount via the empty deps array. The React-compiler-approved fix (moving this into a
@@ -118,6 +135,39 @@ export function InventorySection({
     router.refresh();
   }
 
+  async function submitRequest() {
+    const qty = Number(requestForm.quantity);
+    if (!requestForm.item_description.trim() || !requestForm.purpose.trim() || !qty || qty <= 0) return;
+    setRequestPending(true);
+    setRequestError(null);
+    const result = await requestMedicalSuppliesAction({
+      item_description: requestForm.item_description,
+      quantity: qty,
+      purpose: requestForm.purpose,
+      estimated_unit_cost: requestForm.estimated_unit_cost ? Number(requestForm.estimated_unit_cost) : undefined,
+    });
+    setRequestPending(false);
+    if ("error" in result) return setRequestError(result.error);
+    setRequestOpen(false);
+    setRequestForm({ item_description: "", quantity: "", purpose: "", estimated_unit_cost: "" });
+    router.refresh();
+  }
+
+  const requisitionStatusTone: Record<MyRequisitionRow["status"], "success" | "warning" | "danger"> = {
+    draft: "warning",
+    submitted: "warning",
+    approved: "success",
+    converted: "success",
+    rejected: "danger",
+  };
+  const requisitionStatusLabel: Record<MyRequisitionRow["status"], string> = {
+    draft: "Draft",
+    submitted: "Pending approval",
+    approved: "Approved",
+    converted: "Ordered from supplier",
+    rejected: "Rejected",
+  };
+
   return (
     <div className="flex flex-col gap-4">
       <p className="text-sm text-muted-foreground">
@@ -173,6 +223,85 @@ export function InventorySection({
                 )}
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {canRequestSupplies && (
+        <div className="panel">
+          <header className="flex items-center justify-between border-b border-border px-4 py-2.5">
+            <p className="text-sm font-medium">Request supplies</p>
+            <Dialog open={requestOpen} onOpenChange={setRequestOpen}>
+              <DialogTrigger asChild>
+                <Button size="sm" variant="outline">
+                  New request
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Request medical supplies</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-3">
+                  <p className="text-xs text-muted-foreground">
+                    Goes to whoever can approve procurement (owner/principal/deputy). Once
+                    approved, the supplier is emailed automatically. Delivery is received at
+                    Main Store, then transferred to you here — the same as any other transfer.
+                  </p>
+                  <Input
+                    placeholder="Item needed (e.g. Paracetamol syrup 100ml)"
+                    value={requestForm.item_description}
+                    onChange={(e) => setRequestForm({ ...requestForm, item_description: e.target.value })}
+                  />
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <Input
+                      type="number"
+                      min={1}
+                      placeholder="Quantity"
+                      value={requestForm.quantity}
+                      onChange={(e) => setRequestForm({ ...requestForm, quantity: e.target.value })}
+                    />
+                    <Input
+                      type="number"
+                      min={0}
+                      step="0.01"
+                      placeholder="Est. unit cost (optional)"
+                      value={requestForm.estimated_unit_cost}
+                      onChange={(e) => setRequestForm({ ...requestForm, estimated_unit_cost: e.target.value })}
+                    />
+                  </div>
+                  <Input
+                    placeholder="Reason / purpose"
+                    value={requestForm.purpose}
+                    onChange={(e) => setRequestForm({ ...requestForm, purpose: e.target.value })}
+                  />
+                  {requestError && <p className="text-sm text-danger">{requestError}</p>}
+                </div>
+                <DialogFooter>
+                  <Button
+                    onClick={submitRequest}
+                    disabled={requestPending || !requestForm.item_description || !requestForm.quantity || !requestForm.purpose}
+                  >
+                    {requestPending ? "Submitting…" : "Submit request"}
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+          </header>
+          <div className="divide-y divide-border">
+            {myRequisitions.map((r) => (
+              <div key={r.id} className="flex flex-wrap items-center justify-between gap-2 px-4 py-3">
+                <div>
+                  <p className="text-sm font-medium">
+                    {r.item_description} — {r.quantity}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {r.purpose} · {new Date(r.created_at).toLocaleDateString()}
+                  </p>
+                </div>
+                <StatusBadge tone={requisitionStatusTone[r.status]} label={requisitionStatusLabel[r.status]} />
+              </div>
+            ))}
+            {myRequisitions.length === 0 && <p className="px-4 py-6 text-center text-sm text-muted-foreground">No requests yet.</p>}
           </div>
         </div>
       )}

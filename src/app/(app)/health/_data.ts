@@ -6,7 +6,7 @@ import type { SickBayVisitRow } from "@/components/health/sick-bay-section";
 import type { MedicationRow, MedicalInventoryOption } from "@/components/health/medication-section";
 import type { ReferralRow } from "@/components/health/referrals-section";
 import type { EmergencyRow } from "@/components/health/emergencies-section";
-import type { MedicalItemRow, PendingTransferRow } from "@/components/health/inventory-section";
+import type { MedicalItemRow, PendingTransferRow, MyRequisitionRow } from "@/components/health/inventory-section";
 import type { HealthReportsData } from "@/components/health/reports-section";
 import type { StudentOption } from "@/components/health/student-picker";
 
@@ -26,6 +26,8 @@ export interface HealthContext {
   inventoryOptions: MedicalInventoryOption[];
   medicalCategoryId: string | null;
   pendingTransfers: PendingTransferRow[];
+  canRequestSupplies: boolean;
+  myRequisitions: MyRequisitionRow[];
   sickBayTableRows: SickBayVisitRow[];
   medicationTableRows: MedicationRow[];
   referralTableRows: ReferralRow[];
@@ -42,19 +44,22 @@ export async function loadHealthContext(): Promise<HealthContext> {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const [{ data: viewer }, { data: canReadAny }, { data: canWriteData }, { data: canReadMedicalData }] = await Promise.all([
-    supabase.from("school_users").select("full_name, roles(display_name), schools(name)").eq("auth_user_id", user.id).maybeSingle(),
+  const [{ data: viewer }, { data: canReadAny }, { data: canWriteData }, { data: canReadMedicalData }, { data: canRequestData }] = await Promise.all([
+    supabase.from("school_users").select("id, full_name, roles(display_name), schools(name)").eq("auth_user_id", user.id).maybeSingle(),
     supabase.rpc("auth_has_permission", { p_permission_key: "health.read_any" }),
     supabase.rpc("auth_has_permission", { p_permission_key: "health.write" }),
     supabase.rpc("auth_has_permission", { p_permission_key: "students.medical.read" }),
+    supabase.rpc("auth_has_permission", { p_permission_key: "health.procurement.request" }),
   ]);
   const canWrite = canWriteData === true;
   const canReadMedicalRecords = canReadMedicalData === true;
+  const canRequestSupplies = canRequestData === true;
   const roleName = (viewer?.roles as unknown as { display_name: string } | null)?.display_name;
   const schoolName = (viewer?.schools as unknown as { name: string } | null)?.name ?? "EduCore";
   const userName = viewer?.full_name ?? user.email ?? "Account";
+  const myId = viewer?.id ?? null;
 
-  const base = { userName, userRole: roleName, schoolName, canReadAny: canReadAny === true, canReadMedicalRecords, canWrite };
+  const base = { userName, userRole: roleName, schoolName, canReadAny: canReadAny === true, canReadMedicalRecords, canWrite, canRequestSupplies };
 
   // health.read_any gates the bulk of this module's SELECT queries below, but
   // a user granted only health.write (e.g. a nurse-assigned helper who should
@@ -70,6 +75,7 @@ export async function loadHealthContext(): Promise<HealthContext> {
       inventoryOptions: [],
       medicalCategoryId: null,
       pendingTransfers: [],
+      myRequisitions: [],
       sickBayTableRows: [],
       medicationTableRows: [],
       referralTableRows: [],
@@ -125,6 +131,31 @@ export async function loadHealthContext(): Promise<HealthContext> {
     supabase.from("inventory_categories").select("id").eq("name", "Medical Supplies").maybeSingle(),
     supabase.from("student_guardians").select("student_id, primary_contact, relationship, school_users(id, full_name, phone)"),
   ]);
+
+  // Her own requests only -- purchase_requisitions_select already scopes this via its
+  // "or requested_by = auth_school_user_id()" clause, but filtering explicitly here keeps
+  // this query's intent obvious and avoids ever accidentally listing someone else's request
+  // if her permissions change in the future.
+  const { data: myRequisitionRows } = myId
+    ? await supabase
+        .from("purchase_requisitions")
+        .select("id, purpose, status, created_at, purchase_requisition_items(item_description, quantity)")
+        .eq("requested_by", myId)
+        .order("created_at", { ascending: false })
+    : { data: [] };
+
+  const myRequisitions: MyRequisitionRow[] = (myRequisitionRows ?? []).map((r) => {
+    const items = r.purchase_requisition_items as unknown as { item_description: string; quantity: number }[] | null;
+    const first = items?.[0];
+    return {
+      id: r.id,
+      purpose: r.purpose,
+      status: r.status as MyRequisitionRow["status"],
+      created_at: r.created_at,
+      item_description: first?.item_description ?? "—",
+      quantity: first?.quantity ?? 0,
+    };
+  });
 
   const studentOptions: StudentOption[] = (students ?? []).map((s) => ({ id: s.id, name: `${s.first_name} ${s.last_name}` }));
 
@@ -283,6 +314,7 @@ export async function loadHealthContext(): Promise<HealthContext> {
     inventoryOptions,
     medicalCategoryId: medicalCategory?.id ?? null,
     pendingTransfers,
+    myRequisitions,
     sickBayTableRows,
     medicationTableRows,
     referralTableRows,
