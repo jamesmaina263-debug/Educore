@@ -69,7 +69,7 @@ export default async function StudentProfilePage({
 
   const { data: documentRows } = await supabase
     .from("documents")
-    .select("id, category, file_name, storage_path, created_at")
+    .select("id, category, file_name, storage_path, storage_bucket, created_at")
     .eq("student_id", id)
     .order("created_at", { ascending: false });
 

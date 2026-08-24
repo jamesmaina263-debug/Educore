@@ -111,19 +111,17 @@ export interface ApplicantIdentityInput {
 // student record is created.
 export async function updateApplicantIdentity(applicationId: string, input: ApplicantIdentityInput): Promise<ActionResult> {
   const supabase = await createClient();
-  const { error } = await supabase
-    .from("applications")
-    .update({
-      first_name: input.first_name.trim(),
-      last_name: input.last_name.trim(),
-      other_names: input.other_names?.trim() || null,
-      date_of_birth: input.date_of_birth,
-      gender: input.gender,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", applicationId);
+  const { error } = await supabase.rpc("update_admission_identity", {
+    p_application_id: applicationId,
+    p_first_name: input.first_name.trim(),
+    p_last_name: input.last_name.trim(),
+    p_other_names: input.other_names?.trim() || null,
+    p_date_of_birth: input.date_of_birth,
+    p_gender: input.gender,
+  });
   if (error) return { error: error.message };
   revalidatePath(`/admissions/${applicationId}/wizard`);
+  revalidatePath(`/admissions/${applicationId}`);
   return { success: true };
 }
 
@@ -371,6 +369,7 @@ export async function uploadDocumentAsStaff(applicationId: string, category: str
     category,
     file_name: file.name,
     storage_path: path,
+    storage_bucket: "application-documents",
     uploaded_by: staff?.id ?? null,
     verification_status: "verified", // staff-uploaded documents don't need self-verification
     verified_by: staff?.id ?? null,

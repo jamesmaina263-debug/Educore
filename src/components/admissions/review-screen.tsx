@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { StatusBadge } from "@/components/status-badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
+import { DocumentPreviewButton } from "@/components/document-preview-dialog";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import {
   markUnderReviewAction,
@@ -66,6 +67,7 @@ export interface DocumentRequirementRow {
     id: string;
     file_name: string;
     storage_path: string;
+    storage_bucket: string;
     verification_status: "pending" | "verified" | "rejected";
     verification_comment: string | null;
   } | null;
@@ -257,8 +259,12 @@ export function ReviewScreen({
                     <p className="mt-1 text-[0.75rem] text-danger">{req.document.verification_comment}</p>
                   )}
                 </div>
+                <div className="flex shrink-0 items-center gap-2">
+                  {req.document && (
+                    <DocumentPreviewButton bucket={req.document.storage_bucket} storagePath={req.document.storage_path} fileName={req.document.file_name} />
+                  )}
                 {canWrite && (
-                  <div className="flex shrink-0 items-center gap-2">
+                  <>
                     {req.document && req.document.verification_status !== "verified" && (
                       <Button size="sm" variant="outline" disabled={pending} onClick={() => run(() => verifyDocumentAction(req.document!.id))}>
                         Verify
@@ -274,8 +280,9 @@ export function ReviewScreen({
                         Request
                       </Button>
                     )}
-                  </div>
+                  </>
                 )}
+                </div>
               </div>
             ))}
           </div>

@@ -130,6 +130,7 @@ export async function uploadStatusDocument(
     category,
     file_name: file.name,
     storage_path: path,
+    storage_bucket: "application-documents",
     uploaded_by: application.guardian_id,
   });
   if (insertError) {

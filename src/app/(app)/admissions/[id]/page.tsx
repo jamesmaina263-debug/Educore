@@ -70,11 +70,11 @@ export default async function AdmissionReviewPage({ params }: { params: Promise<
     application.resulting_student_id
       ? supabase
           .from("documents")
-          .select("id, category, file_name, storage_path, verification_status, verification_comment, created_at")
+          .select("id, category, file_name, storage_path, storage_bucket, verification_status, verification_comment, created_at")
           .or(`application_id.eq.${id},student_id.eq.${application.resulting_student_id}`)
       : supabase
           .from("documents")
-          .select("id, category, file_name, storage_path, verification_status, verification_comment, created_at")
+          .select("id, category, file_name, storage_path, storage_bucket, verification_status, verification_comment, created_at")
           .eq("application_id", id),
   ]);
 
@@ -91,6 +91,7 @@ export default async function AdmissionReviewPage({ params }: { params: Promise<
             id: doc.id,
             file_name: doc.file_name,
             storage_path: doc.storage_path,
+            storage_bucket: doc.storage_bucket,
             verification_status: doc.verification_status as "pending" | "verified" | "rejected",
             verification_comment: doc.verification_comment,
           }

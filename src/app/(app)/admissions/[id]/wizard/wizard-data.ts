@@ -72,11 +72,11 @@ export async function loadWizardStepData(supabase: SupabaseClient, applicationId
   const { data: documents } = studentId
     ? await supabase
         .from("documents")
-        .select("id, category, file_name, verification_status, verification_comment")
+        .select("id, category, file_name, storage_path, storage_bucket, verification_status, verification_comment")
         .or(`application_id.eq.${applicationId},student_id.eq.${studentId}`)
     : await supabase
         .from("documents")
-        .select("id, category, file_name, verification_status, verification_comment")
+        .select("id, category, file_name, storage_path, storage_bucket, verification_status, verification_comment")
         .eq("application_id", applicationId);
 
   let currentStreamId: string | null = null;

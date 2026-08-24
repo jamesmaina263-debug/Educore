@@ -68,7 +68,7 @@ export default async function StaffProfilePage({
       .order("start_date", { ascending: false }),
     supabase
       .from("documents")
-      .select("id, category, file_name, storage_path, created_at")
+      .select("id, category, file_name, storage_path, storage_bucket, created_at")
       .eq("staff_id", id)
       .order("created_at", { ascending: false }),
   ]);

@@ -43,6 +43,7 @@ import { useOfflineSync } from "@/hooks/use-offline-sync";
 import { queueMutation } from "@/lib/offline/queue";
 import { AdmissionsOfflineBanner } from "@/components/admissions/offline-banner";
 import { MpesaPushTrigger } from "@/components/finance/mpesa-push-trigger";
+import { DocumentPreviewButton } from "@/components/document-preview-dialog";
 
 // Shared shell every step form renders inside, matching the wizard panel's existing look.
 function StepPanel({ title, hint, children }: { title: string; hint?: string; children: React.ReactNode }) {
@@ -286,10 +287,15 @@ export function StudentStep({
     });
   }
 
-  if (resultingStudentId) {
+  // Once the Student record exists, identity is authoritative on the students table (not just
+  // the application snapshot) — updateApplicantIdentity's underlying RPC keeps both rows in
+  // sync, so editing here after linking is safe and no longer locked. Still shows the same
+  // form; only the surrounding lock screen and Cancel option differ.
+  if (resultingStudentId && !editingIdentity) {
     return (
       <StepPanel title="Student">
         <p className="flex items-center gap-1.5 text-sm text-success"><SuccessDot />Student record linked ({applicantSummary.first_name} {applicantSummary.last_name}).</p>
+        <Button size="sm" variant="ghost" onClick={() => setEditingIdentity(true)}>Edit details</Button>
       </StepPanel>
     );
   }
@@ -326,8 +332,20 @@ export function StudentStep({
             </Select>
           </div>
         </div>
+        {resultingStudentId && (
+          <p className="text-xs text-muted-foreground">
+            This student has already been enrolled — saving here corrects both the admission record and the student&apos;s own record, and is logged in Settings &gt; Audit Log.
+          </p>
+        )}
         <ErrorText error={error} />
-        <Button size="sm" onClick={saveIdentity} disabled={pending}>{pending ? "Saving…" : "Save"}</Button>
+        <div className="flex items-center gap-2">
+          <Button size="sm" onClick={saveIdentity} disabled={pending}>{pending ? "Saving…" : "Save"}</Button>
+          {resultingStudentId && (
+            <Button size="sm" variant="ghost" onClick={() => { setError(null); setIdentity({ first_name: applicantSummary.first_name ?? "", last_name: applicantSummary.last_name ?? "", other_names: applicantSummary.other_names ?? "", date_of_birth: applicantSummary.date_of_birth ?? "", gender: applicantSummary.gender ?? "" }); setEditingIdentity(false); }} disabled={pending}>
+              Cancel
+            </Button>
+          )}
+        </div>
       </StepPanel>
     );
   }
@@ -493,7 +511,15 @@ export function GuardianStep({ applicationId, resultingStudentId }: { applicatio
 // ============================================================================
 
 export interface DocumentRequirement { category: string; label: string; required: boolean }
-export interface ApplicationDocument { id: string; category: string; file_name: string; verification_status: string; verification_comment: string | null }
+export interface ApplicationDocument {
+  id: string;
+  category: string;
+  file_name: string;
+  storage_path: string;
+  storage_bucket: string;
+  verification_status: string;
+  verification_comment: string | null;
+}
 
 export function DocumentsStep({
   applicationId,
@@ -565,6 +591,9 @@ export function DocumentsStep({
               <div className="mt-2 flex items-center gap-2">
                 <Input type="file" accept=".pdf,.jpg,.jpeg,.png" className="h-8 max-w-64 text-xs"
                   onChange={(e) => { const f = e.target.files?.[0]; if (f) upload(req.category, f); }} />
+                {doc && (
+                  <DocumentPreviewButton bucket={doc.storage_bucket} storagePath={doc.storage_path} fileName={doc.file_name} />
+                )}
                 {doc && doc.verification_status !== "verified" && (
                   <Button size="sm" variant="outline" onClick={() => verify(doc.id)} disabled={pending}>Verify</Button>
                 )}

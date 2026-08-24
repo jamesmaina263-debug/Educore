@@ -252,6 +252,7 @@ export async function submitApplication(
       category: req.category,
       file_name: file.name,
       storage_path: path,
+      storage_bucket: "application-documents",
       uploaded_by: guardianId,
     });
   }
