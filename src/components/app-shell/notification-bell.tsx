@@ -11,7 +11,12 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
-import { getMyInAppNotifications, markNotificationReadAction, type InAppNotification } from "@/app/notifications/actions";
+import {
+  getMyInAppNotifications,
+  markNotificationReadAction,
+  clearAllNotificationsAction,
+  type InAppNotification,
+} from "@/app/notifications/actions";
 
 function timeAgo(iso: string): string {
   const diffMs = Date.now() - new Date(iso).getTime();
@@ -28,6 +33,7 @@ export function NotificationBell() {
   const [notifications, setNotifications] = useState<InAppNotification[]>([]);
   const [open, setOpen] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  const [clearing, setClearing] = useState(false);
 
   const unreadCount = notifications.filter((n) => !n.read_at).length;
   const actionRequiredCount = notifications.filter((n) => !n.read_at && n.action_url).length;
@@ -59,6 +65,15 @@ export function NotificationBell() {
     if (next) await load();
   }
 
+  async function handleClearAll() {
+    setClearing(true);
+    const result = await clearAllNotificationsAction();
+    setClearing(false);
+    if (result && "success" in result) {
+      setNotifications([]);
+    }
+  }
+
   async function handleClick(n: InAppNotification) {
     if (!n.read_at) {
       setNotifications((prev) => prev.map((x) => (x.id === n.id ? { ...x, read_at: new Date().toISOString() } : x)));
@@ -85,7 +100,19 @@ export function NotificationBell() {
       <DropdownMenuContent align="end" className="w-80">
         <DropdownMenuLabel className="flex items-center justify-between">
           <span>Notifications</span>
-          {unreadCount > 0 && <span className="text-[0.6875rem] font-normal text-muted-foreground">{unreadCount} unread</span>}
+          <span className="flex items-center gap-2">
+            {unreadCount > 0 && <span className="text-[0.6875rem] font-normal text-muted-foreground">{unreadCount} unread</span>}
+            {notifications.length > 0 && (
+              <button
+                type="button"
+                onClick={handleClearAll}
+                disabled={clearing}
+                className="text-[0.6875rem] font-normal text-muted-foreground hover:text-foreground hover:underline disabled:opacity-50"
+              >
+                Clear all
+              </button>
+            )}
+          </span>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
         {!loaded ? (
