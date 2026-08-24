@@ -465,6 +465,8 @@ export function ProcurementPanel({
   const [receiveOpen, setReceiveOpen] = useState<string | null>(null);
   const [editItemOpen, setEditItemOpen] = useState<{ id: string; quantity: number; unit_cost: number | null } | null>(null);
   const [poItemMode, setPoItemMode] = useState<string>("__custom__");
+  const [receiveItemId, setReceiveItemId] = useState<string | null>(null);
+  const [customItemMatch, setCustomItemMatch] = useState<string | null>(null);
 
   return (
     <div className="flex flex-col gap-4">
@@ -574,7 +576,18 @@ export function ProcurementPanel({
                     required
                     defaultValue={poItemMode === "__custom__" ? "" : items.find((i) => i.id === poItemMode)?.name ?? ""}
                     key={poItemMode}
+                    onChange={(e) => {
+                      if (poItemMode !== "__custom__") return;
+                      const typed = e.target.value.trim().toLowerCase();
+                      const hit = items.find((i) => i.name.trim().toLowerCase() === typed);
+                      setCustomItemMatch(hit ? hit.name : null);
+                    }}
                   />
+                  {poItemMode === "__custom__" && customItemMatch && (
+                    <p className="text-xs text-amber-600">
+                      &quot;{customItemMatch}&quot; is already in your stock catalog — pick it from the Item dropdown above instead, or receiving goods against this line won&apos;t update stock.
+                    </p>
+                  )}
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div className="flex flex-col gap-1.5">
@@ -695,7 +708,7 @@ export function ProcurementPanel({
                     {canWrite && (
                       <td>
                         {po.status !== "received" && po.status !== "cancelled" && (
-                          <Dialog open={receiveOpen === po.id} onOpenChange={(o) => setReceiveOpen(o ? po.id : null)}>
+                          <Dialog open={receiveOpen === po.id} onOpenChange={(o) => { setReceiveOpen(o ? po.id : null); if (!o) setReceiveItemId(null); }}>
                             <DialogTrigger asChild>
                               <Button size="sm" variant="outline">Receive Goods</Button>
                             </DialogTrigger>
@@ -707,7 +720,7 @@ export function ProcurementPanel({
                                 <input type="hidden" name="po_id" value={po.id} />
                                 <div className="flex flex-col gap-1.5">
                                   <Label>Item</Label>
-                                  <Select name="po_item_id" required>
+                                  <Select name="po_item_id" required onValueChange={setReceiveItemId}>
                                     <SelectTrigger>
                                       <SelectValue placeholder="Select item" />
                                     </SelectTrigger>
@@ -719,6 +732,11 @@ export function ProcurementPanel({
                                       ))}
                                     </SelectContent>
                                   </Select>
+                                  {po.items.find((i) => i.id === receiveItemId && !i.inventory_item_id) && (
+                                    <p className="text-xs text-amber-600">
+                                      This line isn&apos;t linked to a stock catalog item — receiving it will record the delivery but won&apos;t update stock levels.
+                                    </p>
+                                  )}
                                 </div>
                                 <div className="flex flex-col gap-1.5">
                                   <Label>Quantity Received</Label>
