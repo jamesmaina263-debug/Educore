@@ -53,6 +53,11 @@ interface ScanRequestBody {
   credential_reference?: string;
   event_type?: EventType;
   occurred_at?: string;
+  // Testing aid only: when true, everything runs exactly as normal
+  // (verification, event, attendance) except the guardian SMS is never
+  // actually sent. Lets someone verify the whole pipeline against a real
+  // enrolled student without texting that student's real guardian.
+  dry_run?: boolean;
 }
 
 async function sha256Hex(input: string): Promise<string> {
@@ -335,6 +340,12 @@ Deno.serve(async (req) => {
 
     if (recipients.length === 0) {
       notificationStatus = "skipped";
+    } else if (body.dry_run) {
+      // Everything above this point (verification, event, attendance) still
+      // happened for real -- only the outbound SMS itself is skipped, and
+      // no notification_logs row is created, so a dry run leaves no trace
+      // in the delivery audit trail (there was nothing to audit).
+      notificationStatus = "skipped";
     } else {
       const studentName = student ? `${student.first_name} ${student.last_name}` : "Student";
       const schoolName = school?.name ?? "School";
@@ -429,5 +440,6 @@ Deno.serve(async (req) => {
     event_id: biometricEvent.id,
     attendance: attendanceTable ? { table: attendanceTable, id: attendanceId } : null,
     notification: notificationStatus,
+    dry_run: body.dry_run === true,
   });
 });
