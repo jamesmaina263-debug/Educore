@@ -62,6 +62,7 @@ import {
   Palette,
   Landmark,
   Smartphone,
+  Fingerprint,
 } from "lucide-react";
 
 export interface NavChild {
@@ -181,6 +182,7 @@ const settingsChildren: NavChild[] = [
   { label: "Billing", href: "/settings/billing", icon: CoinsIcon },
   { label: "Notifications", href: "/settings/notifications", icon: Bell },
   { label: "API Keys", href: "/settings/api-keys", icon: KeyRound },
+  { label: "Biometric Devices", href: "/settings/biometric-devices", icon: Fingerprint },
   { label: "Audit Log", href: "/settings/audit", icon: History },
 ];
 
