@@ -21,6 +21,7 @@ export interface SettingsContext {
   canManageBilling: boolean;
   canManageApiKeys: boolean;
   canManageBiometricDevices: boolean;
+  canReadBiometricEvents: boolean;
   canReadAudit: boolean;
   canReadStaff: boolean;
   staff: StaffRow[];
@@ -51,6 +52,7 @@ export async function loadSettingsContext(): Promise<SettingsContext> {
     { data: canManageBilling },
     { data: canManageApiKeys },
     { data: canManageBiometricDevices },
+    { data: canReadBiometricEvents },
     { data: canReadAudit },
     { data: canReadStaff },
   ] = await Promise.all([
@@ -66,6 +68,7 @@ export async function loadSettingsContext(): Promise<SettingsContext> {
     supabase.rpc("auth_has_permission", { p_permission_key: "billing.manage" }),
     supabase.rpc("auth_has_permission", { p_permission_key: "api.manage" }),
     supabase.rpc("auth_has_permission", { p_permission_key: "biometric.devices_manage" }),
+    supabase.rpc("auth_has_permission", { p_permission_key: "biometric.events_read" }),
     supabase.rpc("auth_has_permission", { p_permission_key: "audit.read" }),
     supabase.rpc("auth_has_permission", { p_permission_key: "staff.read" }),
   ]);
@@ -203,6 +206,7 @@ export async function loadSettingsContext(): Promise<SettingsContext> {
     canManageBilling: canManageBilling === true,
     canManageApiKeys: canManageApiKeys === true,
     canManageBiometricDevices: canManageBiometricDevices === true,
+    canReadBiometricEvents: canReadBiometricEvents === true,
     canReadAudit: canReadAudit === true,
     canReadStaff: canReadStaff === true,
     staff,
