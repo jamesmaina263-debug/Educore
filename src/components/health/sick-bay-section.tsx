@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { checkInStudent, checkOutStudent, sendHealthAlertAction } from "@/app/(app)/health/actions";
+import { checkInStudent, checkOutStudent, sendHealthAlertAction, createReferral } from "@/app/(app)/health/actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -56,6 +56,40 @@ export function SickBaySection({
   const [notifyGuardianIds, setNotifyGuardianIds] = useState<string[]>([]);
   const [notifyBody, setNotifyBody] = useState("");
   const [notifySent, setNotifySent] = useState<number | null>(null);
+
+  const [referFor, setReferFor] = useState<SickBayVisitRow | null>(null);
+  const [referForm, setReferForm] = useState({ referred_to: "", reason: "", referral_date: "", guardian_notified: false });
+  const [referDone, setReferDone] = useState(false);
+
+  function openRefer(v: SickBayVisitRow) {
+    setReferFor(v);
+    setReferForm({ referred_to: "", reason: v.reason, referral_date: new Date().toISOString().slice(0, 10), guardian_notified: false });
+    setReferDone(false);
+    setError(null);
+  }
+
+  async function submitRefer() {
+    if (!referFor) return;
+    setPending(true);
+    setError(null);
+    const result = await createReferral({
+      student_id: referFor.student_id,
+      sick_bay_visit_id: referFor.id,
+      referred_to: referForm.referred_to,
+      reason: referForm.reason,
+      referral_date: referForm.referral_date,
+      guardian_notified: referForm.guardian_notified,
+    });
+    if ("error" in result) {
+      setPending(false);
+      return setError(result.error);
+    }
+    const checkoutResult = await checkOutStudent(referFor.id, "referred", `Referred to ${referForm.referred_to}`);
+    setPending(false);
+    if ("error" in checkoutResult) return setError(checkoutResult.error);
+    setReferDone(true);
+    router.refresh();
+  }
 
   function defaultAlertMessage(v: SickBayVisitRow) {
     const base = `${v.student_name} visited the school sick bay today (${v.reason}).`;
@@ -232,6 +266,11 @@ export function SickBaySection({
                       <Button size="sm" variant="ghost" onClick={() => openNotify(v)} disabled={v.guardians.length === 0}>
                         Notify guardian
                       </Button>
+                      {v.is_open && (
+                        <Button size="sm" variant="ghost" onClick={() => openRefer(v)}>
+                          Refer
+                        </Button>
+                      )}
                     </div>
                   </td>
                 )}
@@ -288,6 +327,56 @@ export function SickBaySection({
             ) : (
               <Button onClick={submitNotify} disabled={pending || notifyGuardianIds.length === 0 || !notifyBody.trim()}>
                 {pending ? "Sending…" : "Send"}
+              </Button>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={referFor !== null} onOpenChange={(open) => !open && setReferFor(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Refer — {referFor?.student_name}</DialogTitle>
+          </DialogHeader>
+          {referFor && !referDone && (
+            <div className="space-y-3">
+              <Input
+                placeholder="Referred to (hospital / clinic)"
+                value={referForm.referred_to}
+                onChange={(e) => setReferForm({ ...referForm, referred_to: e.target.value })}
+              />
+              <Textarea
+                placeholder="Reason"
+                value={referForm.reason}
+                onChange={(e) => setReferForm({ ...referForm, reason: e.target.value })}
+              />
+              <Input
+                type="date"
+                value={referForm.referral_date}
+                onChange={(e) => setReferForm({ ...referForm, referral_date: e.target.value })}
+              />
+              <label className="flex items-center gap-2 text-sm">
+                <Checkbox
+                  checked={referForm.guardian_notified}
+                  onCheckedChange={(checked) => setReferForm({ ...referForm, guardian_notified: checked === true })}
+                />
+                Guardian already notified
+              </label>
+              <p className="text-xs text-muted-foreground">
+                This will also check {referFor.student_name} out of sick bay with outcome &quot;Referred&quot;.
+              </p>
+              {error && <p className="text-sm text-danger">{error}</p>}
+            </div>
+          )}
+          {referDone && <p className="text-sm text-success">Referral created and student checked out.</p>}
+          <DialogFooter>
+            {referDone ? (
+              <Button variant="outline" onClick={() => setReferFor(null)}>
+                Close
+              </Button>
+            ) : (
+              <Button onClick={submitRefer} disabled={pending || !referForm.referred_to.trim() || !referForm.reason.trim()}>
+                {pending ? "Referring…" : "Refer & check out"}
               </Button>
             )}
           </DialogFooter>
