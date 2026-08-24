@@ -25,13 +25,14 @@ const PLACEHOLDER_TAGS = [
 export function AdmissionFormTemplatePanel({ initial, canWrite }: { initial: AdmissionFormTemplateInfo | null; canWrite: boolean }) {
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [selectedFileName, setSelectedFileName] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
 
   async function handleUpload() {
     const file = fileInputRef.current?.files?.[0];
-    if (!file) return setError("Choose a .docx file first.");
+    if (!file) return setError("Choose a file first — click \"Choose file\" above, then \"Upload template\".");
     setPending(true);
     setError(null);
     setSaved(false);
@@ -41,6 +42,7 @@ export function AdmissionFormTemplatePanel({ initial, canWrite }: { initial: Adm
     setPending(false);
     if ("error" in result) return setError(result.error);
     setSaved(true);
+    setSelectedFileName(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
     router.refresh();
   }
@@ -89,16 +91,33 @@ export function AdmissionFormTemplatePanel({ initial, canWrite }: { initial: Adm
       )}
 
       {canWrite && (
-        <div className="space-y-2">
+        <div className="space-y-2 rounded-md border border-dashed border-border p-3">
+          <p className="text-[0.75rem] font-medium text-muted-foreground">Step 1 — choose a file</p>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={() => fileInputRef.current?.click()}
+          >
+            Choose file
+          </Button>
           <input
             ref={fileInputRef}
             type="file"
             accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-            className="text-[0.8125rem]"
+            className="hidden"
+            onChange={(e) => {
+              setError(null);
+              setSaved(false);
+              setSelectedFileName(e.target.files?.[0]?.name ?? null);
+            }}
           />
+          <p className="text-[0.8125rem]">{selectedFileName ? `Selected: ${selectedFileName}` : "No file chosen yet."}</p>
+
+          <p className="pt-1 text-[0.75rem] font-medium text-muted-foreground">Step 2 — upload it</p>
           {error && <p className="text-sm text-danger">{error}</p>}
           {saved && !error && <p className="text-sm text-success">Saved.</p>}
-          <Button size="sm" onClick={handleUpload} disabled={pending}>
+          <Button size="sm" onClick={handleUpload} disabled={pending || !selectedFileName}>
             {pending ? "Uploading…" : initial ? "Replace template" : "Upload template"}
           </Button>
         </div>
