@@ -12,6 +12,10 @@
     {
       "path": "/api/cron/school-comms",
       "schedule": "0 4 * * *"
+    },
+    {
+      "path": "/api/cron/communication-retention",
+      "schedule": "0 5 * * *"
     }
   ]
 }

@@ -16,10 +16,11 @@ export default async function CommunicationPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const [{ data: schoolUser }, { data: canWrite }, { data: canMessageSuppliers }] = await Promise.all([
+  const [{ data: schoolUser }, { data: canWrite }, { data: canMessageSuppliers }, { data: canDelete }] = await Promise.all([
     supabase.from("school_users").select("full_name, roles(display_name), schools(name)").eq("auth_user_id", user.id).maybeSingle(),
     supabase.rpc("auth_has_permission", { p_permission_key: "communication.write" }),
     supabase.rpc("auth_can_message_suppliers"),
+    supabase.rpc("auth_has_permission", { p_permission_key: "communication.delete" }),
   ]);
 
   const roleName = (schoolUser?.roles as unknown as { display_name: string } | null)?.display_name;
@@ -49,7 +50,7 @@ export default async function CommunicationPage() {
       supabase.from("suppliers").select("id, name, email").eq("active", true).order("name"),
       supabase
         .from("notification_logs")
-        .select("id, channel, recipient_phone, recipient_email, subject, body, status, provider_response, read_at, created_at, students(first_name, last_name)")
+        .select("id, channel, recipient_phone, recipient_email, subject, body, status, provider_response, read_at, created_at, archived_at, students(first_name, last_name)")
         .order("created_at", { ascending: false })
         .limit(200),
       supabase
@@ -72,6 +73,7 @@ export default async function CommunicationPage() {
       provider_response: l.provider_response,
       read_at: l.read_at,
       created_at: l.created_at,
+      archived_at: l.archived_at,
     }));
 
     return (
@@ -87,40 +89,54 @@ export default async function CommunicationPage() {
             <p className="text-sm text-muted-foreground">Email suppliers about purchase orders and deliveries.</p>
           </div>
           <SupplierComposeSection suppliers={(suppliers ?? []) as SupplierOption[]} purchaseOrders={(purchaseOrders ?? []) as SupplierPoOption[]} />
-          <HistorySection logs={logRows} />
+          <HistorySection logs={logRows} canDelete={canDelete ?? false} />
         </div>
       </AppShell>
     );
   }
 
-  const [{ data: templates }, { data: logs }, { data: students }, { data: classes }, { data: suppliers }, { data: purchaseOrders }, { data: conversations }] = await Promise.all([
-    supabase.from("communication_templates").select("id, name, category, body, channel").order("created_at", { ascending: false }),
-    supabase
-      .from("notification_logs")
-      .select("id, channel, recipient_phone, recipient_email, subject, body, status, provider_response, read_at, created_at, students(first_name, last_name)")
-      .order("created_at", { ascending: false })
-      .limit(200),
-    supabase
-      .from("students")
-      .select("id, first_name, last_name, current_class_id, streams(class_id, classes(name)), student_guardians(primary_contact, school_users(id, phone, email))")
-      .eq("status", "active"),
-    supabase.from("classes").select("id, name").order("level_order"),
-    supabase.from("suppliers").select("id, name, email").eq("active", true).order("name"),
-    supabase
-      .from("purchase_orders")
-      .select("id, po_number, status, supplier_id")
-      .neq("status", "cancelled")
-      .order("order_date", { ascending: false })
-      .limit(100),
-    supabase
-      .from("whatsapp_conversations")
-      .select(
-        "id, phone_number, status, unread_count, last_message_at, last_message_preview, guardian:guardian_user_id(full_name), student:student_id(first_name, last_name), assigned:assigned_to(full_name)",
-      )
-      .neq("status", "closed")
-      .order("last_message_at", { ascending: false })
-      .limit(100),
-  ]);
+  const [{ data: templates }, { data: logs }, { data: students }, { data: classes }, { data: suppliers }, { data: purchaseOrders }, { data: conversations }, { data: archivedConversationsData }] =
+    await Promise.all([
+      supabase.from("communication_templates").select("id, name, category, body, channel").order("created_at", { ascending: false }),
+      supabase
+        .from("notification_logs")
+        .select("id, channel, recipient_phone, recipient_email, subject, body, status, provider_response, read_at, created_at, archived_at, students(first_name, last_name)")
+        .order("created_at", { ascending: false })
+        .limit(200),
+      supabase
+        .from("students")
+        .select("id, first_name, last_name, current_class_id, streams(class_id, classes(name)), student_guardians(primary_contact, school_users(id, phone, email))")
+        .eq("status", "active"),
+      supabase.from("classes").select("id, name").order("level_order"),
+      supabase.from("suppliers").select("id, name, email").eq("active", true).order("name"),
+      supabase
+        .from("purchase_orders")
+        .select("id, po_number, status, supplier_id")
+        .neq("status", "cancelled")
+        .order("order_date", { ascending: false })
+        .limit(100),
+      supabase
+        .from("whatsapp_conversations")
+        // .is("archived_at", null) keeps the working inbox from accumulating threads the daily
+        // retention sweep has already archived (7+ days inactive) -- see
+        // 20260824153119_communication_retention_archive_purge.sql. Those threads are still fully
+        // browsable, just in the separate "Archived" view fetched just below.
+        .select(
+          "id, phone_number, status, unread_count, last_message_at, last_message_preview, guardian:guardian_user_id(full_name), student:student_id(first_name, last_name), assigned:assigned_to(full_name)",
+        )
+        .neq("status", "closed")
+        .is("archived_at", null)
+        .order("last_message_at", { ascending: false })
+        .limit(100),
+      supabase
+        .from("whatsapp_conversations")
+        .select(
+          "id, phone_number, status, unread_count, last_message_at, last_message_preview, guardian:guardian_user_id(full_name), student:student_id(first_name, last_name), assigned:assigned_to(full_name)",
+        )
+        .not("archived_at", "is", null)
+        .order("last_message_at", { ascending: false })
+        .limit(50),
+    ]);
 
   const roster: RosterEntry[] = (students ?? []).map((s) => {
     const stream = s.streams as unknown as { class_id: string; classes: { name: string } | null } | null;
@@ -151,10 +167,11 @@ export default async function CommunicationPage() {
       provider_response: l.provider_response,
       read_at: l.read_at,
       created_at: l.created_at,
+      archived_at: l.archived_at,
     };
   });
 
-  const conversationRows: ConversationRow[] = (conversations ?? []).map((c) => {
+  function toConversationRow(c: NonNullable<typeof conversations>[number]): ConversationRow {
     const guardian = c.guardian as unknown as { full_name: string } | null;
     const student = c.student as unknown as { first_name: string; last_name: string } | null;
     const assigned = c.assigned as unknown as { full_name: string } | null;
@@ -169,7 +186,10 @@ export default async function CommunicationPage() {
       student_name: student ? `${student.first_name} ${student.last_name}` : null,
       assigned_to_name: assigned?.full_name ?? null,
     };
-  });
+  }
+
+  const conversationRows: ConversationRow[] = (conversations ?? []).map(toConversationRow);
+  const archivedConversationRows: ConversationRow[] = (archivedConversationsData ?? []).map(toConversationRow);
   const escalatedCount = conversationRows.filter((c) => c.status === "escalated").length;
 
   return (
@@ -201,7 +221,7 @@ export default async function CommunicationPage() {
           </TabsContent>
 
           <TabsContent value="whatsapp">
-            <WhatsAppInboxSection conversations={conversationRows} />
+            <WhatsAppInboxSection conversations={conversationRows} archivedConversations={archivedConversationRows} canDelete={canDelete ?? false} />
           </TabsContent>
 
           <TabsContent value="suppliers">
@@ -213,7 +233,7 @@ export default async function CommunicationPage() {
           </TabsContent>
 
           <TabsContent value="history">
-            <HistorySection logs={logRows} />
+            <HistorySection logs={logRows} canDelete={canDelete ?? false} />
           </TabsContent>
         </Tabs>
       </div>

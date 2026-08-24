@@ -4,7 +4,8 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/status-badge";
-import { dispatchPending } from "@/app/(app)/communication/actions";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { dispatchPending, deleteCommunicationPermanentlyAction } from "@/app/(app)/communication/actions";
 
 export interface LogRow {
   id: string;
@@ -18,16 +19,39 @@ export interface LogRow {
   provider_response: string | null;
   read_at: string | null;
   created_at: string;
+  // Null until the daily retention sweep (7 days after created_at) archives this row; see
+  // 20260824153119_communication_retention_archive_purge.sql. Optional so any existing caller
+  // that doesn't pass it (there shouldn't be any left, but this keeps the type change non-breaking)
+  // still type-checks.
+  archived_at?: string | null;
 }
 
 const CHANNEL_LABELS: Record<LogRow["channel"], string> = { sms: "SMS", email: "Email", whatsapp: "WhatsApp", in_app: "In-app" };
 
-export function HistorySection({ logs }: { logs: LogRow[] }) {
+export function HistorySection({ logs, canDelete = false }: { logs: LogRow[]; canDelete?: boolean }) {
   const router = useRouter();
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [tab, setTab] = useState<"active" | "archived">("active");
+  const [confirmTarget, setConfirmTarget] = useState<LogRow | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
-  const hasQueued = logs.some((l) => l.status === "queued");
+  const activeLogs = logs.filter((l) => !l.archived_at);
+  const archivedLogs = logs.filter((l) => l.archived_at);
+  const visibleLogs = tab === "active" ? activeLogs : archivedLogs;
+
+  const hasQueued = activeLogs.some((l) => l.status === "queued");
+
+  async function handleDelete() {
+    if (!confirmTarget) return;
+    setDeleting(true);
+    setError(null);
+    const result = await deleteCommunicationPermanentlyAction({ table: "notification_logs", id: confirmTarget.id });
+    setDeleting(false);
+    if ("error" in result) return setError(result.error);
+    setConfirmTarget(null);
+    router.refresh();
+  }
 
   // "not configured" is the exact substring assertDevFallbackAllowed() throws with
   // (see supabase/functions/_shared/devFallbackGuard.ts) — surfaced separately from
@@ -82,13 +106,30 @@ export function HistorySection({ logs }: { logs: LogRow[] }) {
 
       <div className="panel">
         <header className="flex items-center justify-between border-b border-border px-4 py-2.5">
-          <h2 className="text-[0.8125rem] font-semibold">Delivery history</h2>
+          <div className="flex items-center gap-1">
+            <h2 className="text-[0.8125rem] font-semibold">Delivery history</h2>
+            <div className="ml-3 flex gap-1">
+              <Button variant={tab === "active" ? "secondary" : "ghost"} size="sm" onClick={() => setTab("active")}>
+                Active ({activeLogs.length})
+              </Button>
+              <Button variant={tab === "archived" ? "secondary" : "ghost"} size="sm" onClick={() => setTab("archived")}>
+                Archived ({archivedLogs.length})
+              </Button>
+            </div>
+          </div>
           <span className="text-[0.6875rem] text-muted-foreground">
-            {logs.length} message{logs.length === 1 ? "" : "s"}
+            {visibleLogs.length} message{visibleLogs.length === 1 ? "" : "s"}
           </span>
         </header>
-        {logs.length === 0 ? (
-          <p className="p-10 text-center text-sm text-muted-foreground">No messages sent yet.</p>
+        {tab === "archived" && (
+          <p className="border-b border-border bg-muted/40 px-4 py-1.5 text-[0.6875rem] text-muted-foreground">
+            Archived messages are auto-deleted permanently 7 days after archiving, 14 days after they were sent.
+          </p>
+        )}
+        {visibleLogs.length === 0 ? (
+          <p className="p-10 text-center text-sm text-muted-foreground">
+            {tab === "active" ? "No messages sent yet." : "Nothing archived yet."}
+          </p>
         ) : (
           <div className="overflow-x-auto">
             <table className="table-dense w-full">
@@ -102,10 +143,11 @@ export function HistorySection({ logs }: { logs: LogRow[] }) {
                   <th>Reason</th>
                   <th>Read</th>
                   <th>Sent</th>
+                  {canDelete && <th className="w-10" />}
                 </tr>
               </thead>
               <tbody>
-                {logs.map((l) => (
+                {visibleLogs.map((l) => (
                   <tr key={l.id}>
                     <td>
                       <StatusBadge tone="neutral" label={CHANNEL_LABELS[l.channel]} />
@@ -132,6 +174,13 @@ export function HistorySection({ logs }: { logs: LogRow[] }) {
                       {l.channel === "in_app" ? (l.read_at ? <StatusBadge tone="success" label="Read" /> : <StatusBadge tone="neutral" label="Unread" />) : "—"}
                     </td>
                     <td className="text-muted-foreground">{new Date(l.created_at).toLocaleString()}</td>
+                    {canDelete && (
+                      <td>
+                        <Button variant="ghost" size="sm" className="text-danger hover:text-danger" onClick={() => setConfirmTarget(l)}>
+                          Delete
+                        </Button>
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>
@@ -139,6 +188,27 @@ export function HistorySection({ logs }: { logs: LogRow[] }) {
           </div>
         )}
       </div>
+
+      <Dialog open={confirmTarget !== null} onOpenChange={(open) => !open && setConfirmTarget(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete this message permanently?</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            This immediately and permanently deletes this record from the delivery history. This cannot be undone, and it skips the
+            normal 7/14-day archive schedule.
+          </p>
+          {error && <p className="text-sm text-danger">{error}</p>}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirmTarget(null)} disabled={deleting}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={handleDelete} disabled={deleting}>
+              {deleting ? "Deleting…" : "Delete permanently"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

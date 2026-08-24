@@ -199,6 +199,28 @@ export async function returnWhatsAppConversationToBotAction(conversationId: stri
   return { success: true };
 }
 
+// Manual permanent delete for the history/inbox "Delete permanently" buttons. Gated server-side
+// by delete_communication_permanently() on the communication.delete permission (school_owner/
+// principal by default) — a caller without it gets a plain Postgres error back through `error`,
+// same as every other RPC-backed action in this file. See
+// 20260824153119_communication_retention_archive_purge.sql for the full retention design: this
+// bypasses the normal 7-day-archive / 14-day-purge schedule for one record someone wants gone now.
+export async function deleteCommunicationPermanentlyAction(input: {
+  table: "notification_logs" | "whatsapp_conversations";
+  id: string;
+  reason?: string;
+}): Promise<ActionResult> {
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("delete_communication_permanently", {
+    p_table: input.table,
+    p_id: input.id,
+    p_reason: input.reason ?? null,
+  });
+  if (error) return { error: error.message };
+  revalidatePath("/communication");
+  return { success: true };
+}
+
 // One-off email to a single supplier. Distinct from composeAndSendAction/queue_communication —
 // gated on communication.supplier (or communication.write), never on communication.write alone —
 // so a procurement officer with only the narrower permission can use this without also being able
