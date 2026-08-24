@@ -221,6 +221,63 @@ export async function issueMedicalStock(itemId: string, quantity: number, reason
   return { success: true };
 }
 
+// Raises a requisition for approval -- the exact same purchase_requisitions /
+// purchase_requisition_items tables, and the exact same approve -> issue PO ->
+// email supplier flow Main Store uses (src/app/(app)/inventory/actions.ts),
+// just reached from here and scoped to her own requests by the
+// health.procurement.request RLS policy (20260824170000). She never gets
+// purchase_orders/purchase_order_items access -- once approved, the resulting
+// PO and supplier details stay with whoever approved it; she only sees her
+// requisition's status change here. Receiving still happens at Main Store,
+// and reaches her only via the existing Transfer to Health / Accept flow.
+export async function requestMedicalSuppliesAction(input: {
+  item_description: string;
+  quantity: number;
+  purpose: string;
+  estimated_unit_cost?: number;
+}): Promise<ActionResult> {
+  const supabase = await createClient();
+  const me = await currentActor(supabase);
+  if (!me) return { error: "Could not resolve your account." };
+
+  if (!input.purpose.trim() || !input.item_description.trim() || !input.quantity) {
+    return { error: "Purpose, item, and quantity are required." };
+  }
+
+  const { data: requisition, error } = await supabase
+    .from("purchase_requisitions")
+    .insert({ school_id: me.school_id, purpose: input.purpose, status: "submitted", requested_by: me.id })
+    .select("id")
+    .single();
+  if (error) return { error: error.message };
+
+  const { error: itemError } = await supabase.from("purchase_requisition_items").insert({
+    requisition_id: requisition.id,
+    school_id: me.school_id,
+    item_description: input.item_description,
+    quantity: input.quantity,
+    estimated_unit_cost: input.estimated_unit_cost ?? null,
+  });
+  if (itemError) {
+    // Don't leave an itemless requisition behind claiming success -- roll the header back.
+    await supabase.from("purchase_requisitions").delete().eq("id", requisition.id);
+    return { error: `Could not save the request item: ${itemError.message}` };
+  }
+
+  // Best-effort: let whoever can approve procurement (owner/principal/deputy)
+  // know a medical supplies request is waiting. Never block the request on this.
+  await supabase.rpc("notify_users_with_permission", {
+    p_permission_key: "inventory.procurement.approve",
+    p_subject: "Medical supplies request needs approval",
+    p_body: `The nurse requested: ${input.item_description} (qty ${input.quantity}) — ${input.purpose}.`,
+    p_action_url: "/inventory/procurement",
+    p_category: "other",
+  });
+
+  revalidatePath("/health", "layout");
+  return { success: true };
+}
+
 export async function acceptTransferAction(transferId: string, quantityConfirmed: number): Promise<ActionResult> {
   const supabase = await createClient();
   const { error } = await supabase.rpc("accept_inventory_transfer", {
