@@ -116,23 +116,20 @@ export function MedicationSection({
                   ))}
                 </SelectContent>
               </Select>
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <Input placeholder="Medication name" value={form.medication_name} onChange={(e) => setForm({ ...form, medication_name: e.target.value })} />
-                <Input placeholder="Dosage (e.g. 5ml)" value={form.dosage} onChange={(e) => setForm({ ...form, dosage: e.target.value })} />
-              </div>
-              <Select value={form.route} onValueChange={(v) => setForm({ ...form, route: v })}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {ROUTES.map((r) => (
-                    <SelectItem key={r} value={r}>
-                      {r}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Select value={form.inventory_item_id} onValueChange={(v) => setForm({ ...form, inventory_item_id: v })}>
+              <Select
+                value={form.inventory_item_id}
+                onValueChange={(v) => {
+                  const picked = inventoryOptions.find((i) => i.id === v);
+                  setForm({
+                    ...form,
+                    inventory_item_id: v,
+                    // Auto-fill (and lock) the name from the stock item so what's recorded can
+                    // never drift from what's actually deducted. Switching back to "not tracked"
+                    // clears it so a real non-stock medication can be typed in.
+                    medication_name: picked ? picked.name : "",
+                  });
+                }}
+              >
                 <SelectTrigger>
                   <SelectValue placeholder="Deduct from medical inventory (optional)" />
                 </SelectTrigger>
@@ -141,6 +138,38 @@ export function MedicationSection({
                   {inventoryOptions.map((i) => (
                     <SelectItem key={i.id} value={i.id}>
                       {i.name} ({i.quantity} in stock)
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <Input
+                  placeholder="Medication name"
+                  value={form.medication_name}
+                  disabled={form.inventory_item_id !== "none"}
+                  onChange={(e) => setForm({ ...form, medication_name: e.target.value })}
+                />
+                <Input placeholder="Dosage (e.g. 5ml)" value={form.dosage} onChange={(e) => setForm({ ...form, dosage: e.target.value })} />
+              </div>
+              {form.inventory_item_id !== "none" && (
+                <p className="-mt-2 text-xs text-muted-foreground">Name is set from the selected stock item.</p>
+              )}
+              {form.inventory_item_id === "none" &&
+                form.medication_name.trim().length > 0 &&
+                inventoryOptions.some((i) => i.name.toLowerCase() === form.medication_name.trim().toLowerCase()) && (
+                  <p className="-mt-2 text-xs text-amber-600">
+                    &ldquo;{form.medication_name.trim()}&rdquo; is in your medical stock — select it above so this dose gets deducted from
+                    inventory, or leave as-is only if this dose truly isn&rsquo;t from stock (e.g. a parent-supplied medication).
+                  </p>
+                )}
+              <Select value={form.route} onValueChange={(v) => setForm({ ...form, route: v })}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {ROUTES.map((r) => (
+                    <SelectItem key={r} value={r}>
+                      {r}
                     </SelectItem>
                   ))}
                 </SelectContent>
