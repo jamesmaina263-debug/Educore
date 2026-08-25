@@ -237,7 +237,7 @@ export async function issueMedicalStock(itemId: string, quantity: number, reason
 // requisition's status change here. Receiving still happens at Main Store,
 // and reaches her only via the existing Transfer to Health / Accept flow.
 export async function requestMedicalSuppliesAction(input: {
-  items: { item_description: string; quantity: number; estimated_unit_cost?: number }[];
+  items: { item_description: string; quantity: number; estimated_unit_cost?: number; inventory_item_id?: string }[];
   purpose: string;
 }): Promise<ActionResult> {
   const supabase = await createClient();
@@ -263,6 +263,9 @@ export async function requestMedicalSuppliesAction(input: {
       item_description: i.item_description,
       quantity: i.quantity,
       estimated_unit_cost: i.estimated_unit_cost ?? null,
+      // Links the line to the medical supplies catalog when she picked one --
+      // that's what lets approve_requisition auto-resolve a supplier for it.
+      inventory_item_id: i.inventory_item_id ?? null,
     })),
   );
   if (itemError) {

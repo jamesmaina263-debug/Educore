@@ -237,6 +237,7 @@ export async function createRequisitionAction(formData: FormData): Promise<Actio
   const itemDescription = String(formData.get("item_description") ?? "").trim();
   const quantity = String(formData.get("quantity") ?? "");
   const estimatedCost = String(formData.get("estimated_unit_cost") ?? "") || null;
+  const inventoryItemId = String(formData.get("inventory_item_id") ?? "") || null;
   if (!purpose || !itemDescription || !quantity) return { error: "Purpose, item, and quantity are required." };
 
   const { data: requisition, error } = await supabase
@@ -247,12 +248,17 @@ export async function createRequisitionAction(formData: FormData): Promise<Actio
   if (error) return { error: error.message };
 
   if (requisition) {
+    // inventory_item_id links this line to the stock catalog (and so to a
+    // defined category) whenever a catalog item was picked -- left null for a
+    // genuinely custom/off-catalog request, which approve_requisition then
+    // has no purchase history to auto-resolve a supplier from.
     const { error: itemError } = await supabase.from("purchase_requisition_items").insert({
       requisition_id: requisition.id,
       school_id: schoolUser.school_id,
       item_description: itemDescription,
       quantity,
       estimated_unit_cost: estimatedCost,
+      inventory_item_id: inventoryItemId,
     });
     if (itemError) {
       // Don't leave an itemless requisition behind claiming success -- roll the header back.
@@ -276,13 +282,16 @@ export async function createRequisitionAction(formData: FormData): Promise<Actio
   return { success: true };
 }
 
+// Rejection only -- approving a requisition now goes through
+// approveRequisitionAction below, which auto-generates the PO in the same
+// step (approve_requisition RPC) instead of just flipping a status column.
 export async function decideRequisitionAction(formData: FormData): Promise<ActionResult> {
   const { supabase, schoolUser } = await currentSchoolUser();
   if (!schoolUser) return { error: "Could not resolve your account." };
 
   const requisitionId = String(formData.get("requisition_id") ?? "");
   const decision = String(formData.get("decision") ?? "");
-  if (!requisitionId || !["approved", "rejected"].includes(decision)) return { error: "Missing requisition or decision." };
+  if (!requisitionId || decision !== "rejected") return { error: "Missing requisition, or not a rejection." };
 
   const { data: requisition } = await supabase
     .from("purchase_requisitions")
@@ -292,7 +301,7 @@ export async function decideRequisitionAction(formData: FormData): Promise<Actio
 
   const { error } = await supabase
     .from("purchase_requisitions")
-    .update({ status: decision, approved_by: schoolUser.id, approved_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+    .update({ status: "rejected", approved_by: schoolUser.id, approved_at: new Date().toISOString(), updated_at: new Date().toISOString() })
     .eq("id", requisitionId);
   if (error) return { error: error.message };
   revalidatePath("/inventory", "layout");
@@ -314,17 +323,60 @@ export async function decideRequisitionAction(formData: FormData): Promise<Actio
 
     await supabase.rpc("notify_school_user", {
       p_recipient_id: requisition.requested_by,
-      p_subject: decision === "approved" ? "Requisition approved" : "Requisition rejected",
-      p_body:
-        decision === "approved"
-          ? `Your requisition for "${requisition.purpose}" was approved.`
-          : `Your requisition for "${requisition.purpose}" was not approved.`,
+      p_subject: "Requisition rejected",
+      p_body: `Your requisition for "${requisition.purpose}" was not approved.`,
       p_action_url: actionUrl,
       p_category: "other",
     });
   }
 
   return { success: true };
+}
+
+// Approves a requisition and auto-generates + sends the PO for exactly its
+// requested items, via the approve_requisition RPC. If the RPC can't resolve
+// a supplier (or cost) for an item, it raises and this surfaces that error to
+// the caller -- the UI then asks for a supplier and retries with it set.
+export async function approveRequisitionAction(formData: FormData): Promise<ActionResult> {
+  const { supabase } = await currentSchoolUser();
+
+  const requisitionId = String(formData.get("requisition_id") ?? "");
+  const supplierId = String(formData.get("supplier_id") ?? "") || null;
+  const unitCostOverride = String(formData.get("unit_cost_override") ?? "") || null;
+  if (!requisitionId) return { error: "Missing requisition." };
+
+  const { error } = await supabase.rpc("approve_requisition", {
+    p_requisition_id: requisitionId,
+    p_supplier_id: supplierId,
+    p_unit_cost_override: unitCostOverride,
+  });
+  if (error) return { error: error.message };
+
+  revalidatePath("/inventory", "layout");
+  return { success: true };
+}
+
+export interface RequisitionApprovalPreviewRow {
+  item_id: string;
+  item_description: string;
+  quantity: number;
+  resolved_supplier_id: string | null;
+  resolved_supplier_name: string | null;
+  resolved_unit_cost: number | null;
+  needs_supplier: boolean;
+  needs_cost: boolean;
+}
+
+// Read-only check the UI runs before showing a plain "Approve" button, so it
+// knows whether to ask for a supplier/cost up front instead of letting the
+// approve action fail first.
+export async function previewRequisitionApprovalAction(
+  requisitionId: string,
+): Promise<{ error: string } | { success: true; rows: RequisitionApprovalPreviewRow[] }> {
+  const { supabase } = await currentSchoolUser();
+  const { data, error } = await supabase.rpc("preview_requisition_approval", { p_requisition_id: requisitionId });
+  if (error) return { error: error.message };
+  return { success: true, rows: (data ?? []) as RequisitionApprovalPreviewRow[] };
 }
 
 export async function createPurchaseOrderAction(formData: FormData): Promise<ActionResult> {
