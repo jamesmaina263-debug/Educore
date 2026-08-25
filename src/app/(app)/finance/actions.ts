@@ -53,6 +53,38 @@ export async function createFeeStructure(input: {
   return { success: true };
 }
 
+// Flip a fee structure active/inactive. Inactive structures are invisible to invoice
+// generation (create_or_get_invoice_for_student / generate_invoices both filter on
+// is_active), so this is the on/off switch for "will this actually get picked up when
+// invoicing students" -- e.g. reviewing a drafted structure before it's allowed to invoice
+// real students, or retiring a superseded one without deleting its history.
+export async function setFeeStructureActiveAction(structureId: string, isActive: boolean): Promise<ActionResult> {
+  const supabase = await createClient();
+  const { error } = await supabase.from("fee_structures").update({ is_active: isActive, updated_at: new Date().toISOString() }).eq("id", structureId);
+  if (error) return { error: error.message };
+  revalidatePath("/finance", "layout");
+  return { success: true };
+}
+
+// Replace a fee structure's line items wholesale (delete + reinsert) -- used when reviewing
+// a drafted structure's cloned amounts before activating it, or correcting a live one.
+export async function updateFeeStructureItemsAction(
+  structureId: string,
+  items: { name: string; amount: number }[],
+): Promise<ActionResult> {
+  const supabase = await createClient();
+  const { error: deleteError } = await supabase.from("fee_items").delete().eq("fee_structure_id", structureId);
+  if (deleteError) return { error: deleteError.message };
+  if (items.length > 0) {
+    const { error: insertError } = await supabase
+      .from("fee_items")
+      .insert(items.map((i) => ({ fee_structure_id: structureId, name: i.name, amount: i.amount })));
+    if (insertError) return { error: insertError.message };
+  }
+  revalidatePath("/finance", "layout");
+  return { success: true };
+}
+
 export async function generateInvoicesAction(termId: string, classId: string | null): Promise<{ error: string } | { success: true; count: number }> {
   const supabase = await createClient();
   const { data, error } = await supabase.rpc("generate_invoices", { p_term_id: termId, p_class_id: classId });
