@@ -2,11 +2,12 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { addMedicalInventoryItem, issueMedicalStock, acceptTransferAction, rejectTransferAction, requestMedicalSuppliesAction } from "@/app/(app)/health/actions";
+import { addMedicalInventoryItem, issueMedicalStock, acceptTransferAction, rejectTransferAction, requestMedicalSuppliesAction, requestHealthStockAdjustmentAction } from "@/app/(app)/health/actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { StatusBadge } from "@/components/status-badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 
 export interface MedicalItemRow {
   id: string;
@@ -33,6 +34,17 @@ export interface MyRequisitionRow {
   items: { item_description: string; quantity: number }[];
 }
 
+export interface MyStockRequestRow {
+  id: string;
+  item_name: string;
+  unit: string;
+  quantity: number;
+  reason: string;
+  status: "pending" | "approved" | "rejected";
+  created_at: string;
+  rejection_reason: string | null;
+}
+
 export function InventorySection({
   items,
   medicalCategoryId,
@@ -40,6 +52,7 @@ export function InventorySection({
   canWrite,
   canRequestSupplies,
   myRequisitions,
+  myStockRequests,
 }: {
   items: MedicalItemRow[];
   medicalCategoryId: string | null;
@@ -47,6 +60,7 @@ export function InventorySection({
   canWrite: boolean;
   canRequestSupplies: boolean;
   myRequisitions: MyRequisitionRow[];
+  myStockRequests: MyStockRequestRow[];
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -62,6 +76,12 @@ export function InventorySection({
   const [requestError, setRequestError] = useState<string | null>(null);
   const [requestPurpose, setRequestPurpose] = useState("");
   const [requestLines, setRequestLines] = useState([{ item_description: "", quantity: "", estimated_unit_cost: "" }]);
+  const [stockRequestOpen, setStockRequestOpen] = useState(false);
+  const [stockRequestPending, setStockRequestPending] = useState(false);
+  const [stockRequestError, setStockRequestError] = useState<string | null>(null);
+  const [stockRequestItemId, setStockRequestItemId] = useState("");
+  const [stockRequestQty, setStockRequestQty] = useState("");
+  const [stockRequestReason, setStockRequestReason] = useState("");
 
   // Date.now() here only sets a display threshold (expiring-soon cutoff), recomputed once per
   // mount via the empty deps array. The React-compiler-approved fix (moving this into a
@@ -170,6 +190,25 @@ export function InventorySection({
     router.refresh();
   }
 
+  async function submitStockRequest() {
+    const qty = Number(stockRequestQty);
+    if (!stockRequestItemId || !qty || qty <= 0 || !stockRequestReason.trim()) return;
+    setStockRequestPending(true);
+    setStockRequestError(null);
+    const result = await requestHealthStockAdjustmentAction({
+      item_id: stockRequestItemId,
+      quantity: qty,
+      reason: stockRequestReason,
+    });
+    setStockRequestPending(false);
+    if ("error" in result) return setStockRequestError(result.error);
+    setStockRequestOpen(false);
+    setStockRequestItemId("");
+    setStockRequestQty("");
+    setStockRequestReason("");
+    router.refresh();
+  }
+
   const requisitionStatusTone: Record<MyRequisitionRow["status"], "success" | "warning" | "danger"> = {
     draft: "warning",
     submitted: "warning",
@@ -182,6 +221,16 @@ export function InventorySection({
     submitted: "Pending approval",
     approved: "Approved",
     converted: "Ordered from supplier",
+    rejected: "Rejected",
+  };
+  const stockRequestStatusTone: Record<MyStockRequestRow["status"], "success" | "warning" | "danger"> = {
+    pending: "warning",
+    approved: "success",
+    rejected: "danger",
+  };
+  const stockRequestStatusLabel: Record<MyStockRequestRow["status"], string> = {
+    pending: "Pending approval",
+    approved: "Approved",
     rejected: "Rejected",
   };
 
@@ -339,6 +388,84 @@ export function InventorySection({
               </div>
             ))}
             {myRequisitions.length === 0 && <p className="px-4 py-6 text-center text-sm text-muted-foreground">No requests yet.</p>}
+          </div>
+        </div>
+      )}
+
+      {canWrite && (
+        <div className="panel">
+          <header className="flex items-center justify-between border-b border-border px-4 py-2.5">
+            <p className="text-sm font-medium">Add stock manually</p>
+            <Dialog
+              open={stockRequestOpen}
+              onOpenChange={(next) => {
+                setStockRequestOpen(next);
+                if (!next) {
+                  setStockRequestItemId("");
+                  setStockRequestQty("");
+                  setStockRequestReason("");
+                  setStockRequestError(null);
+                }
+              }}
+            >
+              <DialogTrigger asChild>
+                <Button size="sm" variant="outline">
+                  Request addition
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Request manual stock addition</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-3">
+                  <p className="text-xs text-muted-foreground">
+                    For stock you&apos;re physically holding that didn&apos;t come through a Main Store
+                    transfer (e.g. a donation). Goes to whoever can approve procurement
+                    (owner/principal/deputy) before it&apos;s added to your count.
+                  </p>
+                  <Select value={stockRequestItemId} onValueChange={setStockRequestItemId}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select item" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {items.map((i) => (
+                        <SelectItem key={i.id} value={i.id}>
+                          {i.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Input type="number" min={1} placeholder="Quantity" value={stockRequestQty} onChange={(e) => setStockRequestQty(e.target.value)} />
+                  <Input placeholder="Reason (e.g. donation from...)" value={stockRequestReason} onChange={(e) => setStockRequestReason(e.target.value)} />
+                  {stockRequestError && <p className="text-sm text-danger">{stockRequestError}</p>}
+                </div>
+                <DialogFooter>
+                  <Button
+                    onClick={submitStockRequest}
+                    disabled={stockRequestPending || !stockRequestItemId || !stockRequestQty || !stockRequestReason.trim()}
+                  >
+                    {stockRequestPending ? "Submitting…" : "Submit request"}
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+          </header>
+          <div className="divide-y divide-border">
+            {myStockRequests.map((r) => (
+              <div key={r.id} className="flex flex-wrap items-center justify-between gap-2 px-4 py-3">
+                <div>
+                  <p className="text-sm font-medium">
+                    {r.item_name} — {r.quantity} {r.unit}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {r.reason} · {new Date(r.created_at).toLocaleDateString()}
+                    {r.status === "rejected" && r.rejection_reason ? ` · ${r.rejection_reason}` : ""}
+                  </p>
+                </div>
+                <StatusBadge tone={stockRequestStatusTone[r.status]} label={stockRequestStatusLabel[r.status]} />
+              </div>
+            ))}
+            {myStockRequests.length === 0 && <p className="px-4 py-6 text-center text-sm text-muted-foreground">No requests yet.</p>}
           </div>
         </div>
       )}
