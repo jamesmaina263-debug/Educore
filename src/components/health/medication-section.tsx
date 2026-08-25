@@ -29,7 +29,19 @@ export interface MedicalInventoryOption {
   quantity: number;
 }
 
-const ROUTES = ["Oral", "Topical", "Inhaled", "Injection", "Other"];
+// Values must match medication_administrations_route_check in the DB exactly
+// (lowercase) -- labels are what the nurse sees.
+const ROUTES = [
+  { value: "oral", label: "Oral" },
+  { value: "topical", label: "Topical" },
+  { value: "inhaled", label: "Inhaled" },
+  { value: "injection", label: "Injection" },
+  { value: "other", label: "Other" },
+];
+
+function routeLabel(value: string): string {
+  return ROUTES.find((r) => r.value === value)?.label ?? value;
+}
 
 export function MedicationSection({
   administrations,
@@ -51,7 +63,7 @@ export function MedicationSection({
     student_id: "",
     medication_name: "",
     dosage: "",
-    route: ROUTES[0],
+    route: ROUTES[0].value,
     inventory_item_id: "none",
     notes: "",
   });
@@ -78,14 +90,14 @@ export function MedicationSection({
       await queueMutation("health", "administerMedication", input);
       setPending(false);
       setOpen(false);
-      setForm({ student_id: "", medication_name: "", dosage: "", route: ROUTES[0], inventory_item_id: "none", notes: "" });
+      setForm({ student_id: "", medication_name: "", dosage: "", route: ROUTES[0].value, inventory_item_id: "none", notes: "" });
       return;
     }
     const result = await administerMedication(input);
     setPending(false);
     if ("error" in result) return setError(result.error);
     setOpen(false);
-    setForm({ student_id: "", medication_name: "", dosage: "", route: ROUTES[0], inventory_item_id: "none", notes: "" });
+    setForm({ student_id: "", medication_name: "", dosage: "", route: ROUTES[0].value, inventory_item_id: "none", notes: "" });
     router.refresh();
   }
 
@@ -168,8 +180,8 @@ export function MedicationSection({
                 </SelectTrigger>
                 <SelectContent>
                   {ROUTES.map((r) => (
-                    <SelectItem key={r} value={r}>
-                      {r}
+                    <SelectItem key={r.value} value={r.value}>
+                      {r.label}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -204,7 +216,7 @@ export function MedicationSection({
                 <td>{m.student_name}</td>
                 <td>{m.medication_name}</td>
                 <td>{m.dosage}</td>
-                <td>{m.route}</td>
+                <td>{routeLabel(m.route)}</td>
                 <td>{new Date(m.administered_at).toLocaleString()}</td>
                 <td className="text-muted-foreground">{m.administered_by_name ?? "—"}</td>
               </tr>
