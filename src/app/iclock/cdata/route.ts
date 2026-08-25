@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { parseAttlogBody, parseOperlogUserBody, statusToEventType, buildDeterministicEventId, parseDeviceTime } from "@/lib/biometric/zkteco";
+import { notifyGuardianOfGateEvent } from "@/lib/biometric/notifyGuardian";
 
 // ZKTeco (and most ADMS-protocol) attendance terminals are hardcoded to
 // call exactly this path -- /iclock/cdata -- relative to whatever
@@ -22,10 +23,14 @@ import { parseAttlogBody, parseOperlogUserBody, statusToEventType, buildDetermin
 // attendance-write logic on purpose -- see this session's design notes:
 // coupling the proven bearer-token path to this unproven push-protocol
 // path risked regressing something already deployed and live-tested.
-// Deliberately does NOT yet send the guardian SMS biometric-verify sends
-// on a student check-in -- that's a real gap, kept out of this first pass
-// so the reviewable diff stays focused on the part that can actually be
-// reasoned about without a real device's captured payload in hand.
+// Guardian SMS on a student check-in is now wired in too, via
+// notifyGuardianOfGateEvent -- a deliberate duplicate of
+// biometric-verify's own notification block (Deno Edge Function vs. this
+// Vercel Route Handler can't share a module without a build-tooling
+// change neither side has). Still unverified against real hardware: SMS
+// send success/failure hasn't been observed with a real device push,
+// only reasoned about from the same logic that's already live-tested on
+// the kiosk path.
 
 export const dynamic = "force-dynamic";
 
@@ -367,16 +372,38 @@ async function processAttendanceRecord(
     }
   }
 
-  // notification_status='skipped' is the same value biometric-verify uses
-  // when a student genuinely has no guardian phone on file -- there's no
-  // separate status for "this adapter doesn't send SMS yet" (adding one
-  // would mean a schema change + updating biometric-verify's own status
-  // set too), so an admin reviewing biometric_events can't currently tell
-  // these two "skipped" cases apart. Worth a real status value if/once
-  // this adapter's SMS gap gets closed.
+  // Guardian notification: students only, same as biometric-verify.
+  // Wrapped separately from the attendance write above -- attendance has
+  // already been recorded by this point, and a bug in the notify path
+  // (a bad template, an SMS provider outage, etc.) should not turn an
+  // already-successful attendance record into a failed ATTLOG record.
+  let notificationStatus: string = "not_applicable";
+  let notificationLogId: string | null = null;
+  if (profile.person_type === "student") {
+    try {
+      const result = await notifyGuardianOfGateEvent(admin, {
+        schoolId: device.school_id,
+        studentId: profile.person_id,
+        eventType,
+        occurredAt,
+        sourceModule: "biometric",
+      });
+      notificationStatus = result.status;
+      notificationLogId = result.logId;
+    } catch (err) {
+      console.error(`[iclock/cdata] guardian notification failed for SN=${serialNumber} PIN=${record.pin}:`, err);
+      notificationStatus = "failed";
+    }
+  }
+
   await admin
     .from("biometric_events")
-    .update({ attendance_table: attendanceTable, attendance_id: attendanceId, notification_status: "skipped" })
+    .update({
+      attendance_table: attendanceTable,
+      attendance_id: attendanceId,
+      notification_status: notificationStatus,
+      notification_log_id: notificationLogId,
+    })
     .eq("id", biometricEventId);
 
   return { ok: true };
