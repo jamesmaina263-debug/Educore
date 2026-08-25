@@ -49,6 +49,7 @@
 import { createClient, type SupabaseClient } from "jsr:@supabase/supabase-js@2";
 import { buildCorsHeaders } from "../_shared/cors.ts";
 import { getSmsProvider } from "../_shared/sms/index.ts";
+import { timingSafeEqual } from "../_shared/timingSafeEqual.ts";
 
 type EventType = "check_in" | "check_out";
 type VerificationResult =
@@ -129,7 +130,7 @@ async function authenticateDevice(
   if (!device) return { error: "Unknown device.", status: 401 };
   if (device.status !== "active") return { error: "This device has been deactivated.", status: 401 };
   const secretHash = await sha256Hex(secret);
-  if (!device.api_key_hash || secretHash !== device.api_key_hash) return { error: "Invalid device key.", status: 401 };
+  if (!device.api_key_hash || !timingSafeEqual(secretHash, device.api_key_hash)) return { error: "Invalid device key.", status: 401 };
 
   await supabase.from("biometric_devices").update({ last_seen_at: new Date().toISOString() }).eq("id", device.id);
   return { device: { id: device.id, school_id: device.school_id, name: device.name, status: device.status } };

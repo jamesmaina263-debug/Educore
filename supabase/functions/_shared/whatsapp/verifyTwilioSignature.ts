@@ -9,6 +9,8 @@
 //
 // Algorithm: HMAC-SHA1(authToken, url + sorted(key+value for every POST param)), base64-encoded,
 // compared against the X-Twilio-Signature header.
+import { timingSafeEqual } from "../timingSafeEqual.ts";
+
 export async function verifyTwilioSignature(
   url: string,
   params: Record<string, string>,
@@ -42,15 +44,4 @@ function base64Encode(bytes: Uint8Array): string {
   return btoa(binary);
 }
 
-// Plain === on the computed vs. provided signature would leak timing information about how many
-// leading characters matched -- irrelevant against Twilio itself, but this function's contract is
-// "safely compare two signatures," not "safely compare two signatures, except when the input
-// happens to come from Twilio," so it's constant-time regardless of caller.
-function timingSafeEqual(a: string, b: string): boolean {
-  if (a.length !== b.length) return false;
-  let result = 0;
-  for (let i = 0; i < a.length; i++) {
-    result |= a.charCodeAt(i) ^ b.charCodeAt(i);
-  }
-  return result === 0;
-}
+
