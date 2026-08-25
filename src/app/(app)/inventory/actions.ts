@@ -503,3 +503,41 @@ export async function markSupplierInvoicePaidAction(formData: FormData): Promise
   return { success: true };
 }
 
+export async function decideHealthStockRequestAction(formData: FormData): Promise<ActionResult> {
+  const { supabase, schoolUser } = await currentSchoolUser();
+  if (!schoolUser) return { error: "Could not resolve your account." };
+
+  const requestId = String(formData.get("request_id") ?? "");
+  const decision = String(formData.get("decision") ?? "");
+  if (!requestId || !["approved", "rejected"].includes(decision)) return { error: "Missing request or decision." };
+
+  const { data: request } = await supabase
+    .from("health_stock_adjustment_requests")
+    .select("requested_by, reason")
+    .eq("id", requestId)
+    .maybeSingle();
+
+  const { error } =
+    decision === "approved"
+      ? await supabase.rpc("approve_health_stock_adjustment", { p_request_id: requestId })
+      : await supabase.rpc("reject_health_stock_adjustment", { p_request_id: requestId, p_reason: null });
+  if (error) return { error: error.message };
+  revalidatePath("/inventory", "layout");
+  revalidatePath("/health", "layout");
+
+  // Best-effort: tell the Nurse the outcome. Never block the decision on this.
+  if (request?.requested_by) {
+    await supabase.rpc("notify_school_user", {
+      p_recipient_id: request.requested_by,
+      p_subject: decision === "approved" ? "Manual stock addition approved" : "Manual stock addition rejected",
+      p_body:
+        decision === "approved"
+          ? `Your manual stock request ("${request.reason}") was approved and added to your stock.`
+          : `Your manual stock request ("${request.reason}") was not approved.`,
+      p_action_url: "/health/inventory",
+      p_category: "other",
+    });
+  }
+
+  return { success: true };
+}

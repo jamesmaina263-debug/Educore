@@ -8,6 +8,7 @@ import type {
   RequisitionRow,
   PurchaseOrderRow,
   SupplierInvoiceRow,
+  HealthStockRequestRow,
 } from "@/components/inventory/procurement-section";
 
 export interface InventoryContext {
@@ -27,6 +28,7 @@ export interface InventoryContext {
   requisitions: RequisitionRow[];
   purchaseOrders: PurchaseOrderRow[];
   invoices: SupplierInvoiceRow[];
+  healthStockRequests: HealthStockRequestRow[];
 }
 
 export async function loadInventoryContext(): Promise<InventoryContext> {
@@ -62,6 +64,7 @@ export async function loadInventoryContext(): Promise<InventoryContext> {
       requisitions: [],
       purchaseOrders: [],
       invoices: [],
+      healthStockRequests: [],
     };
   }
 
@@ -76,6 +79,7 @@ export async function loadInventoryContext(): Promise<InventoryContext> {
     { data: poRows },
     { data: invoiceRows },
     { data: transferRows },
+    { data: healthStockRequestRows },
   ] = await Promise.all([
     supabase.from("inventory_items").select("*, inventory_categories(name)").order("name"),
     supabase.from("inventory_categories").select("*").order("name"),
@@ -103,6 +107,11 @@ export async function loadInventoryContext(): Promise<InventoryContext> {
       .from("inventory_transfers")
       .select("id, item_id, quantity_requested, quantity_confirmed, status, initiated_at, accepted_at, rejected_at, rejection_reason, inventory_items(name, unit)")
       .order("initiated_at", { ascending: false })
+      .limit(50),
+    supabase
+      .from("health_stock_adjustment_requests")
+      .select("id, item_id, quantity, reason, status, created_at, reviewed_at, rejection_reason, inventory_items(name, unit), requested_by_user:school_users!health_stock_adjustment_requests_requested_by_fkey(full_name)")
+      .order("created_at", { ascending: false })
       .limit(50),
   ]);
 
@@ -199,5 +208,22 @@ export async function loadInventoryContext(): Promise<InventoryContext> {
     };
   });
 
-  return { ...base, items, categories, movements, transfers, assets, maintenance, suppliers, requisitions, purchaseOrders, invoices };
+  const healthStockRequests: HealthStockRequestRow[] = (healthStockRequestRows ?? []).map((r) => {
+    const item = r.inventory_items as unknown as { name: string; unit: string } | null;
+    const requester = r.requested_by_user as unknown as { full_name: string } | null;
+    return {
+      id: r.id,
+      item_name: item?.name ?? "Unknown",
+      unit: item?.unit ?? "",
+      quantity: r.quantity,
+      reason: r.reason,
+      status: r.status as "pending" | "approved" | "rejected",
+      requested_by_name: requester?.full_name ?? "Unknown",
+      created_at: r.created_at,
+      reviewed_at: r.reviewed_at,
+      rejection_reason: r.rejection_reason,
+    };
+  });
+
+  return { ...base, items, categories, movements, transfers, assets, maintenance, suppliers, requisitions, purchaseOrders, invoices, healthStockRequests };
 }

@@ -337,3 +337,29 @@ export async function sendHealthAlertAction(input: {
   revalidatePath("/health", "layout");
   return { success: true, sent: data.sent };
 }
+export async function requestHealthStockAdjustmentAction(input: {
+  item_id: string;
+  quantity: number;
+  reason: string;
+}): Promise<ActionResult> {
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("request_health_stock_adjustment", {
+    p_item_id: input.item_id,
+    p_quantity: input.quantity,
+    p_reason: input.reason,
+  });
+  if (error) return { error: error.message };
+
+  // Best-effort: let whoever can approve procurement (owner/principal/deputy)
+  // know a manual stock request is waiting. Never block the request on this.
+  await supabase.rpc("notify_users_with_permission", {
+    p_permission_key: "inventory.procurement.approve",
+    p_subject: "Manual stock addition needs approval",
+    p_body: `The nurse requested to add ${input.quantity} units — ${input.reason}.`,
+    p_action_url: "/inventory/procurement",
+    p_category: "other",
+  });
+
+  revalidatePath("/health", "layout");
+  return { success: true };
+}

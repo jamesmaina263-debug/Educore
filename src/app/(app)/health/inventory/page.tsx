@@ -22,6 +22,7 @@ export default async function HealthInventoryPage() {
         canWrite={ctx.canWrite}
         canRequestSupplies={ctx.canRequestSupplies}
         myRequisitions={ctx.myRequisitions}
+        myStockRequests={ctx.myStockRequests}
       />
     </ModulePageShell>
   );

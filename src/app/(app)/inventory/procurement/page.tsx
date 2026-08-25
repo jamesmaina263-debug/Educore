@@ -22,6 +22,7 @@ export default async function InventoryProcurementPage() {
         items={ctx.items}
         canWrite={ctx.canWrite}
         canApprove={ctx.canApprove}
+        healthStockRequests={ctx.healthStockRequests}
       />
     </ModulePageShell>
   );

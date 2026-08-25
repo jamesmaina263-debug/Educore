@@ -24,6 +24,7 @@ import {
   createSupplierAction,
   createSupplierInvoiceAction,
   decideRequisitionAction,
+  decideHealthStockRequestAction,
   markSupplierInvoicePaidAction,
   receiveGoodsAction,
   requestAssetMaintenanceAction,
@@ -64,6 +65,18 @@ export interface RequisitionRow {
   created_at: string;
   items: { item_description: string; quantity: number }[];
 }
+export interface HealthStockRequestRow {
+  id: string;
+  item_name: string;
+  unit: string;
+  quantity: number;
+  reason: string;
+  status: "pending" | "approved" | "rejected";
+  requested_by_name: string;
+  created_at: string;
+  reviewed_at: string | null;
+  rejection_reason: string | null;
+}
 export interface PurchaseOrderRow {
   id: string;
   po_number: string;
@@ -93,6 +106,11 @@ const REQ_STATUS_TONE: Record<RequisitionRow["status"], "neutral" | "warning" | 
   approved: "success",
   rejected: "danger",
   converted: "success",
+};
+const HEALTH_STOCK_REQUEST_STATUS_TONE: Record<HealthStockRequestRow["status"], "warning" | "success" | "danger"> = {
+  pending: "warning",
+  approved: "success",
+  rejected: "danger",
 };
 const PO_STATUS_TONE: Record<PurchaseOrderRow["status"], "neutral" | "warning" | "success" | "info" | "danger"> = {
   draft: "neutral",
@@ -451,6 +469,7 @@ export function ProcurementPanel({
   items,
   canWrite,
   canApprove,
+  healthStockRequests,
 }: {
   requisitions: RequisitionRow[];
   purchaseOrders: PurchaseOrderRow[];
@@ -458,6 +477,7 @@ export function ProcurementPanel({
   items: ItemRow[];
   canWrite: boolean;
   canApprove: boolean;
+  healthStockRequests: HealthStockRequestRow[];
 }) {
   const { isPending, error, run } = useAction();
   const [reqOpen, setReqOpen] = useState(false);
@@ -645,6 +665,64 @@ export function ProcurementPanel({
                             </form>
                             <form action={(fd) => run(decideRequisitionAction, fd)}>
                               <input type="hidden" name="requisition_id" value={r.id} />
+                              <input type="hidden" name="decision" value="rejected" />
+                              <Button type="submit" size="sm" variant="outline" disabled={isPending}>Reject</Button>
+                            </form>
+                          </div>
+                        )}
+                      </td>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      <div className="panel">
+        <header className="flex items-center justify-between border-b border-border px-4 py-2.5">
+          <h2 className="text-[0.8125rem] font-semibold">Health: manual stock addition requests</h2>
+          <span className="text-[0.6875rem] text-muted-foreground">{healthStockRequests.length}</span>
+        </header>
+        {healthStockRequests.length === 0 ? (
+          <p className="p-10 text-center text-sm text-muted-foreground">No requests yet.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="table-dense w-full">
+              <thead className="bg-muted/70">
+                <tr>
+                  <th>Item</th>
+                  <th>Quantity</th>
+                  <th>Reason</th>
+                  <th>Requested by</th>
+                  <th>Status</th>
+                  {canApprove && <th></th>}
+                </tr>
+              </thead>
+              <tbody>
+                {healthStockRequests.map((r) => (
+                  <tr key={r.id}>
+                    <td className="font-medium">{r.item_name}</td>
+                    <td className="text-muted-foreground">
+                      {r.quantity} {r.unit}
+                    </td>
+                    <td className="text-muted-foreground">{r.reason}</td>
+                    <td className="text-muted-foreground">{r.requested_by_name}</td>
+                    <td>
+                      <StatusBadge tone={HEALTH_STOCK_REQUEST_STATUS_TONE[r.status]} label={r.status} />
+                    </td>
+                    {canApprove && (
+                      <td>
+                        {r.status === "pending" && (
+                          <div className="flex gap-2">
+                            <form action={(fd) => run(decideHealthStockRequestAction, fd)}>
+                              <input type="hidden" name="request_id" value={r.id} />
+                              <input type="hidden" name="decision" value="approved" />
+                              <Button type="submit" size="sm" variant="outline" disabled={isPending}>Approve</Button>
+                            </form>
+                            <form action={(fd) => run(decideHealthStockRequestAction, fd)}>
+                              <input type="hidden" name="request_id" value={r.id} />
                               <input type="hidden" name="decision" value="rejected" />
                               <Button type="submit" size="sm" variant="outline" disabled={isPending}>Reject</Button>
                             </form>

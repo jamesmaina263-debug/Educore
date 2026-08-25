@@ -6,7 +6,7 @@ import type { SickBayVisitRow } from "@/components/health/sick-bay-section";
 import type { MedicationRow, MedicalInventoryOption } from "@/components/health/medication-section";
 import type { ReferralRow } from "@/components/health/referrals-section";
 import type { EmergencyRow } from "@/components/health/emergencies-section";
-import type { MedicalItemRow, PendingTransferRow, MyRequisitionRow } from "@/components/health/inventory-section";
+import type { MedicalItemRow, PendingTransferRow, MyRequisitionRow, MyStockRequestRow } from "@/components/health/inventory-section";
 import type { HealthReportsData } from "@/components/health/reports-section";
 import type { StudentOption } from "@/components/health/student-picker";
 
@@ -28,6 +28,7 @@ export interface HealthContext {
   pendingTransfers: PendingTransferRow[];
   canRequestSupplies: boolean;
   myRequisitions: MyRequisitionRow[];
+  myStockRequests: MyStockRequestRow[];
   sickBayTableRows: SickBayVisitRow[];
   medicationTableRows: MedicationRow[];
   referralTableRows: ReferralRow[];
@@ -76,6 +77,7 @@ export async function loadHealthContext(): Promise<HealthContext> {
       medicalCategoryId: null,
       pendingTransfers: [],
       myRequisitions: [],
+      myStockRequests: [],
       sickBayTableRows: [],
       medicationTableRows: [],
       referralTableRows: [],
@@ -196,6 +198,29 @@ export async function loadHealthContext(): Promise<HealthContext> {
       return { id: t.id, item_name: item?.name ?? "Unknown", unit: item?.unit ?? "", quantity_requested: t.quantity_requested, initiated_at: t.initiated_at };
     });
 
+  const { data: myStockRequestRows } = medicalCategory
+    ? await supabase
+        .from("health_stock_adjustment_requests")
+        .select("id, item_id, quantity, reason, status, created_at, rejection_reason, inventory_items(name, unit)")
+        .eq("requested_by", myId ?? "")
+        .order("created_at", { ascending: false })
+        .limit(20)
+    : { data: [] };
+
+  const myStockRequests: MyStockRequestRow[] = (myStockRequestRows ?? []).map((r) => {
+    const item = r.inventory_items as unknown as { name: string; unit: string } | null;
+    return {
+      id: r.id,
+      item_name: item?.name ?? "Unknown",
+      unit: item?.unit ?? "",
+      quantity: r.quantity,
+      reason: r.reason,
+      status: r.status as "pending" | "approved" | "rejected",
+      created_at: r.created_at,
+      rejection_reason: r.rejection_reason,
+    };
+  });
+
   const sickBayTableRows: SickBayVisitRow[] = (sickBayRows ?? []).map((v) => ({
     id: v.id,
     student_id: v.student_id,
@@ -313,6 +338,7 @@ export async function loadHealthContext(): Promise<HealthContext> {
     medicalCategoryId: medicalCategory?.id ?? null,
     pendingTransfers,
     myRequisitions,
+    myStockRequests,
     sickBayTableRows,
     medicationTableRows,
     referralTableRows,
