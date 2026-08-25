@@ -75,6 +75,7 @@ export function InventorySection({
   const [reorderLevel, setReorderLevel] = useState("");
   const [location, setLocation] = useState("");
   const [categoryId, setCategoryId] = useState("");
+  const [openingQuantity, setOpeningQuantity] = useState("");
 
   const [categoryOpen, setCategoryOpen] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState("");
@@ -95,6 +96,7 @@ export function InventorySection({
     const result = await createInventoryItemAction({
       name: itemName,
       unit,
+      quantity: openingQuantity ? Number(openingQuantity) : undefined,
       reorder_level: reorderLevel ? Number(reorderLevel) : undefined,
       location,
       category_id: categoryId || undefined,
@@ -104,6 +106,7 @@ export function InventorySection({
     setItemOpen(false);
     setItemName("");
     setUnit("pieces");
+    setOpeningQuantity("");
     setReorderLevel("");
     setLocation("");
     setCategoryId("");
@@ -216,11 +219,15 @@ export function InventorySection({
                     <Input value={unit} onChange={(e) => setUnit(e.target.value)} placeholder="pieces, sets, boxes…" />
                   </div>
                   <div className="space-y-1.5">
-                    <Label>Reorder level (optional)</Label>
-                    <Input type="number" value={reorderLevel} onChange={(e) => setReorderLevel(e.target.value)} />
+                    <Label>Starting quantity (optional)</Label>
+                    <Input type="number" min={0} value={openingQuantity} onChange={(e) => setOpeningQuantity(e.target.value)} placeholder="0" />
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label>Reorder level (optional)</Label>
+                    <Input type="number" value={reorderLevel} onChange={(e) => setReorderLevel(e.target.value)} />
+                  </div>
                   <div className="space-y-1.5">
                     <Label>Category (optional)</Label>
                     <Select value={categoryId} onValueChange={setCategoryId}>
@@ -236,12 +243,12 @@ export function InventorySection({
                       </SelectContent>
                     </Select>
                   </div>
-                  <div className="space-y-1.5">
-                    <Label>Location</Label>
-                    <Input value={location} onChange={(e) => setLocation(e.target.value)} />
-                  </div>
                 </div>
-                <p className="text-xs text-muted-foreground">New items start at 0 — record a stock-in movement to add quantity.</p>
+                <div className="space-y-1.5">
+                  <Label>Location</Label>
+                  <Input value={location} onChange={(e) => setLocation(e.target.value)} />
+                </div>
+                <p className="text-xs text-muted-foreground">Leave starting quantity blank for 0 — you can always record a stock movement later to adjust it.</p>
               </div>
               <DialogFooter>
                 <Button onClick={handleCreateItem} disabled={pending || !itemName}>

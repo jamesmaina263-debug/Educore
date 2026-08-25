@@ -9,26 +9,20 @@ export async function createInventoryItemAction(input: {
   name: string;
   description?: string;
   unit: string;
+  quantity?: number;
   reorder_level?: number;
   location?: string;
   category_id?: string;
 }): Promise<ActionResult> {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  const { data: schoolUser } = await supabase.from("school_users").select("school_id").eq("auth_user_id", user?.id ?? "").maybeSingle();
-  if (!schoolUser) return { error: "No school context found" };
-
-  const { error } = await supabase.from("inventory_items").insert({
-    school_id: schoolUser.school_id,
-    name: input.name,
-    description: input.description || null,
-    unit: input.unit || "pieces",
-    quantity: 0,
-    reorder_level: input.reorder_level ?? null,
-    location: input.location || null,
-    category_id: input.category_id || null,
+  const { error } = await supabase.rpc("create_inventory_item", {
+    p_name: input.name,
+    p_unit: input.unit,
+    p_quantity: input.quantity ?? 0,
+    p_description: input.description || null,
+    p_reorder_level: input.reorder_level ?? null,
+    p_location: input.location || null,
+    p_category_id: input.category_id || null,
   });
   if (error) return { error: error.message };
   revalidatePath("/inventory", "layout");
