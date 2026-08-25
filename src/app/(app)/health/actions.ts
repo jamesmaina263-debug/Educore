@@ -237,16 +237,16 @@ export async function issueMedicalStock(itemId: string, quantity: number, reason
 // requisition's status change here. Receiving still happens at Main Store,
 // and reaches her only via the existing Transfer to Health / Accept flow.
 export async function requestMedicalSuppliesAction(input: {
-  items: { item_description: string; quantity: number; estimated_unit_cost?: number; inventory_item_id?: string }[];
+  items: { item_description: string; quantity: number; estimated_unit_cost?: number; inventory_item_id: string }[];
   purpose: string;
 }): Promise<ActionResult> {
   const supabase = await createClient();
   const me = await currentActor(supabase);
   if (!me) return { error: "Could not resolve your account." };
 
-  const items = input.items.filter((i) => i.item_description.trim() && i.quantity > 0);
+  const items = input.items.filter((i) => i.inventory_item_id && i.item_description.trim() && i.quantity > 0);
   if (!input.purpose.trim() || items.length === 0) {
-    return { error: "Purpose and at least one item with a quantity are required." };
+    return { error: "Purpose and at least one catalog item with a quantity are required." };
   }
 
   const { data: requisition, error } = await supabase
