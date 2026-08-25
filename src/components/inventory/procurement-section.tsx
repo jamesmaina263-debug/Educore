@@ -580,8 +580,7 @@ export function ProcurementPanel({
   const [poItemMode, setPoItemMode] = useState<string>("__custom__");
   const [receiveItemId, setReceiveItemId] = useState<string | null>(null);
   const [customItemMatch, setCustomItemMatch] = useState<string | null>(null);
-  const [reqItemMode, setReqItemMode] = useState<string>("__custom__");
-  const [reqCustomItemMatch, setReqCustomItemMatch] = useState<string | null>(null);
+  const [reqItemMode, setReqItemMode] = useState<string>("");
 
   return (
     <div className="flex flex-col gap-4">
@@ -592,10 +591,7 @@ export function ProcurementPanel({
             open={reqOpen}
             onOpenChange={(o) => {
               setReqOpen(o);
-              if (!o) {
-                setReqItemMode("__custom__");
-                setReqCustomItemMatch(null);
-              }
+              if (!o) setReqItemMode("");
             }}
           >
             <DialogTrigger asChild>
@@ -612,38 +608,28 @@ export function ProcurementPanel({
                 </div>
                 <div className="flex flex-col gap-1.5">
                   <Label>Item</Label>
-                  <Select value={reqItemMode} onValueChange={setReqItemMode}>
+                  <Select value={reqItemMode} onValueChange={setReqItemMode} required>
                     <SelectTrigger>
-                      <SelectValue placeholder="Select a stock item, or enter a custom item below" />
+                      <SelectValue placeholder="Select a stock item" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="__custom__">Custom item (not in stock catalog)</SelectItem>
                       {items.map((i) => (
                         <SelectItem key={i.id} value={i.id}>{i.name}{i.category_name ? ` (${i.category_name})` : ""}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </div>
-                {reqItemMode !== "__custom__" && <input type="hidden" name="inventory_item_id" value={reqItemMode} />}
+                {reqItemMode && <input type="hidden" name="inventory_item_id" value={reqItemMode} />}
                 <div className="flex flex-col gap-1.5">
                   <Label>Item Description</Label>
                   <Input
                     name="item_description"
                     required
-                    defaultValue={reqItemMode === "__custom__" ? "" : items.find((i) => i.id === reqItemMode)?.name ?? ""}
-                    key={reqItemMode}
-                    onChange={(e) => {
-                      if (reqItemMode !== "__custom__") return;
-                      const typed = e.target.value.trim().toLowerCase();
-                      const hit = items.find((i) => i.name.trim().toLowerCase() === typed);
-                      setReqCustomItemMatch(hit ? hit.name : null);
-                    }}
+                    readOnly
+                    placeholder="Select an item above"
+                    value={items.find((i) => i.id === reqItemMode)?.name ?? ""}
+                    className="bg-muted"
                   />
-                  {reqItemMode === "__custom__" && reqCustomItemMatch && (
-                    <p className="text-xs text-amber-600">
-                      &quot;{reqCustomItemMatch}&quot; is already in your stock catalog — pick it from the Item dropdown above instead, so this request stays in a defined category and can be auto-approved.
-                    </p>
-                  )}
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div className="flex flex-col gap-1.5">
@@ -678,19 +664,6 @@ export function ProcurementPanel({
                 <DialogTitle>Issue Purchase Order</DialogTitle>
               </DialogHeader>
               <form className="flex flex-col gap-3" action={(fd) => run(createPurchaseOrderAction, fd, () => setPoOpen(false))}>
-                <div className="flex flex-col gap-1.5">
-                  <Label>From Requisition (optional)</Label>
-                  <Select name="requisition_id">
-                    <SelectTrigger>
-                      <SelectValue placeholder="None" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {requisitions.filter((r) => r.status === "approved").map((r) => (
-                        <SelectItem key={r.id} value={r.id}>{r.purpose}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
                 <div className="flex flex-col gap-1.5">
                   <Label>Supplier</Label>
                   <Select name="supplier_id" required>

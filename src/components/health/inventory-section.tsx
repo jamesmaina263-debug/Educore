@@ -76,7 +76,7 @@ export function InventorySection({
   const [requestError, setRequestError] = useState<string | null>(null);
   const [requestPurpose, setRequestPurpose] = useState("");
   const [requestLines, setRequestLines] = useState([
-    { item_mode: "__custom__", item_description: "", quantity: "", estimated_unit_cost: "" },
+    { item_mode: "", item_description: "", quantity: "", estimated_unit_cost: "" },
   ]);
   const [stockRequestOpen, setStockRequestOpen] = useState(false);
   const [stockRequestPending, setStockRequestPending] = useState(false);
@@ -168,17 +168,17 @@ export function InventorySection({
     updateRequestLine(index, { item_mode: itemMode, item_description: catalogItem ? catalogItem.name : "" });
   }
   function addRequestLine() {
-    setRequestLines((lines) => [...lines, { item_mode: "__custom__", item_description: "", quantity: "", estimated_unit_cost: "" }]);
+    setRequestLines((lines) => [...lines, { item_mode: "", item_description: "", quantity: "", estimated_unit_cost: "" }]);
   }
   function removeRequestLine(index: number) {
     setRequestLines((lines) => (lines.length > 1 ? lines.filter((_, i) => i !== index) : lines));
   }
   function resetRequestForm() {
     setRequestPurpose("");
-    setRequestLines([{ item_mode: "__custom__", item_description: "", quantity: "", estimated_unit_cost: "" }]);
+    setRequestLines([{ item_mode: "", item_description: "", quantity: "", estimated_unit_cost: "" }]);
   }
 
-  const validRequestLines = requestLines.filter((l) => l.item_description.trim() && Number(l.quantity) > 0);
+  const validRequestLines = requestLines.filter((l) => l.item_mode && l.item_description.trim() && Number(l.quantity) > 0);
 
   async function submitRequest() {
     if (!requestPurpose.trim() || validRequestLines.length === 0) return;
@@ -190,7 +190,7 @@ export function InventorySection({
         item_description: l.item_description,
         quantity: Number(l.quantity),
         estimated_unit_cost: l.estimated_unit_cost ? Number(l.estimated_unit_cost) : undefined,
-        inventory_item_id: l.item_mode !== "__custom__" ? l.item_mode : undefined,
+        inventory_item_id: l.item_mode,
       })),
     });
     setRequestPending(false);
@@ -335,10 +335,9 @@ export function InventorySection({
                       <div key={i} className="flex flex-col gap-1.5 rounded-md border border-border/60 p-2">
                         <Select value={line.item_mode} onValueChange={(v) => selectRequestLineItem(i, v)}>
                           <SelectTrigger className="h-8">
-                            <SelectValue placeholder="Select a supply, or enter a custom item below" />
+                            <SelectValue placeholder="Select a supply" />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="__custom__">Custom item (not in supplies catalog)</SelectItem>
                             {items.map((it) => (
                               <SelectItem key={it.id} value={it.id}>{it.name}</SelectItem>
                             ))}
@@ -347,10 +346,10 @@ export function InventorySection({
                       <div className="flex items-start gap-2">
                         <div className="grid flex-1 grid-cols-1 gap-2 sm:grid-cols-[1fr_auto_auto]">
                           <Input
-                            placeholder="Item needed (e.g. Paracetamol syrup 100ml)"
+                            placeholder="Item needed"
                             value={line.item_description}
-                            disabled={line.item_mode !== "__custom__"}
-                            onChange={(e) => updateRequestLine(i, { item_description: e.target.value })}
+                            readOnly
+                            className="bg-muted"
                           />
                           <Input
                             type="number"
