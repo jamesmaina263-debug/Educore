@@ -284,6 +284,7 @@ export async function registerBiometricDevice(input: {
   provider: string;
   location: string;
   serial_number: string;
+  comm_key: string;
 }): Promise<RegisterBiometricDeviceResult> {
   const supabase = await createClient();
   const { data, error } = await supabase
@@ -299,8 +300,139 @@ export async function registerBiometricDevice(input: {
   if (error || !data) return { error: error?.message ?? "Could not register the device." };
   const issued = data as { id: string; raw_key: string; key_prefix: string };
 
+  // comm_key isn't part of issue_biometric_device_key's RPC (that RPC's
+  // job is issuing+hashing the bearer secret; comm_key is a separate,
+  // deliberately-plaintext field only push-protocol devices like ZKTeco
+  // use -- see its column comment). A plain update is enough: RLS on
+  // biometric_devices already gates every operation, including this one,
+  // on biometric.devices_manage.
+  if (input.comm_key.trim()) {
+    await supabase.from("biometric_devices").update({ comm_key: input.comm_key.trim() }).eq("id", issued.id);
+  }
+
   revalidatePath("/settings", "layout");
   return { success: true, raw_key: issued.raw_key, key_prefix: issued.key_prefix };
+}
+
+// --- Pending device enrollments (see biometric_enrollment_events'
+// migration comment for why these are staged, not auto-linked). ---
+// Lets an admin find the real EduCore person a device-pushed PIN belongs
+// to, when linking a pending enrollment. Searches students and staff in
+// one call since either could be the match, merged client-side by caller.
+export async function searchPeopleForBiometricLink(
+  query: string,
+): Promise<{ error: string } | { success: true; results: { person_type: "student" | "staff"; person_id: string; name: string; subtitle: string }[] }> {
+  const supabase = await createClient();
+  const q = query.trim();
+  if (q.length < 2) return { success: true, results: [] };
+
+  const [students, staff] = await Promise.all([
+    supabase
+      .from("students")
+      .select("id, first_name, last_name, admission_number")
+      .eq("status", "active")
+      .or(`first_name.ilike.%${q}%,last_name.ilike.%${q}%,admission_number.ilike.%${q}%`)
+      .limit(10),
+    supabase
+      .from("school_users")
+      .select("id, full_name")
+      .eq("status", "active")
+      .ilike("full_name", `%${q}%`)
+      .limit(10),
+  ]);
+  if (students.error) return { error: students.error.message };
+  if (staff.error) return { error: staff.error.message };
+
+  const results = [
+    ...(students.data ?? []).map((s) => ({
+      person_type: "student" as const,
+      person_id: s.id,
+      name: `${s.first_name} ${s.last_name}`,
+      subtitle: `Student · ${s.admission_number}`,
+    })),
+    ...(staff.data ?? []).map((s) => ({ person_type: "staff" as const, person_id: s.id, name: s.full_name, subtitle: "Staff" })),
+  ];
+  return { success: true, results };
+}
+
+export async function linkBiometricEnrollmentEvent(input: {
+  enrollment_event_id: string;
+  device_id: string;
+  provider_user_id: string;
+  person_type: "student" | "staff";
+  person_id: string;
+  credential_type: "fingerprint" | "face";
+  provider: string;
+}): Promise<ActionResult> {
+  const supabase = await createClient();
+
+  // Both writes are ordinary RLS-gated operations for an authenticated
+  // staff member with biometric.enroll -- not an RPC, since (unlike the
+  // device-key issuance RPCs elsewhere in this file) there's no
+  // cross-boundary privilege gap to bridge here.
+  const { data: schoolId, error: schoolIdError } = await supabase.rpc("auth_school_id");
+  if (schoolIdError || !schoolId) return { error: "Could not resolve your school." };
+
+  const { data: authUser } = await supabase.auth.getUser();
+  const { data: schoolUser } = await supabase
+    .from("school_users")
+    .select("id")
+    .eq("auth_user_id", authUser.user?.id ?? "")
+    .maybeSingle();
+
+  // Find-or-create the biometric_profiles row -- same shape BiometricTab's
+  // own enableProfile() creates, since this is the same underlying action
+  // (turning biometric enrollment on for a person), just triggered from
+  // the device-push side instead of the profile-page side.
+  const { data: existingProfile } = await supabase
+    .from("biometric_profiles")
+    .select("id")
+    .eq("person_type", input.person_type)
+    .eq("person_id", input.person_id)
+    .maybeSingle();
+
+  let profileId = existingProfile?.id as string | undefined;
+  if (!profileId) {
+    const { data: newProfile, error: profileError } = await supabase
+      .from("biometric_profiles")
+      .insert({ school_id: schoolId, person_type: input.person_type, person_id: input.person_id, status: "active", created_by: schoolUser?.id ?? null })
+      .select("id")
+      .single();
+    if (profileError || !newProfile) return { error: profileError?.message ?? "Could not create the biometric profile." };
+    profileId = newProfile.id;
+  }
+
+  const { data: credential, error: credentialError } = await supabase
+    .from("biometric_credentials")
+    .insert({
+      school_id: schoolId,
+      profile_id: profileId,
+      device_id: input.device_id,
+      credential_type: input.credential_type,
+      provider: input.provider,
+      credential_reference: input.provider_user_id,
+      enrolled_by: schoolUser?.id ?? null,
+    })
+    .select("id")
+    .single();
+  if (credentialError || !credential) return { error: credentialError?.message ?? "Could not create the credential." };
+
+  const { error: updateError } = await supabase
+    .from("biometric_enrollment_events")
+    .update({ status: "linked", linked_credential_id: credential.id, linked_by: schoolUser?.id ?? null, linked_at: new Date().toISOString() })
+    .eq("id", input.enrollment_event_id);
+  if (updateError) return { error: updateError.message };
+
+  revalidatePath("/settings", "layout");
+  return { success: true };
+}
+
+export async function ignoreBiometricEnrollmentEvent(id: string): Promise<ActionResult> {
+  const supabase = await createClient();
+  const { error } = await supabase.from("biometric_enrollment_events").update({ status: "ignored" }).eq("id", id);
+  if (error) return { error: error.message };
+  revalidatePath("/settings", "layout");
+  return { success: true };
 }
 
 export async function setBiometricDeviceStatus(id: string, status: "active" | "inactive"): Promise<ActionResult> {
