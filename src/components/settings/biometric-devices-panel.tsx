@@ -22,7 +22,7 @@ export interface BiometricDeviceRow {
   created_at: string;
 }
 
-type RegisterInput = { name: string; device_type: string; provider: string; location: string; serial_number: string };
+type RegisterInput = { name: string; device_type: string; provider: string; location: string; serial_number: string; comm_key: string };
 type RegisterResult = { error: string } | { success: true; raw_key: string; key_prefix: string };
 type StatusResult = { error: string } | { success: true };
 
@@ -44,6 +44,7 @@ export function BiometricDevicesPanel({
   const [provider, setProvider] = useState("generic");
   const [location, setLocation] = useState("");
   const [serialNumber, setSerialNumber] = useState("");
+  const [commKey, setCommKey] = useState("");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [issuedKey, setIssuedKey] = useState<string | null>(null);
@@ -62,6 +63,7 @@ export function BiometricDevicesPanel({
       provider: provider.trim() || "generic",
       location: location.trim(),
       serial_number: serialNumber.trim(),
+      comm_key: commKey.trim(),
     });
     setPending(false);
     if ("error" in result) return setError(result.error);
@@ -77,6 +79,7 @@ export function BiometricDevicesPanel({
       setProvider("generic");
       setLocation("");
       setSerialNumber("");
+      setCommKey("");
       setIssuedKey(null);
       setError(null);
     }
@@ -154,6 +157,15 @@ export function BiometricDevicesPanel({
                   <div className="space-y-1.5">
                     <Label htmlFor="device_serial">Serial number (optional)</Label>
                     <Input id="device_serial" value={serialNumber} onChange={(e) => setSerialNumber(e.target.value)} />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="device_comm_key">Comm key (optional — push-protocol devices like ZKTeco only)</Label>
+                    <Input
+                      id="device_comm_key"
+                      placeholder="Must match the &quot;Comm Key&quot; set in the device's own menu"
+                      value={commKey}
+                      onChange={(e) => setCommKey(e.target.value)}
+                    />
                   </div>
                   {error && <p className="text-sm text-danger">{error}</p>}
                 </div>
