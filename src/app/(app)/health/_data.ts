@@ -145,15 +145,13 @@ export async function loadHealthContext(): Promise<HealthContext> {
     : { data: [] };
 
   const myRequisitions: MyRequisitionRow[] = (myRequisitionRows ?? []).map((r) => {
-    const items = r.purchase_requisition_items as unknown as { item_description: string; quantity: number }[] | null;
-    const first = items?.[0];
+    const items = (r.purchase_requisition_items as unknown as { item_description: string; quantity: number }[] | null) ?? [];
     return {
       id: r.id,
       purpose: r.purpose,
       status: r.status as MyRequisitionRow["status"],
       created_at: r.created_at,
-      item_description: first?.item_description ?? "—",
-      quantity: first?.quantity ?? 0,
+      items,
     };
   });
 

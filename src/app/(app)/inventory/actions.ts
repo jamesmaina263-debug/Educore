@@ -305,6 +305,19 @@ export async function decideRequisitionAction(formData: FormData): Promise<Actio
 
   // Best-effort: tell the requester the outcome. Never block the decision on this.
   if (requisition?.requested_by) {
+    // She raised this via health.procurement.request, not inventory.write, so she
+    // can't see /inventory/procurement -- send her to her own status view instead.
+    // Everyone else keeps the original link, unchanged.
+    const { data: isHealthRequester } = await supabase.rpc("school_user_has_permission", {
+      p_school_user_id: requisition.requested_by,
+      p_permission_key: "health.procurement.request",
+    });
+    const { data: canSeeMainStore } = await supabase.rpc("school_user_has_permission", {
+      p_school_user_id: requisition.requested_by,
+      p_permission_key: "inventory.read_any",
+    });
+    const actionUrl = isHealthRequester === true && canSeeMainStore !== true ? "/health/inventory" : "/inventory/procurement";
+
     await supabase.rpc("notify_school_user", {
       p_recipient_id: requisition.requested_by,
       p_subject: decision === "approved" ? "Requisition approved" : "Requisition rejected",
@@ -312,7 +325,7 @@ export async function decideRequisitionAction(formData: FormData): Promise<Actio
         decision === "approved"
           ? `Your requisition for "${requisition.purpose}" was approved.`
           : `Your requisition for "${requisition.purpose}" was not approved.`,
-      p_action_url: "/inventory/procurement",
+      p_action_url: actionUrl,
       p_category: "other",
     });
   }

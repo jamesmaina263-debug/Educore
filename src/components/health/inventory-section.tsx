@@ -30,8 +30,7 @@ export interface MyRequisitionRow {
   purpose: string;
   status: "draft" | "submitted" | "approved" | "rejected" | "converted";
   created_at: string;
-  item_description: string;
-  quantity: number;
+  items: { item_description: string; quantity: number }[];
 }
 
 export function InventorySection({
@@ -61,7 +60,8 @@ export function InventorySection({
   const [requestOpen, setRequestOpen] = useState(false);
   const [requestPending, setRequestPending] = useState(false);
   const [requestError, setRequestError] = useState<string | null>(null);
-  const [requestForm, setRequestForm] = useState({ item_description: "", quantity: "", purpose: "", estimated_unit_cost: "" });
+  const [requestPurpose, setRequestPurpose] = useState("");
+  const [requestLines, setRequestLines] = useState([{ item_description: "", quantity: "", estimated_unit_cost: "" }]);
 
   // Date.now() here only sets a display threshold (expiring-soon cutoff), recomputed once per
   // mount via the empty deps array. The React-compiler-approved fix (moving this into a
@@ -135,21 +135,38 @@ export function InventorySection({
     router.refresh();
   }
 
+  function updateRequestLine(index: number, patch: Partial<{ item_description: string; quantity: string; estimated_unit_cost: string }>) {
+    setRequestLines((lines) => lines.map((l, i) => (i === index ? { ...l, ...patch } : l)));
+  }
+  function addRequestLine() {
+    setRequestLines((lines) => [...lines, { item_description: "", quantity: "", estimated_unit_cost: "" }]);
+  }
+  function removeRequestLine(index: number) {
+    setRequestLines((lines) => (lines.length > 1 ? lines.filter((_, i) => i !== index) : lines));
+  }
+  function resetRequestForm() {
+    setRequestPurpose("");
+    setRequestLines([{ item_description: "", quantity: "", estimated_unit_cost: "" }]);
+  }
+
+  const validRequestLines = requestLines.filter((l) => l.item_description.trim() && Number(l.quantity) > 0);
+
   async function submitRequest() {
-    const qty = Number(requestForm.quantity);
-    if (!requestForm.item_description.trim() || !requestForm.purpose.trim() || !qty || qty <= 0) return;
+    if (!requestPurpose.trim() || validRequestLines.length === 0) return;
     setRequestPending(true);
     setRequestError(null);
     const result = await requestMedicalSuppliesAction({
-      item_description: requestForm.item_description,
-      quantity: qty,
-      purpose: requestForm.purpose,
-      estimated_unit_cost: requestForm.estimated_unit_cost ? Number(requestForm.estimated_unit_cost) : undefined,
+      purpose: requestPurpose,
+      items: validRequestLines.map((l) => ({
+        item_description: l.item_description,
+        quantity: Number(l.quantity),
+        estimated_unit_cost: l.estimated_unit_cost ? Number(l.estimated_unit_cost) : undefined,
+      })),
     });
     setRequestPending(false);
     if ("error" in result) return setRequestError(result.error);
     setRequestOpen(false);
-    setRequestForm({ item_description: "", quantity: "", purpose: "", estimated_unit_cost: "" });
+    resetRequestForm();
     router.refresh();
   }
 
@@ -231,7 +248,13 @@ export function InventorySection({
         <div className="panel">
           <header className="flex items-center justify-between border-b border-border px-4 py-2.5">
             <p className="text-sm font-medium">Request supplies</p>
-            <Dialog open={requestOpen} onOpenChange={setRequestOpen}>
+            <Dialog
+              open={requestOpen}
+              onOpenChange={(next) => {
+                setRequestOpen(next);
+                if (!next) resetRequestForm();
+              }}
+            >
               <DialogTrigger asChild>
                 <Button size="sm" variant="outline">
                   New request
@@ -246,41 +269,55 @@ export function InventorySection({
                     Goes to whoever can approve procurement (owner/principal/deputy). Once
                     approved, the supplier is emailed automatically. Delivery is received at
                     Main Store, then transferred to you here — the same as any other transfer.
+                    Add as many items as you need in one request.
                   </p>
-                  <Input
-                    placeholder="Item needed (e.g. Paracetamol syrup 100ml)"
-                    value={requestForm.item_description}
-                    onChange={(e) => setRequestForm({ ...requestForm, item_description: e.target.value })}
-                  />
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                    <Input
-                      type="number"
-                      min={1}
-                      placeholder="Quantity"
-                      value={requestForm.quantity}
-                      onChange={(e) => setRequestForm({ ...requestForm, quantity: e.target.value })}
-                    />
-                    <Input
-                      type="number"
-                      min={0}
-                      step="0.01"
-                      placeholder="Est. unit cost (optional)"
-                      value={requestForm.estimated_unit_cost}
-                      onChange={(e) => setRequestForm({ ...requestForm, estimated_unit_cost: e.target.value })}
-                    />
+                  <div className="space-y-2">
+                    {requestLines.map((line, i) => (
+                      <div key={i} className="flex items-start gap-2">
+                        <div className="grid flex-1 grid-cols-1 gap-2 sm:grid-cols-[1fr_auto_auto]">
+                          <Input
+                            placeholder="Item needed (e.g. Paracetamol syrup 100ml)"
+                            value={line.item_description}
+                            onChange={(e) => updateRequestLine(i, { item_description: e.target.value })}
+                          />
+                          <Input
+                            type="number"
+                            min={1}
+                            placeholder="Qty"
+                            className="sm:w-24"
+                            value={line.quantity}
+                            onChange={(e) => updateRequestLine(i, { quantity: e.target.value })}
+                          />
+                          <Input
+                            type="number"
+                            min={0}
+                            step="0.01"
+                            placeholder="Est. cost"
+                            className="sm:w-28"
+                            value={line.estimated_unit_cost}
+                            onChange={(e) => updateRequestLine(i, { estimated_unit_cost: e.target.value })}
+                          />
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => removeRequestLine(i)}
+                          disabled={requestLines.length === 1}
+                          className="mt-1.5 px-1 text-sm text-muted-foreground hover:text-danger disabled:opacity-30"
+                          aria-label="Remove item"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ))}
+                    <Button type="button" size="sm" variant="ghost" onClick={addRequestLine}>
+                      + Add another item
+                    </Button>
                   </div>
-                  <Input
-                    placeholder="Reason / purpose"
-                    value={requestForm.purpose}
-                    onChange={(e) => setRequestForm({ ...requestForm, purpose: e.target.value })}
-                  />
+                  <Input placeholder="Reason / purpose" value={requestPurpose} onChange={(e) => setRequestPurpose(e.target.value)} />
                   {requestError && <p className="text-sm text-danger">{requestError}</p>}
                 </div>
                 <DialogFooter>
-                  <Button
-                    onClick={submitRequest}
-                    disabled={requestPending || !requestForm.item_description || !requestForm.quantity || !requestForm.purpose}
-                  >
+                  <Button onClick={submitRequest} disabled={requestPending || !requestPurpose.trim() || validRequestLines.length === 0}>
                     {requestPending ? "Submitting…" : "Submit request"}
                   </Button>
                 </DialogFooter>
@@ -292,7 +329,7 @@ export function InventorySection({
               <div key={r.id} className="flex flex-wrap items-center justify-between gap-2 px-4 py-3">
                 <div>
                   <p className="text-sm font-medium">
-                    {r.item_description} — {r.quantity}
+                    {r.items.map((it) => `${it.item_description} — ${it.quantity}`).join(", ")}
                   </p>
                   <p className="text-xs text-muted-foreground">
                     {r.purpose} · {new Date(r.created_at).toLocaleDateString()}
