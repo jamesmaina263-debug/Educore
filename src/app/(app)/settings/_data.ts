@@ -6,6 +6,7 @@ import type { StaffRow, RoleOption } from "@/components/settings/staff-roles-tab
 import type { BillingData } from "@/components/settings/billing-panel";
 import type { ApiKeyRow } from "@/components/settings/api-keys-panel";
 import type { BiometricDeviceRow } from "@/components/settings/biometric-devices-panel";
+import type { PendingEnrollmentRow } from "@/components/settings/pending-enrollments-panel";
 import type { LeaveTypeRow } from "@/components/settings/leave-types-panel";
 import { getMyNotificationPreferences, type PreferenceRow } from "@/app/notifications/actions";
 
@@ -31,6 +32,7 @@ export interface SettingsContext {
   preferenceRows: PreferenceRow[];
   apiKeyRows: ApiKeyRow[];
   biometricDeviceRows: BiometricDeviceRow[];
+  pendingEnrollmentRows: PendingEnrollmentRow[];
   gateLateThresholds: { late_after_student: string | null; late_after_staff: string | null };
   groupBranding: { logo_url: string | null; primary_color: string | null } | null;
   brandingData: BrandingData;
@@ -157,12 +159,35 @@ export async function loadSettingsContext(): Promise<SettingsContext> {
   }
 
   let biometricDeviceRows: BiometricDeviceRow[] = [];
+  let pendingEnrollmentRows: PendingEnrollmentRow[] = [];
   if (canManageBiometricDevices === true) {
     const { data } = await supabase
       .from("biometric_devices")
       .select("id, name, device_type, provider, location, api_key_prefix, status, last_seen_at, created_at")
       .order("created_at", { ascending: false });
     biometricDeviceRows = (data ?? []) as BiometricDeviceRow[];
+
+    const { data: pending } = await supabase
+      .from("biometric_enrollment_events")
+      .select("id, device_id, provider_user_id, provider_user_name, created_at, biometric_devices(name, provider)")
+      .eq("status", "pending")
+      .order("created_at", { ascending: false });
+    pendingEnrollmentRows = ((pending ?? []) as unknown as {
+      id: string;
+      device_id: string;
+      provider_user_id: string;
+      provider_user_name: string | null;
+      created_at: string;
+      biometric_devices: { name: string; provider: string } | null;
+    }[]).map((row) => ({
+      id: row.id,
+      device_id: row.device_id,
+      device_name: row.biometric_devices?.name ?? "Unknown device",
+      provider: row.biometric_devices?.provider ?? "generic",
+      provider_user_id: row.provider_user_id,
+      provider_user_name: row.provider_user_name,
+      created_at: row.created_at,
+    }));
   }
 
   let groupBranding: { logo_url: string | null; primary_color: string | null } | null = null;
@@ -225,6 +250,7 @@ export async function loadSettingsContext(): Promise<SettingsContext> {
     preferenceRows,
     apiKeyRows,
     biometricDeviceRows,
+    pendingEnrollmentRows,
     gateLateThresholds: {
       late_after_student: school?.gate_late_after_student ?? null,
       late_after_staff: school?.gate_late_after_staff ?? null,
