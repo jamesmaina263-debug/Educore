@@ -19,6 +19,7 @@ export interface MedicationRow {
   medication_name: string;
   dosage: string;
   route: string;
+  quantity_administered: number | null;
   administered_at: string;
   administered_by_name: string | null;
 }
@@ -27,6 +28,7 @@ export interface MedicalInventoryOption {
   id: string;
   name: string;
   quantity: number;
+  unit: string;
 }
 
 // Values must match medication_administrations_route_check in the DB exactly
@@ -65,13 +67,27 @@ export function MedicationSection({
     dosage: "",
     route: ROUTES[0].value,
     inventory_item_id: "none",
+    quantity: "1",
     notes: "",
   });
+
+  const selectedInventoryItem = inventoryOptions.find((i) => i.id === form.inventory_item_id);
 
   async function submit() {
     if (!form.student_id || !form.medication_name || !form.dosage) {
       setError("Student, medication, and dosage are required.");
       return;
+    }
+    const parsedQuantity = Number(form.quantity);
+    if (form.inventory_item_id !== "none") {
+      if (!Number.isInteger(parsedQuantity) || parsedQuantity < 1) {
+        setError("Enter a valid quantity to deduct from stock.");
+        return;
+      }
+      if (selectedInventoryItem && parsedQuantity > selectedInventoryItem.quantity) {
+        setError(`Only ${selectedInventoryItem.quantity} ${selectedInventoryItem.unit} in stock.`);
+        return;
+      }
     }
     setPending(true);
     setError(null);
@@ -81,6 +97,7 @@ export function MedicationSection({
       dosage: form.dosage,
       route: form.route,
       inventory_item_id: form.inventory_item_id === "none" ? undefined : form.inventory_item_id,
+      quantity: form.inventory_item_id === "none" ? undefined : parsedQuantity,
       notes: form.notes || undefined,
     };
     if (!online) {
@@ -90,14 +107,14 @@ export function MedicationSection({
       await queueMutation("health", "administerMedication", input);
       setPending(false);
       setOpen(false);
-      setForm({ student_id: "", medication_name: "", dosage: "", route: ROUTES[0].value, inventory_item_id: "none", notes: "" });
+      setForm({ student_id: "", medication_name: "", dosage: "", route: ROUTES[0].value, inventory_item_id: "none", quantity: "1", notes: "" });
       return;
     }
     const result = await administerMedication(input);
     setPending(false);
     if ("error" in result) return setError(result.error);
     setOpen(false);
-    setForm({ student_id: "", medication_name: "", dosage: "", route: ROUTES[0].value, inventory_item_id: "none", notes: "" });
+    setForm({ student_id: "", medication_name: "", dosage: "", route: ROUTES[0].value, inventory_item_id: "none", quantity: "1", notes: "" });
     router.refresh();
   }
 
@@ -139,6 +156,7 @@ export function MedicationSection({
                     // never drift from what's actually deducted. Switching back to "not tracked"
                     // clears it so a real non-stock medication can be typed in.
                     medication_name: picked ? picked.name : "",
+                    quantity: "1",
                   });
                 }}
               >
@@ -163,6 +181,24 @@ export function MedicationSection({
                 />
                 <Input placeholder="Dosage (e.g. 5ml)" value={form.dosage} onChange={(e) => setForm({ ...form, dosage: e.target.value })} />
               </div>
+              {form.inventory_item_id !== "none" && (
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <Input
+                    type="number"
+                    min={1}
+                    max={selectedInventoryItem?.quantity}
+                    step={1}
+                    placeholder="Quantity administered"
+                    value={form.quantity}
+                    onChange={(e) => setForm({ ...form, quantity: e.target.value })}
+                  />
+                  <p className="flex items-center text-xs text-muted-foreground">
+                    {selectedInventoryItem
+                      ? `${selectedInventoryItem.unit} — deducted from stock on Record`
+                      : ""}
+                  </p>
+                </div>
+              )}
               {form.inventory_item_id !== "none" && (
                 <p className="-mt-2 text-xs text-muted-foreground">Name is set from the selected stock item.</p>
               )}
@@ -215,7 +251,12 @@ export function MedicationSection({
               <tr key={m.id}>
                 <td>{m.student_name}</td>
                 <td>{m.medication_name}</td>
-                <td>{m.dosage}</td>
+                <td>
+                  {m.dosage}
+                  {m.quantity_administered != null && (
+                    <span className="ml-1 text-xs text-muted-foreground">({m.quantity_administered} deducted)</span>
+                  )}
+                </td>
                 <td>{routeLabel(m.route)}</td>
                 <td>{new Date(m.administered_at).toLocaleString()}</td>
                 <td className="text-muted-foreground">{m.administered_by_name ?? "—"}</td>

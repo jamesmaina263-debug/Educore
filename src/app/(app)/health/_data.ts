@@ -120,7 +120,7 @@ export async function loadHealthContext(): Promise<HealthContext> {
       .order("check_in_at", { ascending: false }),
     supabase
       .from("medication_administrations")
-      .select("id, medication_name, dosage, route, administered_at, students(first_name, last_name), administrator:administered_by(full_name)")
+      .select("id, medication_name, dosage, route, administered_at, quantity_administered, students(first_name, last_name), administrator:administered_by(full_name)")
       .order("administered_at", { ascending: false }),
     supabase
       .from("health_referrals")
@@ -181,7 +181,7 @@ export async function loadHealthContext(): Promise<HealthContext> {
     const quantity = Array.isArray(stock) ? (stock[0]?.quantity ?? 0) : (stock?.quantity ?? 0);
     return { id: i.id, name: i.name, unit: i.unit, quantity, reorder_level: i.reorder_level, expiry_date: i.expiry_date };
   });
-  const inventoryOptions: MedicalInventoryOption[] = medicalItems.filter((i) => i.quantity > 0).map((i) => ({ id: i.id, name: i.name, quantity: i.quantity }));
+  const inventoryOptions: MedicalInventoryOption[] = medicalItems.filter((i) => i.quantity > 0).map((i) => ({ id: i.id, name: i.name, quantity: i.quantity, unit: i.unit }));
 
   const { data: pendingTransferRows } = medicalCategory
     ? await supabase
@@ -241,6 +241,7 @@ export async function loadHealthContext(): Promise<HealthContext> {
     medication_name: m.medication_name,
     dosage: m.dosage,
     route: m.route,
+    quantity_administered: m.quantity_administered,
     administered_at: m.administered_at,
     administered_by_name: (m.administrator as unknown as { full_name: string } | null)?.full_name ?? null,
   }));
