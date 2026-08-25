@@ -74,6 +74,7 @@ export async function administerMedication(input: {
   dosage: string;
   route: string;
   inventory_item_id?: string;
+  quantity?: number;
   notes?: string;
 }): Promise<ActionResult> {
   const supabase = await createClient();
@@ -82,10 +83,14 @@ export async function administerMedication(input: {
 
   // If drawn from tracked medical inventory, deduct from the Nurse's own stock pool (never
   // Main Store's directly -- she only ever draws from what's already been transferred to her).
+  // Quantity is the actual number of units given (e.g. 2 tablets), not a fixed 1 -- previously
+  // hardcoded to 1 regardless of dosage, which silently under-deducted stock on every
+  // multi-unit dose.
+  const quantity = input.inventory_item_id ? (input.quantity && input.quantity > 0 ? Math.trunc(input.quantity) : 1) : null;
   if (input.inventory_item_id) {
     const { error: stockError } = await supabase.rpc("issue_health_stock", {
       p_item_id: input.inventory_item_id,
-      p_quantity: 1,
+      p_quantity: quantity,
       p_reason: `Administered to student — ${input.medication_name}`,
     });
     if (stockError) return { error: `Stock deduction failed: ${stockError.message}` };
@@ -101,6 +106,7 @@ export async function administerMedication(input: {
     administered_at: new Date().toISOString(),
     administered_by: me.id,
     inventory_item_id: input.inventory_item_id || null,
+    quantity_administered: quantity,
     notes: input.notes || null,
   });
   if (error) return { error: error.message };
