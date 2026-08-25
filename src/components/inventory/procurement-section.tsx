@@ -17,6 +17,7 @@ import {
 import { StatusBadge } from "@/components/status-badge";
 import type { ItemRow } from "@/components/inventory/inventory-section";
 import {
+  approveRequisitionAction,
   completeAssetMaintenanceAction,
   createAssetAction,
   createPurchaseOrderAction,
@@ -137,6 +138,98 @@ function useAction() {
     });
   }
   return { isPending, error, run };
+}
+
+// Approving a requisition auto-generates its PO (approve_requisition RPC).
+// The common case (item has purchase history) needs nothing further -- one
+// click. If the RPC can't resolve a supplier or cost, it comes back with a
+// specific error naming the item, and this swaps in a small inline picker
+// instead of the plain button, rather than failing silently or opening a
+// full "Issue PO" dialog for something that should stay one step.
+function ApproveRequisitionButton({ requisitionId, suppliers }: { requisitionId: string; suppliers: SupplierRow[] }) {
+  const [isPending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+  const [needsSupplier, setNeedsSupplier] = useState(false);
+  const [needsCost, setNeedsCost] = useState(false);
+  const [supplierId, setSupplierId] = useState("");
+  const [unitCost, setUnitCost] = useState("");
+
+  function attempt(fd: FormData) {
+    setError(null);
+    startTransition(async () => {
+      const res = await approveRequisitionAction(fd);
+      if ("error" in res) {
+        setNeedsSupplier(res.error.includes("no supplier on file"));
+        setNeedsCost(res.error.includes("no unit cost on file"));
+        setError(res.error);
+      } else {
+        setNeedsSupplier(false);
+        setNeedsCost(false);
+        setError(null);
+      }
+    });
+  }
+
+  function handleApproveClick() {
+    const fd = new FormData();
+    fd.set("requisition_id", requisitionId);
+    attempt(fd);
+  }
+
+  function handleResolvedSubmit() {
+    const fd = new FormData();
+    fd.set("requisition_id", requisitionId);
+    if (supplierId) fd.set("supplier_id", supplierId);
+    if (unitCost) fd.set("unit_cost_override", unitCost);
+    attempt(fd);
+  }
+
+  if (needsSupplier || needsCost) {
+    return (
+      <div className="flex flex-col gap-1.5 rounded-md border border-amber-300/60 bg-amber-50 p-2">
+        <p className="text-xs text-amber-800">{error}</p>
+        {needsSupplier && (
+          <Select value={supplierId} onValueChange={setSupplierId}>
+            <SelectTrigger className="h-8">
+              <SelectValue placeholder="Select supplier" />
+            </SelectTrigger>
+            <SelectContent>
+              {suppliers.map((s) => (
+                <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+        {needsCost && (
+          <Input
+            type="number"
+            step="0.01"
+            placeholder="Unit cost"
+            value={unitCost}
+            onChange={(e) => setUnitCost(e.target.value)}
+            className="h-8"
+          />
+        )}
+        <Button
+          type="button"
+          size="sm"
+          disabled={isPending || (needsSupplier && !supplierId) || (needsCost && !unitCost)}
+          onClick={handleResolvedSubmit}
+        >
+          Approve &amp; issue PO
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-1">
+      {error && <p className="text-xs text-destructive">{error}</p>}
+      <Button type="button" size="sm" variant="outline" disabled={isPending} onClick={handleApproveClick}>
+        Approve
+      </Button>
+    </div>
+  );
 }
 
 export function AssetsPanel({ assets, maintenance, canWrite }: { assets: AssetRow[]; maintenance: MaintenanceRow[]; canWrite: boolean }) {
@@ -487,13 +580,24 @@ export function ProcurementPanel({
   const [poItemMode, setPoItemMode] = useState<string>("__custom__");
   const [receiveItemId, setReceiveItemId] = useState<string | null>(null);
   const [customItemMatch, setCustomItemMatch] = useState<string | null>(null);
+  const [reqItemMode, setReqItemMode] = useState<string>("__custom__");
+  const [reqCustomItemMatch, setReqCustomItemMatch] = useState<string | null>(null);
 
   return (
     <div className="flex flex-col gap-4">
       {error && <div className="rounded-md border border-destructive/25 bg-destructive-subtle px-3 py-2 text-sm text-destructive">{error}</div>}
       <div className="flex justify-end gap-2">
         {canWrite && (
-          <Dialog open={reqOpen} onOpenChange={setReqOpen}>
+          <Dialog
+            open={reqOpen}
+            onOpenChange={(o) => {
+              setReqOpen(o);
+              if (!o) {
+                setReqItemMode("__custom__");
+                setReqCustomItemMatch(null);
+              }
+            }}
+          >
             <DialogTrigger asChild>
               <Button size="sm" variant="outline">New Requisition</Button>
             </DialogTrigger>
@@ -508,7 +612,38 @@ export function ProcurementPanel({
                 </div>
                 <div className="flex flex-col gap-1.5">
                   <Label>Item</Label>
-                  <Input name="item_description" required />
+                  <Select value={reqItemMode} onValueChange={setReqItemMode}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select a stock item, or enter a custom item below" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__custom__">Custom item (not in stock catalog)</SelectItem>
+                      {items.map((i) => (
+                        <SelectItem key={i.id} value={i.id}>{i.name}{i.category_name ? ` (${i.category_name})` : ""}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                {reqItemMode !== "__custom__" && <input type="hidden" name="inventory_item_id" value={reqItemMode} />}
+                <div className="flex flex-col gap-1.5">
+                  <Label>Item Description</Label>
+                  <Input
+                    name="item_description"
+                    required
+                    defaultValue={reqItemMode === "__custom__" ? "" : items.find((i) => i.id === reqItemMode)?.name ?? ""}
+                    key={reqItemMode}
+                    onChange={(e) => {
+                      if (reqItemMode !== "__custom__") return;
+                      const typed = e.target.value.trim().toLowerCase();
+                      const hit = items.find((i) => i.name.trim().toLowerCase() === typed);
+                      setReqCustomItemMatch(hit ? hit.name : null);
+                    }}
+                  />
+                  {reqItemMode === "__custom__" && reqCustomItemMatch && (
+                    <p className="text-xs text-amber-600">
+                      &quot;{reqCustomItemMatch}&quot; is already in your stock catalog — pick it from the Item dropdown above instead, so this request stays in a defined category and can be auto-approved.
+                    </p>
+                  )}
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div className="flex flex-col gap-1.5">
@@ -657,12 +792,8 @@ export function ProcurementPanel({
                     {canApprove && (
                       <td>
                         {r.status === "submitted" && (
-                          <div className="flex gap-2">
-                            <form action={(fd) => run(decideRequisitionAction, fd)}>
-                              <input type="hidden" name="requisition_id" value={r.id} />
-                              <input type="hidden" name="decision" value="approved" />
-                              <Button type="submit" size="sm" variant="outline" disabled={isPending}>Approve</Button>
-                            </form>
+                          <div className="flex items-start gap-2">
+                            <ApproveRequisitionButton requisitionId={r.id} suppliers={suppliers} />
                             <form action={(fd) => run(decideRequisitionAction, fd)}>
                               <input type="hidden" name="requisition_id" value={r.id} />
                               <input type="hidden" name="decision" value="rejected" />
