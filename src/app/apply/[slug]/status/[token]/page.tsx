@@ -7,6 +7,8 @@ const STATUS_LABELS: Record<string, string> = {
   submitted: "Submitted — awaiting review",
   under_review: "Under review",
   documents_required: "Documents needed",
+  // 'shortlisted' and 'assessment_required' are reserved for a future shortlisting/
+  // assessment step — no code path currently sets an application to either status.
   shortlisted: "Shortlisted",
   interview_scheduled: "Interview scheduled",
   assessment_required: "Assessment required",

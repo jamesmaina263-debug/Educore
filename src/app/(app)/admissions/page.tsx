@@ -18,6 +18,10 @@ const STATUS_TONE: Record<string, "success" | "warning" | "danger" | "info" | "n
   submitted: "info",
   under_review: "info",
   documents_required: "warning",
+  // 'shortlisted' and 'assessment_required' are defined in the applications status enum and
+  // reserved for a future shortlisting/assessment step, but no code path currently
+  // transitions an application to either status — kept here so labels/tone are ready when
+  // that step is built, not because they're reachable today.
   shortlisted: "info",
   interview_scheduled: "info",
   assessment_required: "info",
@@ -35,6 +39,7 @@ const STATUS_LABELS: Record<string, string> = {
   submitted: "Submitted",
   under_review: "Under review",
   documents_required: "Documents needed",
+  // See note on STATUS_TONE above — not yet reachable, reserved for a future step.
   shortlisted: "Shortlisted",
   interview_scheduled: "Interview scheduled",
   assessment_required: "Assessment required",
@@ -43,7 +48,7 @@ const STATUS_LABELS: Record<string, string> = {
   waitlisted: "Waitlisted",
   rejected: "Rejected",
   withdrawn: "Withdrawn",
-  admission_pending: "Admission pending",
+  admission_pending: "Accepted — admission in progress",
   enrolled: "Enrolled",
 };
 
@@ -65,6 +70,8 @@ function draftStaleness(
   return null;
 }
 
+// Includes 'shortlisted' and 'assessment_required' for forward-compatibility with the
+// reserved statuses above — harmless today since no application ever carries either value.
 const ACTIVE_STATUSES = [
   "submitted",
   "under_review",
@@ -74,6 +81,13 @@ const ACTIVE_STATUSES = [
   "assessment_required",
 ];
 
+// Task 17: same pattern as draftStaleness above -- a plain helper (not a direct Date.now() call
+// inside the Server Component body) so eslint's react-hooks/purity rule doesn't flag it, while
+// still resolving "now" fresh on every request.
+function thirtyDaysAgoIso(nowMs: number = Date.now()): string {
+  return new Date(nowMs - 30 * 24 * 60 * 60 * 1000).toISOString();
+}
+
 export default async function AdmissionsPage() {
   const supabase = await createClient();
 
@@ -82,20 +96,21 @@ export default async function AdmissionsPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const [{ data: schoolUser }, { data: canReview }, { data: canWrite }] = await Promise.all([
+  const [{ data: schoolUser }, { data: canReview }, { data: canWrite }, { data: canReadFinance }] = await Promise.all([
     supabase.from("school_users").select("full_name, roles(display_name), schools(name, slug)").eq("auth_user_id", user.id).maybeSingle(),
     supabase.rpc("auth_has_permission", { p_permission_key: "admissions.read_any" }),
     supabase.rpc("auth_has_permission", { p_permission_key: "admissions.write" }),
+    supabase.rpc("auth_has_permission", { p_permission_key: "finance.read" }),
   ]);
 
   const roleName = (schoolUser?.roles as unknown as { display_name: string } | null)?.display_name;
   const school = schoolUser?.schools as unknown as { name: string; slug: string } | null;
 
-  const [{ data: applications }, { data: drafts }] = await Promise.all([
+  const [{ data: applications }, { data: drafts }, { data: turnaroundRows }, { data: terms }, { data: feeStructures }] = await Promise.all([
     supabase
       .from("applications")
       .select(
-        "id, application_number, first_name, last_name, status, application_source, submitted_at, created_at, assigned_officer_id, school_users!applications_assigned_officer_id_fkey(full_name)",
+        "id, application_number, first_name, last_name, status, application_source, term_id, submitted_at, created_at, assigned_officer_id, school_users!applications_assigned_officer_id_fkey(full_name)",
       )
       .neq("status", "draft")
       .order("created_at", { ascending: false })
@@ -107,14 +122,40 @@ export default async function AdmissionsPage() {
       )
       .eq("status", "draft")
       .order("updated_at", { ascending: false }),
+    // Task 17: read-only aggregate, no new table/cron -- a straightforward query against the
+    // existing submitted_at/decision_at columns, averaged in JS below.
+    supabase
+      .from("applications")
+      .select("submitted_at, decision_at")
+      .not("submitted_at", "is", null)
+      .not("decision_at", "is", null)
+      .gte("decision_at", thirtyDaysAgoIso()),
+    // Gap 4 (audit): same early fee-structure-gap warning shown at Admission Details (Step 1),
+    // surfaced here too so it's visible at a glance across the whole list, not just once an
+    // officer is already inside a given application's wizard.
+    supabase.from("terms").select("id, name"),
+    supabase.from("fee_structures").select("term_id").eq("is_active", true),
   ]);
 
   const rows = applications ?? [];
+  const termNameById = new Map((terms ?? []).map((t) => [t.id, t.name]));
+  const termsWithFeeStructure = new Set((feeStructures ?? []).map((f) => f.term_id));
   const counts = ACTIVE_STATUSES.reduce(
     (acc, s) => ({ ...acc, [s]: rows.filter((r) => r.status === s).length }),
     {} as Record<string, number>,
   );
   const decidedCount = rows.filter((r) => ["accepted", "conditionally_accepted", "admission_pending"].includes(r.status)).length;
+
+  const turnaroundSamples = turnaroundRows ?? [];
+  const avgTurnaroundDays =
+    turnaroundSamples.length > 0
+      ? turnaroundSamples.reduce(
+          (sum, a) => sum + (new Date(a.decision_at as string).getTime() - new Date(a.submitted_at as string).getTime()),
+          0,
+        ) /
+        turnaroundSamples.length /
+        (1000 * 60 * 60 * 24)
+      : null;
 
   return (
     <AppShell
@@ -147,6 +188,18 @@ export default async function AdmissionsPage() {
             <CopyApplicationLink slug={school.slug} />
           </div>
         )}
+
+        {/* Task 17: read-only turnaround-time card, computed above from existing
+            submitted_at/decision_at columns -- no new dashboard framework, no scheduled job. */}
+        <div className="flex items-center gap-2 rounded-md border border-border bg-muted/40 px-3 py-2 text-sm">
+          <span className="text-muted-foreground">Average days from submission to decision (last 30 days):</span>
+          <span className="font-semibold">
+            {avgTurnaroundDays != null ? avgTurnaroundDays.toFixed(1) : "—"}
+          </span>
+          {avgTurnaroundDays == null && (
+            <span className="text-[0.75rem] text-muted-foreground">No decisions recorded in this window yet</span>
+          )}
+        </div>
 
         {drafts && drafts.length > 0 && (
           <div className="panel">
@@ -250,6 +303,7 @@ export default async function AdmissionsPage() {
                 <tbody>
                   {rows.map((a) => {
                     const officer = a.school_users as unknown as { full_name: string } | null;
+                    const feeStructureMissing = canReadFinance && !!a.term_id && !termsWithFeeStructure.has(a.term_id);
                     return (
                       <tr key={a.id}>
                         <td className="font-medium">
@@ -258,7 +312,17 @@ export default async function AdmissionsPage() {
                         <td className="font-mono text-[0.75rem] text-muted-foreground">{a.application_number}</td>
                         <td className="text-muted-foreground">{a.application_source === "walk_in" ? "Walk-in" : "Online"}</td>
                         <td>
-                          <StatusBadge tone={STATUS_TONE[a.status] ?? "neutral"} label={STATUS_LABELS[a.status] ?? a.status} />
+                          <div className="flex items-center gap-1.5">
+                            <StatusBadge tone={STATUS_TONE[a.status] ?? "neutral"} label={STATUS_LABELS[a.status] ?? a.status} />
+                            {feeStructureMissing && (
+                              <span
+                                className="rounded-full border border-warning/25 bg-warning-subtle px-1.5 py-0.5 text-[0.625rem] font-medium text-warning"
+                                title={`No fee structure configured for ${termNameById.get(a.term_id!) ?? "this term"} — Finance will not be able to invoice until this is fixed.`}
+                              >
+                                No fee structure
+                              </span>
+                            )}
+                          </div>
                         </td>
                         <td className="text-muted-foreground">{officer?.full_name ?? "Unassigned"}</td>
                         <td className="text-muted-foreground">

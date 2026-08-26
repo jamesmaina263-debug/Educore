@@ -72,24 +72,28 @@ export interface AdmissionDetailsInput {
   transport_required: boolean;
   previous_school?: string;
   previous_class?: string;
+  // Only ever sent by the wizard for a walk_in-sourced application (Gap #2 compensating
+  // control) -- omitted entirely for online applications, so their row is never touched.
+  walk_in_screening_confirmed?: boolean;
 }
 
 export async function updateAdmissionDetails(applicationId: string, input: AdmissionDetailsInput): Promise<ActionResult> {
   const supabase = await createClient();
-  const { error } = await supabase
-    .from("applications")
-    .update({
-      admission_type: input.admission_type,
-      academic_year_id: input.academic_year_id,
-      term_id: input.term_id,
-      intended_class_id: input.intended_class_id,
-      boarding_preference: input.boarding_preference,
-      transport_required: input.transport_required,
-      previous_school: input.previous_school || null,
-      previous_class: input.previous_class || null,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", applicationId);
+  const updatePayload: Record<string, unknown> = {
+    admission_type: input.admission_type,
+    academic_year_id: input.academic_year_id,
+    term_id: input.term_id,
+    intended_class_id: input.intended_class_id,
+    boarding_preference: input.boarding_preference,
+    transport_required: input.transport_required,
+    previous_school: input.previous_school || null,
+    previous_class: input.previous_class || null,
+    updated_at: new Date().toISOString(),
+  };
+  if (input.walk_in_screening_confirmed !== undefined) {
+    updatePayload.walk_in_screening_confirmed = input.walk_in_screening_confirmed;
+  }
+  const { error } = await supabase.from("applications").update(updatePayload).eq("id", applicationId);
   if (error) return { error: error.message };
   revalidatePath(`/admissions/${applicationId}/wizard`);
   return { success: true };

@@ -120,7 +120,8 @@ export async function submitApplication(
   });
   if (alreadyApplied) {
     return {
-      error: "It looks like this application was already submitted recently. The school will be in touch.",
+      error:
+        "It looks like this application was already submitted recently. The school will be in touch. If the school asked you to resubmit, please contact them directly.",
     };
   }
 
