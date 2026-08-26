@@ -72,10 +72,27 @@ export interface AdmissionDetailsInput {
   transport_required: boolean;
   previous_school?: string;
   previous_class?: string;
+  // Task 2: only meaningful (and only rendered/required in the UI) for application_source =
+  // 'walk_in'. check_admission_checklist() already hard-blocks complete_enrollment() on this
+  // flag being true for walk-ins; this mirrors that same requirement one step earlier, at save
+  // time, so an officer finds out immediately rather than only at Final Review.
+  walk_in_screening_confirmed?: boolean;
 }
 
 export async function updateAdmissionDetails(applicationId: string, input: AdmissionDetailsInput): Promise<ActionResult> {
   const supabase = await createClient();
+
+  const { data: existing, error: fetchError } = await supabase
+    .from("applications")
+    .select("application_source")
+    .eq("id", applicationId)
+    .single();
+  if (fetchError) return { error: fetchError.message };
+
+  if (existing.application_source === "walk_in" && input.walk_in_screening_confirmed !== true) {
+    return { error: "Please confirm this applicant was screened per school policy before saving." };
+  }
+
   const { error } = await supabase
     .from("applications")
     .update({
@@ -87,6 +104,7 @@ export async function updateAdmissionDetails(applicationId: string, input: Admis
       transport_required: input.transport_required,
       previous_school: input.previous_school || null,
       previous_class: input.previous_class || null,
+      ...(existing.application_source === "walk_in" ? { walk_in_screening_confirmed: true } : {}),
       updated_at: new Date().toISOString(),
     })
     .eq("id", applicationId);

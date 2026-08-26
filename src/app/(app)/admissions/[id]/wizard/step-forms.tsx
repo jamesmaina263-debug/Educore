@@ -96,15 +96,19 @@ export function AdmissionDetailsStep({
     transport_required: boolean;
     previous_school: string | null;
     previous_class: string | null;
+    application_source: string;
+    walk_in_screening_confirmed: boolean;
   };
 }) {
   const router = useRouter();
   const { online, pendingCount, failed, syncing, sync, discard } = useOfflineSync("admissions");
   const [form, setForm] = useState(initial);
+  const [screeningConfirmed, setScreeningConfirmed] = useState(initial.walk_in_screening_confirmed);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
 
+  const isWalkIn = initial.application_source === "walk_in";
   const termsForYear = terms.filter((t) => t.academic_year_id === form.academic_year_id);
   // Gap 4 (audit): warn as soon as a term with no configured fee structure is picked, instead
   // of only discovering it when Finance's invoice creation fails mid-wizard. Non-blocking —
@@ -118,6 +122,10 @@ export function AdmissionDetailsStep({
   function save() {
     setError(null);
     setSaved(false);
+    if (isWalkIn && !screeningConfirmed) {
+      setError("Please confirm this applicant was screened per school policy before saving.");
+      return;
+    }
     const input: AdmissionDetailsInput = {
       admission_type: form.admission_type as "new" | "transfer" | "re_admission",
       academic_year_id: form.academic_year_id,
@@ -127,6 +135,7 @@ export function AdmissionDetailsStep({
       transport_required: form.transport_required,
       previous_school: form.previous_school ?? undefined,
       previous_class: form.previous_class ?? undefined,
+      walk_in_screening_confirmed: isWalkIn ? screeningConfirmed : undefined,
     };
     startTransition(async () => {
       if (!online) {
@@ -197,6 +206,19 @@ export function AdmissionDetailsStep({
         <Checkbox id="transport_required" checked={form.transport_required} onCheckedChange={(c) => setForm({ ...form, transport_required: c === true })} />
         <Label htmlFor="transport_required" className="font-normal">Requires school transport</Label>
       </div>
+      {isWalkIn && (
+        <div className="flex items-start gap-2 rounded-md border border-warning/25 bg-warning-subtle p-3">
+          <Checkbox
+            id="walk_in_screening_confirmed"
+            checked={screeningConfirmed}
+            onCheckedChange={(c) => setScreeningConfirmed(c === true)}
+            className="mt-0.5"
+          />
+          <Label htmlFor="walk_in_screening_confirmed" className="font-normal text-sm text-warning">
+            I confirm this applicant was screened per school policy before starting enrollment.
+          </Label>
+        </div>
+      )}
       {selectedTermMissingFeeStructure && (
         <div className="rounded-md border border-warning/25 bg-warning-subtle p-3">
           <p className="text-sm font-medium text-warning">
@@ -206,7 +228,7 @@ export function AdmissionDetailsStep({
       )}
       <ErrorText error={error} />
       <div className="flex items-center gap-2">
-        <Button size="sm" onClick={save} disabled={pending}>{pending ? "Saving…" : "Save"}</Button>
+        <Button size="sm" onClick={save} disabled={pending || (isWalkIn && !screeningConfirmed)}>{pending ? "Saving…" : "Save"}</Button>
         {saved && !pending && <span className="flex items-center gap-1.5 text-xs text-success"><SuccessDot />Saved</span>}
       </div>
     </StepPanel>
