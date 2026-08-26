@@ -47,6 +47,24 @@ const STATUS_LABELS: Record<string, string> = {
   enrolled: "Enrolled",
 };
 
+// Task 7: purely a display computation on updated_at, already fetched for every draft — no
+// new column, no cron job. 7 days flags an abandoned draft as "warning"; 14+ as "danger".
+const STALE_DRAFT_DAYS = 7;
+const VERY_STALE_DRAFT_DAYS = 14;
+
+// A plain helper (not called with Date.now() directly in the component body) — same pattern as
+// ageInvoiceRows() in finance/_data.ts, so the render function stays pure while this still
+// resolves "now" fresh on every request (this page is an async Server Component).
+function draftStaleness(
+  updatedAt: string,
+  nowMs: number = Date.now(),
+): { tone: "warning" | "danger"; label: string; days: number } | null {
+  const days = Math.floor((nowMs - new Date(updatedAt).getTime()) / (1000 * 60 * 60 * 24));
+  if (days >= VERY_STALE_DRAFT_DAYS) return { tone: "danger", label: `Stale · ${days}d`, days };
+  if (days >= STALE_DRAFT_DAYS) return { tone: "warning", label: `Stale · ${days}d`, days };
+  return null;
+}
+
 const ACTIVE_STATUSES = [
   "submitted",
   "under_review",
@@ -158,6 +176,7 @@ export default async function AdmissionsPage() {
                     });
                     const pct = Math.round((((d.wizard_current_step ?? 0) + 1) / total) * 100);
                     const officer = d.school_users as unknown as { full_name: string } | null;
+                    const staleness = draftStaleness(d.updated_at);
                     return (
                       <tr key={d.id}>
                         <td className="font-mono text-[0.75rem] text-muted-foreground">{d.application_number}</td>
@@ -168,7 +187,18 @@ export default async function AdmissionsPage() {
                           Step {(d.wizard_current_step ?? 0) + 1} of {total} · {pct}%
                         </td>
                         <td className="text-muted-foreground">{officer?.full_name ?? "Unassigned"}</td>
-                        <td className="text-muted-foreground">{new Date(d.updated_at).toLocaleString()}</td>
+                        <td className="text-muted-foreground">
+                          <div className="flex items-center gap-2">
+                            {new Date(d.updated_at).toLocaleString()}
+                            {staleness && (
+                              <StatusBadge
+                                tone={staleness.tone}
+                                label={staleness.label}
+                                title={`No activity in ${staleness.days} days`}
+                              />
+                            )}
+                          </div>
+                        </td>
                         <td className="text-right">
                           <div className="flex items-center justify-end gap-3">
                             <Link href={`/admissions/${d.id}/wizard`} className="text-[0.8125rem] font-medium text-primary hover:underline">
