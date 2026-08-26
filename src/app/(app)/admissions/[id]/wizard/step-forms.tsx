@@ -943,6 +943,13 @@ export function HealthStep({
 // Step 9 — Finance
 // ============================================================================
 
+const FINANCE_METHOD_LABELS: Record<string, string> = {
+  cash: "Cash",
+  bank: "Bank",
+  cheque: "Cheque",
+  mpesa: "M-Pesa",
+};
+
 export function FinanceStep({
   applicationId,
   hasStudentAndTerm,
@@ -967,6 +974,11 @@ export function FinanceStep({
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  // Task 16: cash/bank/cheque payments have no equivalent of M-Pesa's own confirmation —
+  // this holds a snapshot (method, amount, timestamp) of what was just saved so the officer
+  // has an on-screen acknowledgment to screenshot/print. Purely a display snapshot of data
+  // already saved by saveFinanceDecision below; no new receipt system, no PDF.
+  const [savedReceipt, setSavedReceipt] = useState<{ method: string; amount: number; timestamp: string } | null>(null);
 
   function loadPreview() {
     setError(null);
@@ -982,6 +994,7 @@ export function FinanceStep({
   function save() {
     setError(null);
     setSaved(false);
+    setSavedReceipt(null);
     startTransition(async () => {
       const result = await saveFinanceDecision(applicationId, {
         initial_payment_amount: amount ? Number(amount) : null,
@@ -989,6 +1002,9 @@ export function FinanceStep({
       });
       if ("error" in result) { setError(result.error); return; }
       setSaved(true);
+      if (method && method !== "mpesa" && amount.trim() !== "" && !Number.isNaN(Number(amount))) {
+        setSavedReceipt({ method, amount: Number(amount), timestamp: new Date().toLocaleString() });
+      }
     });
   }
 
@@ -1086,6 +1102,17 @@ export function FinanceStep({
         <Button size="sm" onClick={save} disabled={pending}>{pending ? "Saving…" : "Save"}</Button>
         {saved && !pending && <span className="flex items-center gap-1.5 text-xs text-success"><SuccessDot />Saved</span>}
       </div>
+      {savedReceipt && (
+        <div className="rounded-md border border-success/40 bg-success/5 p-3 text-sm">
+          <p className="mb-1 flex items-center gap-1.5 font-medium text-success"><SuccessDot />Payment recorded</p>
+          <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-muted-foreground">
+            <dt>Method</dt><dd className="text-foreground">{FINANCE_METHOD_LABELS[savedReceipt.method] ?? savedReceipt.method}</dd>
+            <dt>Amount</dt><dd className="text-foreground">KES {savedReceipt.amount.toLocaleString()}</dd>
+            <dt>Recorded at</dt><dd className="text-foreground">{savedReceipt.timestamp}</dd>
+          </dl>
+          <p className="mt-1.5 text-xs text-muted-foreground">You can screenshot or print this as the officer&apos;s confirmation of the recorded payment.</p>
+        </div>
+      )}
     </StepPanel>
   );
 }
