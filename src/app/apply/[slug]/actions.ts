@@ -1,5 +1,6 @@
 "use server";
 
+import { headers } from "next/headers";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { safeStorageFilename } from "@/lib/storage-path";
 
@@ -68,6 +69,26 @@ export async function submitApplication(
     admin = createAdminClient();
   } catch (e) {
     return { error: e instanceof Error ? e.message : "Applications are not available right now." };
+  }
+
+  // Abuse guard: this endpoint is public/unauthenticated, and a successful submission
+  // triggers a real SMS to guardianPhone (whatever number a caller supplies) plus a
+  // storage write per uploaded document. The honeypot and minimum-fill-time checks above
+  // only deter unsophisticated bots — nothing previously stopped a script from submitting
+  // repeatedly with varying names/phone numbers, which would both run up real SMS costs
+  // and could be used to send unsolicited "your child's application" texts to phone
+  // numbers the sender doesn't own. Same increment_and_check_rate_limit() primitive
+  // signUpSchool() and request-otp already use; keyed by IP, generous enough for a school
+  // office or cybercafé submitting several walk-in applications from one connection.
+  const forwardedFor = (await headers()).get("x-forwarded-for");
+  const clientIp = forwardedFor?.split(",")[0]?.trim() || "unknown";
+  const { data: withinLimit } = await admin.rpc("increment_and_check_rate_limit", {
+    p_bucket: `apply-submit:${clientIp}`,
+    p_max_events: 10,
+    p_window_seconds: 3_600,
+  });
+  if (withinLimit === false) {
+    return { error: "Too many applications submitted from this network. Please try again later." };
   }
 
   const { data: school, error: schoolError } = await admin
