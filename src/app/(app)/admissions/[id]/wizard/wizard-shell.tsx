@@ -152,7 +152,7 @@ export function WizardShell({
         </p>
         <div className="mt-3">
           {current.id === "admission_details" && (
-            <AdmissionDetailsStep applicationId={applicationId} academicYears={data.academicYears} terms={data.terms} initial={data.application} />
+            <AdmissionDetailsStep applicationId={applicationId} academicYears={data.academicYears} terms={data.terms} termsWithFeeStructure={data.termsWithFeeStructure} canReadFinance={data.canReadFinance} initial={data.application} />
           )}
           {current.id === "student" && (
             <StudentStep applicationId={applicationId} applicantSummary={data.application} resultingStudentId={data.resultingStudentId} />

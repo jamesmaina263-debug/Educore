@@ -96,20 +96,21 @@ export default async function AdmissionsPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const [{ data: schoolUser }, { data: canReview }, { data: canWrite }] = await Promise.all([
+  const [{ data: schoolUser }, { data: canReview }, { data: canWrite }, { data: canReadFinance }] = await Promise.all([
     supabase.from("school_users").select("full_name, roles(display_name), schools(name, slug)").eq("auth_user_id", user.id).maybeSingle(),
     supabase.rpc("auth_has_permission", { p_permission_key: "admissions.read_any" }),
     supabase.rpc("auth_has_permission", { p_permission_key: "admissions.write" }),
+    supabase.rpc("auth_has_permission", { p_permission_key: "finance.read" }),
   ]);
 
   const roleName = (schoolUser?.roles as unknown as { display_name: string } | null)?.display_name;
   const school = schoolUser?.schools as unknown as { name: string; slug: string } | null;
 
-  const [{ data: applications }, { data: drafts }, { data: turnaroundRows }] = await Promise.all([
+  const [{ data: applications }, { data: drafts }, { data: turnaroundRows }, { data: terms }, { data: feeStructures }] = await Promise.all([
     supabase
       .from("applications")
       .select(
-        "id, application_number, first_name, last_name, status, application_source, submitted_at, created_at, assigned_officer_id, school_users!applications_assigned_officer_id_fkey(full_name)",
+        "id, application_number, first_name, last_name, status, application_source, term_id, submitted_at, created_at, assigned_officer_id, school_users!applications_assigned_officer_id_fkey(full_name)",
       )
       .neq("status", "draft")
       .order("created_at", { ascending: false })
@@ -129,9 +130,16 @@ export default async function AdmissionsPage() {
       .not("submitted_at", "is", null)
       .not("decision_at", "is", null)
       .gte("decision_at", thirtyDaysAgoIso()),
+    // Gap 4 (audit): same early fee-structure-gap warning shown at Admission Details (Step 1),
+    // surfaced here too so it's visible at a glance across the whole list, not just once an
+    // officer is already inside a given application's wizard.
+    supabase.from("terms").select("id, name"),
+    supabase.from("fee_structures").select("term_id").eq("is_active", true),
   ]);
 
   const rows = applications ?? [];
+  const termNameById = new Map((terms ?? []).map((t) => [t.id, t.name]));
+  const termsWithFeeStructure = new Set((feeStructures ?? []).map((f) => f.term_id));
   const counts = ACTIVE_STATUSES.reduce(
     (acc, s) => ({ ...acc, [s]: rows.filter((r) => r.status === s).length }),
     {} as Record<string, number>,
@@ -295,6 +303,7 @@ export default async function AdmissionsPage() {
                 <tbody>
                   {rows.map((a) => {
                     const officer = a.school_users as unknown as { full_name: string } | null;
+                    const feeStructureMissing = canReadFinance && !!a.term_id && !termsWithFeeStructure.has(a.term_id);
                     return (
                       <tr key={a.id}>
                         <td className="font-medium">
@@ -303,7 +312,17 @@ export default async function AdmissionsPage() {
                         <td className="font-mono text-[0.75rem] text-muted-foreground">{a.application_number}</td>
                         <td className="text-muted-foreground">{a.application_source === "walk_in" ? "Walk-in" : "Online"}</td>
                         <td>
-                          <StatusBadge tone={STATUS_TONE[a.status] ?? "neutral"} label={STATUS_LABELS[a.status] ?? a.status} />
+                          <div className="flex items-center gap-1.5">
+                            <StatusBadge tone={STATUS_TONE[a.status] ?? "neutral"} label={STATUS_LABELS[a.status] ?? a.status} />
+                            {feeStructureMissing && (
+                              <span
+                                className="rounded-full border border-warning/25 bg-warning-subtle px-1.5 py-0.5 text-[0.625rem] font-medium text-warning"
+                                title={`No fee structure configured for ${termNameById.get(a.term_id!) ?? "this term"} — Finance will not be able to invoice until this is fixed.`}
+                              >
+                                No fee structure
+                              </span>
+                            )}
+                          </div>
                         </td>
                         <td className="text-muted-foreground">{officer?.full_name ?? "Unassigned"}</td>
                         <td className="text-muted-foreground">
