@@ -2,6 +2,7 @@ import { loadSettingsContext } from "../_data";
 import { ModulePageShell } from "@/components/app-shell/module-page-shell";
 import { BiometricDevicesPanel } from "@/components/settings/biometric-devices-panel";
 import { GateLatenessPanel } from "@/components/settings/gate-lateness-panel";
+import { PendingBiometricCapturesPanel } from "@/components/settings/pending-biometric-captures-panel";
 import { registerBiometricDevice, setBiometricDeviceStatus, updateGateLateThresholds } from "@/app/(app)/settings/actions";
 
 export default async function SettingsBiometricDevicesPage() {
@@ -24,6 +25,9 @@ export default async function SettingsBiometricDevicesPage() {
         setStatusAction={setBiometricDeviceStatus}
       />
       <GateLatenessPanel initial={ctx.gateLateThresholds} canManage={ctx.canManageBiometricDevices} updateAction={updateGateLateThresholds} />
+      {/* Task 12 of the admissions fix backlog: read-only visibility into which enrolled
+          students still need their biometric captured. */}
+      <PendingBiometricCapturesPanel />
       <p className="mt-4 text-xs text-muted-foreground">
         Once a device key is issued above, open{" "}
         <a href="/biometric-kiosk" target="_blank" rel="noopener noreferrer" className="underline">
