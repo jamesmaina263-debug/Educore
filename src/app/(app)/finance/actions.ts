@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { escapePostgrestOrValue } from "@/lib/postgrest-filter";
 
 type ActionResult = { error: string } | { success: true };
 
@@ -271,7 +272,10 @@ export async function searchStudentAccountsAction(query: string): Promise<
     supabase
       .from("student_financial_accounts")
       .select("student_id, payment_reference, students!inner(first_name, last_name, admission_number)")
-      .or(`admission_number.ilike.%${q}%,first_name.ilike.%${q}%,last_name.ilike.%${q}%`, { referencedTable: "students" }),
+      .or(
+        `admission_number.ilike.${escapePostgrestOrValue(`%${q}%`)},first_name.ilike.${escapePostgrestOrValue(`%${q}%`)},last_name.ilike.${escapePostgrestOrValue(`%${q}%`)}`,
+        { referencedTable: "students" },
+      ),
   ]);
   if (byReference.error) return { error: byReference.error.message };
   if (byStudent.error) return { error: byStudent.error.message };

@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import type { Recipient } from "@/app/(app)/communication/actions";
+import { escapePostgrestOrValue } from "@/lib/postgrest-filter";
 
 type ActionResult = { error: string } | { success: true };
 
@@ -264,7 +265,7 @@ export async function searchGuardians(query: string): Promise<{ error: string } 
     .from("school_users")
     .select("id, full_name, phone, email, roles(name)")
     .eq("roles.name", "parent")
-    .or(`full_name.ilike.%${query}%,phone.ilike.%${query}%`)
+    .or(`full_name.ilike.${escapePostgrestOrValue(`%${query}%`)},phone.ilike.${escapePostgrestOrValue(`%${query}%`)}`)
     .limit(10);
   if (error) return { error: error.message };
   return { success: true, results: (data ?? []).map((d) => ({ id: d.id, full_name: d.full_name, phone: d.phone, email: d.email })) };
