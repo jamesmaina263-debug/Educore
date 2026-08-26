@@ -28,6 +28,21 @@ export async function markUnderReviewAction(applicationId: string): Promise<Acti
   return { success: true };
 }
 
+// Reuses the existing assigned_officer_id column (already set once at creation for walk-ins,
+// see walk-in-actions.ts) and extends it to submitted applications. Any officer with
+// admissions.write can claim an unassigned application, or take over an already-assigned one —
+// no separate approval step, matching how ownership already works for drafts.
+export async function claimApplicationAction(applicationId: string): Promise<ActionResult> {
+  const supabase = await createClient();
+  const me = await currentSchoolUser(supabase);
+  if (!me) return { error: "Not signed in." };
+
+  const { error } = await supabase.from("applications").update({ assigned_officer_id: me }).eq("id", applicationId);
+  if (error) return { error: error.message };
+  revalidatePath("/admissions", "layout");
+  return { success: true };
+}
+
 export async function verifyDocumentAction(documentId: string): Promise<ActionResult> {
   const supabase = await createClient();
   const me = await currentSchoolUser(supabase);

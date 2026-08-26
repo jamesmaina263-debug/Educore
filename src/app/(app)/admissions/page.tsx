@@ -7,8 +7,9 @@ import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import { CopyApplicationLink } from "@/components/admissions/copy-application-link";
 import { DeleteApplicationButton } from "@/components/admissions/delete-application-button";
+import { ClaimApplicationButton } from "@/components/admissions/claim-application-button";
 import { createWalkInApplication } from "./walk-in-actions";
-import { deleteApplicationPermanentlyAction } from "./actions";
+import { deleteApplicationPermanentlyAction, claimApplicationAction } from "./actions";
 import { discardDraft } from "./[id]/wizard/actions";
 import { applicableStepCount } from "./wizard-steps";
 
@@ -75,7 +76,9 @@ export default async function AdmissionsPage() {
   const [{ data: applications }, { data: drafts }] = await Promise.all([
     supabase
       .from("applications")
-      .select("id, application_number, first_name, last_name, status, application_source, submitted_at, created_at")
+      .select(
+        "id, application_number, first_name, last_name, status, application_source, submitted_at, created_at, assigned_officer_id, school_users!applications_assigned_officer_id_fkey(full_name)",
+      )
       .neq("status", "draft")
       .order("created_at", { ascending: false })
       .limit(200),
@@ -209,42 +212,54 @@ export default async function AdmissionsPage() {
                     <th>Reference</th>
                     <th>Source</th>
                     <th>Status</th>
+                    <th>Assigned officer</th>
                     <th>Submitted</th>
                     <th className="text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {rows.map((a) => (
-                    <tr key={a.id}>
-                      <td className="font-medium">
-                        {a.first_name} {a.last_name}
-                      </td>
-                      <td className="font-mono text-[0.75rem] text-muted-foreground">{a.application_number}</td>
-                      <td className="text-muted-foreground">{a.application_source === "walk_in" ? "Walk-in" : "Online"}</td>
-                      <td>
-                        <StatusBadge tone={STATUS_TONE[a.status] ?? "neutral"} label={STATUS_LABELS[a.status] ?? a.status} />
-                      </td>
-                      <td className="text-muted-foreground">
-                        {a.submitted_at ? new Date(a.submitted_at).toLocaleDateString() : "—"}
-                      </td>
-                      <td className="text-right">
-                        <div className="flex items-center justify-end gap-3">
-                          {canReview && (
-                            <Link href={`/admissions/${a.id}`} className="text-[0.8125rem] font-medium text-primary hover:underline">
-                              Review
-                            </Link>
-                          )}
-                          {canWrite && (a.status === "rejected" || a.status === "withdrawn") && (
-                            <DeleteApplicationButton
-                              applicationId={a.id}
-                              applicantLabel={`${a.first_name} ${a.last_name}`}
-                              deleteAction={deleteApplicationPermanentlyAction}
-                            />
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
+                  {rows.map((a) => {
+                    const officer = a.school_users as unknown as { full_name: string } | null;
+                    return (
+                      <tr key={a.id}>
+                        <td className="font-medium">
+                          {a.first_name} {a.last_name}
+                        </td>
+                        <td className="font-mono text-[0.75rem] text-muted-foreground">{a.application_number}</td>
+                        <td className="text-muted-foreground">{a.application_source === "walk_in" ? "Walk-in" : "Online"}</td>
+                        <td>
+                          <StatusBadge tone={STATUS_TONE[a.status] ?? "neutral"} label={STATUS_LABELS[a.status] ?? a.status} />
+                        </td>
+                        <td className="text-muted-foreground">{officer?.full_name ?? "Unassigned"}</td>
+                        <td className="text-muted-foreground">
+                          {a.submitted_at ? new Date(a.submitted_at).toLocaleDateString() : "—"}
+                        </td>
+                        <td className="text-right">
+                          <div className="flex items-center justify-end gap-3">
+                            {canReview && (
+                              <Link href={`/admissions/${a.id}`} className="text-[0.8125rem] font-medium text-primary hover:underline">
+                                Review
+                              </Link>
+                            )}
+                            {canWrite && (
+                              <ClaimApplicationButton
+                                applicationId={a.id}
+                                isAssigned={!!a.assigned_officer_id}
+                                claimAction={claimApplicationAction}
+                              />
+                            )}
+                            {canWrite && (a.status === "rejected" || a.status === "withdrawn") && (
+                              <DeleteApplicationButton
+                                applicationId={a.id}
+                                applicantLabel={`${a.first_name} ${a.last_name}`}
+                                deleteAction={deleteApplicationPermanentlyAction}
+                              />
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
