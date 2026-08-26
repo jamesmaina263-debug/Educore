@@ -613,6 +613,18 @@ export interface EnrollmentResult {
   invoice_id: string | null;
   payment_reference: string | null;
   total_amount: number | null;
+  // Task 11: not columns from complete_enrollment() itself -- set below, after the RPC call,
+  // based on whether the best-effort "send confirmation" step below actually found a template
+  // to send. Lets the completion screen tell officers explicitly when nothing was sent
+  // automatically, instead of that failing silently.
+  // Task 11: confirmation_sent/confirmation_note are set live, only right after
+  // completeEnrollmentAction() actually runs the best-effort send — there's no reliable way to
+  // reconstruct "was a message sent" from history on a page reload, so both are optional and
+  // simply absent here. CompleteStep only shows the "nothing was sent" banner when
+  // confirmation_note is present, so an absent value here correctly shows no (possibly stale)
+  // warning on reload rather than guessing.
+  confirmation_sent?: boolean;
+  confirmation_note?: string | null;
 }
 
 // Single call into the transactional SQL function (Brief 4.16.12) — the DB either commits every
@@ -627,6 +639,8 @@ export async function completeEnrollmentAction(applicationId: string): Promise<{
   // through an Edge Function the SQL function can't call directly, so this happens here, and
   // never fails the enrollment itself: the completion screen's own "Send Parent Confirmation"
   // action covers this if no template is configured or the send fails.
+  let confirmationSent = false;
+  let confirmationNote: string | null = null;
   try {
     const { data: application } = await supabase.from("applications").select("school_id, guardian_id").eq("id", applicationId).maybeSingle();
     if (application?.guardian_id) {
@@ -650,15 +664,21 @@ export async function completeEnrollmentAction(applicationId: string): Promise<{
           values: { first_name: app2?.first_name ?? "", last_name: app2?.last_name ?? "" },
         };
         await composeAndSendAction({ recipients: [recipient], template_id: template.id, channel: template.channel });
+        confirmationSent = true;
+      } else {
+        confirmationNote = "No confirmation message was sent automatically — no admission-category communication template is configured for this school.";
       }
+    } else {
+      confirmationNote = "No confirmation message was sent automatically — this application has no guardian on record.";
     }
   } catch {
     // Non-blocking — enrollment already succeeded.
+    confirmationNote = "No confirmation message was sent automatically — the send failed.";
   }
 
   revalidatePath(`/admissions/${applicationId}/wizard`);
   revalidatePath(`/admissions/${applicationId}`);
   revalidatePath("/admissions");
   revalidatePath("/students");
-  return { success: true, result: data as EnrollmentResult };
+  return { success: true, result: { ...(data as Omit<EnrollmentResult, "confirmation_sent" | "confirmation_note">), confirmation_sent: confirmationSent, confirmation_note: confirmationNote } };
 }

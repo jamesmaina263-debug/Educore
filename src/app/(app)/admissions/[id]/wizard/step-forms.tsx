@@ -1217,7 +1217,7 @@ export function CompleteStep({
   function sendConfirmation() {
     startTransition(async () => {
       const outcome = await completeEnrollmentAction(applicationId); // idempotent — also re-triggers the best-effort send
-      if (!("error" in outcome)) setSent(true);
+      if (!("error" in outcome)) { setSent(true); setResult(outcome.result); }
     });
   }
 
@@ -1251,6 +1251,16 @@ export function CompleteStep({
           <p className="mt-1 text-sm text-muted-foreground">
             Finance has been notified via the audit log. A fee structure will need to be configured for this class/term before an invoice can be raised.
           </p>
+        </div>
+      )}
+      {/* Task 11: completeEnrollmentAction() now returns confirmation_sent/confirmation_note --
+          set right after the same best-effort send this button re-triggers. Makes the "no
+          template configured" (or no guardian, or send failure) case visible instead of it
+          silently doing nothing. Purely a UI branch on data already returned. */}
+      {!result.confirmation_sent && result.confirmation_note && (
+        <div className="rounded-md border border-warning/25 bg-warning-subtle p-3">
+          <p className="text-sm font-medium text-warning">No confirmation message sent automatically</p>
+          <p className="mt-1 text-sm text-muted-foreground">{result.confirmation_note} Use &quot;Send Parent Confirmation&quot; below.</p>
         </div>
       )}
       <div className="flex flex-wrap gap-2">
