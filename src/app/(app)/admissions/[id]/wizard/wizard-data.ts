@@ -23,6 +23,8 @@ export interface WizardStepData {
   terms: TermOption[];
   streamOptions: StreamOption[];
   currentStreamId: string | null;
+  termsWithFeeStructure: string[];
+  canReadFinance: boolean;
   houseOptions: HouseOption[];
   currentBedId: string | null;
   routeOptions: RouteOption[];
@@ -47,6 +49,7 @@ export async function loadWizardStepData(supabase: SupabaseClient, applicationId
     { data: application },
     { data: canWriteMedical },
     { data: canWriteFinance },
+    { data: canReadFinance },
     { data: requirements },
     { data: mpesaSettings },
   ] = await Promise.all([
@@ -59,6 +62,7 @@ export async function loadWizardStepData(supabase: SupabaseClient, applicationId
       .single(),
     supabase.rpc("auth_has_permission", { p_permission_key: "students.medical.write" }),
     supabase.rpc("auth_has_permission", { p_permission_key: "finance.write" }),
+    supabase.rpc("auth_has_permission", { p_permission_key: "finance.read" }),
     supabase.from("application_document_requirements").select("category, label, required").eq("school_id", schoolId).order("display_order"),
     supabase.from("mpesa_settings").select("is_active").maybeSingle(),
   ]);
@@ -143,6 +147,8 @@ export async function loadWizardStepData(supabase: SupabaseClient, applicationId
     terms: ref.terms,
     streamOptions: ref.streamOptions,
     currentStreamId,
+    termsWithFeeStructure: ref.termsWithFeeStructure,
+    canReadFinance: canReadFinance === true,
     houseOptions: ref.houseOptions,
     currentBedId,
     routeOptions: ref.routeOptions,

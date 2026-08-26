@@ -79,11 +79,15 @@ export function AdmissionDetailsStep({
   applicationId,
   academicYears,
   terms,
+  termsWithFeeStructure,
+  canReadFinance,
   initial,
 }: {
   applicationId: string;
   academicYears: AcademicYearOption[];
   terms: TermOption[];
+  termsWithFeeStructure: string[];
+  canReadFinance: boolean;
   initial: {
     admission_type: string;
     academic_year_id: string | null;
@@ -102,6 +106,14 @@ export function AdmissionDetailsStep({
   const [saved, setSaved] = useState(false);
 
   const termsForYear = terms.filter((t) => t.academic_year_id === form.academic_year_id);
+  // Gap 4 (audit): warn as soon as a term with no configured fee structure is picked, instead
+  // of only discovering it when Finance's invoice creation fails mid-wizard. Non-blocking —
+  // the officer can still proceed. Term-only match (class isn't chosen until Academic
+  // Placement), matching the same term-only existence check complete_enrollment already
+  // gates on. Suppressed for officers without finance.read, since RLS would otherwise make
+  // every term look fee-structure-less to them.
+  const selectedTermMissingFeeStructure = canReadFinance && !!form.term_id && !termsWithFeeStructure.includes(form.term_id);
+  const selectedTermName = terms.find((t) => t.id === form.term_id)?.name ?? "this term";
 
   function save() {
     setError(null);
@@ -185,6 +197,13 @@ export function AdmissionDetailsStep({
         <Checkbox id="transport_required" checked={form.transport_required} onCheckedChange={(c) => setForm({ ...form, transport_required: c === true })} />
         <Label htmlFor="transport_required" className="font-normal">Requires school transport</Label>
       </div>
+      {selectedTermMissingFeeStructure && (
+        <div className="rounded-md border border-warning/25 bg-warning-subtle p-3">
+          <p className="text-sm font-medium text-warning">
+            No fee structure configured for {selectedTermName} — Finance will not be able to invoice until this is fixed.
+          </p>
+        </div>
+      )}
       <ErrorText error={error} />
       <div className="flex items-center gap-2">
         <Button size="sm" onClick={save} disabled={pending}>{pending ? "Saving…" : "Save"}</Button>
