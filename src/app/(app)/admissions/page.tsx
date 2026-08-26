@@ -18,6 +18,10 @@ const STATUS_TONE: Record<string, "success" | "warning" | "danger" | "info" | "n
   submitted: "info",
   under_review: "info",
   documents_required: "warning",
+  // 'shortlisted' and 'assessment_required' are defined in the applications status enum and
+  // reserved for a future shortlisting/assessment step, but no code path currently
+  // transitions an application to either status — kept here so labels/tone are ready when
+  // that step is built, not because they're reachable today.
   shortlisted: "info",
   interview_scheduled: "info",
   assessment_required: "info",
@@ -35,6 +39,7 @@ const STATUS_LABELS: Record<string, string> = {
   submitted: "Submitted",
   under_review: "Under review",
   documents_required: "Documents needed",
+  // See note on STATUS_TONE above — not yet reachable, reserved for a future step.
   shortlisted: "Shortlisted",
   interview_scheduled: "Interview scheduled",
   assessment_required: "Assessment required",
@@ -65,6 +70,8 @@ function draftStaleness(
   return null;
 }
 
+// Includes 'shortlisted' and 'assessment_required' for forward-compatibility with the
+// reserved statuses above — harmless today since no application ever carries either value.
 const ACTIVE_STATUSES = [
   "submitted",
   "under_review",
