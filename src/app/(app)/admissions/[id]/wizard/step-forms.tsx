@@ -96,6 +96,8 @@ export function AdmissionDetailsStep({
     transport_required: boolean;
     previous_school: string | null;
     previous_class: string | null;
+    application_source: string;
+    walk_in_screening_confirmed: boolean;
   };
 }) {
   const router = useRouter();
@@ -104,6 +106,7 @@ export function AdmissionDetailsStep({
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  const isWalkIn = initial.application_source === "walk_in";
 
   const termsForYear = terms.filter((t) => t.academic_year_id === form.academic_year_id);
   // Gap 4 (audit): warn as soon as a term with no configured fee structure is picked, instead
@@ -118,6 +121,10 @@ export function AdmissionDetailsStep({
   function save() {
     setError(null);
     setSaved(false);
+    if (isWalkIn && !form.walk_in_screening_confirmed) {
+      setError("Please confirm this applicant was screened per school policy before saving.");
+      return;
+    }
     const input: AdmissionDetailsInput = {
       admission_type: form.admission_type as "new" | "transfer" | "re_admission",
       academic_year_id: form.academic_year_id,
@@ -127,6 +134,7 @@ export function AdmissionDetailsStep({
       transport_required: form.transport_required,
       previous_school: form.previous_school ?? undefined,
       previous_class: form.previous_class ?? undefined,
+      ...(isWalkIn ? { walk_in_screening_confirmed: form.walk_in_screening_confirmed } : {}),
     };
     startTransition(async () => {
       if (!online) {
@@ -202,6 +210,18 @@ export function AdmissionDetailsStep({
           <p className="text-sm font-medium text-warning">
             No fee structure configured for {selectedTermName} — Finance will not be able to invoice until this is fixed.
           </p>
+        </div>
+      )}
+      {isWalkIn && (
+        <div className="flex items-start gap-2 rounded-md border border-warning/25 bg-warning-subtle px-3 py-2">
+          <Checkbox
+            id="walk_in_screening_confirmed"
+            checked={form.walk_in_screening_confirmed}
+            onCheckedChange={(c) => setForm({ ...form, walk_in_screening_confirmed: c === true })}
+          />
+          <Label htmlFor="walk_in_screening_confirmed" className="font-normal">
+            I confirm this applicant was screened per school policy before starting enrollment.
+          </Label>
         </div>
       )}
       <ErrorText error={error} />
@@ -1142,6 +1162,8 @@ export function FinanceStep({
 
 const CHECKLIST_STEP_BY_ITEM: Record<string, string> = {
   student: "student",
+  // Task 2's confirmation checkbox lives on the Admission Details step (Step 1).
+  walk_in_screening: "admission_details",
   guardian: "guardian",
   documents: "documents",
   academics: "academics",
