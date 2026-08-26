@@ -1,6 +1,7 @@
 import { loadSettingsContext } from "../_data";
 import { ModulePageShell } from "@/components/app-shell/module-page-shell";
 import { BiometricDevicesPanel } from "@/components/settings/biometric-devices-panel";
+import { PendingBiometricPanel } from "@/components/settings/pending-biometric-panel";
 import { GateLatenessPanel } from "@/components/settings/gate-lateness-panel";
 import { registerBiometricDevice, setBiometricDeviceStatus, updateGateLateThresholds } from "@/app/(app)/settings/actions";
 
@@ -23,6 +24,14 @@ export default async function SettingsBiometricDevicesPage() {
         registerAction={registerBiometricDevice}
         setStatusAction={setBiometricDeviceStatus}
       />
+      {ctx.canViewBiometricProfiles && (
+        <div className="mt-6 border-t pt-6">
+          <h3 className="text-sm font-medium">Pending Biometric Capture</h3>
+          <div className="mt-3">
+            <PendingBiometricPanel rows={ctx.pendingBiometricRows} />
+          </div>
+        </div>
+      )}
       <GateLatenessPanel initial={ctx.gateLateThresholds} canManage={ctx.canManageBiometricDevices} updateAction={updateGateLateThresholds} />
       <p className="mt-4 text-xs text-muted-foreground">
         Once a device key is issued above, open{" "}

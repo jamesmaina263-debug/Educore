@@ -20,6 +20,7 @@ export async function loadWizardReferenceData(supabase: SupabaseClient) {
     { data: stops },
     { data: vehicles },
     { data: activeTransportAssignments },
+    { data: feeStructures },
   ] = await Promise.all([
     supabase.from("academic_years").select("id, name, status").order("start_date", { ascending: false }),
     supabase.from("terms").select("id, academic_year_id, name, term_number, status").order("term_number"),
@@ -35,6 +36,11 @@ export async function loadWizardReferenceData(supabase: SupabaseClient) {
     supabase.from("transport_stops").select("id, route_id, name, sequence, pickup_time, capacity").order("sequence"),
     supabase.from("transport_vehicles").select("id, registration_number, capacity, driver_name, driver_phone"),
     supabase.from("student_transport_assignments").select("route_id, vehicle_id").eq("status", "active"),
+    // Gap 4 (audit): early, non-blocking warning when a term has no fee structure configured
+    // yet, surfaced at Admission Details (Step 1) instead of only being discovered when
+    // Finance's invoice creation fails mid-wizard (Aug 25 fix). Existence check only —
+    // reuses the same term-only match complete_enrollment's checklist already gates on.
+    supabase.from("fee_structures").select("term_id").eq("is_active", true),
   ]);
 
   const occupancyByStream = new Map<string, number>();
@@ -115,6 +121,8 @@ export async function loadWizardReferenceData(supabase: SupabaseClient) {
     assigned: assignedCountByRoute.get(v.id) ?? 0, // approximate; vehicles aren't route-exclusive today
   }));
 
+  const termsWithFeeStructure = Array.from(new Set((feeStructures ?? []).map((f) => f.term_id as string)));
+
   return {
     academicYears: academicYears ?? [],
     terms: terms ?? [],
@@ -124,5 +132,6 @@ export async function loadWizardReferenceData(supabase: SupabaseClient) {
     routeOptions,
     vehicleOptions,
     dormNameById,
+    termsWithFeeStructure,
   };
 }

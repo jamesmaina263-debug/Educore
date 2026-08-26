@@ -82,6 +82,8 @@ export function WizardShell({
     boardingLabel: bedLabel,
     transportLabel: data.hasTransportAssignment ? "Assigned" : null,
     financeTotal: null,
+    boardingPreference: (data.application.boarding_preference as "day" | "boarding" | null) ?? null,
+    transportRequired: data.application.transport_required,
   };
 
   function goTo(index: number) {
@@ -150,7 +152,7 @@ export function WizardShell({
         </p>
         <div className="mt-3">
           {current.id === "admission_details" && (
-            <AdmissionDetailsStep applicationId={applicationId} academicYears={data.academicYears} terms={data.terms} initial={data.application} />
+            <AdmissionDetailsStep applicationId={applicationId} academicYears={data.academicYears} terms={data.terms} termsWithFeeStructure={data.termsWithFeeStructure} canReadFinance={data.canReadFinance} initial={data.application} />
           )}
           {current.id === "student" && (
             <StudentStep applicationId={applicationId} applicantSummary={data.application} resultingStudentId={data.resultingStudentId} />

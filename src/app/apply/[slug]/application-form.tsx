@@ -167,6 +167,11 @@ export function ApplicationForm({
           {state.guardianVerificationNotice && (
             <p className="text-[0.75rem] text-muted-foreground">{state.guardianVerificationNotice}</p>
           )}
+          {/* Task 18: text-only explanatory copy -- clarifies that skipping this step doesn't
+              drop the application, since "optional" alone left that ambiguous. */}
+          <p className="text-[0.75rem] text-muted-foreground">
+            This step is optional — you can skip it and the school will still receive your application.
+          </p>
           <div className="space-y-1.5">
             <Label htmlFor="guardian_otp_code">6-digit code</Label>
             <Input

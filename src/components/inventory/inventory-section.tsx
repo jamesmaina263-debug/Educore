@@ -87,8 +87,7 @@ export function InventorySection({
   const [moveReason, setMoveReason] = useState("");
 
   const [transferOpen, setTransferOpen] = useState(false);
-  const [transferItemId, setTransferItemId] = useState("");
-  const [transferQuantity, setTransferQuantity] = useState("");
+  const [transferLines, setTransferLines] = useState([{ item_id: "", quantity: "" }]);
 
   async function handleCreateItem() {
     setPending(true);
@@ -152,20 +151,40 @@ export function InventorySection({
     router.refresh();
   }
 
-  const transferItemStock = items.find((i) => i.id === transferItemId)?.quantity ?? null;
+  const medicalItems = items.filter((i) => i.category_name === "Medical Supplies");
+
+  function updateTransferLine(index: number, patch: Partial<{ item_id: string; quantity: string }>) {
+    setTransferLines((lines) => lines.map((l, i) => (i === index ? { ...l, ...patch } : l)));
+  }
+  function addTransferLine() {
+    setTransferLines((lines) => [...lines, { item_id: "", quantity: "" }]);
+  }
+  function removeTransferLine(index: number) {
+    setTransferLines((lines) => (lines.length > 1 ? lines.filter((_, i) => i !== index) : lines));
+  }
+
+  const validTransferLines = transferLines.filter((l) => l.item_id && Number(l.quantity) > 0);
+  const transferStockErrors = validTransferLines
+    .map((l) => {
+      const item = items.find((i) => i.id === l.item_id);
+      if (item && Number(l.quantity) > item.quantity) {
+        return `${item.name}: Main Store only has ${item.quantity} in stock — can't transfer ${l.quantity}.`;
+      }
+      return null;
+    })
+    .filter((m): m is string => m !== null);
 
   async function handleCreateTransfer() {
-    if (transferItemStock !== null && Number(transferQuantity) > transferItemStock) {
-      return setError(`Main Store only has ${transferItemStock} in stock — can't transfer ${transferQuantity}.`);
-    }
+    if (transferStockErrors.length > 0) return setError(transferStockErrors[0]);
     setPending(true);
     setError(null);
-    const result = await createTransferAction({ item_id: transferItemId, quantity: Number(transferQuantity) });
+    const result = await createTransferAction({
+      items: validTransferLines.map((l) => ({ item_id: l.item_id, quantity: Number(l.quantity) })),
+    });
     setPending(false);
     if ("error" in result) return setError(result.error);
     setTransferOpen(false);
-    setTransferItemId("");
-    setTransferQuantity("");
+    setTransferLines([{ item_id: "", quantity: "" }]);
     router.refresh();
   }
 
@@ -313,7 +332,13 @@ export function InventorySection({
             </DialogContent>
           </Dialog>
 
-          <Dialog open={transferOpen} onOpenChange={setTransferOpen}>
+          <Dialog
+            open={transferOpen}
+            onOpenChange={(o) => {
+              setTransferOpen(o);
+              if (!o) setTransferLines([{ item_id: "", quantity: "" }]);
+            }}
+          >
             <DialogTrigger asChild>
               <Button size="sm" variant="outline">
                 Transfer to Health
@@ -324,42 +349,58 @@ export function InventorySection({
                 <DialogTitle>Transfer stock to Health</DialogTitle>
               </DialogHeader>
               <div className="space-y-3">
-                <div className="space-y-1.5">
-                  <Label>Item</Label>
-                  <Select value={transferItemId} onValueChange={setTransferItemId}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select item" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {items.map((i) => (
-                        <SelectItem key={i.id} value={i.id}>
-                          {i.name} ({i.quantity} {i.unit} in stock)
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-1.5">
-                  <Label>Quantity</Label>
-                  <Input
-                    type="number"
-                    min={1}
-                    max={transferItemStock ?? undefined}
-                    value={transferQuantity}
-                    onChange={(e) => setTransferQuantity(e.target.value)}
-                  />
-                  {transferItemId && (
-                    <p className="text-xs text-muted-foreground">
-                      {transferItemStock} in stock at Main Store — you can&apos;t transfer more than that.
-                    </p>
-                  )}
-                </div>
+                {transferLines.map((line, i) => {
+                  const lineItem = medicalItems.find((it) => it.id === line.item_id);
+                  return (
+                    <div key={i} className="flex items-start gap-2 rounded-md border border-border/60 p-2">
+                      <div className="grid flex-1 grid-cols-1 gap-2 sm:grid-cols-[1fr_auto]">
+                        <Select value={line.item_id} onValueChange={(v) => updateTransferLine(i, { item_id: v })}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select a Medical Supplies item" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {medicalItems.map((it) => (
+                              <SelectItem key={it.id} value={it.id}>
+                                {it.name} ({it.quantity} {it.unit} in stock)
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <Input
+                          type="number"
+                          min={1}
+                          max={lineItem?.quantity ?? undefined}
+                          placeholder="Qty"
+                          value={line.quantity}
+                          onChange={(e) => updateTransferLine(i, { quantity: e.target.value })}
+                        />
+                      </div>
+                      {transferLines.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => removeTransferLine(i)}
+                          className="text-muted-foreground hover:text-destructive"
+                          aria-label="Remove item"
+                        >
+                          ×
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+                <Button type="button" size="sm" variant="ghost" onClick={addTransferLine}>
+                  + Add another item
+                </Button>
+                {medicalItems.length === 0 && (
+                  <p className="text-xs text-amber-600">No items in the Medical Supplies category yet — add one first.</p>
+                )}
                 <p className="text-xs text-muted-foreground">
-                  This doesn&apos;t move stock yet — the Nurse confirms what she physically received before it leaves Main Store&apos;s count.
+                  Only Medical Supplies items can be transferred to Health. This doesn&apos;t move stock yet — the Nurse
+                  confirms what she physically received, one item at a time, before it leaves Main Store&apos;s count.
                 </p>
               </div>
               <DialogFooter>
-                <Button onClick={handleCreateTransfer} disabled={pending || !transferItemId || !transferQuantity}>
+                <Button onClick={handleCreateTransfer} disabled={pending || validTransferLines.length === 0}>
                   {pending ? "Sending…" : "Send transfer"}
                 </Button>
               </DialogFooter>
