@@ -16,6 +16,8 @@ export interface WizardStepData {
     transport_required: boolean;
     previous_school: string | null;
     previous_class: string | null;
+    application_source: string;
+    walk_in_screening_confirmed: boolean;
   };
   resultingStudentId: string | null;
   admissionNumber: string | null;
@@ -56,7 +58,7 @@ export async function loadWizardStepData(supabase: SupabaseClient, applicationId
     supabase
       .from("applications")
       .select(
-        "first_name, last_name, other_names, date_of_birth, gender, admission_type, academic_year_id, term_id, boarding_preference, transport_required, previous_school, previous_class, resulting_student_id, initial_payment_amount, initial_payment_method, status",
+        "first_name, last_name, other_names, date_of_birth, gender, admission_type, academic_year_id, term_id, boarding_preference, transport_required, previous_school, previous_class, resulting_student_id, initial_payment_amount, initial_payment_method, status, application_source, walk_in_screening_confirmed",
       )
       .eq("id", applicationId)
       .single(),
@@ -140,6 +142,8 @@ export async function loadWizardStepData(supabase: SupabaseClient, applicationId
       transport_required: application?.transport_required ?? false,
       previous_school: application?.previous_school ?? null,
       previous_class: application?.previous_class ?? null,
+      application_source: application?.application_source ?? "online",
+      walk_in_screening_confirmed: application?.walk_in_screening_confirmed ?? false,
     },
     resultingStudentId: studentId,
     admissionNumber,
