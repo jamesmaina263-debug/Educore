@@ -82,6 +82,8 @@ export function WizardShell({
     boardingLabel: bedLabel,
     transportLabel: data.hasTransportAssignment ? "Assigned" : null,
     financeTotal: null,
+    boardingPreference: (data.application.boarding_preference as "day" | "boarding" | null) ?? null,
+    transportRequired: data.application.transport_required,
   };
 
   function goTo(index: number) {

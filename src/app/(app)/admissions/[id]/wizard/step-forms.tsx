@@ -1117,6 +1117,10 @@ export interface ReviewSummary {
   boardingLabel: string | null;
   transportLabel: string | null;
   financeTotal: number | null;
+  /** Task 15: the applicant's original stated preference, always shown at Final Review even
+   *  when the Boarding/Transport step itself was skipped by the dynamic step logic. */
+  boardingPreference: "day" | "boarding" | null;
+  transportRequired: boolean;
 }
 
 // "Editable inline" (Brief 4.16.13) is delivered by letting every section jump straight back to
@@ -1136,15 +1140,27 @@ export function ReviewStep({ applicationId, summary, onNavigateToStep }: { appli
     });
   }
 
-  const rows: { label: string; value: string; stepId: string }[] = [
+  // Task 15: the Boarding/Transport steps in the wizard auto-skip based on the applicant's
+  // original preference, so an officer reviewing this screen never sees that preference when
+  // the corresponding step didn't appear. These captions surface it regardless, next to a
+  // "confirmed at application" indicator — read-only, no new input, doesn't touch skip logic.
+  const boardingPreferenceCaption =
+    summary.boardingPreference === "boarding" ? "Applicant requested: Boarding"
+    : summary.boardingPreference === "day" ? "Applicant requested: Day scholar"
+    : "Boarding preference not recorded";
+  const transportPreferenceCaption = summary.transportRequired
+    ? "Applicant requested: School transport required"
+    : "Applicant requested: No school transport needed";
+
+  const rows: { label: string; value: string; stepId: string; caption?: string }[] = [
     { label: "Admission type", value: summary.admissionType, stepId: "admission_details" },
     { label: "Academic year / term", value: `${summary.academicYearLabel ?? "—"} / ${summary.termLabel ?? "—"}`, stepId: "admission_details" },
     { label: "Student", value: `${summary.studentName}${summary.admissionNumber ? ` · ${summary.admissionNumber}` : ""}`, stepId: "student" },
     { label: "Guardian", value: summary.guardianName ? `${summary.guardianName} (${summary.guardianRelationship ?? "—"})` : "Not linked", stepId: "guardian" },
     { label: "Documents", value: summary.documentsSummary, stepId: "documents" },
     { label: "Class / stream", value: summary.streamLabel ?? "Not placed", stepId: "academics" },
-    { label: "Boarding", value: summary.boardingLabel ?? "Day / not applicable", stepId: "boarding" },
-    { label: "Transport", value: summary.transportLabel ?? "Not applicable", stepId: "transport" },
+    { label: "Boarding", value: summary.boardingLabel ?? "Day / not applicable", stepId: "boarding", caption: boardingPreferenceCaption },
+    { label: "Transport", value: summary.transportLabel ?? "Not applicable", stepId: "transport", caption: transportPreferenceCaption },
     { label: "Finance", value: summary.financeTotal != null ? `KES ${summary.financeTotal.toLocaleString()} charged this term` : "Not previewed", stepId: "finance" },
   ];
 
@@ -1156,6 +1172,11 @@ export function ReviewStep({ applicationId, summary, onNavigateToStep }: { appli
             <div>
               <p className="text-xs text-muted-foreground">{r.label}</p>
               <p>{r.value}</p>
+              {r.caption && (
+                <p className="mt-0.5 flex items-center gap-1.5 text-xs text-success">
+                  <SuccessDot />{r.caption}
+                </p>
+              )}
             </div>
             <Button size="sm" variant="ghost" onClick={() => onNavigateToStep(r.stepId)}>Edit</Button>
           </li>
