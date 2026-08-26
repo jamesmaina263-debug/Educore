@@ -1031,6 +1031,16 @@ export function FinanceStep({
         <div className="space-y-1.5">
           <Label htmlFor="initial_payment">Record initial payment (optional)</Label>
           <Input id="initial_payment" type="number" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="Amount, KES" />
+          {/* Task 9: informational only, using data already fetched by loadPreview above — no
+              new validation, since a legitimate partial or advance payment can legitimately be
+              less than or more than the term total. */}
+          {charges !== null && amount.trim() !== "" && !Number.isNaN(Number(amount)) && (
+            <p className="text-[0.75rem] text-muted-foreground">
+              You entered KES {Number(amount).toLocaleString()} — the fee total for this term is KES {total.toLocaleString()}
+              {Number(amount) !== total && Number(amount) > total && " (more than the total — likely covers a future term or is a deliberate advance)"}
+              {Number(amount) !== total && Number(amount) < total && " (less than the total — a partial payment)"}
+            </p>
+          )}
         </div>
         <div className="space-y-1.5">
           <Label>Method</Label>
