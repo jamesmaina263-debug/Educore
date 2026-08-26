@@ -22,6 +22,7 @@ export interface GeneralSettingsData {
   academic_year_id: string | null;
   academic_year_name: string | null;
   terms: TermOption[];
+  admission_response_note: string;
 }
 
 function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
@@ -49,19 +50,26 @@ export function GeneralSettingsPanel({ initial, canWrite }: { initial: GeneralSe
   const [email, setEmail] = useState(initial.email);
   const [kraPin, setKraPin] = useState(initial.kra_pin);
   const [termId, setTermId] = useState(initial.terms.find((t) => t.status === "active")?.id ?? "");
+  const [admissionResponseNote, setAdmissionResponseNote] = useState(initial.admission_response_note);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
 
   const selectedTerm = initial.terms.find((t) => t.id === termId) ?? null;
   const initialTermId = initial.terms.find((t) => t.status === "active")?.id ?? "";
-  const dirty = name !== initial.name || email !== initial.email || kraPin !== initial.kra_pin || termId !== initialTermId;
+  const dirty =
+    name !== initial.name ||
+    email !== initial.email ||
+    kraPin !== initial.kra_pin ||
+    termId !== initialTermId ||
+    admissionResponseNote !== initial.admission_response_note;
 
   function handleCancel() {
     setName(initial.name);
     setEmail(initial.email);
     setKraPin(initial.kra_pin);
     setTermId(initialTermId);
+    setAdmissionResponseNote(initial.admission_response_note);
     setError(null);
     setSaved(false);
   }
@@ -71,8 +79,13 @@ export function GeneralSettingsPanel({ initial, canWrite }: { initial: GeneralSe
     setError(null);
     setSaved(false);
 
-    if (name !== initial.name || email !== initial.email || kraPin !== initial.kra_pin) {
-      const result = await updateBranding({ name, email, kra_pin: kraPin });
+    if (
+      name !== initial.name ||
+      email !== initial.email ||
+      kraPin !== initial.kra_pin ||
+      admissionResponseNote !== initial.admission_response_note
+    ) {
+      const result = await updateBranding({ name, email, kra_pin: kraPin, admission_response_note: admissionResponseNote });
       if ("error" in result) {
         setPending(false);
         return setError(result.error);
@@ -123,6 +136,18 @@ export function GeneralSettingsPanel({ initial, canWrite }: { initial: GeneralSe
           </Field>
           <Field label="KRA PIN" hint="Employer PIN, printed on staff payslips.">
             <input className={inputClass} value={kraPin} onChange={(e) => setKraPin(e.target.value)} disabled={!canWrite} />
+          </Field>
+          <Field
+            label="Admission response time"
+            hint='Shown to parents on the confirmation SMS and their status page, e.g. "Typical response time: 5 business days." Leave blank to show nothing.'
+          >
+            <input
+              className={inputClass}
+              value={admissionResponseNote}
+              onChange={(e) => setAdmissionResponseNote(e.target.value)}
+              disabled={!canWrite}
+              placeholder="Typical response time: 5 business days"
+            />
           </Field>
         </section>
 
