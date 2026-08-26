@@ -1162,6 +1162,7 @@ export function FinanceStep({
 
 const CHECKLIST_STEP_BY_ITEM: Record<string, string> = {
   student: "student",
+  // Task 2's confirmation checkbox lives on the Admission Details step (Step 1).
   walk_in_screening: "admission_details",
   guardian: "guardian",
   documents: "documents",
