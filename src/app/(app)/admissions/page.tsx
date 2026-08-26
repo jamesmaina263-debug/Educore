@@ -48,7 +48,7 @@ const STATUS_LABELS: Record<string, string> = {
   waitlisted: "Waitlisted",
   rejected: "Rejected",
   withdrawn: "Withdrawn",
-  admission_pending: "Admission pending",
+  admission_pending: "Accepted — admission in progress",
   enrolled: "Enrolled",
 };
 
