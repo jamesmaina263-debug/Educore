@@ -184,6 +184,9 @@ export interface CreateOrLinkStudentInput {
   upi_number?: string;
   override_duplicate: boolean;
   link_existing_student_id?: string;
+  // Which duplicate candidate(s) were shown when the officer chose to override — recorded to
+  // audit_log for secondary visibility (Task 8). Empty/omitted when override_duplicate is false.
+  overridden_candidate_ids?: string[];
 }
 
 export async function createOrLinkStudent(
@@ -210,6 +213,18 @@ export async function createOrLinkStudent(
       .update({ resulting_student_id: input.link_existing_student_id, duplicate_check_acknowledged: true, updated_at: new Date().toISOString() })
       .eq("id", applicationId);
     if (linkError) return { error: linkError.message };
+
+    if (input.override_duplicate) {
+      const { error: logError } = await supabase.rpc("log_duplicate_override", {
+        p_application_id: applicationId,
+        p_student_id: input.link_existing_student_id,
+        p_candidate_ids: input.overridden_candidate_ids ?? [],
+      });
+      // Non-fatal, matching every other audit/notification call in this codebase — the link
+      // itself already succeeded and is what matters most; the audit trail is best-effort.
+      if (logError) console.error("createOrLinkStudent (link) audit log failed:", logError.message);
+    }
+
     revalidatePath(`/admissions/${applicationId}/wizard`);
     return { success: true, studentId: input.link_existing_student_id };
   }
@@ -243,6 +258,15 @@ export async function createOrLinkStudent(
     })
     .eq("id", applicationId);
   if (updateError) return { error: updateError.message };
+
+  if (input.override_duplicate) {
+    const { error: logError } = await supabase.rpc("log_duplicate_override", {
+      p_application_id: applicationId,
+      p_student_id: student.id,
+      p_candidate_ids: input.overridden_candidate_ids ?? [],
+    });
+    if (logError) console.error("createOrLinkStudent (create) audit log failed:", logError.message);
+  }
 
   revalidatePath(`/admissions/${applicationId}/wizard`);
   revalidatePath("/students");

@@ -272,7 +272,11 @@ export function StudentStep({
   function createNew(overrideDuplicate: boolean) {
     setError(null);
     startTransition(async () => {
-      const result = await createOrLinkStudent(applicationId, { admission_number: "", override_duplicate: overrideDuplicate });
+      const result = await createOrLinkStudent(applicationId, {
+        admission_number: "",
+        override_duplicate: overrideDuplicate,
+        overridden_candidate_ids: overrideDuplicate ? (candidates ?? []).map((c) => c.id) : undefined,
+      });
       if ("error" in result) { setError(result.error); return; }
       router.refresh();
     });
@@ -281,7 +285,12 @@ export function StudentStep({
   function linkExisting(studentId: string) {
     setError(null);
     startTransition(async () => {
-      const result = await createOrLinkStudent(applicationId, { admission_number: "", override_duplicate: true, link_existing_student_id: studentId });
+      const result = await createOrLinkStudent(applicationId, {
+        admission_number: "",
+        override_duplicate: true,
+        link_existing_student_id: studentId,
+        overridden_candidate_ids: (candidates ?? []).map((c) => c.id),
+      });
       if ("error" in result) { setError(result.error); return; }
       router.refresh();
     });
