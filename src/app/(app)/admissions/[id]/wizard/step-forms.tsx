@@ -1241,6 +1241,18 @@ export function CompleteStep({
           {result.payment_reference && <div><dt className="text-xs text-muted-foreground">Payment reference</dt><dd>{result.payment_reference}</dd></div>}
         </dl>
       </div>
+      {/* Task 10: complete_enrollment() already returns invoice_id -- a null here means the
+          fee-structure gap (see Task 4's Aug-25 fix) was hit and the invoice creation was
+          skipped, but the enrollment itself still succeeded. Purely a UI branch on data
+          already returned -- complete_enrollment() itself is untouched. */}
+      {result.invoice_id === null && (
+        <div className="rounded-md border border-warning/25 bg-warning-subtle p-3">
+          <p className="text-sm font-medium text-warning">Enrollment completed, but the fee invoice could not be created</p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Finance has been notified via the audit log. A fee structure will need to be configured for this class/term before an invoice can be raised.
+          </p>
+        </div>
+      )}
       <div className="flex flex-wrap gap-2">
         <Button asChild size="sm"><Link href={`/students/${result.student_id}`}>View Student</Link></Button>
         <Button asChild size="sm" variant="outline"><Link href={`/students/${result.student_id}/id-card`}>Print Student Details</Link></Button>
