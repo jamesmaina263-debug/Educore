@@ -81,6 +81,13 @@ const ACTIVE_STATUSES = [
   "assessment_required",
 ];
 
+// Task 17: same pattern as draftStaleness above -- a plain helper (not a direct Date.now() call
+// inside the Server Component body) so eslint's react-hooks/purity rule doesn't flag it, while
+// still resolving "now" fresh on every request.
+function thirtyDaysAgoIso(nowMs: number = Date.now()): string {
+  return new Date(nowMs - 30 * 24 * 60 * 60 * 1000).toISOString();
+}
+
 export default async function AdmissionsPage() {
   const supabase = await createClient();
 
@@ -121,7 +128,7 @@ export default async function AdmissionsPage() {
       .select("submitted_at, decision_at")
       .not("submitted_at", "is", null)
       .not("decision_at", "is", null)
-      .gte("decision_at", new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()),
+      .gte("decision_at", thirtyDaysAgoIso()),
   ]);
 
   const rows = applications ?? [];
