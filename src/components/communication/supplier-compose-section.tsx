@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { sendSupplierMessageAction } from "@/app/(app)/communication/actions";
 
 export interface SupplierOption {
@@ -32,6 +33,7 @@ export function SupplierComposeSection({ suppliers, purchaseOrders = [] }: { sup
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sent, setSent] = useState(false);
+  const [reviewOpen, setReviewOpen] = useState(false);
 
   const selectedPo = purchaseOrders.find((p) => p.id === poId);
   // Only offer POs whose supplier actually has an email -- otherwise picking one leads straight to
@@ -41,6 +43,7 @@ export function SupplierComposeSection({ suppliers, purchaseOrders = [] }: { sup
   // message to a PO is that it's unambiguous which supplier it's about) -- derived from poId
   // rather than synced via an effect, so there's no extra render or state-drift risk.
   const supplierId = selectedPo ? selectedPo.supplier_id : manualSupplierId;
+  const selectedSupplierName = withEmail.find((s) => s.id === supplierId)?.name;
 
   function handlePoChange(id: string) {
     setPoId(id);
@@ -49,6 +52,7 @@ export function SupplierComposeSection({ suppliers, purchaseOrders = [] }: { sup
   }
 
   async function handleSend() {
+    setReviewOpen(false);
     setPending(true);
     setError(null);
     setSent(false);
@@ -118,13 +122,38 @@ export function SupplierComposeSection({ suppliers, purchaseOrders = [] }: { sup
                 <Label>Message</Label>
                 <Textarea value={body} onChange={(e) => setBody(e.target.value)} rows={5} />
               </div>
-              <Button onClick={handleSend} disabled={pending || !supplierId || !subject.trim() || !body.trim()} className="self-start">
-                {pending ? "Sending…" : "Send"}
+              <Button onClick={() => setReviewOpen(true)} disabled={pending || !supplierId || !subject.trim() || !body.trim()} className="self-start">
+                Review &amp; send
               </Button>
             </>
           )}
         </div>
       </div>
+
+      <Dialog open={reviewOpen} onOpenChange={setReviewOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Review before sending</DialogTitle>
+          </DialogHeader>
+          <div className="flex flex-col gap-3 text-sm">
+            <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[0.8125rem] text-muted-foreground">
+              <span>To</span>
+              <span className="text-foreground">{selectedSupplierName ?? "—"}</span>
+              <span>Subject</span>
+              <span className="text-foreground">{subject}</span>
+            </div>
+            <div className="rounded-md border border-border bg-muted/40 p-3 whitespace-pre-wrap">{body}</div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setReviewOpen(false)} disabled={pending}>
+              Back to edit
+            </Button>
+            <Button onClick={handleSend} disabled={pending}>
+              {pending ? "Sending…" : "Confirm & send"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

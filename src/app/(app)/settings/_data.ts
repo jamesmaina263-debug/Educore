@@ -6,6 +6,7 @@ import type { StaffRow, RoleOption } from "@/components/settings/staff-roles-tab
 import type { BillingData } from "@/components/settings/billing-panel";
 import type { ApiKeyRow } from "@/components/settings/api-keys-panel";
 import type { BiometricDeviceRow } from "@/components/settings/biometric-devices-panel";
+import type { PendingBiometricRow } from "@/components/settings/pending-biometric-panel";
 import type { LeaveTypeRow } from "@/components/settings/leave-types-panel";
 import { getMyNotificationPreferences, type PreferenceRow } from "@/app/notifications/actions";
 
@@ -22,6 +23,7 @@ export interface SettingsContext {
   canManageApiKeys: boolean;
   canManageBiometricDevices: boolean;
   canReadBiometricEvents: boolean;
+  canViewBiometricProfiles: boolean;
   canReadAudit: boolean;
   canReadStaff: boolean;
   staff: StaffRow[];
@@ -31,6 +33,7 @@ export interface SettingsContext {
   preferenceRows: PreferenceRow[];
   apiKeyRows: ApiKeyRow[];
   biometricDeviceRows: BiometricDeviceRow[];
+  pendingBiometricRows: PendingBiometricRow[];
   gateLateThresholds: { late_after_student: string | null; late_after_staff: string | null };
   groupBranding: { logo_url: string | null; primary_color: string | null } | null;
   brandingData: BrandingData;
@@ -54,13 +57,14 @@ export async function loadSettingsContext(): Promise<SettingsContext> {
     { data: canManageApiKeys },
     { data: canManageBiometricDevices },
     { data: canReadBiometricEvents },
+    { data: canViewBiometricProfiles },
     { data: canReadAudit },
     { data: canReadStaff },
   ] = await Promise.all([
     supabase
       .from("school_users")
       .select(
-        "id, full_name, roles(display_name), schools(id, name, email, motto, logo_url, primary_color, school_group_id, kra_pin, gate_late_after_student, gate_late_after_staff)",
+        "id, full_name, roles(display_name), schools(id, name, email, motto, logo_url, primary_color, school_group_id, kra_pin, gate_late_after_student, gate_late_after_staff, admission_response_note)",
       )
       .eq("auth_user_id", user.id)
       .maybeSingle(),
@@ -72,6 +76,7 @@ export async function loadSettingsContext(): Promise<SettingsContext> {
     supabase.rpc("auth_has_permission", { p_permission_key: "api.manage" }),
     supabase.rpc("auth_has_permission", { p_permission_key: "biometric.devices_manage" }),
     supabase.rpc("auth_has_permission", { p_permission_key: "biometric.events_read" }),
+    supabase.rpc("auth_has_permission", { p_permission_key: "biometric.view" }),
     supabase.rpc("auth_has_permission", { p_permission_key: "audit.read" }),
     supabase.rpc("auth_has_permission", { p_permission_key: "staff.read" }),
   ]);
@@ -88,6 +93,7 @@ export async function loadSettingsContext(): Promise<SettingsContext> {
     kra_pin: string | null;
     gate_late_after_student: string | null;
     gate_late_after_staff: string | null;
+    admission_response_note: string | null;
   } | null;
 
   const [{ data: staffRows }, { data: roleRows }, { data: leaveTypeRows }] = await Promise.all([
@@ -165,6 +171,52 @@ export async function loadSettingsContext(): Promise<SettingsContext> {
     biometricDeviceRows = (data ?? []) as BiometricDeviceRow[];
   }
 
+  // Task 12: students who are biometric-eligible (an active biometric_profiles row was
+  // auto-created for them on enrollment, per the existing trigger) but have never actually had
+  // a fingerprint/face captured on a device (no active biometric_credentials row for that
+  // profile). Composed client-side from three simple reads rather than a new SQL function or
+  // schema change -- person_id on biometric_profiles is polymorphic (student/staff), so there's
+  // no FK to join through directly.
+  let pendingBiometricRows: PendingBiometricRow[] = [];
+  if (canViewBiometricProfiles === true) {
+    const { data: profiles } = await supabase
+      .from("biometric_profiles")
+      .select("id, person_id")
+      .eq("person_type", "student")
+      .eq("status", "active");
+    const profileList = profiles ?? [];
+    if (profileList.length > 0) {
+      const { data: credentials } = await supabase
+        .from("biometric_credentials")
+        .select("profile_id")
+        .eq("status", "active")
+        .in(
+          "profile_id",
+          profileList.map((p) => p.id),
+        );
+      const capturedProfileIds = new Set((credentials ?? []).map((c) => c.profile_id));
+      const uncapturedStudentIds = profileList.filter((p) => !capturedProfileIds.has(p.id)).map((p) => p.person_id);
+      if (uncapturedStudentIds.length > 0) {
+        const { data: students } = await supabase
+          .from("students")
+          .select("id, admission_number, first_name, last_name, status, streams(name, classes(name))")
+          .in("id", uncapturedStudentIds)
+          .in("status", ["enrolled", "active"])
+          .order("last_name");
+        pendingBiometricRows = (students ?? []).map((s) => {
+          const stream = s.streams as unknown as { name: string; classes: { name: string } | null } | null;
+          return {
+            id: s.id,
+            admission_number: s.admission_number,
+            first_name: s.first_name,
+            last_name: s.last_name,
+            class_name: stream?.classes?.name ?? null,
+          };
+        });
+      }
+    }
+  }
+
   let groupBranding: { logo_url: string | null; primary_color: string | null } | null = null;
   if (school?.school_group_id) {
     const { data: groupRows } = await supabase.rpc("group_branding_public", {
@@ -201,6 +253,7 @@ export async function loadSettingsContext(): Promise<SettingsContext> {
       start_date: t.start_date,
       end_date: t.end_date,
     })),
+    admission_response_note: school?.admission_response_note ?? "",
   };
 
   return {
@@ -216,6 +269,7 @@ export async function loadSettingsContext(): Promise<SettingsContext> {
     canManageApiKeys: canManageApiKeys === true,
     canManageBiometricDevices: canManageBiometricDevices === true,
     canReadBiometricEvents: canReadBiometricEvents === true,
+    canViewBiometricProfiles: canViewBiometricProfiles === true,
     canReadAudit: canReadAudit === true,
     canReadStaff: canReadStaff === true,
     staff,
@@ -225,6 +279,7 @@ export async function loadSettingsContext(): Promise<SettingsContext> {
     preferenceRows,
     apiKeyRows,
     biometricDeviceRows,
+    pendingBiometricRows,
     gateLateThresholds: {
       late_after_student: school?.gate_late_after_student ?? null,
       late_after_staff: school?.gate_late_after_staff ?? null,

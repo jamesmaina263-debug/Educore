@@ -7,6 +7,8 @@ const STATUS_LABELS: Record<string, string> = {
   submitted: "Submitted — awaiting review",
   under_review: "Under review",
   documents_required: "Documents needed",
+  // 'shortlisted' and 'assessment_required' are reserved for a future shortlisting/
+  // assessment step — no code path currently sets an application to either status.
   shortlisted: "Shortlisted",
   interview_scheduled: "Interview scheduled",
   assessment_required: "Assessment required",
@@ -45,6 +47,10 @@ export default async function ApplicationStatusPage({
             <p className="text-[0.6875rem] uppercase tracking-wide text-muted-foreground">Status</p>
             <p className="text-sm font-medium">{STATUS_LABELS[data.status] ?? data.status}</p>
           </div>
+
+          {data.admission_response_note && (data.status === "submitted" || data.status === "under_review") && (
+            <p className="mt-3 text-sm text-muted-foreground">{data.admission_response_note}</p>
+          )}
 
           {data.status === "documents_required" && (
             <p className="mt-3 text-sm text-warning">

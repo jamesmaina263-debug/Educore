@@ -16,6 +16,8 @@ export interface WizardStepData {
     transport_required: boolean;
     previous_school: string | null;
     previous_class: string | null;
+    application_source: string;
+    walk_in_screening_confirmed: boolean;
   };
   resultingStudentId: string | null;
   admissionNumber: string | null;
@@ -23,6 +25,8 @@ export interface WizardStepData {
   terms: TermOption[];
   streamOptions: StreamOption[];
   currentStreamId: string | null;
+  termsWithFeeStructure: string[];
+  canReadFinance: boolean;
   houseOptions: HouseOption[];
   currentBedId: string | null;
   routeOptions: RouteOption[];
@@ -47,18 +51,20 @@ export async function loadWizardStepData(supabase: SupabaseClient, applicationId
     { data: application },
     { data: canWriteMedical },
     { data: canWriteFinance },
+    { data: canReadFinance },
     { data: requirements },
     { data: mpesaSettings },
   ] = await Promise.all([
     supabase
       .from("applications")
       .select(
-        "first_name, last_name, other_names, date_of_birth, gender, admission_type, academic_year_id, term_id, boarding_preference, transport_required, previous_school, previous_class, resulting_student_id, initial_payment_amount, initial_payment_method, status",
+        "first_name, last_name, other_names, date_of_birth, gender, admission_type, academic_year_id, term_id, boarding_preference, transport_required, previous_school, previous_class, resulting_student_id, initial_payment_amount, initial_payment_method, status, application_source, walk_in_screening_confirmed",
       )
       .eq("id", applicationId)
       .single(),
     supabase.rpc("auth_has_permission", { p_permission_key: "students.medical.write" }),
     supabase.rpc("auth_has_permission", { p_permission_key: "finance.write" }),
+    supabase.rpc("auth_has_permission", { p_permission_key: "finance.read" }),
     supabase.from("application_document_requirements").select("category, label, required").eq("school_id", schoolId).order("display_order"),
     supabase.from("mpesa_settings").select("is_active").maybeSingle(),
   ]);
@@ -136,6 +142,8 @@ export async function loadWizardStepData(supabase: SupabaseClient, applicationId
       transport_required: application?.transport_required ?? false,
       previous_school: application?.previous_school ?? null,
       previous_class: application?.previous_class ?? null,
+      application_source: application?.application_source ?? "online",
+      walk_in_screening_confirmed: application?.walk_in_screening_confirmed ?? false,
     },
     resultingStudentId: studentId,
     admissionNumber,
@@ -143,6 +151,8 @@ export async function loadWizardStepData(supabase: SupabaseClient, applicationId
     terms: ref.terms,
     streamOptions: ref.streamOptions,
     currentStreamId,
+    termsWithFeeStructure: ref.termsWithFeeStructure,
+    canReadFinance: canReadFinance === true,
     houseOptions: ref.houseOptions,
     currentBedId,
     routeOptions: ref.routeOptions,

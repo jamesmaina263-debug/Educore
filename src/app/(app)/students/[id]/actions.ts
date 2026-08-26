@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { findOrCreateGuardian } from "@/lib/guardians";
+import { escapePostgrestOrValue } from "@/lib/postgrest-filter";
 
 export interface GuardianSearchResult {
   id: string;
@@ -23,7 +24,7 @@ export async function searchGuardians(query: string): Promise<GuardianSearchResu
     .from("school_users")
     .select("id, full_name, phone, email")
     .eq("role_id", parentRole.id)
-    .or(`full_name.ilike.%${query}%,phone.ilike.%${query}%`)
+    .or(`full_name.ilike.${escapePostgrestOrValue(`%${query}%`)},phone.ilike.${escapePostgrestOrValue(`%${query}%`)}`)
     .limit(8);
   if (error) return { error: error.message };
   if (!matches || matches.length === 0) return [];

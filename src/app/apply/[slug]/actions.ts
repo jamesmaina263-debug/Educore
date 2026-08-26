@@ -93,7 +93,7 @@ export async function submitApplication(
 
   const { data: school, error: schoolError } = await admin
     .from("schools")
-    .select("id, name, status")
+    .select("id, name, status, admission_response_note")
     .eq("slug", slug)
     .maybeSingle();
   if (schoolError || !school) {
@@ -120,7 +120,8 @@ export async function submitApplication(
   });
   if (alreadyApplied) {
     return {
-      error: "It looks like this application was already submitted recently. The school will be in touch.",
+      error:
+        "It looks like this application was already submitted recently. The school will be in touch. If the school asked you to resubmit, please contact them directly.",
     };
   }
 
@@ -284,7 +285,7 @@ export async function submitApplication(
   // auth_has_permission against the caller) can't be used — insert directly, same as any other
   // system-initiated notification, then best-effort trigger dispatch immediately rather than
   // waiting for a staff member to next open Communication.
-  const confirmationBody = `Hi ${guardianName}, we've received ${firstName} ${lastName}'s application to ${school.name} (Ref: ${application.application_number}). We'll be in touch. Track status: `;
+  const confirmationBody = `Hi ${guardianName}, we've received ${firstName} ${lastName}'s application to ${school.name} (Ref: ${application.application_number}). We'll be in touch.${school.admission_response_note ? ` ${school.admission_response_note}.` : ""} Track status: `;
   await admin.from("notification_logs").insert({
     school_id: school.id,
     recipient_phone: guardianPhone,
