@@ -98,7 +98,7 @@ export default async function AdmissionsPage() {
   const roleName = (schoolUser?.roles as unknown as { display_name: string } | null)?.display_name;
   const school = schoolUser?.schools as unknown as { name: string; slug: string } | null;
 
-  const [{ data: applications }, { data: drafts }] = await Promise.all([
+  const [{ data: applications }, { data: drafts }, { data: turnaroundRows }] = await Promise.all([
     supabase
       .from("applications")
       .select(
@@ -114,6 +114,14 @@ export default async function AdmissionsPage() {
       )
       .eq("status", "draft")
       .order("updated_at", { ascending: false }),
+    // Task 17: read-only aggregate, no new table/cron -- a straightforward query against the
+    // existing submitted_at/decision_at columns, averaged in JS below.
+    supabase
+      .from("applications")
+      .select("submitted_at, decision_at")
+      .not("submitted_at", "is", null)
+      .not("decision_at", "is", null)
+      .gte("decision_at", new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()),
   ]);
 
   const rows = applications ?? [];
@@ -122,6 +130,17 @@ export default async function AdmissionsPage() {
     {} as Record<string, number>,
   );
   const decidedCount = rows.filter((r) => ["accepted", "conditionally_accepted", "admission_pending"].includes(r.status)).length;
+
+  const turnaroundSamples = turnaroundRows ?? [];
+  const avgTurnaroundDays =
+    turnaroundSamples.length > 0
+      ? turnaroundSamples.reduce(
+          (sum, a) => sum + (new Date(a.decision_at as string).getTime() - new Date(a.submitted_at as string).getTime()),
+          0,
+        ) /
+        turnaroundSamples.length /
+        (1000 * 60 * 60 * 24)
+      : null;
 
   return (
     <AppShell
@@ -154,6 +173,18 @@ export default async function AdmissionsPage() {
             <CopyApplicationLink slug={school.slug} />
           </div>
         )}
+
+        {/* Task 17: read-only turnaround-time card, computed above from existing
+            submitted_at/decision_at columns -- no new dashboard framework, no scheduled job. */}
+        <div className="flex items-center gap-2 rounded-md border border-border bg-muted/40 px-3 py-2 text-sm">
+          <span className="text-muted-foreground">Average days from submission to decision (last 30 days):</span>
+          <span className="font-semibold">
+            {avgTurnaroundDays != null ? avgTurnaroundDays.toFixed(1) : "—"}
+          </span>
+          {avgTurnaroundDays == null && (
+            <span className="text-[0.75rem] text-muted-foreground">No decisions recorded in this window yet</span>
+          )}
+        </div>
 
         {drafts && drafts.length > 0 && (
           <div className="panel">
