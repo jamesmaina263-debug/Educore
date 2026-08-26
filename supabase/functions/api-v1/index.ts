@@ -20,6 +20,7 @@
 
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { buildCorsHeaders } from "./cors.ts";
+import { timingSafeEqual } from "../_shared/timingSafeEqual.ts";
 
 type Resource = "students" | "attendance" | "fees" | "exams";
 
@@ -100,7 +101,7 @@ Deno.serve(async (req) => {
   }
 
   const secretHash = await sha256Hex(secret);
-  if (secretHash !== keyRow.key_hash) {
+  if (!timingSafeEqual(secretHash, keyRow.key_hash)) {
     return logAndRespond(keyRow.id, 401, { error: "Invalid API key." });
   }
 

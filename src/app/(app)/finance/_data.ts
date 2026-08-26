@@ -124,7 +124,11 @@ export async function loadFinanceContext(): Promise<FinanceContext> {
         .from("fee_waivers")
         .select("id, name, waiver_type, discount_kind, discount_value, status, students(first_name, last_name), starts_term:terms!fee_waivers_starts_term_id_fkey(name)")
         .order("created_at", { ascending: false }),
-      supabase.from("students").select("id, first_name, last_name").eq("status", "active").order("first_name"),
+      supabase
+        .from("students")
+        .select("id, first_name, last_name, admission_number, current_class_id")
+        .eq("status", "active")
+        .order("first_name"),
       supabase.from("student_financial_accounts").select("student_id, payment_reference"),
       supabase.from("receipts").select("payment_id, receipt_number"),
       supabase.from("payment_reversals").select("payment_id, amount"),
@@ -271,33 +275,40 @@ export async function loadFinanceContext(): Promise<FinanceContext> {
 
   const termOptions: TermOption[] = (terms ?? []).map((t) => ({ id: t.id, name: t.name }));
 
+  // Built from every active student (not just those with an invoice) so a student who has
+  // enrolled but has no invoice yet -- e.g. their class/boarding-type has no fee structure
+  // configured, so invoice generation failed at enrollment -- still shows up on Finance >
+  // Student Accounts with a zero balance, instead of disappearing from finance entirely.
   const studentNameByStreamMap = new Map<string, { name: string; class_name: string; admission_number: string }>();
-  for (const inv of invoices ?? []) {
-    const st = inv.students as unknown as { first_name: string; last_name: string; current_class_id: string; admission_number: string } | null;
-    if (st)
-      studentNameByStreamMap.set(inv.student_id, {
-        name: `${st.first_name} ${st.last_name}`,
-        class_name: classNameByStream.get(st.current_class_id) ?? "",
-        admission_number: st.admission_number,
-      });
+  for (const st of activeStudents ?? []) {
+    studentNameByStreamMap.set(st.id, {
+      name: `${st.first_name} ${st.last_name}`,
+      class_name: classNameByStream.get(st.current_class_id ?? "") ?? "",
+      admission_number: st.admission_number ?? "",
+    });
   }
 
   const referenceByStudent = new Map((accounts ?? []).map((a) => [a.student_id, a.payment_reference]));
 
-  const balanceRows: BalanceRow[] = (balances ?? [])
-    .filter((b) => Number(b.total_invoiced) > 0)
-    .map((b) => ({
-      student_id: b.student_id,
-      full_name: studentNameByStreamMap.get(b.student_id)?.name ?? "",
-      admission_number: studentNameByStreamMap.get(b.student_id)?.admission_number ?? "",
-      payment_reference: referenceByStudent.get(b.student_id) ?? null,
-      class_name: classNameByStream.get(b.stream_id ?? "") ?? "",
-      total_invoiced: Number(b.total_invoiced),
-      total_discounted: Number(b.total_discounted),
-      total_paid: Number(b.total_paid),
-      balance: Number(b.balance),
-      credit_balance: Number(b.credit_balance),
-    }));
+  // No longer filtered to total_invoiced > 0 -- every active student's financial account
+  // should be visible here, including those with no invoice yet (balance shows as 0 rather
+  // than the student vanishing from the list).
+  const balancesByStudent = new Map((balances ?? []).map((b) => [b.student_id, b]));
+  const balanceRows: BalanceRow[] = (activeStudents ?? []).map((st) => {
+    const b = balancesByStudent.get(st.id);
+    return {
+      student_id: st.id,
+      full_name: studentNameByStreamMap.get(st.id)?.name ?? "",
+      admission_number: studentNameByStreamMap.get(st.id)?.admission_number ?? "",
+      payment_reference: referenceByStudent.get(st.id) ?? null,
+      class_name: classNameByStream.get(st.current_class_id ?? "") ?? "",
+      total_invoiced: Number(b?.total_invoiced ?? 0),
+      total_discounted: Number(b?.total_discounted ?? 0),
+      total_paid: Number(b?.total_paid ?? 0),
+      balance: Number(b?.balance ?? 0),
+      credit_balance: Number(b?.credit_balance ?? 0),
+    };
+  });
 
   const activeTerm = (terms ?? []).find((t) => t.status === "active") ?? null;
   const termInvoiceRows = activeTerm ? (invoices ?? []).filter((inv) => inv.term_id === activeTerm.id) : (invoices ?? []);

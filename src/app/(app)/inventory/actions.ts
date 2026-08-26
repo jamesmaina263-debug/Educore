@@ -239,6 +239,7 @@ export async function createRequisitionAction(formData: FormData): Promise<Actio
   const estimatedCost = String(formData.get("estimated_unit_cost") ?? "") || null;
   const inventoryItemId = String(formData.get("inventory_item_id") ?? "") || null;
   if (!purpose || !itemDescription || !quantity) return { error: "Purpose, item, and quantity are required." };
+  if (!inventoryItemId) return { error: "Select an item from the stock catalog." };
 
   const { data: requisition, error } = await supabase
     .from("purchase_requisitions")
