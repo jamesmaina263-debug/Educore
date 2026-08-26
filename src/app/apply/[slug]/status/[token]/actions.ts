@@ -11,6 +11,7 @@ export interface ApplicationStatusData {
   school_name: string;
   submitted_at: string | null;
   decision_notes: string | null;
+  admission_response_note: string | null;
   requirements: {
     category: string;
     label: string;
@@ -26,7 +27,9 @@ export async function getApplicationByToken(
 
   const { data: application } = await admin
     .from("applications")
-    .select("id, school_id, application_number, status, first_name, last_name, submitted_at, decision_notes, resulting_student_id, schools(name)")
+    .select(
+      "id, school_id, application_number, status, first_name, last_name, submitted_at, decision_notes, resulting_student_id, schools(name, admission_response_note)",
+    )
     .eq("access_token", token)
     .maybeSingle();
   if (!application) return { error: "We couldn't find an application with this link." };
@@ -53,6 +56,7 @@ export async function getApplicationByToken(
   ]);
 
   const docsByCategory = new Map((documents ?? []).map((d) => [d.category, d]));
+  const schoolInfo = application.schools as unknown as { name: string; admission_response_note: string | null } | null;
 
   return {
     success: true,
@@ -61,9 +65,10 @@ export async function getApplicationByToken(
       status: application.status,
       first_name: application.first_name,
       last_name: application.last_name,
-      school_name: (application.schools as unknown as { name: string } | null)?.name ?? "",
+      school_name: schoolInfo?.name ?? "",
       submitted_at: application.submitted_at,
       decision_notes: application.decision_notes,
+      admission_response_note: schoolInfo?.admission_response_note ?? null,
       requirements: (requirements ?? []).map((r) => ({
         category: r.category,
         label: r.label,

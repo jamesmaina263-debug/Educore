@@ -64,7 +64,7 @@ export async function loadSettingsContext(): Promise<SettingsContext> {
     supabase
       .from("school_users")
       .select(
-        "id, full_name, roles(display_name), schools(id, name, email, motto, logo_url, primary_color, school_group_id, kra_pin, gate_late_after_student, gate_late_after_staff)",
+        "id, full_name, roles(display_name), schools(id, name, email, motto, logo_url, primary_color, school_group_id, kra_pin, gate_late_after_student, gate_late_after_staff, admission_response_note)",
       )
       .eq("auth_user_id", user.id)
       .maybeSingle(),
@@ -93,6 +93,7 @@ export async function loadSettingsContext(): Promise<SettingsContext> {
     kra_pin: string | null;
     gate_late_after_student: string | null;
     gate_late_after_staff: string | null;
+    admission_response_note: string | null;
   } | null;
 
   const [{ data: staffRows }, { data: roleRows }, { data: leaveTypeRows }] = await Promise.all([
@@ -252,6 +253,7 @@ export async function loadSettingsContext(): Promise<SettingsContext> {
       start_date: t.start_date,
       end_date: t.end_date,
     })),
+    admission_response_note: school?.admission_response_note ?? "",
   };
 
   return {
