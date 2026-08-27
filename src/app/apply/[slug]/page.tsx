@@ -2,6 +2,21 @@ import { notFound } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { ApplicationForm, type DocumentRequirement } from "./application-form";
 
+// This page uses the service-role admin client and never reads cookies/headers,
+// so it has nothing that would otherwise force Next.js into dynamic rendering --
+// left alone, it's eligible to be statically cached (indefinitely, by default)
+// the first time any slug is visited. That's a real bug for a public link: if a
+// school's slug later changes (rename, typo fix, regeneration), visitors with
+// the old link would keep getting served the stale cached page -- rendering
+// fine, listing the right document requirements, everything -- right up until
+// they hit Submit, at which point submitApplication() (a Server Action, always
+// executed live) does its own fresh lookup, doesn't find the now-nonexistent
+// slug, and returns "We couldn't find this school." The page looked correct;
+// only the live submission path was ever telling the truth. Forcing dynamic
+// rendering here makes the page's own lookup live too, so a dead/renamed slug
+// 404s immediately on load instead of only failing silently at submit time.
+export const dynamic = "force-dynamic";
+
 export default async function ApplyPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
 
