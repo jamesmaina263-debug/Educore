@@ -1,0 +1,26 @@
+
+revoke execute on function public.accept_inventory_transfer(uuid, integer) from anon;
+revoke execute on function public.approve_health_stock_adjustment(uuid) from anon;
+revoke execute on function public.assign_admission_number() from anon;
+revoke execute on function public.create_health_inventory_item(text, text, integer, date, uuid) from anon;
+revoke execute on function public.create_inventory_item(text, text, integer, text, integer, text, uuid) from anon;
+revoke execute on function public.create_inventory_transfer(uuid, integer) from anon;
+revoke execute on function public.default_inventory_item_category() from anon;
+revoke execute on function public.enforce_leave_request_gender() from anon;
+revoke execute on function public.enforce_single_primary_guardian() from anon;
+revoke execute on function public.generate_payroll_record(uuid, smallint, smallint, numeric, numeric, text, jsonb, jsonb) from anon;
+revoke execute on function public.get_staff_statutory_numbers(uuid[]) from anon;
+revoke execute on function public.group_schools_summary(uuid) from anon;
+revoke execute on function public.issue_health_stock(uuid, integer, text) from anon;
+revoke execute on function public.marks_recompute_rankings_on_correction() from anon;
+revoke execute on function public.prevent_assignment_submission_self_grading() from anon;
+revoke execute on function public.queue_health_alert(uuid, uuid[], text) from anon;
+revoke execute on function public.record_goods_received(uuid, uuid, integer) from anon;
+revoke execute on function public.reject_health_stock_adjustment(uuid, text) from anon;
+revoke execute on function public.reject_inventory_transfer(uuid, text) from anon;
+revoke execute on function public.request_health_stock_adjustment(uuid, integer, text) from anon;
+revoke execute on function public.seed_default_document_requirements() from anon;
+revoke execute on function public.seed_default_inventory_categories() from anon;
+revoke execute on function public.seed_default_leave_types() from anon;
+revoke execute on function public.send_fee_threshold_alert(uuid) from anon;
+revoke execute on function public.update_staff_statutory_numbers(uuid, text, text, text, text) from anon;

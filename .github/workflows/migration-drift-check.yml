@@ -1,0 +1,49 @@
+name: Migration drift check
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "supabase/migrations/**"
+      - "supabase/.migration_drift_allowlist"
+      - "scripts/check_migration_drift.py"
+  pull_request:
+    branches: [main]
+    paths:
+      - "supabase/migrations/**"
+      - "supabase/.migration_drift_allowlist"
+      - "scripts/check_migration_drift.py"
+  workflow_dispatch: {}
+
+jobs:
+  check-drift:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check SUPABASE_DB_URL is set
+        run: |
+          if [ -z "${{ secrets.SUPABASE_DB_URL }}" ]; then
+            echo "SUPABASE_DB_URL repo secret is not set -- same secret nightly-backup.yml uses. Failing loudly instead of skipping silently."
+            exit 1
+          fi
+
+      - name: Install postgresql-client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+
+      - name: Fetch production's applied migration history
+        id: prod
+        run: |
+          RESULT=$(psql "${{ secrets.SUPABASE_DB_URL }}" -Atqc \
+            "select coalesce(json_agg(json_build_object('version', version, 'name', name)), '[]') from supabase_migrations.schema_migrations;")
+          # Multiline-safe way to pass a JSON blob to the next step via env.
+          {
+            echo "json<<MIGRATIONS_EOF"
+            echo "$RESULT"
+            echo "MIGRATIONS_EOF"
+          } >> "$GITHUB_ENV"
+
+      - name: Compare against supabase/migrations/
+        env:
+          PROD_MIGRATIONS_JSON: ${{ env.json }}
+        run: python3 scripts/check_migration_drift.py
