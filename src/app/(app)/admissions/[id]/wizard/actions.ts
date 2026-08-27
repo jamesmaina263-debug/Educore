@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import type { Recipient } from "@/app/(app)/communication/actions";
+import { escapePostgrestOrValue } from "@/lib/postgrest-filter";
 
 type ActionResult = { error: string } | { success: true };
 
@@ -71,24 +72,28 @@ export interface AdmissionDetailsInput {
   transport_required: boolean;
   previous_school?: string;
   previous_class?: string;
+  // Only ever sent by the wizard for a walk_in-sourced application (Gap #2 compensating
+  // control) -- omitted entirely for online applications, so their row is never touched.
+  walk_in_screening_confirmed?: boolean;
 }
 
 export async function updateAdmissionDetails(applicationId: string, input: AdmissionDetailsInput): Promise<ActionResult> {
   const supabase = await createClient();
-  const { error } = await supabase
-    .from("applications")
-    .update({
-      admission_type: input.admission_type,
-      academic_year_id: input.academic_year_id,
-      term_id: input.term_id,
-      intended_class_id: input.intended_class_id,
-      boarding_preference: input.boarding_preference,
-      transport_required: input.transport_required,
-      previous_school: input.previous_school || null,
-      previous_class: input.previous_class || null,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", applicationId);
+  const updatePayload: Record<string, unknown> = {
+    admission_type: input.admission_type,
+    academic_year_id: input.academic_year_id,
+    term_id: input.term_id,
+    intended_class_id: input.intended_class_id,
+    boarding_preference: input.boarding_preference,
+    transport_required: input.transport_required,
+    previous_school: input.previous_school || null,
+    previous_class: input.previous_class || null,
+    updated_at: new Date().toISOString(),
+  };
+  if (input.walk_in_screening_confirmed !== undefined) {
+    updatePayload.walk_in_screening_confirmed = input.walk_in_screening_confirmed;
+  }
+  const { error } = await supabase.from("applications").update(updatePayload).eq("id", applicationId);
   if (error) return { error: error.message };
   revalidatePath(`/admissions/${applicationId}/wizard`);
   return { success: true };
@@ -183,6 +188,9 @@ export interface CreateOrLinkStudentInput {
   upi_number?: string;
   override_duplicate: boolean;
   link_existing_student_id?: string;
+  // Which duplicate candidate(s) were shown when the officer chose to override — recorded to
+  // audit_log for secondary visibility (Task 8). Empty/omitted when override_duplicate is false.
+  overridden_candidate_ids?: string[];
 }
 
 export async function createOrLinkStudent(
@@ -209,6 +217,18 @@ export async function createOrLinkStudent(
       .update({ resulting_student_id: input.link_existing_student_id, duplicate_check_acknowledged: true, updated_at: new Date().toISOString() })
       .eq("id", applicationId);
     if (linkError) return { error: linkError.message };
+
+    if (input.override_duplicate) {
+      const { error: logError } = await supabase.rpc("log_duplicate_override", {
+        p_application_id: applicationId,
+        p_student_id: input.link_existing_student_id,
+        p_candidate_ids: input.overridden_candidate_ids ?? [],
+      });
+      // Non-fatal, matching every other audit/notification call in this codebase — the link
+      // itself already succeeded and is what matters most; the audit trail is best-effort.
+      if (logError) console.error("createOrLinkStudent (link) audit log failed:", logError.message);
+    }
+
     revalidatePath(`/admissions/${applicationId}/wizard`);
     return { success: true, studentId: input.link_existing_student_id };
   }
@@ -243,6 +263,15 @@ export async function createOrLinkStudent(
     .eq("id", applicationId);
   if (updateError) return { error: updateError.message };
 
+  if (input.override_duplicate) {
+    const { error: logError } = await supabase.rpc("log_duplicate_override", {
+      p_application_id: applicationId,
+      p_student_id: student.id,
+      p_candidate_ids: input.overridden_candidate_ids ?? [],
+    });
+    if (logError) console.error("createOrLinkStudent (create) audit log failed:", logError.message);
+  }
+
   revalidatePath(`/admissions/${applicationId}/wizard`);
   revalidatePath("/students");
   return { success: true, studentId: student.id as string, admissionNumber: student.admission_number as string | null };
@@ -264,7 +293,7 @@ export async function searchGuardians(query: string): Promise<{ error: string } 
     .from("school_users")
     .select("id, full_name, phone, email, roles(name)")
     .eq("roles.name", "parent")
-    .or(`full_name.ilike.%${query}%,phone.ilike.%${query}%`)
+    .or(`full_name.ilike.${escapePostgrestOrValue(`%${query}%`)},phone.ilike.${escapePostgrestOrValue(`%${query}%`)}`)
     .limit(10);
   if (error) return { error: error.message };
   return { success: true, results: (data ?? []).map((d) => ({ id: d.id, full_name: d.full_name, phone: d.phone, email: d.email })) };
@@ -588,6 +617,18 @@ export interface EnrollmentResult {
   invoice_id: string | null;
   payment_reference: string | null;
   total_amount: number | null;
+  // Task 11: not columns from complete_enrollment() itself -- set below, after the RPC call,
+  // based on whether the best-effort "send confirmation" step below actually found a template
+  // to send. Lets the completion screen tell officers explicitly when nothing was sent
+  // automatically, instead of that failing silently.
+  // Task 11: confirmation_sent/confirmation_note are set live, only right after
+  // completeEnrollmentAction() actually runs the best-effort send — there's no reliable way to
+  // reconstruct "was a message sent" from history on a page reload, so both are optional and
+  // simply absent here. CompleteStep only shows the "nothing was sent" banner when
+  // confirmation_note is present, so an absent value here correctly shows no (possibly stale)
+  // warning on reload rather than guessing.
+  confirmation_sent?: boolean;
+  confirmation_note?: string | null;
 }
 
 // Single call into the transactional SQL function (Brief 4.16.12) — the DB either commits every
@@ -602,6 +643,8 @@ export async function completeEnrollmentAction(applicationId: string): Promise<{
   // through an Edge Function the SQL function can't call directly, so this happens here, and
   // never fails the enrollment itself: the completion screen's own "Send Parent Confirmation"
   // action covers this if no template is configured or the send fails.
+  let confirmationSent = false;
+  let confirmationNote: string | null = null;
   try {
     const { data: application } = await supabase.from("applications").select("school_id, guardian_id").eq("id", applicationId).maybeSingle();
     if (application?.guardian_id) {
@@ -625,15 +668,21 @@ export async function completeEnrollmentAction(applicationId: string): Promise<{
           values: { first_name: app2?.first_name ?? "", last_name: app2?.last_name ?? "" },
         };
         await composeAndSendAction({ recipients: [recipient], template_id: template.id, channel: template.channel });
+        confirmationSent = true;
+      } else {
+        confirmationNote = "No confirmation message was sent automatically — no admission-category communication template is configured for this school.";
       }
+    } else {
+      confirmationNote = "No confirmation message was sent automatically — this application has no guardian on record.";
     }
   } catch {
     // Non-blocking — enrollment already succeeded.
+    confirmationNote = "No confirmation message was sent automatically — the send failed.";
   }
 
   revalidatePath(`/admissions/${applicationId}/wizard`);
   revalidatePath(`/admissions/${applicationId}`);
   revalidatePath("/admissions");
   revalidatePath("/students");
-  return { success: true, result: data as EnrollmentResult };
+  return { success: true, result: { ...(data as Omit<EnrollmentResult, "confirmation_sent" | "confirmation_note">), confirmation_sent: confirmationSent, confirmation_note: confirmationNote } };
 }

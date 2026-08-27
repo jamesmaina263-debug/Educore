@@ -1,5 +1,6 @@
 "use server";
 
+import { headers } from "next/headers";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { safeStorageFilename } from "@/lib/storage-path";
 
@@ -70,9 +71,29 @@ export async function submitApplication(
     return { error: e instanceof Error ? e.message : "Applications are not available right now." };
   }
 
+  // Abuse guard: this endpoint is public/unauthenticated, and a successful submission
+  // triggers a real SMS to guardianPhone (whatever number a caller supplies) plus a
+  // storage write per uploaded document. The honeypot and minimum-fill-time checks above
+  // only deter unsophisticated bots — nothing previously stopped a script from submitting
+  // repeatedly with varying names/phone numbers, which would both run up real SMS costs
+  // and could be used to send unsolicited "your child's application" texts to phone
+  // numbers the sender doesn't own. Same increment_and_check_rate_limit() primitive
+  // signUpSchool() and request-otp already use; keyed by IP, generous enough for a school
+  // office or cybercafé submitting several walk-in applications from one connection.
+  const forwardedFor = (await headers()).get("x-forwarded-for");
+  const clientIp = forwardedFor?.split(",")[0]?.trim() || "unknown";
+  const { data: withinLimit } = await admin.rpc("increment_and_check_rate_limit", {
+    p_bucket: `apply-submit:${clientIp}`,
+    p_max_events: 10,
+    p_window_seconds: 3_600,
+  });
+  if (withinLimit === false) {
+    return { error: "Too many applications submitted from this network. Please try again later." };
+  }
+
   const { data: school, error: schoolError } = await admin
     .from("schools")
-    .select("id, name, status")
+    .select("id, name, status, admission_response_note")
     .eq("slug", slug)
     .maybeSingle();
   if (schoolError || !school) {
@@ -99,7 +120,8 @@ export async function submitApplication(
   });
   if (alreadyApplied) {
     return {
-      error: "It looks like this application was already submitted recently. The school will be in touch.",
+      error:
+        "It looks like this application was already submitted recently. The school will be in touch. If the school asked you to resubmit, please contact them directly.",
     };
   }
 
@@ -263,7 +285,7 @@ export async function submitApplication(
   // auth_has_permission against the caller) can't be used — insert directly, same as any other
   // system-initiated notification, then best-effort trigger dispatch immediately rather than
   // waiting for a staff member to next open Communication.
-  const confirmationBody = `Hi ${guardianName}, we've received ${firstName} ${lastName}'s application to ${school.name} (Ref: ${application.application_number}). We'll be in touch. Track status: `;
+  const confirmationBody = `Hi ${guardianName}, we've received ${firstName} ${lastName}'s application to ${school.name} (Ref: ${application.application_number}). We'll be in touch.${school.admission_response_note ? ` ${school.admission_response_note}.` : ""} Track status: `;
   await admin.from("notification_logs").insert({
     school_id: school.id,
     recipient_phone: guardianPhone,

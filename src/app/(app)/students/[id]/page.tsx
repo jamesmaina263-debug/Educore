@@ -50,7 +50,7 @@ export default async function StudentProfilePage({
   // once by Complete Enrollment (Phase 13) — never duplicated onto the student row itself.
   const { data: originatingApplication } = await supabase
     .from("applications")
-    .select("application_number")
+    .select("id, application_number")
     .eq("resulting_student_id", id)
     .maybeSingle();
 
@@ -131,6 +131,19 @@ export default async function StudentProfilePage({
     ? await supabase.from("biometric_devices").select("id, name, location").eq("status", "active").order("name")
     : { data: null };
   const biometricDevices: BiometricDeviceOption[] = biometricDeviceRows ?? [];
+
+  // Gap 5 (audit): post-enrollment handoff. Nothing previously enforced who confirms
+  // documents/health/biometrics/invoice are truly squared away once complete_enrollment()
+  // runs. This reuses the same check_admission_checklist() the wizard's Final Review and
+  // Complete Enrollment steps already call — just surfaced here too, after enrollment, so
+  // the person doing the handoff has one place to see open items. Only meaningful for
+  // students who actually came through Admissions (originatingApplication set); a manually
+  // created student never had a checklist to complete. Errors are swallowed to a null
+  // rather than failing the whole profile page — this is a supplementary display, not a gate.
+  const { data: handoffChecklist } = originatingApplication
+    ? await supabase.rpc("check_admission_checklist", { p_application_id: originatingApplication.id })
+    : { data: null };
+  const biometricCaptured = biometricCredentials.some((c) => c.status === "active");
 
   // Overview tab: display-only aggregation pulled live from each module's own
   // authoritative table (Section 5.1) — nothing here is duplicated/stored on Students.
@@ -328,12 +341,40 @@ export default async function StudentProfilePage({
                 </div>
               )}
 
+              {canViewBiometric && (
+                <div className="panel p-4">
+                  <p className="label-eyebrow">Biometric captured</p>
+                  <p className={`mt-1 text-lg font-semibold ${biometricCaptured ? "text-success" : "text-warning"}`}>
+                    {biometricCaptured ? "Yes" : "Not captured"}
+                  </p>
+                  <p className="text-xs text-muted-foreground">From Biometric</p>
+                </div>
+              )}
+
               {!canReadMedical && (
                 <p className="col-span-full text-xs text-muted-foreground">
                   Health summary hidden — you don&apos;t have medical record access.
                 </p>
               )}
             </div>
+
+            {canManageStudents && originatingApplication && (
+              <div className="panel p-4">
+                <p className="label-eyebrow">Enrollment handoff checklist</p>
+                {handoffChecklist && handoffChecklist.length > 0 ? (
+                  <ul className="mt-2 space-y-1.5 text-sm">
+                    {handoffChecklist.map((item: { item: string; message: string }) => (
+                      <li key={item.item} className="flex items-start gap-1.5 text-warning">
+                        <span aria-hidden>•</span>
+                        <span>{item.message}</span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="mt-1 text-sm text-success">All enrollment checklist items complete.</p>
+                )}
+              </div>
+            )}
 
             <NemisIdentifiersCard
               studentId={id}

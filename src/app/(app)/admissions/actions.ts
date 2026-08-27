@@ -28,6 +28,21 @@ export async function markUnderReviewAction(applicationId: string): Promise<Acti
   return { success: true };
 }
 
+// Reuses the existing assigned_officer_id column (already set once at creation for walk-ins,
+// see walk-in-actions.ts) and extends it to submitted applications. Any officer with
+// admissions.write can claim an unassigned application, or take over an already-assigned one —
+// no separate approval step, matching how ownership already works for drafts.
+export async function claimApplicationAction(applicationId: string): Promise<ActionResult> {
+  const supabase = await createClient();
+  const me = await currentSchoolUser(supabase);
+  if (!me) return { error: "Not signed in." };
+
+  const { error } = await supabase.from("applications").update({ assigned_officer_id: me }).eq("id", applicationId);
+  if (error) return { error: error.message };
+  revalidatePath("/admissions", "layout");
+  return { success: true };
+}
+
 export async function verifyDocumentAction(documentId: string): Promise<ActionResult> {
   const supabase = await createClient();
   const me = await currentSchoolUser(supabase);
@@ -48,11 +63,47 @@ export async function rejectDocumentAction(documentId: string, comment: string):
   const me = await currentSchoolUser(supabase);
   if (!me) return { error: "Not signed in." };
 
+  // Fetch application/guardian context before the update so we can notify the
+  // guardian afterward — same best-effort pattern as requestDocumentAction below.
+  const { data: doc } = await supabase
+    .from("documents")
+    .select(
+      "category, school_id, application_id, applications(application_number, first_name, last_name, guardian_id, school_users!applications_guardian_id_fkey(phone, full_name))"
+    )
+    .eq("id", documentId)
+    .maybeSingle();
+
   const { error } = await supabase
     .from("documents")
     .update({ verification_status: "rejected", verification_comment: comment.trim(), verified_by: me, verified_at: new Date().toISOString() })
     .eq("id", documentId);
   if (error) return { error: error.message };
+
+  const application = doc?.applications as unknown as {
+    application_number: string;
+    first_name: string;
+    last_name: string;
+    school_users: { phone: string | null; full_name: string } | null;
+  } | null;
+  const guardian = application?.school_users ?? null;
+  if (guardian?.phone && application) {
+    const { data: req } = await supabase
+      .from("application_document_requirements")
+      .select("label")
+      .eq("category", doc!.category)
+      .eq("school_id", doc!.school_id)
+      .maybeSingle();
+    const categoryLabel = req?.label ?? doc!.category;
+
+    const { error: notifyError } = await supabase.rpc("queue_communication", {
+      p_recipients: [{ phone: guardian.phone, values: {} }],
+      p_body: `Hi ${guardian.full_name}, the "${categoryLabel}" document for ${application.first_name} ${application.last_name}'s application (Ref: ${application.application_number}) could not be accepted: ${comment.trim()}. Please re-upload it using your status link.`,
+      p_channel: "sms",
+    });
+    // Non-fatal — the rejection itself is what matters most; the notification is best-effort.
+    if (notifyError) console.error("rejectDocumentAction notify failed:", notifyError.message);
+  }
+
   revalidatePath("/admissions", "layout");
   return { success: true };
 }
