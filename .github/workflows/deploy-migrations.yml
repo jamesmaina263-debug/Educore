@@ -1,0 +1,51 @@
+name: Deploy migrations
+
+# Closes a real gap found 2026-08-27: migrations were only ever applied to
+# production by someone remembering to run `supabase db push` by hand after
+# merging. At least one migration (20260826120000_admission_response_time_note)
+# merged to main and was simply never run -- silently broke the public apply
+# form for every school until it was caught and applied manually. CI (ci.yml)
+# only builds/tests the app; it has never touched the database schema.
+#
+# This workflow makes "merged to main" and "applied to the database" the same
+# event, the same way Vercel already makes "merged to main" and "deployed"
+# the same event for the app itself.
+#
+# Reuses the existing SUPABASE_DB_URL secret (already present in this repo --
+# see nightly-backup.yml, which uses the same secret for pg_dump). No new
+# secret setup needed.
+#
+# `supabase db push` is idempotent by design: it only runs migrations whose
+# version isn't already recorded in supabase_migrations.schema_migrations,
+# and it fails loudly (non-zero exit -> red X on the run) rather than
+# swallowing an error, so a bad migration blocks visibly instead of silently
+# not-happening the way this one did.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Preview only -- show what would run without applying it"
+        type: boolean
+        default: false
+
+jobs:
+  push-migrations:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Push migrations
+        run: |
+          if [ "${{ github.event.inputs.dry_run }}" = "true" ]; then
+            echo "Dry run -- previewing pending migrations, nothing will be applied:"
+            supabase db push --db-url "${{ secrets.SUPABASE_DB_URL }}" --dry-run
+          else
+            supabase db push --db-url "${{ secrets.SUPABASE_DB_URL }}"
+          fi
