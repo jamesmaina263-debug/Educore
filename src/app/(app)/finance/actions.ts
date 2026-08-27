@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { escapePostgrestOrValue } from "@/lib/postgrest-filter";
 
 type ActionResult = { error: string } | { success: true };
 
@@ -48,6 +49,38 @@ export async function createFeeStructure(input: {
     if (itemsError) return { error: itemsError.message };
   } catch (e) {
     return { error: e instanceof Error ? e.message : "Could not create the fee structure." };
+  }
+  revalidatePath("/finance", "layout");
+  return { success: true };
+}
+
+// Flip a fee structure active/inactive. Inactive structures are invisible to invoice
+// generation (create_or_get_invoice_for_student / generate_invoices both filter on
+// is_active), so this is the on/off switch for "will this actually get picked up when
+// invoicing students" -- e.g. reviewing a drafted structure before it's allowed to invoice
+// real students, or retiring a superseded one without deleting its history.
+export async function setFeeStructureActiveAction(structureId: string, isActive: boolean): Promise<ActionResult> {
+  const supabase = await createClient();
+  const { error } = await supabase.from("fee_structures").update({ is_active: isActive, updated_at: new Date().toISOString() }).eq("id", structureId);
+  if (error) return { error: error.message };
+  revalidatePath("/finance", "layout");
+  return { success: true };
+}
+
+// Replace a fee structure's line items wholesale (delete + reinsert) -- used when reviewing
+// a drafted structure's cloned amounts before activating it, or correcting a live one.
+export async function updateFeeStructureItemsAction(
+  structureId: string,
+  items: { name: string; amount: number }[],
+): Promise<ActionResult> {
+  const supabase = await createClient();
+  const { error: deleteError } = await supabase.from("fee_items").delete().eq("fee_structure_id", structureId);
+  if (deleteError) return { error: deleteError.message };
+  if (items.length > 0) {
+    const { error: insertError } = await supabase
+      .from("fee_items")
+      .insert(items.map((i) => ({ fee_structure_id: structureId, name: i.name, amount: i.amount })));
+    if (insertError) return { error: insertError.message };
   }
   revalidatePath("/finance", "layout");
   return { success: true };
@@ -144,6 +177,64 @@ export async function allocateUnallocatedPaymentAction(input: {
   return { success: true };
 }
 
+// ---------------------------------------------------------------------------
+// M-Pesa statement reconciliation
+// ---------------------------------------------------------------------------
+
+export interface MpesaStatementLineInput {
+  receipt_no: string;
+  transaction_time?: string | null;
+  details?: string | null;
+  amount: number;
+}
+
+export interface MpesaStatementImportSummary {
+  batch_id: string;
+  total_lines: number;
+  matched_count: number;
+  mismatched_count: number;
+  not_in_system_count: number;
+}
+
+export async function importMpesaStatementAction(input: {
+  lines: MpesaStatementLineInput[];
+  source_label?: string;
+}): Promise<{ error: string } | { success: true; summary: MpesaStatementImportSummary }> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .rpc("import_mpesa_statement", {
+      p_lines: input.lines,
+      p_source_label: input.source_label ?? null,
+    })
+    .single();
+  if (error) return { error: error.message };
+  revalidatePath("/finance", "layout");
+  return { success: true, summary: data as MpesaStatementImportSummary };
+}
+
+export interface MpesaStatementLineRow {
+  id: string;
+  receipt_no: string;
+  transaction_time: string | null;
+  details: string | null;
+  amount: number;
+  match_status: "matched" | "amount_mismatch" | "not_in_system";
+  matched_payment_id: string | null;
+}
+
+export async function getMpesaStatementBatchLinesAction(
+  batchId: string,
+): Promise<{ error: string } | { success: true; lines: MpesaStatementLineRow[] }> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("mpesa_statement_lines")
+    .select("id, receipt_no, transaction_time, details, amount, match_status, matched_payment_id")
+    .eq("batch_id", batchId)
+    .order("created_at", { ascending: true });
+  if (error) return { error: error.message };
+  return { success: true, lines: (data ?? []) as MpesaStatementLineRow[] };
+}
+
 export async function reversePaymentAction(input: {
   payment_id: string;
   amount: number;
@@ -181,7 +272,10 @@ export async function searchStudentAccountsAction(query: string): Promise<
     supabase
       .from("student_financial_accounts")
       .select("student_id, payment_reference, students!inner(first_name, last_name, admission_number)")
-      .or(`admission_number.ilike.%${q}%,first_name.ilike.%${q}%,last_name.ilike.%${q}%`, { referencedTable: "students" }),
+      .or(
+        `admission_number.ilike.${escapePostgrestOrValue(`%${q}%`)},first_name.ilike.${escapePostgrestOrValue(`%${q}%`)},last_name.ilike.${escapePostgrestOrValue(`%${q}%`)}`,
+        { referencedTable: "students" },
+      ),
   ]);
   if (byReference.error) return { error: byReference.error.message };
   if (byStudent.error) return { error: byStudent.error.message };

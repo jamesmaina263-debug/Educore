@@ -64,7 +64,7 @@ Deno.serve(async (req) => {
     // before (health-sourced rows included — they're real queued messages like any other).
     let query = serviceClient
       .from("notification_logs")
-      .select("id, channel, recipient_phone, recipient_email, subject, body")
+      .select("id, channel, recipient_phone, recipient_email, subject, body, attachment_storage_path, attachment_filename")
       .eq("school_id", schoolId)
       .eq("status", "queued")
       .limit(100); // one batch per call; a large backlog just needs the page visited again
@@ -88,7 +88,20 @@ Deno.serve(async (req) => {
     for (const row of queued ?? []) {
       try {
         if (row.channel === "email") {
-          await emailProvider.send(row.recipient_email!, row.subject ?? "", row.body);
+          let attachments: { filename: string; contentBase64: string }[] | undefined;
+          if (row.attachment_storage_path) {
+            const { data: fileBlob, error: downloadError } = await serviceClient.storage
+              .from("application-documents")
+              .download(row.attachment_storage_path);
+            if (downloadError || !fileBlob) {
+              throw new Error(`Could not load attachment: ${downloadError?.message ?? "not found"}`);
+            }
+            const bytes = new Uint8Array(await fileBlob.arrayBuffer());
+            let binary = "";
+            for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+            attachments = [{ filename: row.attachment_filename ?? "attachment", contentBase64: btoa(binary) }];
+          }
+          await emailProvider.send(row.recipient_email!, row.subject ?? "", row.body, attachments);
         } else if (row.channel === "whatsapp") {
           await whatsappProvider.send(row.recipient_phone!, row.body);
         } else {

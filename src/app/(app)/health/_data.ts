@@ -6,7 +6,7 @@ import type { SickBayVisitRow } from "@/components/health/sick-bay-section";
 import type { MedicationRow, MedicalInventoryOption } from "@/components/health/medication-section";
 import type { ReferralRow } from "@/components/health/referrals-section";
 import type { EmergencyRow } from "@/components/health/emergencies-section";
-import type { MedicalItemRow, PendingTransferRow } from "@/components/health/inventory-section";
+import type { MedicalItemRow, PendingTransferRow, MyRequisitionRow, MyStockRequestRow } from "@/components/health/inventory-section";
 import type { HealthReportsData } from "@/components/health/reports-section";
 import type { StudentOption } from "@/components/health/student-picker";
 
@@ -26,6 +26,9 @@ export interface HealthContext {
   inventoryOptions: MedicalInventoryOption[];
   medicalCategoryId: string | null;
   pendingTransfers: PendingTransferRow[];
+  canRequestSupplies: boolean;
+  myRequisitions: MyRequisitionRow[];
+  myStockRequests: MyStockRequestRow[];
   sickBayTableRows: SickBayVisitRow[];
   medicationTableRows: MedicationRow[];
   referralTableRows: ReferralRow[];
@@ -42,19 +45,22 @@ export async function loadHealthContext(): Promise<HealthContext> {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const [{ data: viewer }, { data: canReadAny }, { data: canWriteData }, { data: canReadMedicalData }] = await Promise.all([
-    supabase.from("school_users").select("full_name, roles(display_name), schools(name)").eq("auth_user_id", user.id).maybeSingle(),
+  const [{ data: viewer }, { data: canReadAny }, { data: canWriteData }, { data: canReadMedicalData }, { data: canRequestData }] = await Promise.all([
+    supabase.from("school_users").select("id, full_name, roles(display_name), schools(name)").eq("auth_user_id", user.id).maybeSingle(),
     supabase.rpc("auth_has_permission", { p_permission_key: "health.read_any" }),
     supabase.rpc("auth_has_permission", { p_permission_key: "health.write" }),
     supabase.rpc("auth_has_permission", { p_permission_key: "students.medical.read" }),
+    supabase.rpc("auth_has_permission", { p_permission_key: "health.procurement.request" }),
   ]);
   const canWrite = canWriteData === true;
   const canReadMedicalRecords = canReadMedicalData === true;
+  const canRequestSupplies = canRequestData === true;
   const roleName = (viewer?.roles as unknown as { display_name: string } | null)?.display_name;
   const schoolName = (viewer?.schools as unknown as { name: string } | null)?.name ?? "EduCore";
   const userName = viewer?.full_name ?? user.email ?? "Account";
+  const myId = viewer?.id ?? null;
 
-  const base = { userName, userRole: roleName, schoolName, canReadAny: canReadAny === true, canReadMedicalRecords, canWrite };
+  const base = { userName, userRole: roleName, schoolName, canReadAny: canReadAny === true, canReadMedicalRecords, canWrite, canRequestSupplies };
 
   // health.read_any gates the bulk of this module's SELECT queries below, but
   // a user granted only health.write (e.g. a nurse-assigned helper who should
@@ -70,6 +76,8 @@ export async function loadHealthContext(): Promise<HealthContext> {
       inventoryOptions: [],
       medicalCategoryId: null,
       pendingTransfers: [],
+      myRequisitions: [],
+      myStockRequests: [],
       sickBayTableRows: [],
       medicationTableRows: [],
       referralTableRows: [],
@@ -112,7 +120,7 @@ export async function loadHealthContext(): Promise<HealthContext> {
       .order("check_in_at", { ascending: false }),
     supabase
       .from("medication_administrations")
-      .select("id, medication_name, dosage, route, administered_at, students(first_name, last_name), administrator:administered_by(full_name)")
+      .select("id, medication_name, dosage, route, administered_at, quantity_administered, students(first_name, last_name), administrator:administered_by(full_name)")
       .order("administered_at", { ascending: false }),
     supabase
       .from("health_referrals")
@@ -125,6 +133,29 @@ export async function loadHealthContext(): Promise<HealthContext> {
     supabase.from("inventory_categories").select("id").eq("name", "Medical Supplies").maybeSingle(),
     supabase.from("student_guardians").select("student_id, primary_contact, relationship, school_users(id, full_name, phone)"),
   ]);
+
+  // Her own requests only -- purchase_requisitions_select already scopes this via its
+  // "or requested_by = auth_school_user_id()" clause, but filtering explicitly here keeps
+  // this query's intent obvious and avoids ever accidentally listing someone else's request
+  // if her permissions change in the future.
+  const { data: myRequisitionRows } = myId
+    ? await supabase
+        .from("purchase_requisitions")
+        .select("id, purpose, status, created_at, purchase_requisition_items(item_description, quantity)")
+        .eq("requested_by", myId)
+        .order("created_at", { ascending: false })
+    : { data: [] };
+
+  const myRequisitions: MyRequisitionRow[] = (myRequisitionRows ?? []).map((r) => {
+    const items = (r.purchase_requisition_items as unknown as { item_description: string; quantity: number }[] | null) ?? [];
+    return {
+      id: r.id,
+      purpose: r.purpose,
+      status: r.status as MyRequisitionRow["status"],
+      created_at: r.created_at,
+      items,
+    };
+  });
 
   const studentOptions: StudentOption[] = (students ?? []).map((s) => ({ id: s.id, name: `${s.first_name} ${s.last_name}` }));
 
@@ -150,7 +181,7 @@ export async function loadHealthContext(): Promise<HealthContext> {
     const quantity = Array.isArray(stock) ? (stock[0]?.quantity ?? 0) : (stock?.quantity ?? 0);
     return { id: i.id, name: i.name, unit: i.unit, quantity, reorder_level: i.reorder_level, expiry_date: i.expiry_date };
   });
-  const inventoryOptions: MedicalInventoryOption[] = medicalItems.filter((i) => i.quantity > 0).map((i) => ({ id: i.id, name: i.name, quantity: i.quantity }));
+  const inventoryOptions: MedicalInventoryOption[] = medicalItems.filter((i) => i.quantity > 0).map((i) => ({ id: i.id, name: i.name, quantity: i.quantity, unit: i.unit }));
 
   const { data: pendingTransferRows } = medicalCategory
     ? await supabase
@@ -166,6 +197,29 @@ export async function loadHealthContext(): Promise<HealthContext> {
       const item = t.inventory_items as unknown as { name: string; unit: string } | null;
       return { id: t.id, item_name: item?.name ?? "Unknown", unit: item?.unit ?? "", quantity_requested: t.quantity_requested, initiated_at: t.initiated_at };
     });
+
+  const { data: myStockRequestRows } = medicalCategory
+    ? await supabase
+        .from("health_stock_adjustment_requests")
+        .select("id, item_id, quantity, reason, status, created_at, rejection_reason, inventory_items(name, unit)")
+        .eq("requested_by", myId ?? "")
+        .order("created_at", { ascending: false })
+        .limit(20)
+    : { data: [] };
+
+  const myStockRequests: MyStockRequestRow[] = (myStockRequestRows ?? []).map((r) => {
+    const item = r.inventory_items as unknown as { name: string; unit: string } | null;
+    return {
+      id: r.id,
+      item_name: item?.name ?? "Unknown",
+      unit: item?.unit ?? "",
+      quantity: r.quantity,
+      reason: r.reason,
+      status: r.status as "pending" | "approved" | "rejected",
+      created_at: r.created_at,
+      rejection_reason: r.rejection_reason,
+    };
+  });
 
   const sickBayTableRows: SickBayVisitRow[] = (sickBayRows ?? []).map((v) => ({
     id: v.id,
@@ -187,6 +241,7 @@ export async function loadHealthContext(): Promise<HealthContext> {
     medication_name: m.medication_name,
     dosage: m.dosage,
     route: m.route,
+    quantity_administered: m.quantity_administered,
     administered_at: m.administered_at,
     administered_by_name: (m.administrator as unknown as { full_name: string } | null)?.full_name ?? null,
   }));
@@ -283,6 +338,8 @@ export async function loadHealthContext(): Promise<HealthContext> {
     inventoryOptions,
     medicalCategoryId: medicalCategory?.id ?? null,
     pendingTransfers,
+    myRequisitions,
+    myStockRequests,
     sickBayTableRows,
     medicationTableRows,
     referralTableRows,

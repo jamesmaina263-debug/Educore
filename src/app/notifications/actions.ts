@@ -82,6 +82,7 @@ export async function getMyInAppNotifications(): Promise<
     .from("notification_logs")
     .select("id, body, subject, created_at, read_at, action_url")
     .eq("channel", "in_app")
+    .is("dismissed_at", null)
     .order("created_at", { ascending: false })
     .limit(20);
   if (error) return { error: error.message };
@@ -92,6 +93,16 @@ export async function getMyInAppNotifications(): Promise<
 export async function markNotificationReadAction(id: string): Promise<{ error: string } | { success: true }> {
   const supabase = await createClient();
   const { error } = await supabase.rpc("mark_notification_read", { p_notification_id: id });
+  if (error) return { error: error.message };
+  return { success: true };
+}
+
+// Bulk-dismiss every one of the caller's own in-app notifications. Hides them
+// from the bell (getMyInAppNotifications filters on dismissed_at is null) --
+// does not delete the underlying row or affect anyone else's copy of it.
+export async function clearAllNotificationsAction(): Promise<{ error: string } | { success: true }> {
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("clear_my_notifications");
   if (error) return { error: error.message };
   return { success: true };
 }

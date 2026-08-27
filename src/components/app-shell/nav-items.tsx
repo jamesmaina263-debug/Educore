@@ -62,6 +62,7 @@ import {
   Palette,
   Landmark,
   Smartphone,
+  Fingerprint,
 } from "lucide-react";
 
 export interface NavChild {
@@ -88,6 +89,7 @@ const financeChildren: NavChild[] = [
   { label: "Fee Structures", href: "/finance/fee-structures", icon: FileStack },
   { label: "Invoicing", href: "/finance/invoicing", icon: Receipt },
   { label: "Payments", href: "/finance/payments", icon: CircleDollarSign },
+  { label: "Reconciliation", href: "/finance/reconciliation", icon: ArrowLeftRight },
   { label: "Receivables", href: "/finance/receivables", icon: AlertTriangle },
   { label: "Discounts & Waivers", href: "/finance/discounts-waivers", icon: Tag },
   { label: "Fee Alerts", href: "/finance/fee-alerts", icon: BellRing },
@@ -174,12 +176,15 @@ const integrationsChildren: NavChild[] = [
 const settingsChildren: NavChild[] = [
   { label: "General", href: "/settings/general", icon: Settings },
   { label: "Branding", href: "/settings/branding", icon: Palette },
+  { label: "Admission Form", href: "/settings/admission-form", icon: FileText },
   { label: "Users & Roles", href: "/settings/staff", icon: Users },
   { label: "Permission Requests", href: "/settings/permission-requests", icon: ShieldCheck },
   { label: "Leave Types", href: "/settings/leave-types", icon: CalendarClock },
   { label: "Billing", href: "/settings/billing", icon: CoinsIcon },
   { label: "Notifications", href: "/settings/notifications", icon: Bell },
   { label: "API Keys", href: "/settings/api-keys", icon: KeyRound },
+  { label: "Biometric Devices", href: "/settings/biometric-devices", icon: Fingerprint },
+  { label: "Biometric Events", href: "/settings/biometric-events", icon: History },
   { label: "Audit Log", href: "/settings/audit", icon: History },
 ];
 

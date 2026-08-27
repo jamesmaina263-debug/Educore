@@ -43,6 +43,7 @@ import { useOfflineSync } from "@/hooks/use-offline-sync";
 import { queueMutation } from "@/lib/offline/queue";
 import { AdmissionsOfflineBanner } from "@/components/admissions/offline-banner";
 import { MpesaPushTrigger } from "@/components/finance/mpesa-push-trigger";
+import { DocumentPreviewButton } from "@/components/document-preview-dialog";
 
 // Shared shell every step form renders inside, matching the wizard panel's existing look.
 function StepPanel({ title, hint, children }: { title: string; hint?: string; children: React.ReactNode }) {
@@ -78,11 +79,15 @@ export function AdmissionDetailsStep({
   applicationId,
   academicYears,
   terms,
+  termsWithFeeStructure,
+  canReadFinance,
   initial,
 }: {
   applicationId: string;
   academicYears: AcademicYearOption[];
   terms: TermOption[];
+  termsWithFeeStructure: string[];
+  canReadFinance: boolean;
   initial: {
     admission_type: string;
     academic_year_id: string | null;
@@ -91,6 +96,8 @@ export function AdmissionDetailsStep({
     transport_required: boolean;
     previous_school: string | null;
     previous_class: string | null;
+    application_source: string;
+    walk_in_screening_confirmed: boolean;
   };
 }) {
   const router = useRouter();
@@ -99,12 +106,25 @@ export function AdmissionDetailsStep({
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  const isWalkIn = initial.application_source === "walk_in";
 
   const termsForYear = terms.filter((t) => t.academic_year_id === form.academic_year_id);
+  // Gap 4 (audit): warn as soon as a term with no configured fee structure is picked, instead
+  // of only discovering it when Finance's invoice creation fails mid-wizard. Non-blocking —
+  // the officer can still proceed. Term-only match (class isn't chosen until Academic
+  // Placement), matching the same term-only existence check complete_enrollment already
+  // gates on. Suppressed for officers without finance.read, since RLS would otherwise make
+  // every term look fee-structure-less to them.
+  const selectedTermMissingFeeStructure = canReadFinance && !!form.term_id && !termsWithFeeStructure.includes(form.term_id);
+  const selectedTermName = terms.find((t) => t.id === form.term_id)?.name ?? "this term";
 
   function save() {
     setError(null);
     setSaved(false);
+    if (isWalkIn && !form.walk_in_screening_confirmed) {
+      setError("Please confirm this applicant was screened per school policy before saving.");
+      return;
+    }
     const input: AdmissionDetailsInput = {
       admission_type: form.admission_type as "new" | "transfer" | "re_admission",
       academic_year_id: form.academic_year_id,
@@ -114,6 +134,7 @@ export function AdmissionDetailsStep({
       transport_required: form.transport_required,
       previous_school: form.previous_school ?? undefined,
       previous_class: form.previous_class ?? undefined,
+      ...(isWalkIn ? { walk_in_screening_confirmed: form.walk_in_screening_confirmed } : {}),
     };
     startTransition(async () => {
       if (!online) {
@@ -184,6 +205,25 @@ export function AdmissionDetailsStep({
         <Checkbox id="transport_required" checked={form.transport_required} onCheckedChange={(c) => setForm({ ...form, transport_required: c === true })} />
         <Label htmlFor="transport_required" className="font-normal">Requires school transport</Label>
       </div>
+      {selectedTermMissingFeeStructure && (
+        <div className="rounded-md border border-warning/25 bg-warning-subtle p-3">
+          <p className="text-sm font-medium text-warning">
+            No fee structure configured for {selectedTermName} — Finance will not be able to invoice until this is fixed.
+          </p>
+        </div>
+      )}
+      {isWalkIn && (
+        <div className="flex items-start gap-2 rounded-md border border-warning/25 bg-warning-subtle px-3 py-2">
+          <Checkbox
+            id="walk_in_screening_confirmed"
+            checked={form.walk_in_screening_confirmed}
+            onCheckedChange={(c) => setForm({ ...form, walk_in_screening_confirmed: c === true })}
+          />
+          <Label htmlFor="walk_in_screening_confirmed" className="font-normal">
+            I confirm this applicant was screened per school policy before starting enrollment.
+          </Label>
+        </div>
+      )}
       <ErrorText error={error} />
       <div className="flex items-center gap-2">
         <Button size="sm" onClick={save} disabled={pending}>{pending ? "Saving…" : "Save"}</Button>
@@ -271,7 +311,11 @@ export function StudentStep({
   function createNew(overrideDuplicate: boolean) {
     setError(null);
     startTransition(async () => {
-      const result = await createOrLinkStudent(applicationId, { admission_number: "", override_duplicate: overrideDuplicate });
+      const result = await createOrLinkStudent(applicationId, {
+        admission_number: "",
+        override_duplicate: overrideDuplicate,
+        overridden_candidate_ids: overrideDuplicate ? (candidates ?? []).map((c) => c.id) : undefined,
+      });
       if ("error" in result) { setError(result.error); return; }
       router.refresh();
     });
@@ -280,16 +324,26 @@ export function StudentStep({
   function linkExisting(studentId: string) {
     setError(null);
     startTransition(async () => {
-      const result = await createOrLinkStudent(applicationId, { admission_number: "", override_duplicate: true, link_existing_student_id: studentId });
+      const result = await createOrLinkStudent(applicationId, {
+        admission_number: "",
+        override_duplicate: true,
+        link_existing_student_id: studentId,
+        overridden_candidate_ids: (candidates ?? []).map((c) => c.id),
+      });
       if ("error" in result) { setError(result.error); return; }
       router.refresh();
     });
   }
 
-  if (resultingStudentId) {
+  // Once the Student record exists, identity is authoritative on the students table (not just
+  // the application snapshot) — updateApplicantIdentity's underlying RPC keeps both rows in
+  // sync, so editing here after linking is safe and no longer locked. Still shows the same
+  // form; only the surrounding lock screen and Cancel option differ.
+  if (resultingStudentId && !editingIdentity) {
     return (
       <StepPanel title="Student">
         <p className="flex items-center gap-1.5 text-sm text-success"><SuccessDot />Student record linked ({applicantSummary.first_name} {applicantSummary.last_name}).</p>
+        <Button size="sm" variant="ghost" onClick={() => setEditingIdentity(true)}>Edit details</Button>
       </StepPanel>
     );
   }
@@ -326,8 +380,20 @@ export function StudentStep({
             </Select>
           </div>
         </div>
+        {resultingStudentId && (
+          <p className="text-xs text-muted-foreground">
+            This student has already been enrolled — saving here corrects both the admission record and the student&apos;s own record, and is logged in Settings &gt; Audit Log.
+          </p>
+        )}
         <ErrorText error={error} />
-        <Button size="sm" onClick={saveIdentity} disabled={pending}>{pending ? "Saving…" : "Save"}</Button>
+        <div className="flex items-center gap-2">
+          <Button size="sm" onClick={saveIdentity} disabled={pending}>{pending ? "Saving…" : "Save"}</Button>
+          {resultingStudentId && (
+            <Button size="sm" variant="ghost" onClick={() => { setError(null); setIdentity({ first_name: applicantSummary.first_name ?? "", last_name: applicantSummary.last_name ?? "", other_names: applicantSummary.other_names ?? "", date_of_birth: applicantSummary.date_of_birth ?? "", gender: applicantSummary.gender ?? "" }); setEditingIdentity(false); }} disabled={pending}>
+              Cancel
+            </Button>
+          )}
+        </div>
       </StepPanel>
     );
   }
@@ -493,7 +559,15 @@ export function GuardianStep({ applicationId, resultingStudentId }: { applicatio
 // ============================================================================
 
 export interface DocumentRequirement { category: string; label: string; required: boolean }
-export interface ApplicationDocument { id: string; category: string; file_name: string; verification_status: string; verification_comment: string | null }
+export interface ApplicationDocument {
+  id: string;
+  category: string;
+  file_name: string;
+  storage_path: string;
+  storage_bucket: string;
+  verification_status: string;
+  verification_comment: string | null;
+}
 
 export function DocumentsStep({
   applicationId,
@@ -565,6 +639,9 @@ export function DocumentsStep({
               <div className="mt-2 flex items-center gap-2">
                 <Input type="file" accept=".pdf,.jpg,.jpeg,.png" className="h-8 max-w-64 text-xs"
                   onChange={(e) => { const f = e.target.files?.[0]; if (f) upload(req.category, f); }} />
+                {doc && (
+                  <DocumentPreviewButton bucket={doc.storage_bucket} storagePath={doc.storage_path} fileName={doc.file_name} />
+                )}
                 {doc && doc.verification_status !== "verified" && (
                   <Button size="sm" variant="outline" onClick={() => verify(doc.id)} disabled={pending}>Verify</Button>
                 )}
@@ -905,6 +982,13 @@ export function HealthStep({
 // Step 9 — Finance
 // ============================================================================
 
+const FINANCE_METHOD_LABELS: Record<string, string> = {
+  cash: "Cash",
+  bank: "Bank",
+  cheque: "Cheque",
+  mpesa: "M-Pesa",
+};
+
 export function FinanceStep({
   applicationId,
   hasStudentAndTerm,
@@ -929,6 +1013,11 @@ export function FinanceStep({
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  // Task 16: cash/bank/cheque payments have no equivalent of M-Pesa's own confirmation —
+  // this holds a snapshot (method, amount, timestamp) of what was just saved so the officer
+  // has an on-screen acknowledgment to screenshot/print. Purely a display snapshot of data
+  // already saved by saveFinanceDecision below; no new receipt system, no PDF.
+  const [savedReceipt, setSavedReceipt] = useState<{ method: string; amount: number; timestamp: string } | null>(null);
 
   function loadPreview() {
     setError(null);
@@ -944,6 +1033,7 @@ export function FinanceStep({
   function save() {
     setError(null);
     setSaved(false);
+    setSavedReceipt(null);
     startTransition(async () => {
       const result = await saveFinanceDecision(applicationId, {
         initial_payment_amount: amount ? Number(amount) : null,
@@ -951,6 +1041,9 @@ export function FinanceStep({
       });
       if ("error" in result) { setError(result.error); return; }
       setSaved(true);
+      if (method && method !== "mpesa" && amount.trim() !== "" && !Number.isNaN(Number(amount))) {
+        setSavedReceipt({ method, amount: Number(amount), timestamp: new Date().toLocaleString() });
+      }
     });
   }
 
@@ -993,6 +1086,16 @@ export function FinanceStep({
         <div className="space-y-1.5">
           <Label htmlFor="initial_payment">Record initial payment (optional)</Label>
           <Input id="initial_payment" type="number" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="Amount, KES" />
+          {/* Task 9: informational only, using data already fetched by loadPreview above — no
+              new validation, since a legitimate partial or advance payment can legitimately be
+              less than or more than the term total. */}
+          {charges !== null && amount.trim() !== "" && !Number.isNaN(Number(amount)) && (
+            <p className="text-[0.75rem] text-muted-foreground">
+              You entered KES {Number(amount).toLocaleString()} — the fee total for this term is KES {total.toLocaleString()}
+              {Number(amount) !== total && Number(amount) > total && " (more than the total — likely covers a future term or is a deliberate advance)"}
+              {Number(amount) !== total && Number(amount) < total && " (less than the total — a partial payment)"}
+            </p>
+          )}
         </div>
         <div className="space-y-1.5">
           <Label>Method</Label>
@@ -1038,6 +1141,17 @@ export function FinanceStep({
         <Button size="sm" onClick={save} disabled={pending}>{pending ? "Saving…" : "Save"}</Button>
         {saved && !pending && <span className="flex items-center gap-1.5 text-xs text-success"><SuccessDot />Saved</span>}
       </div>
+      {savedReceipt && (
+        <div className="rounded-md border border-success/40 bg-success/5 p-3 text-sm">
+          <p className="mb-1 flex items-center gap-1.5 font-medium text-success"><SuccessDot />Payment recorded</p>
+          <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-muted-foreground">
+            <dt>Method</dt><dd className="text-foreground">{FINANCE_METHOD_LABELS[savedReceipt.method] ?? savedReceipt.method}</dd>
+            <dt>Amount</dt><dd className="text-foreground">KES {savedReceipt.amount.toLocaleString()}</dd>
+            <dt>Recorded at</dt><dd className="text-foreground">{savedReceipt.timestamp}</dd>
+          </dl>
+          <p className="mt-1.5 text-xs text-muted-foreground">You can screenshot or print this as the officer&apos;s confirmation of the recorded payment.</p>
+        </div>
+      )}
     </StepPanel>
   );
 }
@@ -1048,6 +1162,8 @@ export function FinanceStep({
 
 const CHECKLIST_STEP_BY_ITEM: Record<string, string> = {
   student: "student",
+  // Task 2's confirmation checkbox lives on the Admission Details step (Step 1).
+  walk_in_screening: "admission_details",
   guardian: "guardian",
   documents: "documents",
   academics: "academics",
@@ -1069,6 +1185,10 @@ export interface ReviewSummary {
   boardingLabel: string | null;
   transportLabel: string | null;
   financeTotal: number | null;
+  /** Task 15: the applicant's original stated preference, always shown at Final Review even
+   *  when the Boarding/Transport step itself was skipped by the dynamic step logic. */
+  boardingPreference: "day" | "boarding" | null;
+  transportRequired: boolean;
 }
 
 // "Editable inline" (Brief 4.16.13) is delivered by letting every section jump straight back to
@@ -1088,15 +1208,27 @@ export function ReviewStep({ applicationId, summary, onNavigateToStep }: { appli
     });
   }
 
-  const rows: { label: string; value: string; stepId: string }[] = [
+  // Task 15: the Boarding/Transport steps in the wizard auto-skip based on the applicant's
+  // original preference, so an officer reviewing this screen never sees that preference when
+  // the corresponding step didn't appear. These captions surface it regardless, next to a
+  // "confirmed at application" indicator — read-only, no new input, doesn't touch skip logic.
+  const boardingPreferenceCaption =
+    summary.boardingPreference === "boarding" ? "Applicant requested: Boarding"
+    : summary.boardingPreference === "day" ? "Applicant requested: Day scholar"
+    : "Boarding preference not recorded";
+  const transportPreferenceCaption = summary.transportRequired
+    ? "Applicant requested: School transport required"
+    : "Applicant requested: No school transport needed";
+
+  const rows: { label: string; value: string; stepId: string; caption?: string }[] = [
     { label: "Admission type", value: summary.admissionType, stepId: "admission_details" },
     { label: "Academic year / term", value: `${summary.academicYearLabel ?? "—"} / ${summary.termLabel ?? "—"}`, stepId: "admission_details" },
     { label: "Student", value: `${summary.studentName}${summary.admissionNumber ? ` · ${summary.admissionNumber}` : ""}`, stepId: "student" },
     { label: "Guardian", value: summary.guardianName ? `${summary.guardianName} (${summary.guardianRelationship ?? "—"})` : "Not linked", stepId: "guardian" },
     { label: "Documents", value: summary.documentsSummary, stepId: "documents" },
     { label: "Class / stream", value: summary.streamLabel ?? "Not placed", stepId: "academics" },
-    { label: "Boarding", value: summary.boardingLabel ?? "Day / not applicable", stepId: "boarding" },
-    { label: "Transport", value: summary.transportLabel ?? "Not applicable", stepId: "transport" },
+    { label: "Boarding", value: summary.boardingLabel ?? "Day / not applicable", stepId: "boarding", caption: boardingPreferenceCaption },
+    { label: "Transport", value: summary.transportLabel ?? "Not applicable", stepId: "transport", caption: transportPreferenceCaption },
     { label: "Finance", value: summary.financeTotal != null ? `KES ${summary.financeTotal.toLocaleString()} charged this term` : "Not previewed", stepId: "finance" },
   ];
 
@@ -1108,6 +1240,11 @@ export function ReviewStep({ applicationId, summary, onNavigateToStep }: { appli
             <div>
               <p className="text-xs text-muted-foreground">{r.label}</p>
               <p>{r.value}</p>
+              {r.caption && (
+                <p className="mt-0.5 flex items-center gap-1.5 text-xs text-success">
+                  <SuccessDot />{r.caption}
+                </p>
+              )}
             </div>
             <Button size="sm" variant="ghost" onClick={() => onNavigateToStep(r.stepId)}>Edit</Button>
           </li>
@@ -1169,7 +1306,7 @@ export function CompleteStep({
   function sendConfirmation() {
     startTransition(async () => {
       const outcome = await completeEnrollmentAction(applicationId); // idempotent — also re-triggers the best-effort send
-      if (!("error" in outcome)) setSent(true);
+      if (!("error" in outcome)) { setSent(true); setResult(outcome.result); }
     });
   }
 
@@ -1193,6 +1330,28 @@ export function CompleteStep({
           {result.payment_reference && <div><dt className="text-xs text-muted-foreground">Payment reference</dt><dd>{result.payment_reference}</dd></div>}
         </dl>
       </div>
+      {/* Task 10: complete_enrollment() already returns invoice_id -- a null here means the
+          fee-structure gap (see Task 4's Aug-25 fix) was hit and the invoice creation was
+          skipped, but the enrollment itself still succeeded. Purely a UI branch on data
+          already returned -- complete_enrollment() itself is untouched. */}
+      {result.invoice_id === null && (
+        <div className="rounded-md border border-warning/25 bg-warning-subtle p-3">
+          <p className="text-sm font-medium text-warning">Enrollment completed, but the fee invoice could not be created</p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Finance has been notified via the audit log. A fee structure will need to be configured for this class/term before an invoice can be raised.
+          </p>
+        </div>
+      )}
+      {/* Task 11: completeEnrollmentAction() now returns confirmation_sent/confirmation_note --
+          set right after the same best-effort send this button re-triggers. Makes the "no
+          template configured" (or no guardian, or send failure) case visible instead of it
+          silently doing nothing. Purely a UI branch on data already returned. */}
+      {!result.confirmation_sent && result.confirmation_note && (
+        <div className="rounded-md border border-warning/25 bg-warning-subtle p-3">
+          <p className="text-sm font-medium text-warning">No confirmation message sent automatically</p>
+          <p className="mt-1 text-sm text-muted-foreground">{result.confirmation_note} Use &quot;Send Parent Confirmation&quot; below.</p>
+        </div>
+      )}
       <div className="flex flex-wrap gap-2">
         <Button asChild size="sm"><Link href={`/students/${result.student_id}`}>View Student</Link></Button>
         <Button asChild size="sm" variant="outline"><Link href={`/students/${result.student_id}/id-card`}>Print Student Details</Link></Button>

@@ -17,6 +17,7 @@ import {
 import { StatusBadge } from "@/components/status-badge";
 import type { ItemRow } from "@/components/inventory/inventory-section";
 import {
+  approveRequisitionAction,
   completeAssetMaintenanceAction,
   createAssetAction,
   createPurchaseOrderAction,
@@ -24,6 +25,7 @@ import {
   createSupplierAction,
   createSupplierInvoiceAction,
   decideRequisitionAction,
+  decideHealthStockRequestAction,
   markSupplierInvoicePaidAction,
   receiveGoodsAction,
   requestAssetMaintenanceAction,
@@ -64,6 +66,18 @@ export interface RequisitionRow {
   created_at: string;
   items: { item_description: string; quantity: number }[];
 }
+export interface HealthStockRequestRow {
+  id: string;
+  item_name: string;
+  unit: string;
+  quantity: number;
+  reason: string;
+  status: "pending" | "approved" | "rejected";
+  requested_by_name: string;
+  created_at: string;
+  reviewed_at: string | null;
+  rejection_reason: string | null;
+}
 export interface PurchaseOrderRow {
   id: string;
   po_number: string;
@@ -94,6 +108,11 @@ const REQ_STATUS_TONE: Record<RequisitionRow["status"], "neutral" | "warning" | 
   rejected: "danger",
   converted: "success",
 };
+const HEALTH_STOCK_REQUEST_STATUS_TONE: Record<HealthStockRequestRow["status"], "warning" | "success" | "danger"> = {
+  pending: "warning",
+  approved: "success",
+  rejected: "danger",
+};
 const PO_STATUS_TONE: Record<PurchaseOrderRow["status"], "neutral" | "warning" | "success" | "info" | "danger"> = {
   draft: "neutral",
   sent: "info",
@@ -119,6 +138,98 @@ function useAction() {
     });
   }
   return { isPending, error, run };
+}
+
+// Approving a requisition auto-generates its PO (approve_requisition RPC).
+// The common case (item has purchase history) needs nothing further -- one
+// click. If the RPC can't resolve a supplier or cost, it comes back with a
+// specific error naming the item, and this swaps in a small inline picker
+// instead of the plain button, rather than failing silently or opening a
+// full "Issue PO" dialog for something that should stay one step.
+function ApproveRequisitionButton({ requisitionId, suppliers }: { requisitionId: string; suppliers: SupplierRow[] }) {
+  const [isPending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+  const [needsSupplier, setNeedsSupplier] = useState(false);
+  const [needsCost, setNeedsCost] = useState(false);
+  const [supplierId, setSupplierId] = useState("");
+  const [unitCost, setUnitCost] = useState("");
+
+  function attempt(fd: FormData) {
+    setError(null);
+    startTransition(async () => {
+      const res = await approveRequisitionAction(fd);
+      if ("error" in res) {
+        setNeedsSupplier(res.error.includes("no supplier on file"));
+        setNeedsCost(res.error.includes("no unit cost on file"));
+        setError(res.error);
+      } else {
+        setNeedsSupplier(false);
+        setNeedsCost(false);
+        setError(null);
+      }
+    });
+  }
+
+  function handleApproveClick() {
+    const fd = new FormData();
+    fd.set("requisition_id", requisitionId);
+    attempt(fd);
+  }
+
+  function handleResolvedSubmit() {
+    const fd = new FormData();
+    fd.set("requisition_id", requisitionId);
+    if (supplierId) fd.set("supplier_id", supplierId);
+    if (unitCost) fd.set("unit_cost_override", unitCost);
+    attempt(fd);
+  }
+
+  if (needsSupplier || needsCost) {
+    return (
+      <div className="flex flex-col gap-1.5 rounded-md border border-amber-300/60 bg-amber-50 p-2">
+        <p className="text-xs text-amber-800">{error}</p>
+        {needsSupplier && (
+          <Select value={supplierId} onValueChange={setSupplierId}>
+            <SelectTrigger className="h-8">
+              <SelectValue placeholder="Select supplier" />
+            </SelectTrigger>
+            <SelectContent>
+              {suppliers.map((s) => (
+                <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+        {needsCost && (
+          <Input
+            type="number"
+            step="0.01"
+            placeholder="Unit cost"
+            value={unitCost}
+            onChange={(e) => setUnitCost(e.target.value)}
+            className="h-8"
+          />
+        )}
+        <Button
+          type="button"
+          size="sm"
+          disabled={isPending || (needsSupplier && !supplierId) || (needsCost && !unitCost)}
+          onClick={handleResolvedSubmit}
+        >
+          Approve &amp; issue PO
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-1">
+      {error && <p className="text-xs text-destructive">{error}</p>}
+      <Button type="button" size="sm" variant="outline" disabled={isPending} onClick={handleApproveClick}>
+        Approve
+      </Button>
+    </div>
+  );
 }
 
 export function AssetsPanel({ assets, maintenance, canWrite }: { assets: AssetRow[]; maintenance: MaintenanceRow[]; canWrite: boolean }) {
@@ -451,6 +562,7 @@ export function ProcurementPanel({
   items,
   canWrite,
   canApprove,
+  healthStockRequests,
 }: {
   requisitions: RequisitionRow[];
   purchaseOrders: PurchaseOrderRow[];
@@ -458,6 +570,7 @@ export function ProcurementPanel({
   items: ItemRow[];
   canWrite: boolean;
   canApprove: boolean;
+  healthStockRequests: HealthStockRequestRow[];
 }) {
   const { isPending, error, run } = useAction();
   const [reqOpen, setReqOpen] = useState(false);
@@ -465,13 +578,22 @@ export function ProcurementPanel({
   const [receiveOpen, setReceiveOpen] = useState<string | null>(null);
   const [editItemOpen, setEditItemOpen] = useState<{ id: string; quantity: number; unit_cost: number | null } | null>(null);
   const [poItemMode, setPoItemMode] = useState<string>("__custom__");
+  const [receiveItemId, setReceiveItemId] = useState<string | null>(null);
+  const [customItemMatch, setCustomItemMatch] = useState<string | null>(null);
+  const [reqItemMode, setReqItemMode] = useState<string>("");
 
   return (
     <div className="flex flex-col gap-4">
       {error && <div className="rounded-md border border-destructive/25 bg-destructive-subtle px-3 py-2 text-sm text-destructive">{error}</div>}
       <div className="flex justify-end gap-2">
         {canWrite && (
-          <Dialog open={reqOpen} onOpenChange={setReqOpen}>
+          <Dialog
+            open={reqOpen}
+            onOpenChange={(o) => {
+              setReqOpen(o);
+              if (!o) setReqItemMode("");
+            }}
+          >
             <DialogTrigger asChild>
               <Button size="sm" variant="outline">New Requisition</Button>
             </DialogTrigger>
@@ -486,7 +608,28 @@ export function ProcurementPanel({
                 </div>
                 <div className="flex flex-col gap-1.5">
                   <Label>Item</Label>
-                  <Input name="item_description" required />
+                  <Select value={reqItemMode} onValueChange={setReqItemMode} required>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select a stock item" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {items.map((i) => (
+                        <SelectItem key={i.id} value={i.id}>{i.name}{i.category_name ? ` (${i.category_name})` : ""}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                {reqItemMode && <input type="hidden" name="inventory_item_id" value={reqItemMode} />}
+                <div className="flex flex-col gap-1.5">
+                  <Label>Item Description</Label>
+                  <Input
+                    name="item_description"
+                    required
+                    readOnly
+                    placeholder="Select an item above"
+                    value={items.find((i) => i.id === reqItemMode)?.name ?? ""}
+                    className="bg-muted"
+                  />
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div className="flex flex-col gap-1.5">
@@ -521,19 +664,6 @@ export function ProcurementPanel({
                 <DialogTitle>Issue Purchase Order</DialogTitle>
               </DialogHeader>
               <form className="flex flex-col gap-3" action={(fd) => run(createPurchaseOrderAction, fd, () => setPoOpen(false))}>
-                <div className="flex flex-col gap-1.5">
-                  <Label>From Requisition (optional)</Label>
-                  <Select name="requisition_id">
-                    <SelectTrigger>
-                      <SelectValue placeholder="None" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {requisitions.filter((r) => r.status === "approved").map((r) => (
-                        <SelectItem key={r.id} value={r.id}>{r.purpose}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
                 <div className="flex flex-col gap-1.5">
                   <Label>Supplier</Label>
                   <Select name="supplier_id" required>
@@ -574,7 +704,18 @@ export function ProcurementPanel({
                     required
                     defaultValue={poItemMode === "__custom__" ? "" : items.find((i) => i.id === poItemMode)?.name ?? ""}
                     key={poItemMode}
+                    onChange={(e) => {
+                      if (poItemMode !== "__custom__") return;
+                      const typed = e.target.value.trim().toLowerCase();
+                      const hit = items.find((i) => i.name.trim().toLowerCase() === typed);
+                      setCustomItemMatch(hit ? hit.name : null);
+                    }}
                   />
+                  {poItemMode === "__custom__" && customItemMatch && (
+                    <p className="text-xs text-amber-600">
+                      &quot;{customItemMatch}&quot; is already in your stock catalog — pick it from the Item dropdown above instead, or receiving goods against this line won&apos;t update stock.
+                    </p>
+                  )}
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div className="flex flex-col gap-1.5">
@@ -624,14 +765,68 @@ export function ProcurementPanel({
                     {canApprove && (
                       <td>
                         {r.status === "submitted" && (
-                          <div className="flex gap-2">
+                          <div className="flex items-start gap-2">
+                            <ApproveRequisitionButton requisitionId={r.id} suppliers={suppliers} />
                             <form action={(fd) => run(decideRequisitionAction, fd)}>
                               <input type="hidden" name="requisition_id" value={r.id} />
+                              <input type="hidden" name="decision" value="rejected" />
+                              <Button type="submit" size="sm" variant="outline" disabled={isPending}>Reject</Button>
+                            </form>
+                          </div>
+                        )}
+                      </td>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      <div className="panel">
+        <header className="flex items-center justify-between border-b border-border px-4 py-2.5">
+          <h2 className="text-[0.8125rem] font-semibold">Health: manual stock addition requests</h2>
+          <span className="text-[0.6875rem] text-muted-foreground">{healthStockRequests.length}</span>
+        </header>
+        {healthStockRequests.length === 0 ? (
+          <p className="p-10 text-center text-sm text-muted-foreground">No requests yet.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="table-dense w-full">
+              <thead className="bg-muted/70">
+                <tr>
+                  <th>Item</th>
+                  <th>Quantity</th>
+                  <th>Reason</th>
+                  <th>Requested by</th>
+                  <th>Status</th>
+                  {canApprove && <th></th>}
+                </tr>
+              </thead>
+              <tbody>
+                {healthStockRequests.map((r) => (
+                  <tr key={r.id}>
+                    <td className="font-medium">{r.item_name}</td>
+                    <td className="text-muted-foreground">
+                      {r.quantity} {r.unit}
+                    </td>
+                    <td className="text-muted-foreground">{r.reason}</td>
+                    <td className="text-muted-foreground">{r.requested_by_name}</td>
+                    <td>
+                      <StatusBadge tone={HEALTH_STOCK_REQUEST_STATUS_TONE[r.status]} label={r.status} />
+                    </td>
+                    {canApprove && (
+                      <td>
+                        {r.status === "pending" && (
+                          <div className="flex gap-2">
+                            <form action={(fd) => run(decideHealthStockRequestAction, fd)}>
+                              <input type="hidden" name="request_id" value={r.id} />
                               <input type="hidden" name="decision" value="approved" />
                               <Button type="submit" size="sm" variant="outline" disabled={isPending}>Approve</Button>
                             </form>
-                            <form action={(fd) => run(decideRequisitionAction, fd)}>
-                              <input type="hidden" name="requisition_id" value={r.id} />
+                            <form action={(fd) => run(decideHealthStockRequestAction, fd)}>
+                              <input type="hidden" name="request_id" value={r.id} />
                               <input type="hidden" name="decision" value="rejected" />
                               <Button type="submit" size="sm" variant="outline" disabled={isPending}>Reject</Button>
                             </form>
@@ -695,7 +890,7 @@ export function ProcurementPanel({
                     {canWrite && (
                       <td>
                         {po.status !== "received" && po.status !== "cancelled" && (
-                          <Dialog open={receiveOpen === po.id} onOpenChange={(o) => setReceiveOpen(o ? po.id : null)}>
+                          <Dialog open={receiveOpen === po.id} onOpenChange={(o) => { setReceiveOpen(o ? po.id : null); if (!o) setReceiveItemId(null); }}>
                             <DialogTrigger asChild>
                               <Button size="sm" variant="outline">Receive Goods</Button>
                             </DialogTrigger>
@@ -707,7 +902,7 @@ export function ProcurementPanel({
                                 <input type="hidden" name="po_id" value={po.id} />
                                 <div className="flex flex-col gap-1.5">
                                   <Label>Item</Label>
-                                  <Select name="po_item_id" required>
+                                  <Select name="po_item_id" required onValueChange={setReceiveItemId}>
                                     <SelectTrigger>
                                       <SelectValue placeholder="Select item" />
                                     </SelectTrigger>
@@ -719,6 +914,11 @@ export function ProcurementPanel({
                                       ))}
                                     </SelectContent>
                                   </Select>
+                                  {po.items.find((i) => i.id === receiveItemId && !i.inventory_item_id) && (
+                                    <p className="text-xs text-amber-600">
+                                      This line isn&apos;t linked to a stock catalog item — receiving it will record the delivery but won&apos;t update stock levels.
+                                    </p>
+                                  )}
                                 </div>
                                 <div className="flex flex-col gap-1.5">
                                   <Label>Quantity Received</Label>

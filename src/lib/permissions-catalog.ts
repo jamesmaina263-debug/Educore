@@ -55,6 +55,17 @@ export const PERMISSION_CATALOG: PermissionGroup[] = [
     ],
   },
   {
+    module: "biometric",
+    label: "Biometric",
+    permissions: [
+      { key: "biometric.view", label: "View biometric profiles and credential status" },
+      { key: "biometric.enroll", label: "Enroll a student/staff biometric credential" },
+      { key: "biometric.revoke", label: "Revoke a biometric credential" },
+      { key: "biometric.devices_manage", label: "Register and administer biometric devices" },
+      { key: "biometric.events_read", label: "View the biometric event/verification audit log" },
+    ],
+  },
+  {
     module: "exams",
     label: "Exams",
     permissions: [
@@ -160,6 +171,7 @@ export const PERMISSION_CATALOG: PermissionGroup[] = [
     permissions: [
       { key: "health.read_any", label: "View any student's health records" },
       { key: "health.write", label: "Manage health records" },
+      { key: "health.procurement.request", label: "Request medical supplies (procurement)" },
     ],
   },
   {
@@ -205,6 +217,7 @@ export const PERMISSION_CATALOG: PermissionGroup[] = [
       { key: "communication.read", label: "View messages / newsletters" },
       { key: "communication.write", label: "Send messages / newsletters" },
       { key: "communication.supplier", label: "Message suppliers only (Procurement)" },
+      { key: "communication.delete", label: "Permanently delete communication history" },
     ],
   },
   {

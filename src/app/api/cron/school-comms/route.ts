@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { isValidCronRequest } from "@/lib/cron-auth";
 
 export const dynamic = "force-dynamic";
 
@@ -22,8 +23,7 @@ export async function GET(request: Request) {
   if (!cronSecret) {
     return NextResponse.json({ error: "CRON_SECRET is not configured." }, { status: 500 });
   }
-  const authHeader = request.headers.get("authorization");
-  if (authHeader !== `Bearer ${cronSecret}`) {
+  if (!isValidCronRequest(request, cronSecret)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

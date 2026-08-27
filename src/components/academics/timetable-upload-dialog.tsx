@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
 import { bulkUploadTimetableAction, type TimetableUploadResult, type TimetableUploadRow } from "@/app/(app)/academics/actions";
+import { buildXlsxWorkbook, downloadBlob, XLSX_MIME } from "@/lib/xlsx-export";
 import type { StreamRow, ClassRow, TeacherOption } from "./classes-streams-section";
 import type { SubjectRow } from "./subjects-section";
 
@@ -149,7 +150,6 @@ async function parseFileToRows(file: File): Promise<TimetableUploadRow[]> {
 }
 
 export async function downloadTimetableTemplate(streams: StreamRow[], classes: ClassRow[], subjects: SubjectRow[], teachers: TeacherOption[]) {
-  const XLSX = await import("xlsx");
   const classNameById = new Map(classes.map((c) => [c.id, c.name]));
   const firstStream = streams[0];
   const exampleClass = firstStream ? classNameById.get(firstStream.class_id) ?? "" : "1";
@@ -160,17 +160,13 @@ export async function downloadTimetableTemplate(streams: StreamRow[], classes: C
   const headers = ["Class", "Stream", "Day", "Period", "Subject", "Teacher", "Start Time", "End Time"];
   const exampleRow = [exampleClass, exampleStream, "Monday", 1, exampleSubject, exampleTeacher, "08:00", "08:40"];
 
-  const wb = XLSX.utils.book_new();
-  const sheet = XLSX.utils.aoa_to_sheet([headers, exampleRow]);
-  XLSX.utils.book_append_sheet(wb, sheet, "Timetable");
-
   // Reference sheet: exact valid spellings to copy-paste from, since the upload matches
   // Class/Stream/Subject/Teacher names exactly (case-insensitive) against what's on file.
   const classStreamPairs = streams.map((s) => [classNameById.get(s.class_id) ?? "", s.name]);
   const subjectNames = subjects.filter((s) => s.is_active).map((s) => [s.name]);
   const teacherNames = teachers.map((t) => [t.full_name]);
   const maxLen = Math.max(classStreamPairs.length, subjectNames.length, teacherNames.length, 1);
-  const refRows: (string | number)[][] = [["Class", "Stream", "", "Subject", "", "Teacher"]];
+  const refRows: (string | number)[][] = [];
   for (let i = 0; i < maxLen; i++) {
     refRows.push([
       classStreamPairs[i]?.[0] ?? "",
@@ -181,10 +177,12 @@ export async function downloadTimetableTemplate(streams: StreamRow[], classes: C
       teacherNames[i]?.[0] ?? "",
     ]);
   }
-  const refSheet = XLSX.utils.aoa_to_sheet(refRows);
-  XLSX.utils.book_append_sheet(wb, refSheet, "Reference");
 
-  XLSX.writeFile(wb, "timetable-template.xlsx");
+  const buffer = await buildXlsxWorkbook([
+    { name: "Timetable", headers, rows: [exampleRow] },
+    { name: "Reference", headers: ["Class", "Stream", "", "Subject", "", "Teacher"], rows: refRows },
+  ]);
+  downloadBlob(buffer, "timetable-template.xlsx", XLSX_MIME);
 }
 
 export function TimetableUploadDialog() {

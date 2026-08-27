@@ -38,6 +38,26 @@ export default async function AdmissionReviewPage({ params }: { params: Promise<
     ? await supabase.from("students").select("admission_number").eq("id", application.resulting_student_id).maybeSingle()
     : { data: null };
 
+  // Only needed for online applications' Accept dialog (term + class must be picked there so
+  // the fee structure is real by the time the acceptance email goes out) — skip the query
+  // otherwise.
+  const [{ data: termRows }, { data: streamRows }] =
+    application.application_source === "online"
+      ? await Promise.all([
+          supabase.from("terms").select("id, name, academic_year_id, academic_years(name)").eq("school_id", application.school_id).order("start_date"),
+          supabase.from("streams").select("id, name, class_id, classes(name)").eq("school_id", application.school_id),
+        ])
+      : [{ data: [] }, { data: [] }];
+
+  const termOptions = (termRows ?? []).map((t) => ({
+    id: t.id,
+    label: `${(t.academic_years as unknown as { name: string } | null)?.name ?? ""} — ${t.name}`,
+  }));
+  const streamOptions = (streamRows ?? []).map((s) => ({
+    id: s.id,
+    label: s.name ? `${(s.classes as unknown as { name: string } | null)?.name ?? ""} ${s.name}`.trim() : (s.classes as unknown as { name: string } | null)?.name ?? "",
+  }));
+
   // Bug fix: complete_enrollment() intentionally reassigns verified documents from
   // application_id to student_id (and nulls application_id) once enrollment finishes — see
   // that function's migration. This page used to filter by application_id only, so any
@@ -50,11 +70,11 @@ export default async function AdmissionReviewPage({ params }: { params: Promise<
     application.resulting_student_id
       ? supabase
           .from("documents")
-          .select("id, category, file_name, storage_path, verification_status, verification_comment, created_at")
+          .select("id, category, file_name, storage_path, storage_bucket, verification_status, verification_comment, created_at")
           .or(`application_id.eq.${id},student_id.eq.${application.resulting_student_id}`)
       : supabase
           .from("documents")
-          .select("id, category, file_name, storage_path, verification_status, verification_comment, created_at")
+          .select("id, category, file_name, storage_path, storage_bucket, verification_status, verification_comment, created_at")
           .eq("application_id", id),
   ]);
 
@@ -71,6 +91,7 @@ export default async function AdmissionReviewPage({ params }: { params: Promise<
             id: doc.id,
             file_name: doc.file_name,
             storage_path: doc.storage_path,
+            storage_bucket: doc.storage_bucket,
             verification_status: doc.verification_status as "pending" | "verified" | "rejected",
             verification_comment: doc.verification_comment,
           }
@@ -128,7 +149,14 @@ export default async function AdmissionReviewPage({ params }: { params: Promise<
       userRole={roleName}
       onSignOut={logout}
     >
-      <ReviewScreen application={detail} requirements={requirements} canWrite={canWrite === true} schoolSlug={schoolInfo?.slug ?? ""} />
+      <ReviewScreen
+        application={detail}
+        requirements={requirements}
+        canWrite={canWrite === true}
+        schoolSlug={schoolInfo?.slug ?? ""}
+        termOptions={termOptions}
+        streamOptions={streamOptions}
+      />
     </AppShell>
   );
 }

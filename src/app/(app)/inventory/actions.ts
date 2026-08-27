@@ -9,26 +9,20 @@ export async function createInventoryItemAction(input: {
   name: string;
   description?: string;
   unit: string;
+  quantity?: number;
   reorder_level?: number;
   location?: string;
   category_id?: string;
 }): Promise<ActionResult> {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  const { data: schoolUser } = await supabase.from("school_users").select("school_id").eq("auth_user_id", user?.id ?? "").maybeSingle();
-  if (!schoolUser) return { error: "No school context found" };
-
-  const { error } = await supabase.from("inventory_items").insert({
-    school_id: schoolUser.school_id,
-    name: input.name,
-    description: input.description || null,
-    unit: input.unit || "pieces",
-    quantity: 0,
-    reorder_level: input.reorder_level ?? null,
-    location: input.location || null,
-    category_id: input.category_id || null,
+  const { error } = await supabase.rpc("create_inventory_item", {
+    p_name: input.name,
+    p_unit: input.unit,
+    p_quantity: input.quantity ?? 0,
+    p_description: input.description || null,
+    p_reorder_level: input.reorder_level ?? null,
+    p_location: input.location || null,
+    p_category_id: input.category_id || null,
   });
   if (error) return { error: error.message };
   revalidatePath("/inventory", "layout");
@@ -71,11 +65,10 @@ export async function recordStockMovementAction(input: {
 // Health transfers -- Main Store initiates, the Nurse accepts/rejects (see
 // src/app/health/actions.ts for the other side of this). Stock only moves on accept.
 // ---------------------------------------------------------------------------
-export async function createTransferAction(input: { item_id: string; quantity: number }): Promise<ActionResult> {
+export async function createTransferAction(input: { items: { item_id: string; quantity: number }[] }): Promise<ActionResult> {
   const supabase = await createClient();
-  const { error } = await supabase.rpc("create_inventory_transfer", {
-    p_item_id: input.item_id,
-    p_quantity: input.quantity,
+  const { error } = await supabase.rpc("create_inventory_transfers", {
+    p_items: input.items.map((i) => ({ item_id: i.item_id, quantity: i.quantity })),
   });
   if (error) return { error: error.message };
   revalidatePath("/inventory", "layout");
@@ -243,7 +236,9 @@ export async function createRequisitionAction(formData: FormData): Promise<Actio
   const itemDescription = String(formData.get("item_description") ?? "").trim();
   const quantity = String(formData.get("quantity") ?? "");
   const estimatedCost = String(formData.get("estimated_unit_cost") ?? "") || null;
+  const inventoryItemId = String(formData.get("inventory_item_id") ?? "") || null;
   if (!purpose || !itemDescription || !quantity) return { error: "Purpose, item, and quantity are required." };
+  if (!inventoryItemId) return { error: "Select an item from the stock catalog." };
 
   const { data: requisition, error } = await supabase
     .from("purchase_requisitions")
@@ -253,12 +248,17 @@ export async function createRequisitionAction(formData: FormData): Promise<Actio
   if (error) return { error: error.message };
 
   if (requisition) {
+    // inventory_item_id links this line to the stock catalog (and so to a
+    // defined category) whenever a catalog item was picked -- left null for a
+    // genuinely custom/off-catalog request, which approve_requisition then
+    // has no purchase history to auto-resolve a supplier from.
     const { error: itemError } = await supabase.from("purchase_requisition_items").insert({
       requisition_id: requisition.id,
       school_id: schoolUser.school_id,
       item_description: itemDescription,
       quantity,
       estimated_unit_cost: estimatedCost,
+      inventory_item_id: inventoryItemId,
     });
     if (itemError) {
       // Don't leave an itemless requisition behind claiming success -- roll the header back.
@@ -282,13 +282,16 @@ export async function createRequisitionAction(formData: FormData): Promise<Actio
   return { success: true };
 }
 
+// Rejection only -- approving a requisition now goes through
+// approveRequisitionAction below, which auto-generates the PO in the same
+// step (approve_requisition RPC) instead of just flipping a status column.
 export async function decideRequisitionAction(formData: FormData): Promise<ActionResult> {
   const { supabase, schoolUser } = await currentSchoolUser();
   if (!schoolUser) return { error: "Could not resolve your account." };
 
   const requisitionId = String(formData.get("requisition_id") ?? "");
   const decision = String(formData.get("decision") ?? "");
-  if (!requisitionId || !["approved", "rejected"].includes(decision)) return { error: "Missing requisition or decision." };
+  if (!requisitionId || decision !== "rejected") return { error: "Missing requisition, or not a rejection." };
 
   const { data: requisition } = await supabase
     .from("purchase_requisitions")
@@ -298,26 +301,82 @@ export async function decideRequisitionAction(formData: FormData): Promise<Actio
 
   const { error } = await supabase
     .from("purchase_requisitions")
-    .update({ status: decision, approved_by: schoolUser.id, approved_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+    .update({ status: "rejected", approved_by: schoolUser.id, approved_at: new Date().toISOString(), updated_at: new Date().toISOString() })
     .eq("id", requisitionId);
   if (error) return { error: error.message };
   revalidatePath("/inventory", "layout");
 
   // Best-effort: tell the requester the outcome. Never block the decision on this.
   if (requisition?.requested_by) {
+    // She raised this via health.procurement.request, not inventory.write, so she
+    // can't see /inventory/procurement -- send her to her own status view instead.
+    // Everyone else keeps the original link, unchanged.
+    const { data: isHealthRequester } = await supabase.rpc("school_user_has_permission", {
+      p_school_user_id: requisition.requested_by,
+      p_permission_key: "health.procurement.request",
+    });
+    const { data: canSeeMainStore } = await supabase.rpc("school_user_has_permission", {
+      p_school_user_id: requisition.requested_by,
+      p_permission_key: "inventory.read_any",
+    });
+    const actionUrl = isHealthRequester === true && canSeeMainStore !== true ? "/health/inventory" : "/inventory/procurement";
+
     await supabase.rpc("notify_school_user", {
       p_recipient_id: requisition.requested_by,
-      p_subject: decision === "approved" ? "Requisition approved" : "Requisition rejected",
-      p_body:
-        decision === "approved"
-          ? `Your requisition for "${requisition.purpose}" was approved.`
-          : `Your requisition for "${requisition.purpose}" was not approved.`,
-      p_action_url: "/inventory/procurement",
+      p_subject: "Requisition rejected",
+      p_body: `Your requisition for "${requisition.purpose}" was not approved.`,
+      p_action_url: actionUrl,
       p_category: "other",
     });
   }
 
   return { success: true };
+}
+
+// Approves a requisition and auto-generates + sends the PO for exactly its
+// requested items, via the approve_requisition RPC. If the RPC can't resolve
+// a supplier (or cost) for an item, it raises and this surfaces that error to
+// the caller -- the UI then asks for a supplier and retries with it set.
+export async function approveRequisitionAction(formData: FormData): Promise<ActionResult> {
+  const { supabase } = await currentSchoolUser();
+
+  const requisitionId = String(formData.get("requisition_id") ?? "");
+  const supplierId = String(formData.get("supplier_id") ?? "") || null;
+  const unitCostOverride = String(formData.get("unit_cost_override") ?? "") || null;
+  if (!requisitionId) return { error: "Missing requisition." };
+
+  const { error } = await supabase.rpc("approve_requisition", {
+    p_requisition_id: requisitionId,
+    p_supplier_id: supplierId,
+    p_unit_cost_override: unitCostOverride,
+  });
+  if (error) return { error: error.message };
+
+  revalidatePath("/inventory", "layout");
+  return { success: true };
+}
+
+export interface RequisitionApprovalPreviewRow {
+  item_id: string;
+  item_description: string;
+  quantity: number;
+  resolved_supplier_id: string | null;
+  resolved_supplier_name: string | null;
+  resolved_unit_cost: number | null;
+  needs_supplier: boolean;
+  needs_cost: boolean;
+}
+
+// Read-only check the UI runs before showing a plain "Approve" button, so it
+// knows whether to ask for a supplier/cost up front instead of letting the
+// approve action fail first.
+export async function previewRequisitionApprovalAction(
+  requisitionId: string,
+): Promise<{ error: string } | { success: true; rows: RequisitionApprovalPreviewRow[] }> {
+  const { supabase } = await currentSchoolUser();
+  const { data, error } = await supabase.rpc("preview_requisition_approval", { p_requisition_id: requisitionId });
+  if (error) return { error: error.message };
+  return { success: true, rows: (data ?? []) as RequisitionApprovalPreviewRow[] };
 }
 
 export async function createPurchaseOrderAction(formData: FormData): Promise<ActionResult> {
@@ -496,3 +555,41 @@ export async function markSupplierInvoicePaidAction(formData: FormData): Promise
   return { success: true };
 }
 
+export async function decideHealthStockRequestAction(formData: FormData): Promise<ActionResult> {
+  const { supabase, schoolUser } = await currentSchoolUser();
+  if (!schoolUser) return { error: "Could not resolve your account." };
+
+  const requestId = String(formData.get("request_id") ?? "");
+  const decision = String(formData.get("decision") ?? "");
+  if (!requestId || !["approved", "rejected"].includes(decision)) return { error: "Missing request or decision." };
+
+  const { data: request } = await supabase
+    .from("health_stock_adjustment_requests")
+    .select("requested_by, reason")
+    .eq("id", requestId)
+    .maybeSingle();
+
+  const { error } =
+    decision === "approved"
+      ? await supabase.rpc("approve_health_stock_adjustment", { p_request_id: requestId })
+      : await supabase.rpc("reject_health_stock_adjustment", { p_request_id: requestId, p_reason: null });
+  if (error) return { error: error.message };
+  revalidatePath("/inventory", "layout");
+  revalidatePath("/health", "layout");
+
+  // Best-effort: tell the Nurse the outcome. Never block the decision on this.
+  if (request?.requested_by) {
+    await supabase.rpc("notify_school_user", {
+      p_recipient_id: request.requested_by,
+      p_subject: decision === "approved" ? "Manual stock addition approved" : "Manual stock addition rejected",
+      p_body:
+        decision === "approved"
+          ? `Your manual stock request ("${request.reason}") was approved and added to your stock.`
+          : `Your manual stock request ("${request.reason}") was not approved.`,
+      p_action_url: "/health/inventory",
+      p_category: "other",
+    });
+  }
+
+  return { success: true };
+}

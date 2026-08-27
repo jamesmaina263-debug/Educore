@@ -2,6 +2,8 @@
 
 import { Suspense, useActionState } from "react";
 import { useSearchParams } from "next/navigation";
+import { ShieldCheck } from "lucide-react";
+import { AuthLayout } from "@/components/shared/auth-layout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -21,15 +23,20 @@ function LoginForm() {
   const [state, formAction, pending] = useActionState(login, initialState);
   const searchParams = useSearchParams();
   const wasDeactivated = searchParams.get("deactivated") === "1";
+  const errorMessage =
+    state.error ??
+    (wasDeactivated
+      ? "Your account has been deactivated. Contact your school admin."
+      : null);
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background px-4">
+    <AuthLayout>
       <form
         action={formAction}
-        className="w-full max-w-sm space-y-4 rounded-md border border-border bg-surface p-6"
+        className="space-y-5 rounded-xl border border-border bg-surface p-7 shadow-raised sm:p-8"
       >
-        <div>
-          <h1 className="text-base font-semibold">Staff sign in</h1>
+        <div className="space-y-1.5">
+          <h1 className="text-lg font-semibold tracking-tight">Staff sign in</h1>
           <p className="text-sm text-muted-foreground">
             Parents and students sign in with a phone number instead.
           </p>
@@ -37,7 +44,15 @@ function LoginForm() {
 
         <div className="space-y-1.5">
           <Label htmlFor="email">Email</Label>
-          <Input id="email" name="email" type="email" required autoComplete="email" />
+          <Input
+            id="email"
+            name="email"
+            type="email"
+            required
+            autoComplete="email"
+            autoFocus
+            className="h-10 focus-visible:ring-2 focus-visible:ring-[var(--brand-gold-500)] focus-visible:ring-offset-0"
+          />
         </div>
 
         <div className="space-y-1.5">
@@ -48,25 +63,41 @@ function LoginForm() {
             type="password"
             required
             autoComplete="current-password"
+            className="h-10 focus-visible:ring-2 focus-visible:ring-[var(--brand-gold-500)] focus-visible:ring-offset-0"
           />
         </div>
 
-        {wasDeactivated && !state.error && (
-          <p role="alert" className="text-sm text-danger">
-            Your account has been deactivated. Contact your school admin.
+        {errorMessage && (
+          <p
+            role="alert"
+            className="rounded-md border border-destructive/25 bg-destructive-subtle px-3 py-2 text-sm text-destructive"
+          >
+            {errorMessage}
           </p>
         )}
 
-        {state.error && (
-          <p role="alert" className="text-sm text-danger">
-            {state.error}
-          </p>
-        )}
-
-        <Button type="submit" disabled={pending} className="w-full">
+        <Button
+          type="submit"
+          disabled={pending}
+          className="h-10 w-full border-0 font-semibold text-[var(--brand-navy-950)] shadow-sm transition-colors hover:brightness-105 focus-visible:ring-2 focus-visible:ring-[var(--brand-gold-500)] focus-visible:ring-offset-2"
+          style={{
+            background:
+              "linear-gradient(135deg, var(--brand-gold-400) 0%, var(--brand-gold-500) 100%)",
+          }}
+        >
           {pending ? "Signing in…" : "Sign in"}
         </Button>
+
+        <p className="border-t border-border pt-4 text-xs text-muted-foreground">
+          Having trouble signing in? Contact your school administrator to
+          reset your staff account.
+        </p>
       </form>
-    </div>
+
+      <p className="mt-6 flex items-center justify-center gap-1.5 text-xs text-muted-foreground">
+        <ShieldCheck className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden />
+        Protected by enterprise-grade security
+      </p>
+    </AuthLayout>
   );
 }

@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { StatusBadge } from "@/components/status-badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
-import { createFeeStructure, generateInvoicesAction } from "@/app/(app)/finance/actions";
+import { createFeeStructure, generateInvoicesAction, setFeeStructureActiveAction, updateFeeStructureItemsAction } from "@/app/(app)/finance/actions";
 
 export interface FeeStructureRow {
   id: string;
@@ -51,6 +51,41 @@ export function FeeStructuresSection({
   const [boardingType, setBoardingType] = useState<"day" | "boarder">("day");
   const [feeCategory, setFeeCategory] = useState<"core" | "transport">("core");
   const [items, setItems] = useState<ItemDraft[]>([{ name: "Tuition", amount: "" }]);
+
+  const [togglingId, setTogglingId] = useState<string | null>(null);
+  const [editStructure, setEditStructure] = useState<FeeStructureRow | null>(null);
+  const [editItems, setEditItems] = useState<ItemDraft[]>([]);
+  const [editPending, setEditPending] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
+
+  function openEdit(s: FeeStructureRow) {
+    setEditStructure(s);
+    setEditItems(s.items.map((i) => ({ name: i.name, amount: String(i.amount) })));
+    setEditError(null);
+  }
+
+  async function handleToggleActive(s: FeeStructureRow) {
+    setTogglingId(s.id);
+    setError(null);
+    const result = await setFeeStructureActiveAction(s.id, !s.is_active);
+    setTogglingId(null);
+    if ("error" in result) return setError(result.error);
+    router.refresh();
+  }
+
+  async function handleSaveEdit() {
+    if (!editStructure) return;
+    setEditPending(true);
+    setEditError(null);
+    const result = await updateFeeStructureItemsAction(
+      editStructure.id,
+      editItems.filter((i) => i.name.trim() && i.amount).map((i) => ({ name: i.name, amount: Number(i.amount) })),
+    );
+    setEditPending(false);
+    if ("error" in result) return setEditError(result.error);
+    setEditStructure(null);
+    router.refresh();
+  }
 
   async function handleCreate() {
     setPending(true);
@@ -223,6 +258,7 @@ export function FeeStructuresSection({
                   ) : (
                     <StatusBadge tone="warning" label="transport add-on" />
                   )}
+                  <StatusBadge tone={s.is_active ? "success" : "neutral"} label={s.is_active ? "active" : "inactive"} />
                 </div>
                 <p className="text-sm font-medium">KES {s.total.toLocaleString()}</p>
               </div>
@@ -233,11 +269,29 @@ export function FeeStructuresSection({
                   </span>
                 ))}
               </div>
+              {!s.is_active && (
+                <p className="mt-2 text-xs text-warning">
+                  Inactive — invoice generation skips this structure entirely until it&apos;s activated.
+                </p>
+              )}
               {canWrite && (
                 <>
-                  <Button size="sm" variant="outline" className="mt-3" disabled={pending} onClick={() => handleGenerate(s.id, s.term_id, s.class_id)}>
-                    Generate invoices for {s.class_name ?? "all grades"} — {s.term_name}
-                  </Button>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <Button size="sm" variant="outline" disabled={pending} onClick={() => handleGenerate(s.id, s.term_id, s.class_id)}>
+                      Generate invoices for {s.class_name ?? "all grades"} — {s.term_name}
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={() => openEdit(s)}>
+                      Edit amounts
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant={s.is_active ? "outline" : "default"}
+                      disabled={togglingId === s.id}
+                      onClick={() => handleToggleActive(s)}
+                    >
+                      {togglingId === s.id ? "Updating…" : s.is_active ? "Deactivate" : "Activate"}
+                    </Button>
+                  </div>
                   {lastGenerated?.structureId === s.id && (
                     lastGenerated.count > 0 ? (
                       <p className="mt-2 text-sm text-success">
@@ -255,6 +309,47 @@ export function FeeStructuresSection({
           ))}
         </div>
       )}
+
+      <Dialog open={editStructure !== null} onOpenChange={(v) => !v && setEditStructure(null)}>
+        <DialogContent className="max-w-xl">
+          <DialogHeader>
+            <DialogTitle>Edit amounts — {editStructure?.name}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Fee items</Label>
+              {editItems.map((it, i) => (
+                <div key={i} className="grid grid-cols-[2fr_1fr] gap-2">
+                  <Input
+                    placeholder="Tuition"
+                    value={it.name}
+                    onChange={(e) => setEditItems((p) => p.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)))}
+                  />
+                  <Input
+                    placeholder="Amount"
+                    type="number"
+                    value={it.amount}
+                    onChange={(e) => setEditItems((p) => p.map((x, j) => (j === i ? { ...x, amount: e.target.value } : x)))}
+                  />
+                </div>
+              ))}
+              <Button type="button" size="sm" variant="ghost" onClick={() => setEditItems((p) => [...p, { name: "", amount: "" }])}>
+                + Add item
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Changes only affect invoices generated after saving — existing invoices already snapshot the amounts
+              they were created with and don&apos;t recompute retroactively.
+            </p>
+            {editError && <p className="text-sm text-danger">{editError}</p>}
+          </div>
+          <DialogFooter>
+            <Button onClick={handleSaveEdit} disabled={editPending}>
+              {editPending ? "Saving…" : "Save amounts"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

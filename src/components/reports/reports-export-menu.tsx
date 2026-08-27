@@ -8,6 +8,7 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
 } from "@/components/ui/dropdown-menu";
+import { buildXlsxWorkbook, sheetFromObjectRows, XLSX_MIME } from "@/lib/xlsx-export";
 import type { AtRiskRow, TransportRouteCapacityRow, FeeForecast } from "./reports-section";
 
 export interface AttendanceExportDay {
@@ -80,13 +81,13 @@ async function exportAttendanceCSV(data: ReportExportData) {
 }
 
 async function exportExcel(data: ReportExportData) {
-  const XLSX = await import("xlsx");
-  const wb = XLSX.utils.book_new();
+  const summarySheet = sheetFromObjectRows(
+    "Summary",
+    data.summary.map((s) => ({ Metric: s.label, Value: s.value })),
+  );
 
-  const summarySheet = XLSX.utils.json_to_sheet(data.summary.map((s) => ({ Metric: s.label, Value: s.value })));
-  XLSX.utils.book_append_sheet(wb, summarySheet, "Summary");
-
-  const atRiskSheet = XLSX.utils.json_to_sheet(
+  const atRiskSheet = sheetFromObjectRows(
+    "At-risk students",
     data.atRisk.map((r) => ({
       Student: `${r.first_name} ${r.last_name}`,
       "Adm. No.": r.admission_number,
@@ -96,9 +97,9 @@ async function exportExcel(data: ReportExportData) {
       Reasons: r.risk_reasons.join("; "),
     })),
   );
-  XLSX.utils.book_append_sheet(wb, atRiskSheet, "At-risk students");
 
-  const transportSheet = XLSX.utils.json_to_sheet(
+  const transportSheet = sheetFromObjectRows(
+    "Transport capacity",
     data.transport.map((t) => ({
       Route: t.route_name,
       Capacity: t.capacity,
@@ -106,9 +107,9 @@ async function exportExcel(data: ReportExportData) {
       Available: t.available,
     })),
   );
-  XLSX.utils.book_append_sheet(wb, transportSheet, "Transport capacity");
 
-  const attendanceSheet = XLSX.utils.json_to_sheet(
+  const attendanceSheet = sheetFromObjectRows(
+    "Attendance",
     data.attendance.map((d) => ({
       Date: d.date,
       Present: d.present,
@@ -118,9 +119,9 @@ async function exportExcel(data: ReportExportData) {
       "Attendance %": d.total > 0 ? Math.round((1000 * (d.present + d.late)) / d.total) / 10 : "",
     })),
   );
-  XLSX.utils.book_append_sheet(wb, attendanceSheet, "Attendance");
 
-  XLSX.writeFile(wb, `${filenameStub(data)}.xlsx`);
+  const buffer = await buildXlsxWorkbook([summarySheet, atRiskSheet, transportSheet, attendanceSheet]);
+  downloadBlob(buffer, `${filenameStub(data)}.xlsx`, XLSX_MIME);
 }
 
 async function exportPDF(data: ReportExportData) {

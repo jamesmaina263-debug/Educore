@@ -1,5 +1,89 @@
 # Offline support rollout
 
+## Biometric gate kiosk (device-key auth, not a staff session)
+
+Every module below shares one assumption: the offline write is made by a
+**logged-in staff member**, replayed later through the exact same Server
+Action their online submission would call, because the replay runs with
+that person's Supabase Auth session cookie. The biometric gate kiosk breaks
+that assumption on purpose -- a gate device isn't a staff member. It
+authenticates with a `bio_xxxxxxxx.<secret>` device key (see
+`biometric-verify`'s header comment) issued once from Settings > Biometric
+Devices, and needs to keep recording scans unattended for weeks, long after
+any staff session that paired it has expired.
+
+**What's reused, what isn't:**
+- Reused unchanged: `src/lib/offline/db.ts`'s two IndexedDB stores
+  (`pending_mutations`, `cached_reads`) and `queue.ts`'s
+  `queueMutation()`/`getPendingMutations()`/`syncPendingMutations()`/
+  `discardMutation()`. These were already module-agnostic; the kiosk is
+  just another `module` value (`"biometric-kiosk"`), same as every module
+  above. `useOfflineSync("biometric-kiosk")` also works unmodified.
+- NOT reused: the assumption baked into every other `handlers.ts` entry
+  that the handler *is* a Server Action reference. A Server Action call
+  from the browser is authenticated by the request's session cookie --
+  which the kiosk doesn't have. So `"biometric-kiosk:submitScan"` in
+  `handlers.ts` points at a plain `fetch()` wrapper
+  (`src/lib/biometric/kiosk-client.ts`'s `submitScan()`) that calls the
+  `biometric-verify` Edge Function directly with the device key carried in
+  the queued payload itself, instead of at a Server Action. Everything
+  else about the dispatch (`${module}:${type}` lookup, pending/failed/
+  syncing states, per-module scoping) is identical.
+- First real use of `cached_reads` (previously scaffolded, unused) --
+  `src/lib/biometric/kiosk-cache.ts` caches the device's own roster (names
+  + opaque `credential_reference` values, never biometric data) so the
+  kiosk can still render a picker while offline, not just a blank screen.
+
+**Pairing vs. scanning are different trust boundaries.** Pairing (pasting
+the device key into `/biometric-kiosk`, a route deliberately outside the
+`(app)` staff route group) is a one-time, ideally-online, desk-adjacent
+action -- like every other `Deliberately not queued` admin action across
+this doc. Scanning is the unattended, offline-capable, field action, same
+category as attendance/health/roll-call above.
+
+**Idempotency lives on the server, not the client**, unlike this doc's
+usual framing. `biometric-verify` already treats `event_id` as
+device/kiosk-supplied specifically so a retried buffered scan resolves to
+the same row (unique on `device_id, event_id`) instead of double-recording
+attendance -- see its header comment. The client-side queue here doesn't
+need its own dedupe logic on top of that; it just needs to not lose a scan
+before the server has durably accepted it, which `queueMutation()` already
+guarantees. `biometric-kiosk-queue.test.ts` verifies this explicitly: the
+same `event_id` is sent on both the failed first attempt and the retried
+replay.
+
+`biometric-verify` also gained a `GET` method in this pass (device-key
+authenticated, same as `POST`) returning the device's own roster -- names
+and opaque `credential_reference` values only, nothing biometric. This
+isn't new exposure: a real device already knows this mapping locally
+(it issued the reference during enrollment); the endpoint just lets a
+browser-based kiosk that has no local template store of its own render a
+human-pickable list instead of requiring the operator to type a raw
+reference string.
+
+**What this pass does NOT do** (see the implementation summary for the
+full remaining list): there is no real vendor SDK wired into the kiosk
+page -- the "Simulate scan" picker is a harness standing in for a local
+biometric match a real device would already have performed, used to prove
+the buffer-then-replay path against the device's own real, already-
+enrolled `credential_reference` values. A future real integration would
+swap that picker for whatever bridge a specific vendor's local SDK
+exposes; `submitScan()`'s payload/response contract does not need to
+change for that to happen.
+
+Verified: `tsc --noEmit`, `eslint`, and `vitest run` all pass, including
+new tests for `kiosk-client.ts` (mocked `fetch`: success, device-key
+rejection, network-failure re-throw, payload shape never includes anything
+beyond `event_id`/`result`/`credential_reference`/`event_type`/
+`occurred_at`/`dry_run`), `kiosk-cache.ts` (roster round-trip, per-device
+scoping), and `biometric-kiosk-queue.test.ts` (the module through the real
+queue engine: queue/replay/failure/network-drop/idempotent-retry/module-
+scoping, mirroring `queue.test.ts`'s own structure). Not yet verified: an
+actual airplane-mode walkthrough with the kiosk page in a real browser, and
+a real end-to-end run against a live Supabase project (this sandbox cannot
+reach `*.supabase.co`) -- both recommended before relying on this at a real
+gate.
+
 ## Cross-module offline navigation (this pass)
 
 Every module above solved *writing* while offline. This pass solves a

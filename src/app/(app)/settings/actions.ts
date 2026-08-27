@@ -15,22 +15,30 @@ export async function updateBranding(input: {
   logo_url?: string;
   primary_color?: string;
   kra_pin?: string;
+  admission_response_note?: string;
 }): Promise<ActionResult> {
   const supabase = await createClient();
   const { data: schoolId, error: schoolIdError } = await supabase.rpc("auth_school_id");
   if (schoolIdError || !schoolId) return { error: "Could not resolve your school." };
 
-  const { error } = await supabase
-    .from("schools")
-    .update({
-      name: input.name,
-      email: input.email || null,
-      motto: input.motto || null,
-      logo_url: input.logo_url || null,
-      primary_color: input.primary_color || null,
-      kra_pin: input.kra_pin || null,
-    })
-    .eq("id", schoolId);
+  // admission_response_note is only ever set from GeneralSettingsPanel below, not from
+  // BrandingForm (a separate caller of this same action, which doesn't know this field
+  // exists). Unlike the other fields here, this one is conditionally included -- `undefined`
+  // means "caller didn't touch it," leaving the existing value alone, rather than always
+  // coercing to null and letting a Branding-only save silently wipe it out.
+  const update: Record<string, string | null> = {
+    name: input.name,
+    email: input.email || null,
+    motto: input.motto || null,
+    logo_url: input.logo_url || null,
+    primary_color: input.primary_color || null,
+    kra_pin: input.kra_pin || null,
+  };
+  if (input.admission_response_note !== undefined) {
+    update.admission_response_note = input.admission_response_note || null;
+  }
+
+  const { error } = await supabase.from("schools").update(update).eq("id", schoolId);
   if (error) return { error: error.message };
 
   revalidatePath("/settings", "layout");
@@ -268,6 +276,63 @@ export async function revokeSchoolApiKey(id: string): Promise<ActionResult> {
     .from("api_keys")
     .update({ status: "revoked", revoked_at: new Date().toISOString(), revoked_by: schoolUser?.id })
     .eq("id", id);
+  if (error) return { error: error.message };
+  revalidatePath("/settings", "layout");
+  return { success: true };
+}
+
+// Biometric devices. issue_biometric_device_key() re-checks biometric.devices_manage
+// and school scope server-side, same shape as issue_api_key() above -- the RPC is
+// the actual gate, this is just a clean error path.
+type RegisterBiometricDeviceResult = { error: string } | { success: true; raw_key: string; key_prefix: string };
+
+export async function registerBiometricDevice(input: {
+  name: string;
+  device_type: string;
+  provider: string;
+  location: string;
+  serial_number: string;
+}): Promise<RegisterBiometricDeviceResult> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .rpc("issue_biometric_device_key", {
+      p_name: input.name,
+      p_device_type: input.device_type,
+      p_provider: input.provider,
+      p_location: input.location || null,
+      p_serial_number: input.serial_number || null,
+    })
+    .single();
+
+  if (error || !data) return { error: error?.message ?? "Could not register the device." };
+  const issued = data as { id: string; raw_key: string; key_prefix: string };
+
+  revalidatePath("/settings", "layout");
+  return { success: true, raw_key: issued.raw_key, key_prefix: issued.key_prefix };
+}
+
+export async function setBiometricDeviceStatus(id: string, status: "active" | "inactive"): Promise<ActionResult> {
+  const supabase = await createClient();
+  const { error } = await supabase.from("biometric_devices").update({ status }).eq("id", id);
+  if (error) return { error: error.message };
+  revalidatePath("/settings", "layout");
+  return { success: true };
+}
+
+// Gate lateness thresholds. update_gate_late_thresholds() re-checks
+// biometric.devices_manage and school scope server-side (same shape as
+// issue_biometric_device_key above) rather than a direct RLS-gated update
+// on `schools`, whose blanket UPDATE policy is gated on
+// settings.branding.write -- the wrong permission for this setting.
+export async function updateGateLateThresholds(input: {
+  late_after_student: string | null; // "HH:MM" from a <input type="time">, or null to clear
+  late_after_staff: string | null;
+}): Promise<ActionResult> {
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("update_gate_late_thresholds", {
+    p_late_after_student: input.late_after_student || null,
+    p_late_after_staff: input.late_after_staff || null,
+  });
   if (error) return { error: error.message };
   revalidatePath("/settings", "layout");
   return { success: true };

@@ -2,6 +2,7 @@
 
 import { useState, type FormEvent } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { AuthLayout } from "@/components/shared/auth-layout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -69,18 +70,29 @@ export default function ParentLoginPage() {
     }
   }
 
+  const inputRingClass =
+    "h-10 focus-visible:ring-2 focus-visible:ring-[var(--brand-gold-500)] focus-visible:ring-offset-0";
+  const goldButtonClass =
+    "h-10 w-full border-0 font-semibold text-[var(--brand-navy-950)] shadow-sm transition-colors hover:brightness-105 focus-visible:ring-2 focus-visible:ring-[var(--brand-gold-500)] focus-visible:ring-offset-2";
+  const goldButtonStyle = {
+    background:
+      "linear-gradient(135deg, var(--brand-gold-400) 0%, var(--brand-gold-500) 100%)",
+  };
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background px-4">
-      <div className="w-full max-w-sm space-y-4 rounded-md border border-border bg-surface p-6">
-        <div>
-          <h1 className="text-base font-semibold">Parent / student sign in</h1>
+    <AuthLayout>
+      <div className="space-y-5 rounded-xl border border-border bg-surface p-7 shadow-raised sm:p-8">
+        <div className="space-y-1.5">
+          <h1 className="text-lg font-semibold tracking-tight">
+            Parent / student sign in
+          </h1>
           <p className="text-sm text-muted-foreground">
             Staff should use the staff sign-in page instead.
           </p>
         </div>
 
         {step === "phone" && (
-          <form onSubmit={requestCode} className="space-y-3">
+          <form onSubmit={requestCode} className="space-y-5">
             <div className="space-y-1.5">
               <Label htmlFor="phone">Phone number</Label>
               <Input
@@ -90,21 +102,31 @@ export default function ParentLoginPage() {
                 placeholder="+2547XXXXXXXX"
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
+                autoFocus
+                className={inputRingClass}
               />
             </div>
             {error && (
-              <p role="alert" className="text-sm text-danger">
+              <p
+                role="alert"
+                className="rounded-md border border-destructive/25 bg-destructive-subtle px-3 py-2 text-sm text-destructive"
+              >
                 {error}
               </p>
             )}
-            <Button type="submit" disabled={pending} className="w-full">
+            <Button
+              type="submit"
+              disabled={pending}
+              className={goldButtonClass}
+              style={goldButtonStyle}
+            >
               {pending ? "Sending…" : "Send code"}
             </Button>
           </form>
         )}
 
         {step === "code" && (
-          <form onSubmit={verifyCode} className="space-y-3">
+          <form onSubmit={verifyCode} className="space-y-5">
             <div className="space-y-1.5">
               <Label htmlFor="code">6-digit code</Label>
               <Input
@@ -115,19 +137,36 @@ export default function ParentLoginPage() {
                 required
                 value={code}
                 onChange={(e) => setCode(e.target.value)}
+                autoFocus
+                className={inputRingClass}
               />
+              <p className="text-xs text-muted-foreground">
+                Sent to {phone}.
+              </p>
             </div>
             {error && (
-              <p role="alert" className="text-sm text-danger">
+              <p
+                role="alert"
+                className="rounded-md border border-destructive/25 bg-destructive-subtle px-3 py-2 text-sm text-destructive"
+              >
                 {error}
               </p>
             )}
-            <Button type="submit" disabled={pending} className="w-full">
+            <Button
+              type="submit"
+              disabled={pending}
+              className={goldButtonClass}
+              style={goldButtonStyle}
+            >
               {pending ? "Verifying…" : "Verify"}
             </Button>
           </form>
         )}
+
+        <p className="border-t border-border pt-4 text-xs text-muted-foreground">
+          Having trouble signing in? Contact your school office for help.
+        </p>
       </div>
-    </div>
+    </AuthLayout>
   );
 }

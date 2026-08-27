@@ -13,12 +13,14 @@ import {
   SelectItem,
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
+import { DocumentPreviewButton } from "@/components/document-preview-dialog";
 
 export interface DocumentRow {
   id: string;
   category: string;
   file_name: string;
   storage_path: string;
+  storage_bucket: string;
   created_at: string;
 }
 
@@ -58,7 +60,6 @@ export function DocumentsTab({ ownerId, documents, canUpload, ownerType }: Docum
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [downloadingId, setDownloadingId] = useState<string | null>(null);
 
   async function upload() {
     if (!file) return;
@@ -86,6 +87,7 @@ export function DocumentsTab({ ownerId, documents, canUpload, ownerType }: Docum
         category,
         file_name: file.name,
         storage_path: path,
+        storage_bucket: bucket,
         uploaded_by: me!.id,
       });
       if (insertError) throw insertError;
@@ -96,23 +98,6 @@ export function DocumentsTab({ ownerId, documents, canUpload, ownerType }: Docum
       setError(err instanceof Error ? err.message : "Could not upload the document.");
     } finally {
       setUploading(false);
-    }
-  }
-
-  async function download(doc: DocumentRow) {
-    setDownloadingId(doc.id);
-    try {
-      const supabase = createClient();
-      // Signed, short-expiry URL — never a public bucket link (Part I).
-      const { data, error: signError } = await supabase.storage
-        .from(bucket)
-        .createSignedUrl(doc.storage_path, 60);
-      if (signError || !data) throw signError ?? new Error("Could not generate a link.");
-      window.open(data.signedUrl, "_blank", "noopener,noreferrer");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not open the document.");
-    } finally {
-      setDownloadingId(null);
     }
   }
 
@@ -128,14 +113,12 @@ export function DocumentsTab({ ownerId, documents, canUpload, ownerType }: Docum
                 <Badge variant="outline">{doc.category.replace("_", " ")}</Badge>
                 <span>{doc.file_name}</span>
               </div>
-              <Button
-                size="sm"
+              <DocumentPreviewButton
+                bucket={doc.storage_bucket}
+                storagePath={doc.storage_path}
+                fileName={doc.file_name}
                 variant="ghost"
-                onClick={() => download(doc)}
-                disabled={downloadingId === doc.id}
-              >
-                {downloadingId === doc.id ? "Opening…" : "View"}
-              </Button>
+              />
             </li>
           ))}
         </ul>
