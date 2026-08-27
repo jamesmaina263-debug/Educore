@@ -2,6 +2,17 @@ import { notFound } from "next/navigation";
 import { getApplicationByToken } from "./actions";
 import { StatusUploadSection } from "./status-upload-section";
 
+// Same issue as ../../page.tsx (see the comment there): this page uses the
+// service-role admin client and never reads cookies/headers, so nothing
+// forces Next.js into dynamic rendering -- left alone it's eligible for
+// indefinite static caching per token. That's worse here than on the apply
+// form itself: this page's entire purpose is showing an application's
+// *current* status, which is expected to change over its lifecycle
+// (submitted -> under_review -> accepted/rejected/etc). A cached response
+// would leave an applicant staring at a stale status indefinitely after a
+// real decision was made.
+export const dynamic = "force-dynamic";
+
 const STATUS_LABELS: Record<string, string> = {
   draft: "Draft",
   submitted: "Submitted — awaiting review",
