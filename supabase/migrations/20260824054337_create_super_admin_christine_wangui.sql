@@ -1,0 +1,14 @@
+-- Historical placeholder — deliberately not reconstructed as executable SQL.
+-- Supabase's migration history records this version as
+-- "create_super_admin_christine_wangui" — a one-off operational action (provisioning a
+-- specific named individual's super_admin account), not a schema change. It was fully
+-- reversed the same day by 20260824054655_revoke_super_admin_christine_wangui (paired
+-- migration below/after this one); confirmed live that no account matching this person
+-- currently exists.
+--
+-- Replaying the original action verbatim on a fresh database or branch would create a real
+-- auth.users account for a named real person, which isn't appropriate for this backfill's
+-- purpose (making `db reset`/branch creation reproduce the current *schema*, not replay
+-- point-in-time personal-data operations). Recorded here as a no-op so the version number
+-- isn't silently missing from the repo's migration history.
+SELECT 1;
