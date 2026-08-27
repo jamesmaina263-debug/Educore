@@ -1,3 +1,33 @@
+-- Security finding (finance module review): approve_discount() only checked
+-- `discounts.approve` on the caller -- it never checked whether the caller
+-- was also the person who *requested* the discount (discounts.requested_by).
+--
+-- request_discount() requires finance.write; approve_discount() requires
+-- discounts.approve. Those are meant to be a segregation-of-duties control --
+-- see finance_discounts.sql's own comment: "a bursar cannot unilaterally
+-- discount a fee" -- but 'school_owner' (and often 'principal') holds BOTH
+-- permissions by default (finance_fee_structures.sql grants finance.write to
+-- 'bursar'/'school_owner'; finance_discounts.sql grants discounts.approve to
+-- 'principal'/'school_owner'). Nothing stopped that same person from calling
+-- request_discount() then immediately approve_discount() on their own
+-- request -- i.e. unilaterally discounting a fee, exactly what the control
+-- was meant to prevent.
+--
+-- Not fixed as a blanket "approver != requester" block: every new school
+-- starts as a single school_owner account (see signup/actions.ts), and that
+-- owner is the only person who can hold discounts.approve until more staff
+-- are added. A hard block would leave every new school unable to approve any
+-- discount at all -- breaking working functionality for the common case,
+-- which the audit brief explicitly rules out.
+--
+-- Fix: block self-approval only when someone *else* in the school could
+-- actually approve it instead (checked via school_user_has_permission(),
+-- 20260825045022, which resolves the same user/school-override/default
+-- precedence as auth_has_permission() but for an arbitrary target). If no
+-- other eligible approver exists, self-approval is still allowed (preserves
+-- solo-operator schools) but is flagged in the audit log so it's visible to
+-- anyone reviewing finance activity, rather than being indistinguishable
+-- from a normal two-person approval.
 create or replace function approve_discount(p_discount_id uuid) returns void
 language plpgsql security definer set search_path = public as $$
 declare

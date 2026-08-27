@@ -1,3 +1,35 @@
+-- Critical finding (finance module review): create_fee_waiver(p_student_id, ...)
+-- inserts `school_id = auth_school_id()` (the caller's own school) but never
+-- checked that p_student_id actually belongs to that school. A principal/
+-- school_owner (discounts.approve) at School A could call it with a student_id
+-- from School B (guessed, leaked, or known from a prior role at that school),
+-- creating a fee_waivers row shaped (school_id = A, student_id = a School B
+-- student).
+--
+-- That row then silently affected School B: both generate_invoices() and
+-- create_or_get_invoice_for_student() match waivers to a student purely by
+-- `fw.student_id = <the student being invoiced>` with no `fw.school_id`
+-- check, so School B's own invoice run picked up the rogue waiver and
+-- auto-applied it as an approved discount -- reducing what a School B family
+-- owes, funded/authorized by a person with zero legitimate access to School
+-- B. Worse, School B's own staff could not fix it themselves:
+-- revoke_fee_waiver() and the fee_waivers_manage RLS policy both gate on
+-- `school_id = auth_school_id()`, which resolves to School A for that row, so
+-- only School A (or a super_admin) could revoke a waiver quietly draining
+-- School B's fee collections. This is exactly the "access/manipulate another
+-- school's data" and "missing tenant isolation" class of issue from the
+-- audit brief, in the financial-integrity domain specifically.
+--
+-- Verified against a reconstructed slice of the schema/functions in a local
+-- Postgres instance: with the original create_fee_waiver, a School A
+-- principal could create a waiver naming a School B student_id, and a
+-- subsequent generate_invoices() run at School B applied it. With this fix,
+-- the same call is rejected with 'Student not found in your school.', and a
+-- defense-in-depth `fw.school_id = v_school_id` filter is added to both
+-- invoicing functions' waiver-matching loops so a pre-existing mismatched row
+-- (or any future code path that creates one) can no longer auto-apply
+-- outside its own school regardless.
+
 create or replace function public.create_fee_waiver(
   p_student_id uuid,
   p_name text,
@@ -38,6 +70,8 @@ begin
 end;
 $$;
 
+-- Defense in depth: never auto-apply a waiver whose school_id doesn't match
+-- the invoice's own school, regardless of how such a row came to exist.
 create or replace function generate_invoices(p_term_id uuid, p_class_id uuid default null) returns integer
 language plpgsql security definer set search_path = public as $$
 declare
@@ -254,3 +288,23 @@ $function$;
 
 revoke execute on function create_or_get_invoice_for_student(uuid, uuid) from public, anon;
 grant execute on function create_or_get_invoice_for_student(uuid, uuid) to authenticated;
+
+-- One-off cleanup: any fee_waivers row already sitting cross-tenant (created
+-- before this fix) gets flagged for manual review rather than silently
+-- continuing to auto-apply — it is NOT auto-revoked here, since a human
+-- (support/Trimora staff) should confirm intent before touching another
+-- school's financial records.
+do $$
+declare
+  v_mismatched_count integer;
+begin
+  select count(*) into v_mismatched_count
+  from fee_waivers fw
+  join students st on st.id = fw.student_id
+  where fw.school_id is distinct from st.school_id
+    and fw.status = 'active';
+
+  if v_mismatched_count > 0 then
+    raise notice 'MANUAL REVIEW NEEDED: % active fee_waivers row(s) have a school_id that does not match their student''s actual school_id. These were unaffected by this migration (not auto-revoked) — review and resolve manually with support/Trimora staff. Query: select * from fee_waivers fw join students st on st.id = fw.student_id where fw.school_id is distinct from st.school_id and fw.status = ''active'';', v_mismatched_count;
+  end if;
+end $$;
