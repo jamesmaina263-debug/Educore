@@ -1,0 +1,29 @@
+# Production schema_migrations versions with no matching repo file, by design.
+# These are historical rows with no name and no recorded SQL statements at all --
+# almost certainly `supabase migration repair` runs that force-marked a version
+# "applied" without content (Aug 2026 parallel-session period), or superseded
+# same-day attempts with nothing left to reconstruct. Verified individually during
+# the Aug 27 2026 reconciliation (see the PR that resolved ~65 migrations of drift,
+# plus the follow-up PRs that caught more of the same pattern recurring).
+# Do not add a version here just because a migration is missing -- only after
+# confirming supabase_migrations.schema_migrations has no name/statements for it.
+20260807
+20260809160000
+20260809160010
+20260809160020
+20260809170000
+20260809220000
+20260810020546
+20260810020601
+20260810020620
+20260810020640
+20260810020700
+20260810020720
+20260812141707
+20260812202418
+20260813060813
+20260813110328
+20260813111408
+20260813111409
+20260813211027
+20260814040248

@@ -1,3 +1,58 @@
+-- Critical finding (module sweep after the fee_waivers fix): the same root
+-- cause -- a function trusts auth_school_id() for the row it inserts, but
+-- never checks that a *referenced* student_id actually belongs to that
+-- school -- also exists in issue_library_loan(), assign_transport(),
+-- allocate_hostel_room() and allocate_bed(). Any *.write permission holder
+-- (library.write / transport.write / hostel.write) at School A can insert a
+-- hostel_allocations, student_transport_assignments or library_loans row
+-- naming an arbitrary student_id from School B.
+--
+-- This has two distinct, confirmed-real consequences:
+--
+-- 1. FINANCIAL: generate_invoices(), create_or_get_invoice_for_student() and
+--    resolve_fee_charges_for_student() all determine a student's boarder/
+--    transport fee category with
+--      select exists (select 1 from hostel_allocations
+--                      where student_id = <student> and status = 'active')
+--    with NO school_id filter. A single poisoned row planted by an unrelated
+--    school makes School B's own, completely legitimate invoicing pick up
+--    boarding/transport fee items for a School B student who never opted
+--    into either -- inflating what that family is billed, triggered by
+--    someone with zero legitimate access to School B. This mirrors the
+--    fee_waivers bug fixed in 20260825130000, but goes the other direction
+--    (inflating charges rather than waiving them) and needs only a single
+--    INSERT, no approval step.
+--
+-- 2. PRIVACY: library_loans_select, hostel_allocations_select and
+--    student_transport_assignments_select all grant access via
+--    `auth_user_id_is_guardian_of(student_id)` with no check that the row's
+--    own school_id matches the student's actual school. A poisoned row is
+--    therefore visible to the *real* guardian of the named student in their
+--    normal portal view, regardless of which school planted it -- a vector
+--    for confusing or misleading a family with fabricated hostel/transport/
+--    library records injected by an unrelated school.
+--
+-- Fix, defense in depth at every layer:
+--   a) Block the injection at the four sources: each function now verifies
+--      p_student_id belongs to auth_school_id() before doing anything else,
+--      matching the pattern already used elsewhere (record_payment,
+--      request_discount, create_fee_waiver).
+--   b) Add `and school_id = v_school_id` / `and school_id = p_school_id`
+--      to every boarder/transport EXISTS check used for billing, so even a
+--      pre-existing poisoned row (or any future code path that creates one)
+--      can no longer affect another school's invoice.
+--   c) Tighten the three guardian-visibility RLS clauses to require the
+--      row's school_id match the student's own current school_id -- this
+--      doesn't touch how guardian access is granted (auth_user_id_is_
+--      guardian_of is untouched), it only stops a cross-tenant-mismatched
+--      row from being shown, which should never legitimately happen anyway.
+--   d) Flag (do not auto-fix) any already-existing mismatched rows for
+--      manual review, same approach as the fee_waivers migration.
+
+-- ---------------------------------------------------------------------
+-- a) Block injection at the source
+-- ---------------------------------------------------------------------
+
 create or replace function public.issue_library_loan(p_item_id uuid, p_student_id uuid, p_due_date date)
 returns public.library_loans
 language plpgsql security definer set search_path to 'public'
@@ -192,6 +247,10 @@ begin
   return v_result;
 end;
 $$;
+
+-- ---------------------------------------------------------------------
+-- b) Defense in depth: scope every boarder/transport billing check
+-- ---------------------------------------------------------------------
 
 create or replace function generate_invoices(p_term_id uuid, p_class_id uuid default null) returns integer
 language plpgsql security definer set search_path = public as $$
@@ -467,6 +526,12 @@ begin
 end;
 $$;
 
+-- ---------------------------------------------------------------------
+-- c) Tighten guardian-visibility RLS: the row's school_id must match the
+--    named student's actual current school_id. Does not change who counts
+--    as a guardian (auth_user_id_is_guardian_of is untouched).
+-- ---------------------------------------------------------------------
+
 drop policy if exists library_loans_select on public.library_loans;
 create policy library_loans_select on public.library_loans
 for select
@@ -514,3 +579,33 @@ create policy student_transport_assignments_select on public.student_transport_a
     )
     or exists (select 1 from students st where st.id = student_transport_assignments.student_id and st.school_user_id = (select su.id from school_users su where su.auth_user_id = (select auth.uid()) and su.status = 'active'))
   );
+
+-- ---------------------------------------------------------------------
+-- d) Flag pre-existing mismatched rows for manual review (not auto-fixed)
+-- ---------------------------------------------------------------------
+
+do $$
+declare
+  v_count integer;
+begin
+  select count(*) into v_count
+  from hostel_allocations ha join students st on st.id = ha.student_id
+  where ha.school_id is distinct from st.school_id and ha.status = 'active';
+  if v_count > 0 then
+    raise notice 'MANUAL REVIEW NEEDED: % active hostel_allocations row(s) have a school_id that does not match their student''s actual school_id.', v_count;
+  end if;
+
+  select count(*) into v_count
+  from student_transport_assignments sta join students st on st.id = sta.student_id
+  where sta.school_id is distinct from st.school_id and sta.status = 'active';
+  if v_count > 0 then
+    raise notice 'MANUAL REVIEW NEEDED: % active student_transport_assignments row(s) have a school_id that does not match their student''s actual school_id.', v_count;
+  end if;
+
+  select count(*) into v_count
+  from library_loans ll join students st on st.id = ll.student_id
+  where ll.school_id is distinct from st.school_id and ll.status = 'borrowed';
+  if v_count > 0 then
+    raise notice 'MANUAL REVIEW NEEDED: % borrowed library_loans row(s) have a school_id that does not match their student''s actual school_id.', v_count;
+  end if;
+end $$;
