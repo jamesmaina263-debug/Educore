@@ -35,6 +35,7 @@ export function HistorySection({ logs, canDelete = false }: { logs: LogRow[]; ca
   const [tab, setTab] = useState<"active" | "archived">("active");
   const [confirmTarget, setConfirmTarget] = useState<LogRow | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [viewTarget, setViewTarget] = useState<LogRow | null>(null);
 
   const activeLogs = logs.filter((l) => !l.archived_at);
   const archivedLogs = logs.filter((l) => l.archived_at);
@@ -143,6 +144,7 @@ export function HistorySection({ logs, canDelete = false }: { logs: LogRow[]; ca
                   <th>Reason</th>
                   <th>Read</th>
                   <th>Sent</th>
+                  <th className="w-10" />
                   {canDelete && <th className="w-10" />}
                 </tr>
               </thead>
@@ -156,7 +158,7 @@ export function HistorySection({ logs, canDelete = false }: { logs: LogRow[]; ca
                       {l.channel === "email" ? l.recipient_email : l.channel === "in_app" ? "—" : l.recipient_phone}
                     </td>
                     <td>{l.student_name ?? "—"}</td>
-                    <td className="max-w-xs truncate" title={l.subject ? `${l.subject}\n\n${l.body}` : l.body}>
+                    <td className="max-w-xs truncate">
                       {l.subject ? `${l.subject}: ` : ""}
                       {l.body}
                     </td>
@@ -174,6 +176,11 @@ export function HistorySection({ logs, canDelete = false }: { logs: LogRow[]; ca
                       {l.channel === "in_app" ? (l.read_at ? <StatusBadge tone="success" label="Read" /> : <StatusBadge tone="neutral" label="Unread" />) : "—"}
                     </td>
                     <td className="text-muted-foreground">{new Date(l.created_at).toLocaleString()}</td>
+                    <td>
+                      <Button variant="ghost" size="sm" onClick={() => setViewTarget(l)}>
+                        View
+                      </Button>
+                    </td>
                     {canDelete && (
                       <td>
                         <Button variant="ghost" size="sm" className="text-danger hover:text-danger" onClick={() => setConfirmTarget(l)}>
@@ -188,6 +195,49 @@ export function HistorySection({ logs, canDelete = false }: { logs: LogRow[]; ca
           </div>
         )}
       </div>
+
+      <Dialog open={viewTarget !== null} onOpenChange={(open) => !open && setViewTarget(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{viewTarget?.subject || CHANNEL_LABELS[viewTarget?.channel ?? "sms"]}</DialogTitle>
+          </DialogHeader>
+          {viewTarget && (
+            <div className="flex flex-col gap-3 text-sm">
+              <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[0.8125rem] text-muted-foreground">
+                <span>Channel</span>
+                <span className="text-foreground">{CHANNEL_LABELS[viewTarget.channel]}</span>
+                <span>To</span>
+                <span className="text-foreground">
+                  {viewTarget.channel === "email"
+                    ? viewTarget.recipient_email
+                    : viewTarget.channel === "in_app"
+                      ? "In-app notification"
+                      : viewTarget.recipient_phone}
+                </span>
+                {viewTarget.student_name && (
+                  <>
+                    <span>Student</span>
+                    <span className="text-foreground">{viewTarget.student_name}</span>
+                  </>
+                )}
+                <span>Status</span>
+                <span className="text-foreground capitalize">{viewTarget.status}</span>
+                <span>Sent</span>
+                <span className="text-foreground">{new Date(viewTarget.created_at).toLocaleString()}</span>
+              </div>
+              <div className="rounded-md border border-border bg-muted/40 p-3 whitespace-pre-wrap">{viewTarget.body}</div>
+              {viewTarget.status === "failed" && viewTarget.provider_response && (
+                <p className="text-sm text-danger">{viewTarget.provider_response}</p>
+              )}
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setViewTarget(null)}>
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={confirmTarget !== null} onOpenChange={(open) => !open && setConfirmTarget(null)}>
         <DialogContent>

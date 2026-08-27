@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { composeAndSendAction, type Recipient } from "@/app/(app)/communication/actions";
 
 export interface TemplateOption {
@@ -55,6 +56,7 @@ export function ComposeSection({
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<{ sent: number; failed: number; total: number } | null>(null);
+  const [reviewOpen, setReviewOpen] = useState(false);
 
   const contactField = channel === "email" ? "guardian_email" : channel === "in_app" ? "guardian_school_user_id" : "guardian_phone";
   const withContact = roster.filter((r) => r[contactField]);
@@ -82,6 +84,7 @@ export function ComposeSection({
   }
 
   async function handleSend() {
+    setReviewOpen(false);
     setPending(true);
     setError(null);
     setResult(null);
@@ -231,14 +234,59 @@ export function ComposeSection({
           </div>
 
           <Button
-            onClick={handleSend}
+            onClick={() => setReviewOpen(true)}
             disabled={pending || scoped.length === 0 || (templateId === "__none__" && !body.trim()) || (channel === "email" && !subject.trim())}
             className="self-start"
           >
-            {pending ? "Sending…" : `Send to ${scoped.length}`}
+            Review &amp; send to {scoped.length}
           </Button>
         </div>
       </div>
+
+      <Dialog open={reviewOpen} onOpenChange={setReviewOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Review before sending</DialogTitle>
+          </DialogHeader>
+          <div className="flex flex-col gap-3 text-sm">
+            <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[0.8125rem] text-muted-foreground">
+              <span>Channel</span>
+              <span className="text-foreground">{CHANNELS.find((c) => c.value === channel)?.label}</span>
+              <span>Recipients</span>
+              <span className="text-foreground">
+                {scoped.length} guardian{scoped.length !== 1 && "s"}
+                {skippedNoContact > 0 && ` (${skippedNoContact} skipped)`}
+              </span>
+              {channel === "email" && subject && (
+                <>
+                  <span>Subject</span>
+                  <span className="text-foreground">{subject}</span>
+                </>
+              )}
+            </div>
+            <div>
+              <p className="mb-1 text-[0.6875rem] text-muted-foreground">
+                Exact wording for {scoped[0]?.student_name ?? "the first recipient"} — {"{{student_name}}"} etc. are replaced per
+                recipient, everything else goes out exactly as shown.
+              </p>
+              <div className="rounded-md border border-border bg-muted/40 p-3 whitespace-pre-wrap">{previewRendered}</div>
+            </div>
+            {channel === "sms" && (
+              <p className="text-[0.75rem] text-muted-foreground">
+                {previewRendered.length} chars — {segments} segment{segments !== 1 && "s"}
+              </p>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setReviewOpen(false)} disabled={pending}>
+              Back to edit
+            </Button>
+            <Button onClick={handleSend} disabled={pending}>
+              {pending ? "Sending…" : `Confirm & send to ${scoped.length}`}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
