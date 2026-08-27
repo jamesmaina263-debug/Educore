@@ -15,22 +15,30 @@ export async function updateBranding(input: {
   logo_url?: string;
   primary_color?: string;
   kra_pin?: string;
+  admission_response_note?: string;
 }): Promise<ActionResult> {
   const supabase = await createClient();
   const { data: schoolId, error: schoolIdError } = await supabase.rpc("auth_school_id");
   if (schoolIdError || !schoolId) return { error: "Could not resolve your school." };
 
-  const { error } = await supabase
-    .from("schools")
-    .update({
-      name: input.name,
-      email: input.email || null,
-      motto: input.motto || null,
-      logo_url: input.logo_url || null,
-      primary_color: input.primary_color || null,
-      kra_pin: input.kra_pin || null,
-    })
-    .eq("id", schoolId);
+  // admission_response_note is only ever set from GeneralSettingsPanel below, not from
+  // BrandingForm (a separate caller of this same action, which doesn't know this field
+  // exists). Unlike the other fields here, this one is conditionally included -- `undefined`
+  // means "caller didn't touch it," leaving the existing value alone, rather than always
+  // coercing to null and letting a Branding-only save silently wipe it out.
+  const update: Record<string, string | null> = {
+    name: input.name,
+    email: input.email || null,
+    motto: input.motto || null,
+    logo_url: input.logo_url || null,
+    primary_color: input.primary_color || null,
+    kra_pin: input.kra_pin || null,
+  };
+  if (input.admission_response_note !== undefined) {
+    update.admission_response_note = input.admission_response_note || null;
+  }
+
+  const { error } = await supabase.from("schools").update(update).eq("id", schoolId);
   if (error) return { error: error.message };
 
   revalidatePath("/settings", "layout");

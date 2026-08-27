@@ -48,6 +48,10 @@ export default async function ApplicationStatusPage({
             <p className="text-sm font-medium">{STATUS_LABELS[data.status] ?? data.status}</p>
           </div>
 
+          {data.admission_response_note && (data.status === "submitted" || data.status === "under_review") && (
+            <p className="mt-3 text-sm text-muted-foreground">{data.admission_response_note}</p>
+          )}
+
           {data.status === "documents_required" && (
             <p className="mt-3 text-sm text-warning">
               The school needs one or more documents from you — see below.
