@@ -257,12 +257,13 @@ export default function SolutionsPage() {
             id="students"
             icon={GraduationCap}
             eyebrowLabel="For Students"
-            headline="A clearer record, and a school that runs on time."
-            narrative="EduCore doesn't put a separate login in a student's hands — it changes what happens behind the scenes. Attendance is recorded accurately, homework has one home instead of three, and report cards reflect marks entered on time instead of chased down at the last minute. The result is a school where the record-keeping keeps up with the term."
+            headline="Your own login: today's timetable, your record, nothing to chase."
+            narrative="Students get their own portal login, scoped to just their own record — not a shared family view. Log in and see today's timetable, this term's attendance, the latest result, and homework, without waiting on a parent to relay it or a notice board to be updated."
             changes={[
-              "Attendance recorded consistently, so a single missed mark doesn't become a dispute later in the term.",
-              "Homework set, submitted, and graded through one system, with feedback attached to the submission.",
-              "Report cards built from marks entered on time, not assembled the week before they're due.",
+              "Today's timetable, pulled straight from the class schedule — no more finding out what's next once you're already at school.",
+              "Fee balance and this term's attendance rate, visible directly from your own login.",
+              "The latest exam result and class rank, as soon as it's published, with the report card comment alongside it.",
+              "Homework assignments, submissions, and feedback in one place.",
             ]}
           />
         </Reveal>
