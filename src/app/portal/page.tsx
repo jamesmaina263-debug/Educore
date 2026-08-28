@@ -6,6 +6,7 @@ import { NotificationPreferencesPanel } from "@/components/notifications/prefere
 import { getMyNotificationPreferences } from "@/app/notifications/actions";
 import { PortalHomeworkSection, type PortalAssignmentRow } from "@/components/portal/portal-homework";
 import { PortalPtMeetingsSection, type PortalSlotRow } from "@/components/portal/portal-pt-meetings";
+import { PortalConnectSection, type PortalConnectItemRow } from "@/components/portal/portal-connect";
 
 const WEEKDAY_NAMES = ["", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 
@@ -131,6 +132,35 @@ export default async function PortalPage({ searchParams }: { searchParams: Promi
       my_booking_id: mine?.id ?? null,
     };
   });
+
+  // Connect is guardian-only this phase (student access explicitly out of scope for Phase 1).
+  let connectItems: PortalConnectItemRow[] = [];
+  if (roleName === "parent") {
+    const { data: connectRows } = await supabase
+      .from("connect_items")
+      .select(
+        "id, category, title, body, due_date, requires_response, status, created_at, connect_item_recipients(read_at, guardian_user_id), connect_item_events(id, event_type, actor_role, body, created_at)",
+      )
+      .eq("student_id", selected.id)
+      .order("created_at", { ascending: false });
+    connectItems = (connectRows ?? []).map((i) => {
+      const recipients = (i.connect_item_recipients ?? []) as { read_at: string | null; guardian_user_id: string }[];
+      const mine = recipients.find((r) => r.guardian_user_id === schoolUser.id) ?? recipients[0] ?? null;
+      const events = (i.connect_item_events ?? []) as { id: string; event_type: string; actor_role: string; body: string | null; created_at: string }[];
+      return {
+        id: i.id,
+        category: i.category,
+        title: i.title,
+        body: i.body,
+        due_date: i.due_date,
+        requires_response: i.requires_response,
+        status: i.status,
+        created_at: i.created_at,
+        my_read_at: mine?.read_at ?? null,
+        events: events.slice().sort((a, b) => a.created_at.localeCompare(b.created_at)),
+      };
+    });
+  }
 
   let attendanceRate: number | null = null;
   if (activeTerm) {
@@ -275,9 +305,7 @@ export default async function PortalPage({ searchParams }: { searchParams: Promi
 
       <div className="panel p-4">
         <p className="label-eyebrow mb-2">Recent messages</p>
-        <p className="text-sm text-muted-foreground">
-          Messages will appear here once the school starts sending communications.
-        </p>
+        <PortalConnectSection items={connectItems} />
       </div>
 
       <div className="panel p-4">
