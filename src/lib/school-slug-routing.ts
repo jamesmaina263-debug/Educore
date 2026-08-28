@@ -29,11 +29,6 @@ export const APP_ROUTE_SEGMENTS = new Set([
 export const NEVER_PREFIX = new Set([
   "api", "apply", "login", "signup", "notifications", "parent-login", "portal", "admin", "change-password",
   "platform", "solutions", "ai-automation", "pricing", "about", "contact", "faq",
-  // TEMPORARY, Phase 2 QA only -- remove this entry and the corresponding
-  // src/app/(marketing)/style-guide route before Phase 3 ships. Not a real
-  // marketing page; exists only so the design-system components can be
-  // reviewed on a live preview deploy.
-  "style-guide",
 ]);
 
 export type SlugRouting = { type: "next" } | { type: "redirect"; url: URL } | { type: "rewrite"; url: URL };
