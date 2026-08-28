@@ -61,7 +61,7 @@ All of this is committed to `feature/marketing-site`, verified (typecheck + lint
 - New component: `pricing-card.tsx` — deliberately has a "Talk to us" price slot instead of a number, sized so a real rate could be dropped in later without a redesign, per the original Phase 7 roadmap note.
 - Page sections: hero → 3 plan cards (Starter/Growth/Enterprise, real module lists, no numeric prices) → "how pricing works" (per-student, termly billing — real structural facts, not numbers) → final CTA to `/contact` (not yet built — same as existing nav/footer links to `/pricing` before this phase; `/contact` will resolve once Phase 8 ships).
 - Verified: `tsc --noEmit` clean, `eslint` 0 new errors/warnings (same 5 pre-existing warnings as always), full test suite 86/86 passing, `next build` clean with `/pricing` prerendered static and zero route collisions.
-- **Not yet done as part of this phase:** live Vercel preview-deployment fetch (this session doesn't have direct browser/preview-URL access yet — see "Open item" below). Do this before considering Phase 7 fully closed, consistent with the verification bar in Section 5.
+- **Live preview-deployment fetch: done.** `/pricing` on the branch's live preview returns 200, is server-marked `x-nextjs-prerender: 1` (static), has the correct title/description, and the rendered HTML confirms no KES numbers anywhere — only "Talk to us" plus tier names/caps/modules/billing cadence. `/login` re-checked on the same preview and unaffected.
 
 ### Current file inventory (all on `feature/marketing-site`, none on `main`)
 ```
@@ -122,9 +122,7 @@ Layout rhythm: `Section` component alternates `tone="canvas"` / `tone="navy"`, n
 
 ## 6. Complete roadmap — remaining phases
 
-**Phases 4, 5, 6, and 7 are done** — see Section 3 for what was actually built and verified in each. Pricing (Phase 7) is settled: real tier names/caps/modules shown, exact KES rates deliberately withheld per owner decision — don't re-ask this or re-litigate it in Phase 8+.
-
-**Open item carried forward from Phase 7:** a live Vercel preview-deployment fetch for `/pricing` still needs to happen before Phase 7 is fully closed out (this session verified everything except that — no preview-URL access available). Whoever does Phase 8 should either do this first, or explicitly flag it's still outstanding when reporting to the owner.
+**Phases 4, 5, 6, and 7 are done and fully verified**, including live-preview fetches — see Section 3 for what was actually built and verified in each. Pricing (Phase 7) is settled: real tier names/caps/modules shown, exact KES rates deliberately withheld per owner decision — don't re-ask this or re-litigate it in Phase 8+.
 
 ### Phase 8 — About & Contact (`/about`, `/contact`)
 About: mission, vision, what problem EduCore solves, why it exists — company-level, not product-feature copy. Contact: lead-gen demo-request form (name, school, role, email, phone, student count, message). **Before wiring the form to a database:** confirm with the owner whether to (a) add a single new table in the *same* Supabase project (`alzqlvfaftwegptfbfej`) with its own tight, insert-only-from-anon RLS, isolated from the app's real schema, or (b) route it elsewhere entirely (email via an Edge Function, a form service). This was flagged as an open decision earlier in the project — don't assume, ask. If backend isn't ready yet, build the UI with a clearly marked integration point rather than guessing. `about` and `contact` already in `NEVER_PREFIX`.
@@ -144,4 +142,4 @@ Full pass across everything built in Phases 1–9:
 
 ---
 
-**For the next session, in one sentence:** Phases 1–7 (routing fix, design system, homepage, platform, solutions, AI & automation, pricing) are done and verified on branch `feature/marketing-site` — pricing intentionally shows no KES numbers per owner decision, and Phase 7's live-preview fetch is still outstanding — start at Phase 8 (About & Contact), follow the ground rules in Section 5, and do not merge to `main` until Phase 10 is signed off.
+**For the next session, in one sentence:** Phases 1–7 (routing fix, design system, homepage, platform, solutions, AI & automation, pricing) are done, fully verified including live-preview fetches, and owner-approved (pricing intentionally shows no KES numbers) on branch `feature/marketing-site`; start at Phase 8 (About & Contact), follow the ground rules in Section 5, and do not merge to `main` until Phase 10 is signed off.
