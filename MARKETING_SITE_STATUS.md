@@ -1,6 +1,6 @@
 # EduCore Marketing Site — Status & Roadmap
 
-**Last updated:** 2026-08-28
+**Last updated:** 2026-08-28 (Phase 7)
 **Branch:** `feature/marketing-site` — **NOT merged to `main`**. Merge only after Phase 10 (final audit) is complete and explicitly approved by the project owner.
 **Live preview (latest):** deploys automatically from this branch on every push, via Vercel's GitHub integration. Get the current URL from Vercel → Deployments → filter by branch `feature/marketing-site`, or ask whichever Claude session is active to fetch the latest one. This is a preview deployment (`target: null`), not production — it never affects the live site.
 
@@ -23,7 +23,7 @@ A public marketing website for EduCore (a school management SaaS), added to the 
 | Process | Greenlight policy: one phase built and verified at a time, explicit owner sign-off before the next phase starts. |
 | Merge policy | This branch is merged to `main` only when the entire site (all phases below) is complete, tested, and the owner has said so explicitly. |
 
-## 3. What's been built so far (Phases 1–3 of 10)
+## 3. What's been built so far (Phases 1–7 of 10)
 
 All of this is committed to `feature/marketing-site`, verified (typecheck + lint + full existing test suite + full production build + live preview-deployment fetches confirming actual runtime behavior, not just code review), and reviewed/approved by the project owner at each step.
 
@@ -44,6 +44,25 @@ All of this is committed to `feature/marketing-site`, verified (typecheck + lint
 - Homepage sections, built in this order: hero (value prop, Book a Demo / Explore CTAs, Dashboard Frame visual) → problem/value proposition → platform module overview (10 real modules, matched to actual `(app)/` folders) → outcomes → AI & Automation (3 real, codebase-verified features: AI report-card comments, WhatsApp parent communication, timetable automation — explicitly framed as live, not roadmap) → role-based value (7 roles) → trust/proof points (M-Pesa integration, per-school data isolation via RLS, offline resilience, dual grading models — real technical differentiators, zero invented stats/logos/testimonials) → final CTA.
 - Verified on a live preview deployment: `/` renders correctly and is prerendered static, `/login` unchanged, unauthenticated `/dashboard` still correctly redirects to `/login`.
 
+> **Note on this doc's history:** this file was not updated after Phases 4–6 were built in earlier sessions (it still said "Phases 1–3" until this Phase 7 session found and corrected it by reading actual commit history). If you're a future session: trust `git log`, not just this doc's own claims about what's current — then fix the doc if it's stale, like this note is doing now.
+
+### Phase 4 — Platform page (commit `57945cf`)
+- `/platform` built covering EduCore's full module set, matched against the real `(app)/` folder list. New component: `module-block.tsx`. Reuses/extends the `DashboardFrame` pattern selectively rather than on every module.
+
+### Phase 5 — Solutions page (commit `b286e30`)
+- `/solutions` built: role-based, outcome-focused sections for School Owners, Principals, Administrators, Teachers, Finance Teams, Parents, and Students (expands the homepage's compressed role grid). New components: `role-panel.tsx`, `mini-frame.tsx`.
+
+### Phase 6 — AI & Automation page (commit `638fa73`)
+- `/ai-automation` built as the deeper version of the homepage's AI section, with live-vs-planned capabilities clearly distinguished per the ground rules.
+
+### Phase 7 — Pricing page (`/pricing`) — this session
+- **Pricing model found to already exist, live in production** — not invented, not supplied verbally by the owner, but discovered by querying the real `subscription_plans` table in Supabase (project `alzqlvfaftwegptfbfej`), which is actively used by `school_subscriptions` for real billing. Three active plans: **Starter** (≤200 students, modules: core/academics/finance), **Growth** (≤800 students, adds payroll/library/transport/boarding/inventory/communication), **Enterprise** (no student cap, all modules + AI), all billed `termly`, all priced `price_per_student_kes` (a real numeric rate exists per plan).
+- **Owner decision requested and given, before writing any copy:** show tier names, student caps, module coverage, and billing cadence (termly, per-student) publicly — but **do not show the exact KES rates**. Implemented exactly that; no pricing numbers appear on the page.
+- New component: `pricing-card.tsx` — deliberately has a "Talk to us" price slot instead of a number, sized so a real rate could be dropped in later without a redesign, per the original Phase 7 roadmap note.
+- Page sections: hero → 3 plan cards (Starter/Growth/Enterprise, real module lists, no numeric prices) → "how pricing works" (per-student, termly billing — real structural facts, not numbers) → final CTA to `/contact` (not yet built — same as existing nav/footer links to `/pricing` before this phase; `/contact` will resolve once Phase 8 ships).
+- Verified: `tsc --noEmit` clean, `eslint` 0 new errors/warnings (same 5 pre-existing warnings as always), full test suite 86/86 passing, `next build` clean with `/pricing` prerendered static and zero route collisions.
+- **Not yet done as part of this phase:** live Vercel preview-deployment fetch (this session doesn't have direct browser/preview-URL access yet — see "Open item" below). Do this before considering Phase 7 fully closed, consistent with the verification bar in Section 5.
+
 ### Current file inventory (all on `feature/marketing-site`, none on `main`)
 ```
 MODIFIED:
@@ -56,6 +75,10 @@ DELETED:
 ADDED:
   src/app/(marketing)/layout.tsx
   src/app/(marketing)/page.tsx          (homepage)
+  src/app/(marketing)/platform/page.tsx
+  src/app/(marketing)/solutions/page.tsx
+  src/app/(marketing)/ai-automation/page.tsx
+  src/app/(marketing)/pricing/page.tsx
   src/components/marketing/button.tsx
   src/components/marketing/eyebrow.tsx
   src/components/marketing/section.tsx
@@ -64,6 +87,10 @@ ADDED:
   src/components/marketing/dashboard-frame.tsx
   src/components/marketing/feature-card.tsx
   src/components/marketing/reveal.tsx
+  src/components/marketing/module-block.tsx
+  src/components/marketing/role-panel.tsx
+  src/components/marketing/mini-frame.tsx
+  src/components/marketing/pricing-card.tsx
 ```
 
 ## 4. Design system reference (for consistency in later phases)
@@ -95,17 +122,9 @@ Layout rhythm: `Section` component alternates `tone="canvas"` / `tone="navy"`, n
 
 ## 6. Complete roadmap — remaining phases
 
-### Phase 4 — Platform page (`/platform`)
-Dedicated page covering EduCore's full module set (not just the 10 highlighted on the homepage — check `(app)/` for the complete list: academics, admin, admissions, ai, attendance, boarding, campuses, communication, dashboard, discipline, exams, finance, health, homework, integrations, inventory, library, parents, payroll, performance, pt-meetings, reports, settings, staff, students, transport — decide which of these are marketing-relevant vs. internal-only). For each module shown: what it does, who uses it, problem solved, key capabilities, a relevant UI visual (reuse/extend `DashboardFrame` pattern where it fits, don't overuse the exact same frame every time). Add `platform` is already in `NEVER_PREFIX` — no routing change needed, just build the page.
+**Phases 4, 5, 6, and 7 are done** — see Section 3 for what was actually built and verified in each. Pricing (Phase 7) is settled: real tier names/caps/modules shown, exact KES rates deliberately withheld per owner decision — don't re-ask this or re-litigate it in Phase 8+.
 
-### Phase 5 — Solutions page (`/solutions`)
-Role-based solution pages/sections for School Owners, Principals, Administrators, Teachers, Finance Teams, Parents, Students — outcome-focused (not feature lists). The homepage's role grid (Section 8 of the homepage) is a compressed preview of this; this phase expands each role into real depth. `solutions` already in `NEVER_PREFIX`.
-
-### Phase 6 — AI & Automation page (`/ai-automation`)
-Deeper version of the homepage's AI section. **Must clearly distinguish live vs. planned/future capabilities** — the homepage intentionally only shows 3 confirmed-live features; this page can discuss direction/roadmap too, but any forward-looking claim must be explicitly labeled as not-yet-available. Verify anything new against the codebase before writing about it. `ai-automation` already in `NEVER_PREFIX`.
-
-### Phase 7 — Pricing page (`/pricing`)
-No invented pricing numbers unless the owner supplies a real, confirmed pricing model. Default to a "Book a Demo / Talk to EduCore" structure with placeholders, built so real pricing tiers can be dropped in later without a redesign. `pricing` already in `NEVER_PREFIX`.
+**Open item carried forward from Phase 7:** a live Vercel preview-deployment fetch for `/pricing` still needs to happen before Phase 7 is fully closed out (this session verified everything except that — no preview-URL access available). Whoever does Phase 8 should either do this first, or explicitly flag it's still outstanding when reporting to the owner.
 
 ### Phase 8 — About & Contact (`/about`, `/contact`)
 About: mission, vision, what problem EduCore solves, why it exists — company-level, not product-feature copy. Contact: lead-gen demo-request form (name, school, role, email, phone, student count, message). **Before wiring the form to a database:** confirm with the owner whether to (a) add a single new table in the *same* Supabase project (`alzqlvfaftwegptfbfej`) with its own tight, insert-only-from-anon RLS, isolated from the app's real schema, or (b) route it elsewhere entirely (email via an Edge Function, a form service). This was flagged as an open decision earlier in the project — don't assume, ask. If backend isn't ready yet, build the UI with a clearly marked integration point rather than guessing. `about` and `contact` already in `NEVER_PREFIX`.
@@ -125,4 +144,4 @@ Full pass across everything built in Phases 1–9:
 
 ---
 
-**For the next session, in one sentence:** Phases 1–3 (routing fix, design system, homepage) are done, verified, and owner-approved on branch `feature/marketing-site`; start at Phase 4 (Platform page), follow the ground rules in Section 5, and do not merge to `main` until Phase 10 is signed off.
+**For the next session, in one sentence:** Phases 1–7 (routing fix, design system, homepage, platform, solutions, AI & automation, pricing) are done and verified on branch `feature/marketing-site` — pricing intentionally shows no KES numbers per owner decision, and Phase 7's live-preview fetch is still outstanding — start at Phase 8 (About & Contact), follow the ground rules in Section 5, and do not merge to `main` until Phase 10 is signed off.
