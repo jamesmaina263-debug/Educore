@@ -55,3 +55,28 @@ export async function cancelPtBookingAction(bookingId: string): Promise<ActionRe
   return { success: true };
 }
 
+export async function markConnectItemReadAction(itemId: string): Promise<ActionResult> {
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("mark_connect_item_read", { p_item_id: itemId });
+  if (error) return { error: error.message };
+  revalidatePath("/portal");
+  return { success: true };
+}
+
+export async function acknowledgeConnectItemAction(itemId: string): Promise<ActionResult> {
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("acknowledge_connect_item", { p_item_id: itemId });
+  if (error) return { error: error.message };
+  revalidatePath("/portal");
+  return { success: true };
+}
+
+export async function replyConnectItemAction(itemId: string, body: string): Promise<ActionResult> {
+  if (!body.trim()) return { error: "Please write a reply before sending." };
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("reply_connect_item", { p_item_id: itemId, p_body: body.trim() });
+  if (error) return { error: error.message };
+  revalidatePath("/portal");
+  return { success: true };
+}
+

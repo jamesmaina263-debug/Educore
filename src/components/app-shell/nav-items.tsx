@@ -219,6 +219,7 @@ export const navGroups: NavGroup[] = [
       { label: "Inventory & Procurement", href: "/inventory", icon: Package, children: inventoryChildren },
       { label: "Performance", href: "/performance", icon: TrendingUp },
       { label: "PT Meetings", href: "/pt-meetings", icon: Users2 },
+      { label: "Connect", href: "/connect", icon: Mail },
       { label: "Communication", href: "/communication", icon: MessageSquare },
       { label: "Educore AI", href: "/ai", icon: Sparkles },
       { label: "Reports", href: "/reports", icon: BarChart3 },
