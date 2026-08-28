@@ -1,0 +1,50 @@
+name: Deploy edge functions
+
+# Closes a gap found 2026-08-28: deploy-migrations.yml makes "merged to main" and "applied to
+# the database" the same event, but nothing did the equivalent for edge functions -- a merged
+# function change sat in the repo looking done without actually being live until someone
+# manually ran `supabase functions deploy`. This is that missing piece.
+#
+# Needs a SUPABASE_ACCESS_TOKEN repo secret (Supabase dashboard -> Account -> Access Tokens --
+# this is a personal access token scoped to your whole Supabase account, not a per-project
+# credential like SUPABASE_DB_URL, so treat it accordingly). Unlike deploy-migrations.yml, this
+# doesn't touch the database directly -- `supabase functions deploy` talks to Supabase's
+# management API over normal HTTPS, so it isn't affected by the IPv6/pooler issue that blocked
+# deploy-migrations.yml.
+#
+# Per-function verify_jwt settings come from supabase/config.toml, checked into this repo --
+# see that file for why. Deploys every function it finds as a local directory under
+# supabase/functions/; a function only present in Supabase (deployed out-of-band, bypassing git)
+# is untouched either way.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "supabase/functions/**"
+      - "supabase/config.toml"
+  workflow_dispatch:
+
+jobs:
+  deploy-functions:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Deploy functions
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          set +e
+          OUTPUT=$(supabase functions deploy --project-ref alzqlvfaftwegptfbfej 2>&1)
+          STATUS=$?
+          echo "$OUTPUT"
+          if [ $STATUS -ne 0 ]; then
+            SAFE=$(echo "$OUTPUT" | tr '\n' ' ' | tail -c 900)
+            echo "::error::functions deploy failed: $SAFE"
+            exit 1
+          fi
