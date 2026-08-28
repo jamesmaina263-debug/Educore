@@ -1,6 +1,6 @@
 # EduCore Marketing Site — Status & Roadmap
 
-**Last updated:** 2026-08-28 (Phase 7)
+**Last updated:** 2026-08-28 (Phase 9 — Phase 8 skipped for now, being built in a concurrent session)
 **Branch:** `feature/marketing-site` — **NOT merged to `main`**. Merge only after Phase 10 (final audit) is complete and explicitly approved by the project owner.
 **Live preview (latest):** deploys automatically from this branch on every push, via Vercel's GitHub integration. Get the current URL from Vercel → Deployments → filter by branch `feature/marketing-site`, or ask whichever Claude session is active to fetch the latest one. This is a preview deployment (`target: null`), not production — it never affects the live site.
 
@@ -23,7 +23,9 @@ A public marketing website for EduCore (a school management SaaS), added to the 
 | Process | Greenlight policy: one phase built and verified at a time, explicit owner sign-off before the next phase starts. |
 | Merge policy | This branch is merged to `main` only when the entire site (all phases below) is complete, tested, and the owner has said so explicitly. |
 
-## 3. What's been built so far (Phases 1–7 of 10)
+## 3. What's been built so far (Phases 1–7 and 9 of 10 — Phase 8 not yet done)
+
+**Note on ordering:** Phase 9 was built before Phase 8 because Phase 8 (About & Contact) was being handled by another concurrent session at the time. This was a deliberate exception to strict phase order, not an error — Phase 9's SEO/FAQ work doesn't depend on Phase 8's content. The sitemap built in Phase 9 deliberately excludes `/about` and `/contact` until Phase 8 actually lands (see Phase 9 writeup below) so it doesn't list 404s. Whoever finishes Phase 8 should check whether Phase 9 already merged and, if so, add `/about` and `/contact` to `src/app/sitemap.ts`.
 
 All of this is committed to `feature/marketing-site`, verified (typecheck + lint + full existing test suite + full production build + live preview-deployment fetches confirming actual runtime behavior, not just code review), and reviewed/approved by the project owner at each step.
 
@@ -63,11 +65,26 @@ All of this is committed to `feature/marketing-site`, verified (typecheck + lint
 - Verified: `tsc --noEmit` clean, `eslint` 0 new errors/warnings (same 5 pre-existing warnings as always), full test suite 86/86 passing, `next build` clean with `/pricing` prerendered static and zero route collisions.
 - **Live preview-deployment fetch: done.** `/pricing` on the branch's live preview returns 200, is server-marked `x-nextjs-prerender: 1` (static), has the correct title/description, and the rendered HTML confirms no KES numbers anywhere — only "Talk to us" plus tier names/caps/modules/billing cadence. `/login` re-checked on the same preview and unaffected.
 
+### Phase 9 — FAQ & SEO — this session (built ahead of Phase 8, see note above)
+- **New `/faq` page**, 10 Q&A pairs, plus FAQPage JSON-LD structured data that mirrors the visible copy exactly (so it can't say anything the page doesn't). Every answer restates a fact already codebase-verified in an earlier phase (RLS isolation, offline queueing, dual grading models, M-Pesa — Phase 3; AI-is-Enterprise-only — the `subscription_plans.features` jsonb queried in Phase 7; multi-campus — the real `campuses` module, Phase 4) or the pricing structure from Phase 7 — nothing new was asserted.
+- **Site-wide SEO:** new `src/lib/site.ts` (`SITE_URL` = `https://educore-beige.vercel.app`, the project's real current Vercel-assigned production alias — confirmed via `Vercel:get_project`; there's no purchased custom domain yet, so this isn't invented, but it should be swapped to a real domain in this one file if one gets bought later). `metadataBase` + default Open Graph/Twitter tags added to the root layout. Every existing marketing page (`/`, `/platform`, `/solutions`, `/ai-automation`, `/pricing`) got Open Graph/Twitter/canonical metadata added to its existing `metadata` export; the homepage got an explicit `metadata` export for the first time (it had been silently inheriting the generic root-layout fallback).
+- **`sitemap.ts`** lists only the 6 routes that currently render real content (`/`, `/platform`, `/solutions`, `/ai-automation`, `/pricing`, `/faq`) — `/about` and `/contact` are deliberately left off until Phase 8 actually ships a page at each path, so the sitemap can't point search engines at 404s. **`robots.ts`** disallows `/dashboard`, `/login`, `/parent-login` (real authenticated-only entry points); `/signup` is deliberately allowed since it's a real public "start a school" page, not gated. Both routes are already excluded from `proxy.ts`'s matcher, confirmed by their appearing in the build output as prerendered — no `NEVER_PREFIX` entry was needed.
+- **Heading hierarchy audit:** every existing marketing page already had exactly one `<h1>` — confirmed by grep across all 5 pages, nothing needed fixing.
+- **No OG image** was added — the only real image asset available (`educore-logo-lockup.png`) is a wide wordmark (1431×417, ~3.4:1) that would get cropped at the standard 1200×630 (1.91:1) Open Graph ratio, so a proper social-share image would need actual design work rather than reusing the logo as-is. Flagging this rather than guessing; can be picked up as a small follow-up if the owner wants one.
+- Verified: `tsc --noEmit` clean, `eslint` 0 new errors/warnings (same 5 pre-existing warnings), full test suite 86/86 passing, `next build` clean with `/faq`, `/robots.txt`, `/sitemap.xml` all prerendered static and zero route collisions. Generated `sitemap.xml`/`robots.txt` output inspected directly from the build to confirm correct URLs/rules, not just that the build succeeded.
+- **Not yet done as part of this phase:** live Vercel preview-deployment fetch for `/faq` (and to re-confirm `/robots.txt` / `/sitemap.xml` serve correctly on the actual preview). Do this before considering Phase 9 fully closed, same as every prior phase's verification bar.
+
 ### Current file inventory (all on `feature/marketing-site`, none on `main`)
 ```
 MODIFIED:
   src/lib/school-slug-routing.ts       (NEVER_PREFIX +7 entries)
   src/app/globals.css                  (+marketing tokens, +2 font weights)
+  src/app/layout.tsx                   (Phase 9: metadataBase, default OG/Twitter)
+  src/app/(marketing)/page.tsx          (Phase 9: added explicit metadata export)
+  src/app/(marketing)/platform/page.tsx        (Phase 9: OG/Twitter/canonical added)
+  src/app/(marketing)/solutions/page.tsx       (Phase 9: OG/Twitter/canonical added)
+  src/app/(marketing)/ai-automation/page.tsx   (Phase 9: OG/Twitter/canonical added)
+  src/app/(marketing)/pricing/page.tsx         (Phase 9: OG/Twitter/canonical added)
 
 DELETED:
   src/app/page.tsx                     (old redirect("/dashboard"))
@@ -91,6 +108,10 @@ ADDED:
   src/components/marketing/role-panel.tsx
   src/components/marketing/mini-frame.tsx
   src/components/marketing/pricing-card.tsx
+  src/app/(marketing)/faq/page.tsx     (Phase 9)
+  src/app/sitemap.ts                   (Phase 9)
+  src/app/robots.ts                    (Phase 9)
+  src/lib/site.ts                      (Phase 9)
 ```
 
 ## 4. Design system reference (for consistency in later phases)
@@ -122,13 +143,10 @@ Layout rhythm: `Section` component alternates `tone="canvas"` / `tone="navy"`, n
 
 ## 6. Complete roadmap — remaining phases
 
-**Phases 4, 5, 6, and 7 are done and fully verified**, including live-preview fetches — see Section 3 for what was actually built and verified in each. Pricing (Phase 7) is settled: real tier names/caps/modules shown, exact KES rates deliberately withheld per owner decision — don't re-ask this or re-litigate it in Phase 8+.
+**Phases 4, 5, 6, 7, and 9 are done and verified** — see Section 3 for what was actually built and verified in each (Phase 9's live-preview fetch is the one open item, see its writeup). Pricing (Phase 7) is settled: real tier names/caps/modules shown, exact KES rates deliberately withheld per owner decision — don't re-ask this or re-litigate it. **Phase 8 has NOT been done by this line of sessions** — it was being handled by a separate concurrent session as of the Phase 9 session. Check `git log` before assuming it's still undone; if it landed, `sitemap.ts` needs `/about` and `/contact` added (Phase 9 deliberately left them out to avoid listing 404s).
 
-### Phase 8 — About & Contact (`/about`, `/contact`)
-About: mission, vision, what problem EduCore solves, why it exists — company-level, not product-feature copy. Contact: lead-gen demo-request form (name, school, role, email, phone, student count, message). **Before wiring the form to a database:** confirm with the owner whether to (a) add a single new table in the *same* Supabase project (`alzqlvfaftwegptfbfej`) with its own tight, insert-only-from-anon RLS, isolated from the app's real schema, or (b) route it elsewhere entirely (email via an Edge Function, a form service). This was flagged as an open decision earlier in the project — don't assume, ask. If backend isn't ready yet, build the UI with a clearly marked integration point rather than guessing. `about` and `contact` already in `NEVER_PREFIX`.
-
-### Phase 9 — FAQ & SEO (`/faq` + site-wide)
-FAQ page/section. Site-wide SEO fundamentals: per-page titles/descriptions (root layout currently has a generic "EduCore" title/description that's fine as a fallback, but marketing pages should have their own via each page's `metadata` export), Open Graph tags, semantic HTML/heading hierarchy, descriptive alt text, `sitemap.ts`/`robots.ts` (note: these paths are already excluded from the proxy's matcher, so no `NEVER_PREFIX` entry needed for them). Optimize for the search terms listed in the original brief without keyword stuffing. `faq` already in `NEVER_PREFIX`.
+### Phase 8 — About & Contact (`/about`, `/contact`) — status unknown to this line of sessions, check git log
+About: mission, vision, what problem EduCore solves, why it exists — company-level, not product-feature copy. Contact: lead-gen demo-request form (name, school, role, email, phone, student count, message). **Before wiring the form to a database:** confirm with the owner whether to (a) add a single new table in the *same* Supabase project (`alzqlvfaftwegptfbfej`) with its own tight, insert-only-from-anon RLS, isolated from the app's real schema, or (b) route it elsewhere entirely (email via an Edge Function, a form service). This was flagged as an open decision earlier in the project — don't assume, ask. If backend isn't ready yet, build the UI with a clearly marked integration point rather than guessing. `about` and `contact` already in `NEVER_PREFIX`. **If this phase lands after Phase 9, add `/about` and `/contact` to `src/app/sitemap.ts`'s `ROUTES` array.**
 
 ### Phase 10 — Final UX & quality audit
 Full pass across everything built in Phases 1–9:
@@ -142,4 +160,4 @@ Full pass across everything built in Phases 1–9:
 
 ---
 
-**For the next session, in one sentence:** Phases 1–7 (routing fix, design system, homepage, platform, solutions, AI & automation, pricing) are done, fully verified including live-preview fetches, and owner-approved (pricing intentionally shows no KES numbers) on branch `feature/marketing-site`; start at Phase 8 (About & Contact), follow the ground rules in Section 5, and do not merge to `main` until Phase 10 is signed off.
+**For the next session, in one sentence:** Phases 1–7 and 9 are done and verified (Phase 9's live-preview fetch is the one open item) on branch `feature/marketing-site`; Phase 8 (About & Contact) status is unknown to this line of sessions — check `git log` first, since it was being built concurrently — do it next if it's not there yet, add `/about`/`/contact` to `sitemap.ts` if it is, follow the ground rules in Section 5, and do not merge to `main` until Phase 10 is signed off.

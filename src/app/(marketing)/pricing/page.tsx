@@ -8,10 +8,16 @@ import { Section } from "@/components/marketing/section";
 import { Reveal } from "@/components/marketing/reveal";
 import { PricingCard } from "@/components/marketing/pricing-card";
 
+const TITLE = "Pricing — EduCore";
+const DESCRIPTION =
+  "EduCore's three plans — Starter, Growth, and Enterprise — scale by student count and module coverage. Termly, per-student billing. Talk to us for a quote sized to your school.";
+
 export const metadata: Metadata = {
-  title: "Pricing — EduCore",
-  description:
-    "EduCore's three plans — Starter, Growth, and Enterprise — scale by student count and module coverage. Termly, per-student billing. Talk to us for a quote sized to your school.",
+  title: TITLE,
+  description: DESCRIPTION,
+  alternates: { canonical: "/pricing" },
+  openGraph: { title: TITLE, description: DESCRIPTION, url: "/pricing" },
+  twitter: { card: "summary", title: TITLE, description: DESCRIPTION },
 };
 
 // Tier names, student caps, module coverage, and billing cadence below are

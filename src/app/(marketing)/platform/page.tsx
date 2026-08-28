@@ -37,10 +37,16 @@ import { MiniFrame } from "@/components/marketing/mini-frame";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
+const TITLE = "Platform — EduCore";
+const DESCRIPTION =
+  "Every module EduCore runs for a school: academics, admissions, finance, operations, communication, and multi-campus tools, in one connected platform.";
+
 export const metadata: Metadata = {
-  title: "Platform — EduCore",
-  description:
-    "Every module EduCore runs for a school: academics, admissions, finance, operations, communication, and multi-campus tools, in one connected platform.",
+  title: TITLE,
+  description: DESCRIPTION,
+  alternates: { canonical: "/platform" },
+  openGraph: { title: TITLE, description: DESCRIPTION, url: "/platform" },
+  twitter: { card: "summary", title: TITLE, description: DESCRIPTION },
 };
 
 type Mod = {

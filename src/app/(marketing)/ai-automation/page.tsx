@@ -18,10 +18,16 @@ import { FeatureCard } from "@/components/marketing/feature-card";
 import { MiniFrame } from "@/components/marketing/mini-frame";
 import { Badge } from "@/components/ui/badge";
 
+const TITLE = "AI & Automation — EduCore";
+const DESCRIPTION =
+  "How EduCore actually uses AI: grounded in your school's real data, drafted for a human to review, never sent unreviewed. Live features only — nothing on this page is a roadmap promise.";
+
 export const metadata: Metadata = {
-  title: "AI & Automation — EduCore",
-  description:
-    "How EduCore actually uses AI: grounded in your school's real data, drafted for a human to review, never sent unreviewed. Live features only — nothing on this page is a roadmap promise.",
+  title: TITLE,
+  description: DESCRIPTION,
+  alternates: { canonical: "/ai-automation" },
+  openGraph: { title: TITLE, description: DESCRIPTION, url: "/ai-automation" },
+  twitter: { card: "summary", title: TITLE, description: DESCRIPTION },
 };
 
 const AI_DRAFTED = [

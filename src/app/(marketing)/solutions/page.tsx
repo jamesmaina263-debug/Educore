@@ -20,10 +20,16 @@ import { MiniFrame } from "@/components/marketing/mini-frame";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
+const TITLE = "Solutions — EduCore";
+const DESCRIPTION =
+  "What EduCore changes day to day for School Owners, Principals, Administrators, Teachers, Finance Teams, Parents, and Students — role by role.";
+
 export const metadata: Metadata = {
-  title: "Solutions — EduCore",
-  description:
-    "What EduCore changes day to day for School Owners, Principals, Administrators, Teachers, Finance Teams, Parents, and Students — role by role.",
+  title: TITLE,
+  description: DESCRIPTION,
+  alternates: { canonical: "/solutions" },
+  openGraph: { title: TITLE, description: DESCRIPTION, url: "/solutions" },
+  twitter: { card: "summary", title: TITLE, description: DESCRIPTION },
 };
 
 const ROLE_NAV = [

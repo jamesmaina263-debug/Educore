@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import {
   ArrowRight,
@@ -82,6 +83,26 @@ const TRUST_POINTS = [
   { icon: WifiOff, title: "Built for patchy connectivity", description: "Core workflows queue and sync when the connection drops, instead of losing work." },
   { icon: Smartphone, title: "Two grading models, natively", description: "Numeric and CBC competency-based grading are both supported from the ground up — pick per school, grade, or class." },
 ];
+
+const TITLE = "EduCore — School Management Software for Kenyan Schools";
+const DESCRIPTION =
+  "Admissions, academics, finance, attendance, and parent communication in one connected platform — with M-Pesa built in and per-school data isolation.";
+
+export const metadata: Metadata = {
+  title: TITLE,
+  description: DESCRIPTION,
+  alternates: { canonical: "/" },
+  openGraph: {
+    title: TITLE,
+    description: DESCRIPTION,
+    url: "/",
+  },
+  twitter: {
+    card: "summary",
+    title: TITLE,
+    description: DESCRIPTION,
+  },
+};
 
 export default function MarketingHomePage() {
   return (
