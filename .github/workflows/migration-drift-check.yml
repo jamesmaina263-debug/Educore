@@ -13,6 +13,12 @@ on:
       - "supabase/migrations/**"
       - "supabase/.migration_drift_allowlist"
       - "scripts/check_migration_drift.py"
+  schedule:
+    # Runs daily even with no push/PR, so a migration applied directly to
+    # production (e.g. via `supabase migration apply`/Studio, outside this
+    # pipeline) surfaces the same day instead of waiting for the next
+    # unrelated push to main to touch supabase/migrations/.
+    - cron: "0 3 * * *" # 03:00 UTC = 06:00 Nairobi time
   workflow_dispatch: {}
 
 jobs:
