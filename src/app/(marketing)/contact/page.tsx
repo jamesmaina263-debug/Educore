@@ -6,10 +6,16 @@ import { Section } from "@/components/marketing/section";
 import { Reveal } from "@/components/marketing/reveal";
 import { DemoRequestForm } from "@/components/marketing/demo-request-form";
 
+const TITLE = "Contact — EduCore";
+const DESCRIPTION =
+  "Book a demo or ask a question — tell us a bit about your school and we'll get back to you.";
+
 export const metadata: Metadata = {
-  title: "Contact — EduCore",
-  description:
-    "Book a demo or ask a question — tell us a bit about your school and we'll get back to you.",
+  title: TITLE,
+  description: DESCRIPTION,
+  alternates: { canonical: "/contact" },
+  openGraph: { title: TITLE, description: DESCRIPTION, url: "/contact" },
+  twitter: { card: "summary", title: TITLE, description: DESCRIPTION },
 };
 
 export default function ContactPage() {

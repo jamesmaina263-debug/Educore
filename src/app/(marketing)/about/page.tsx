@@ -7,10 +7,16 @@ import { Eyebrow } from "@/components/marketing/eyebrow";
 import { Section } from "@/components/marketing/section";
 import { Reveal } from "@/components/marketing/reveal";
 
+const TITLE = "About — EduCore";
+const DESCRIPTION =
+  "Why EduCore exists: one platform for the way schools actually run, instead of a patchwork of spreadsheets, WhatsApp groups, and paper registers.";
+
 export const metadata: Metadata = {
-  title: "About — EduCore",
-  description:
-    "Why EduCore exists: one platform for the way schools actually run, instead of a patchwork of spreadsheets, WhatsApp groups, and paper registers.",
+  title: TITLE,
+  description: DESCRIPTION,
+  alternates: { canonical: "/about" },
+  openGraph: { title: TITLE, description: DESCRIPTION, url: "/about" },
+  twitter: { card: "summary", title: TITLE, description: DESCRIPTION },
 };
 
 export default function AboutPage() {
