@@ -1,0 +1,48 @@
+project_id = "alzqlvfaftwegptfbfej"
+
+# verify_jwt settings below match what's actually live in Supabase as of 2026-08-28 (confirmed
+# via the management API before this file was created) -- this file didn't exist before, so these
+# settings previously lived only in Supabase's runtime state, nowhere in git. Getting this wrong
+# in either direction is a real risk: flipping a currently-false to true breaks a public
+# webhook Safaricom/Twilio/etc. call directly (they can't send a Supabase JWT); flipping a
+# currently-true to false removes auth from an endpoint that needs it.
+#
+# mpesa-stk-callback and whatsapp-webhook are public webhooks called directly by Safaricom/Twilio
+# with no Supabase session -- verify_jwt must stay false for both.
+# admin-create-demo-user and mpesa-stk-push are called from within the app with a real user
+# session -- verify_jwt must stay true for both.
+#
+# Note: biometric-gate-webhook is live in Supabase (version 15) but has no corresponding
+# directory in this repo -- it was deployed directly, bypassing git. It's intentionally not
+# listed here and won't be touched by deploy-functions.yml (that workflow only deploys functions
+# it finds as local directories under supabase/functions/). Worth reconciling separately.
+
+[functions.admin-create-demo-user]
+verify_jwt = true
+
+[functions.api-v1]
+verify_jwt = false
+
+[functions.biometric-verify]
+verify_jwt = false
+
+[functions.mpesa-stk-callback]
+verify_jwt = false
+
+[functions.mpesa-stk-push]
+verify_jwt = true
+
+[functions.request-otp]
+verify_jwt = false
+
+[functions.send-communication]
+verify_jwt = false
+
+[functions.verify-otp]
+verify_jwt = false
+
+[functions.whatsapp-send-reply]
+verify_jwt = false
+
+[functions.whatsapp-webhook]
+verify_jwt = false
