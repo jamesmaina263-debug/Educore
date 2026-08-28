@@ -16,7 +16,20 @@ export const APP_ROUTE_SEGMENTS = new Set([
 // Never slug-prefixed: public/marketing pages, the parent/student portal
 // (separate login, out of scope for this staff-app change), API routes, and
 // the platform super_admin panel (no single school to prefix with).
-export const NEVER_PREFIX = new Set(["api", "apply", "login", "signup", "notifications", "parent-login", "portal", "admin", "change-password"]);
+//
+// The trailing group (platform, solutions, ai-automation, pricing, about,
+// contact, faq) are the public EduCore marketing site's top-level routes,
+// added when that site was introduced. Without this, resolveSlugRouting's
+// fallback branch below would treat each of these as an unrecognized
+// "school slug" and silently rewrite the request to /dashboard -- the
+// marketing pages would never render for an anonymous visitor. This is a
+// routing allow-list only: it does not touch updateSession/isProtectedPath
+// above, so auth/redirect behavior for every existing protected route is
+// unchanged. Keep in sync with src/app/(marketing)'s top-level folder list.
+export const NEVER_PREFIX = new Set([
+  "api", "apply", "login", "signup", "notifications", "parent-login", "portal", "admin", "change-password",
+  "platform", "solutions", "ai-automation", "pricing", "about", "contact", "faq",
+]);
 
 export type SlugRouting = { type: "next" } | { type: "redirect"; url: URL } | { type: "rewrite"; url: URL };
 
