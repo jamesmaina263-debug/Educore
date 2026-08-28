@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -213,7 +214,7 @@ export function ConnectSection({
                 <button
                   type="button"
                   onClick={() => setExpandedId(expanded ? null : item.id)}
-                  className="flex w-full items-center justify-between gap-3 text-left"
+                  className="flex w-full cursor-pointer items-center justify-between gap-3 text-left hover:opacity-80"
                 >
                   <div>
                     <p className="text-sm font-medium">
@@ -228,6 +229,7 @@ export function ConnectSection({
                     <StatusBadge tone={item.read_by_any ? "success" : "neutral"} label={item.read_by_any ? "Read" : "Unread"} />
                     {item.requires_response && <StatusBadge tone={guardianAction.tone} label={guardianAction.label} />}
                     <StatusBadge tone={item.status === "resolved" ? "success" : "info"} label={item.status === "resolved" ? "Resolved" : "Open"} />
+                    <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${expanded ? "rotate-180" : ""}`} />
                   </div>
                 </button>
 

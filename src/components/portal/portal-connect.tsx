@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { StatusBadge } from "@/components/status-badge";
@@ -93,17 +94,25 @@ export function PortalConnectSection({ items }: { items: PortalConnectItemRow[] 
         );
         return (
           <div key={item.id} className="rounded-md border border-border p-3">
-            <button type="button" onClick={() => handleExpand(item)} className="flex w-full items-center justify-between gap-3 text-left">
+            <button
+              type="button"
+              onClick={() => handleExpand(item)}
+              className="flex w-full cursor-pointer items-center justify-between gap-3 text-left hover:opacity-80"
+            >
               <div>
                 <p className="text-sm font-medium">{item.title}</p>
                 <p className="text-xs text-muted-foreground">
                   {CATEGORY_LABELS[item.category] ?? item.category} · {new Date(item.created_at).toLocaleDateString()}
                   {item.due_date && ` · Due ${item.due_date}`}
                 </p>
+                {!expanded && item.status === "open" && item.requires_response && (
+                  <p className="mt-1 text-xs font-medium text-primary">Tap to view and respond</p>
+                )}
               </div>
               <div className="flex shrink-0 items-center gap-1.5">
                 {!item.my_read_at && <StatusBadge tone="info" label="New" />}
                 <StatusBadge tone={item.status === "resolved" ? "success" : "neutral"} label={item.status === "resolved" ? "Resolved" : "Open"} />
+                <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${expanded ? "rotate-180" : ""}`} />
               </div>
             </button>
 
