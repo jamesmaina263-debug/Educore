@@ -3,8 +3,11 @@
 @import "@fontsource/inter/400.css";
 @import "@fontsource/inter/500.css";
 @import "@fontsource/inter/600.css";
+@import "@fontsource/inter/700.css";
+@import "@fontsource/inter/800.css";
 @import "@fontsource/ibm-plex-mono/400.css";
 @import "@fontsource/ibm-plex-mono/500.css";
+@import "@fontsource/ibm-plex-mono/600.css";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -84,6 +87,18 @@
   --color-danger: var(--destructive);
   --color-danger-foreground: var(--destructive-foreground);
 
+  /* Marketing-site tokens, registered as Tailwind colors (marketing-navy-*,
+     marketing-gold-*, marketing-blue, marketing-canvas) for use in
+     src/components/marketing and src/app/(marketing) only. */
+  --color-marketing-navy-950: var(--brand-navy-950);
+  --color-marketing-navy-900: var(--brand-navy-900);
+  --color-marketing-navy-800: var(--brand-navy-800);
+  --color-marketing-gold-300: var(--brand-gold-300);
+  --color-marketing-gold-400: var(--brand-gold-400);
+  --color-marketing-gold-500: var(--brand-gold-500);
+  --color-marketing-blue: var(--marketing-blue);
+  --color-marketing-canvas: var(--marketing-canvas);
+
   --shadow-flat: 0 0 0 1px var(--border);
   --shadow-raised: 0 1px 2px 0 oklch(0.2 0.02 260 / 0.06);
   --shadow-overlay:
@@ -161,6 +176,18 @@
   --brand-gold-300: #f2d182;
   --brand-gold-400: #e8bc4c;
   --brand-gold-500: #d9a627;
+
+  /* Marketing-site-only tokens (src/app/(marketing)). Not used anywhere in
+     the authenticated app shell -- the app keeps its own neutral/blue
+     `--primary` etc. above untouched. `--brand-navy-*` and `--brand-gold-*`
+     above are reused as-is (same source: the EduCore logo). The two new
+     values here fill out what the marketing site additionally needs:
+     `--marketing-blue` is sampled directly from the logo's "core" wordmark
+     gradient (not the app's --primary, which is a separate admin-UI design
+     decision), and `--marketing-canvas` is a warm off-white content
+     background rather than pure #fff, for print-like warmth against navy. */
+  --marketing-blue: #0057c7;
+  --marketing-canvas: #fcfcfa;
 }
 
 .dark {
