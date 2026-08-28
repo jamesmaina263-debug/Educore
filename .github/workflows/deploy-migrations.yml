@@ -11,9 +11,18 @@ name: Deploy migrations
 # event, the same way Vercel already makes "merged to main" and "deployed"
 # the same event for the app itself.
 #
-# Reuses the existing SUPABASE_DB_URL secret (already present in this repo --
-# see nightly-backup.yml, which uses the same secret for pg_dump). No new
-# secret setup needed.
+# SUPABASE_DB_URL must be the Session pooler connection string
+# (postgresql://postgres.<ref>:<password>@aws-X-<region>.pooler.supabase.com:5432/postgres),
+# not the direct db.<ref>.supabase.co host -- the direct host resolves IPv6-only
+# and GitHub-hosted runners have no outbound IPv6 route, so it fails instantly.
+# (Updated 2026-08-28 after the workflow failed on every run since creation.)
+#
+# --include-all: two migration files (20260822000000, 20260826100000) carry
+# timestamps earlier than migrations already applied after them, a side
+# effect of the drift reconciliation in #87. Without this flag `db push`
+# refuses to insert anything "out of order". Both are confirmed idempotent
+# with their effects already live in production (see #87), so applying them
+# here is a formality that just records them correctly -- not a real change.
 #
 # `supabase db push` is idempotent by design: it only runs migrations whose
 # version isn't already recorded in supabase_migrations.schema_migrations,
@@ -46,9 +55,9 @@ jobs:
           set +e
           if [ "${{ github.event.inputs.dry_run }}" = "true" ]; then
             echo "Dry run -- previewing pending migrations, nothing will be applied:"
-            OUTPUT=$(supabase db push --db-url "${{ secrets.SUPABASE_DB_URL }}" --dry-run 2>&1)
+            OUTPUT=$(supabase db push --db-url "${{ secrets.SUPABASE_DB_URL }}" --include-all --dry-run 2>&1)
           else
-            OUTPUT=$(supabase db push --db-url "${{ secrets.SUPABASE_DB_URL }}" 2>&1)
+            OUTPUT=$(supabase db push --db-url "${{ secrets.SUPABASE_DB_URL }}" --include-all 2>&1)
           fi
           STATUS=$?
           echo "$OUTPUT"
