@@ -43,9 +43,17 @@ jobs:
 
       - name: Push migrations
         run: |
+          set +e
           if [ "${{ github.event.inputs.dry_run }}" = "true" ]; then
             echo "Dry run -- previewing pending migrations, nothing will be applied:"
-            supabase db push --db-url "${{ secrets.SUPABASE_DB_URL }}" --dry-run
+            OUTPUT=$(supabase db push --db-url "${{ secrets.SUPABASE_DB_URL }}" --dry-run 2>&1)
           else
-            supabase db push --db-url "${{ secrets.SUPABASE_DB_URL }}"
+            OUTPUT=$(supabase db push --db-url "${{ secrets.SUPABASE_DB_URL }}" 2>&1)
+          fi
+          STATUS=$?
+          echo "$OUTPUT"
+          if [ $STATUS -ne 0 ]; then
+            SAFE=$(echo "$OUTPUT" | sed -E 's#(postgres(ql)?://[^:]+):[^@]*@#\1:REDACTED@#g' | tr '\n' ' ' | tail -c 900)
+            echo "::error::db push failed: $SAFE"
+            exit 1
           fi
