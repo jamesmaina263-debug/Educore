@@ -1,16 +1,21 @@
 import { createClient } from "jsr:@supabase/supabase-js@2";
+import { verifyCallbackSource } from "../_shared/mpesa/verifyCallbackSource.ts";
 
 // Public webhook Safaricom calls directly -- no Supabase session, so this function must be
 // deployed with verify_jwt disabled (`supabase functions deploy mpesa-stk-callback --no-verify-jwt`).
 // Daraja callbacks carry no custom headers/auth we control, so the URL path itself
 // (/mpesa-stk-callback/<school_id>/<callback_token>) is the shared secret -- callback_token is
 // a random 24-byte value generated per school in mpesa_settings, never displayed in the UI.
+// verifyCallbackSource() adds a second, independent layer on top of that (Safaricom's published
+// callback source IPs) -- see that file for why this exists instead of a Twilio-style HMAC
+// signature check, which Daraja doesn't support.
 //
 // Per Daraja's own documented behavior, Safaricom retries a callback that doesn't get a 200
 // response -- so this function ALWAYS returns 200 with {ResultCode: 0}, even when our own
-// processing fails internally. A non-200 here just causes pointless retries; real failures are
-// logged (console.error) instead, and mpesa_stk_callback_confirm() is itself idempotent
-// (matches Safaricom's own retry behavior on the legitimate-duplicate-delivery case).
+// processing fails internally (including a rejected source-IP or token check below). A non-200
+// here just causes pointless retries; real failures are logged (console.error) instead, and
+// mpesa_stk_callback_confirm() is itself idempotent (matches Safaricom's own retry behavior on
+// the legitimate-duplicate-delivery case).
 
 interface StkCallbackItem {
   Name: string;
@@ -25,6 +30,20 @@ Deno.serve(async (req) => {
     });
 
   try {
+    const sourceCheck = verifyCallbackSource(req);
+    if (!sourceCheck.enforced) {
+      console.warn(
+        "mpesa-stk-callback: IP allowlist enforcement is DISABLED (MPESA_CALLBACK_IP_ALLOWLIST_ENFORCE=false) -- accepting from",
+        sourceCheck.sourceIp,
+      );
+    } else if (!sourceCheck.allowed) {
+      console.error(
+        "mpesa-stk-callback: rejected callback from IP outside Safaricom's allowlist",
+        sourceCheck.sourceIp,
+      );
+      return alwaysOk();
+    }
+
     const url = new URL(req.url);
     // Path shape: /mpesa-stk-callback/<school_id>/<callback_token>
     const parts = url.pathname.split("/").filter(Boolean);
