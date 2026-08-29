@@ -71,14 +71,11 @@ export function MarketingFooter() {
           <p className="text-xs text-white/40">
             © {new Date().getFullYear()} EduCore. All rights reserved.
           </p>
-          {/* Legal placeholders -- no privacy policy / terms content exists
-              yet; wired up as real links once that copy is provided, rather
-              than left as unclickable text. */}
           <div className="flex gap-6 text-xs text-white/40">
-            <Link href="#" className="hover:text-white/70">
+            <Link href="/privacy" className="hover:text-white/70">
               Privacy Policy
             </Link>
-            <Link href="#" className="hover:text-white/70">
+            <Link href="/terms" className="hover:text-white/70">
               Terms of Service
             </Link>
           </div>
