@@ -6,6 +6,8 @@ const NAV_LINKS = [
   { href: "/platform", label: "Platform" },
   { href: "/solutions", label: "Solutions" },
   { href: "/ai-automation", label: "AI & Automation" },
+  { href: "/finance-fees", label: "Finance & Fees" },
+  { href: "/security", label: "Security" },
   { href: "/pricing", label: "Pricing" },
   { href: "/about", label: "About" },
 ];
@@ -25,7 +27,7 @@ export function MarketingNav() {
           />
         </Link>
 
-        <nav className="hidden items-center gap-8 md:flex">
+        <nav className="hidden items-center gap-5 md:flex">
           {NAV_LINKS.map((link) => (
             <Link
               key={link.href}
