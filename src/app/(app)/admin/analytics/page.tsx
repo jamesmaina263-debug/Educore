@@ -5,29 +5,34 @@ import { AppShell } from "@/components/app-shell/app-shell";
 import { KpiCard } from "@/components/admin/analytics/kpi-card";
 import { NotConnectedCard } from "@/components/admin/analytics/not-connected-card";
 import { DateRangeTabs } from "@/components/admin/analytics/date-range-tabs";
+import { CustomRangePicker } from "@/components/admin/analytics/custom-range-picker";
 import { BreakdownList } from "@/components/admin/analytics/breakdown-list";
 import { TrafficTrendChart } from "@/components/admin/analytics/traffic-trend-chart";
 import { ConversionFunnel, type FunnelStage } from "@/components/admin/analytics/conversion-funnel";
-import { resolveDateRange, priorPeriod, percentChange, type PeriodKey } from "@/lib/analytics-date-range";
+import { resolveDateRange, priorPeriod, percentChange, isValidIsoDate, type PeriodKey } from "@/lib/analytics-date-range";
 import {
   isPlausibleConfigured,
   getOverviewStats,
   getTimeseries,
   getTopPages,
+  getLandingPages,
+  getExitPages,
   getTrafficSources,
   getUtmCampaigns,
   getGoalBreakdown,
   getDeviceBreakdown,
+  getBrowserBreakdown,
+  getOsBreakdown,
   getCountryBreakdown,
   getRealtimeVisitorCount,
 } from "@/lib/plausible";
 
-const VALID_PERIODS: PeriodKey[] = ["today", "yesterday", "7d", "30d", "90d"];
+const VALID_PERIODS: PeriodKey[] = ["today", "yesterday", "7d", "30d", "90d", "custom"];
 
 export default async function AdminAnalyticsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ period?: string }>;
+  searchParams: Promise<{ period?: string; from?: string; to?: string }>;
 }) {
   const supabase = await createClient();
 
@@ -39,9 +44,15 @@ export default async function AdminAnalyticsPage({
   const { data: isSuperAdmin } = await supabase.rpc("auth_is_super_admin");
   if (isSuperAdmin !== true) redirect("/dashboard");
 
-  const { period: rawPeriod } = await searchParams;
-  const period: PeriodKey = VALID_PERIODS.includes(rawPeriod as PeriodKey) ? (rawPeriod as PeriodKey) : "7d";
-  const { plausibleRange, startIso, endIso, label } = resolveDateRange(period);
+  const { period: rawPeriod, from, to } = await searchParams;
+  let period: PeriodKey = VALID_PERIODS.includes(rawPeriod as PeriodKey) ? (rawPeriod as PeriodKey) : "7d";
+  // A custom range needs both dates, in order, and well-formed -- fall back
+  // to the 7-day default rather than letting resolveDateRange see a
+  // half-specified or malformed range silently.
+  const customRange =
+    period === "custom" && isValidIsoDate(from) && isValidIsoDate(to) && from <= to ? { from, to } : undefined;
+  if (period === "custom" && !customRange) period = "7d";
+  const { plausibleRange, startIso, endIso, label } = resolveDateRange(period, customRange);
   const prior = priorPeriod(startIso, endIso);
 
   const [{ data: currentUser }, { data: demoRequests }, { count: priorPeriodDemoCount }] = await Promise.all([
@@ -67,20 +78,37 @@ export default async function AdminAnalyticsPage({
   const convertedCount = statusCounts.get("converted") ?? 0;
 
   const plausibleConfigured = isPlausibleConfigured();
-  const [overview, timeseries, topPages, sources, utmCampaigns, goals, devices, countries, realtimeVisitors] =
-    plausibleConfigured
-      ? await Promise.all([
-          getOverviewStats(plausibleRange),
-          getTimeseries(plausibleRange),
-          getTopPages(plausibleRange),
-          getTrafficSources(plausibleRange),
-          getUtmCampaigns(plausibleRange),
-          getGoalBreakdown(plausibleRange),
-          getDeviceBreakdown(plausibleRange),
-          getCountryBreakdown(plausibleRange),
-          getRealtimeVisitorCount(),
-        ])
-      : [null, null, null, null, null, null, null, null, null];
+  const [
+    overview,
+    timeseries,
+    topPages,
+    landingPages,
+    exitPages,
+    sources,
+    utmCampaigns,
+    goals,
+    devices,
+    browsers,
+    oses,
+    countries,
+    realtimeVisitors,
+  ] = plausibleConfigured
+    ? await Promise.all([
+        getOverviewStats(plausibleRange),
+        getTimeseries(plausibleRange),
+        getTopPages(plausibleRange),
+        getLandingPages(plausibleRange),
+        getExitPages(plausibleRange),
+        getTrafficSources(plausibleRange),
+        getUtmCampaigns(plausibleRange),
+        getGoalBreakdown(plausibleRange),
+        getDeviceBreakdown(plausibleRange),
+        getBrowserBreakdown(plausibleRange),
+        getOsBreakdown(plausibleRange),
+        getCountryBreakdown(plausibleRange),
+        getRealtimeVisitorCount(),
+      ])
+    : [null, null, null, null, null, null, null, null, null, null, null, null, null];
 
   const ctaClicks = goals
     ?.filter((g) => g.goal.includes("CTA") || g.goal.includes("WhatsApp") || g.goal.includes("Email"))
@@ -119,6 +147,10 @@ export default async function AdminAnalyticsPage({
           </div>
           <DateRangeTabs active={period} />
         </div>
+
+        {period === "custom" && (
+          <CustomRangePicker from={customRange?.from} to={customRange?.to} />
+        )}
 
         {/* Top-line KPIs: mixes real Plausible numbers (when connected) with real
             Supabase numbers (always available) -- never fabricated either way. */}
@@ -171,6 +203,8 @@ export default async function AdminAnalyticsPage({
                 <TrafficTrendChart data={timeseries ?? []} />
               </div>
               <BreakdownList title="Top pages" rows={(topPages ?? []).map((r) => ({ label: r.label, value: r.visitors }))} />
+              <BreakdownList title="Landing pages" rows={(landingPages ?? []).map((r) => ({ label: r.label, value: r.visitors }))} />
+              <BreakdownList title="Exit pages" rows={(exitPages ?? []).map((r) => ({ label: r.label, value: r.visitors }))} />
               <BreakdownList title="Traffic sources" rows={(sources ?? []).map((r) => ({ label: r.label, value: r.visitors }))} />
               <BreakdownList
                 title="Campaigns (UTM)"
@@ -186,6 +220,8 @@ export default async function AdminAnalyticsPage({
               />
               <BreakdownList title="Country" rows={(countries ?? []).map((r) => ({ label: r.label, value: r.visitors }))} />
               <BreakdownList title="Device" rows={(devices ?? []).map((r) => ({ label: r.label, value: r.visitors }))} />
+              <BreakdownList title="Browser" rows={(browsers ?? []).map((r) => ({ label: r.label, value: r.visitors }))} />
+              <BreakdownList title="Operating system" rows={(oses ?? []).map((r) => ({ label: r.label, value: r.visitors }))} />
             </div>
           )}
         </div>

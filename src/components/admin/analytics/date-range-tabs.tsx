@@ -17,6 +17,14 @@ export function DateRangeTabs({ active }: { active: PeriodKey }) {
           {opt.label}
         </Link>
       ))}
+      <Link
+        href="/admin/analytics?period=custom"
+        className={`rounded px-2.5 py-1 ${
+          active === "custom" ? "bg-background font-medium shadow-sm" : "text-muted-foreground hover:text-foreground"
+        }`}
+      >
+        Custom
+      </Link>
     </div>
   );
 }
