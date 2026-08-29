@@ -46,6 +46,14 @@ export async function submitDemoRequest(
   const phone = String(formData.get("phone") ?? "").trim();
   const studentCountRaw = String(formData.get("student_count") ?? "").trim();
   const message = String(formData.get("message") ?? "").trim();
+  // Marketing attribution, forwarded silently from the form's hidden fields
+  // (see src/lib/attribution.ts) -- never visitor-entered, so no validation
+  // beyond trimming/length-capping and treating "" as "not provided". Safe
+  // to trust loosely: these values only ever inform which channel gets
+  // credit for a lead, they never gate submission or touch any other table.
+  const utmSource = String(formData.get("utm_source") ?? "").trim().slice(0, 100) || null;
+  const utmMedium = String(formData.get("utm_medium") ?? "").trim().slice(0, 100) || null;
+  const utmCampaign = String(formData.get("utm_campaign") ?? "").trim().slice(0, 100) || null;
 
   if (!name || !schoolName || !role || !email) {
     return {
@@ -97,6 +105,9 @@ export async function submitDemoRequest(
     phone: phone || null,
     student_count: studentCount,
     message: message || null,
+    utm_source: utmSource,
+    utm_medium: utmMedium,
+    utm_campaign: utmCampaign,
   });
 
   if (error) {

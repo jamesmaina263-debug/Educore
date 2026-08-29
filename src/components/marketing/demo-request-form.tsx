@@ -6,6 +6,7 @@ import { CheckCircle2 } from "lucide-react";
 import { submitDemoRequest, type DemoRequestState } from "@/app/(marketing)/contact/actions";
 import { MarketingButton } from "@/components/marketing/button";
 import { trackEvent } from "@/components/marketing/analytics";
+import { getStoredAttribution } from "@/lib/attribution";
 
 const initialState: DemoRequestState = { status: "idle" };
 
@@ -21,6 +22,12 @@ const ROLE_OPTIONS = [
 export function DemoRequestForm() {
   const [state, formAction, pending] = useActionState(submitDemoRequest, initialState);
   const [renderedAt] = useState(() => Date.now());
+  // Read once at mount, not on every render -- whatever was captured
+  // earlier in this session by MarketingAnalytics (see
+  // src/lib/attribution.ts). Empty strings if nothing was captured (direct
+  // visit, no UTM params anywhere in this session) -- the server action
+  // treats an empty string the same as "not provided".
+  const [attribution] = useState(() => getStoredAttribution());
 
   useEffect(() => {
     if (state.status === "success") {
@@ -66,6 +73,12 @@ export function DemoRequestForm() {
         />
       </div>
       <input type="hidden" name="rendered_at" value={renderedAt} />
+      {/* Marketing attribution, forwarded silently -- see src/lib/attribution.ts.
+          Never shown or asked of the visitor; empty/absent if nothing was
+          captured this session. */}
+      <input type="hidden" name="utm_source" value={attribution.utm_source ?? ""} />
+      <input type="hidden" name="utm_medium" value={attribution.utm_medium ?? ""} />
+      <input type="hidden" name="utm_campaign" value={attribution.utm_campaign ?? ""} />
 
       <div className="grid gap-5 sm:grid-cols-2">
         <Field label="Your name" htmlFor="name">
