@@ -47,7 +47,13 @@ jobs:
       - name: Dump database
         run: |
           set +e
-          pg_dump "${{ secrets.SUPABASE_DB_URL }}" \
+          # Explicit versioned path, not bare `pg_dump` -- confirmed via a
+          # live diagnostic run that ubuntu-latest already ships a
+          # PGDG-built v16 pg_dump that stays first on PATH even after
+          # installing postgresql-client-17 alongside it, so PATH
+          # resolution alone doesn't guarantee which version actually
+          # runs. This sidesteps that entirely.
+          /usr/lib/postgresql/17/bin/pg_dump "${{ secrets.SUPABASE_DB_URL }}" \
             --no-owner --no-privileges --format=custom \
             --file=educore-backup-$(date +%Y-%m-%d).dump 2>pg_dump_stderr.log
           status=$?
