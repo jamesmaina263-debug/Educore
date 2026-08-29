@@ -384,6 +384,12 @@ export default function PlatformPage() {
               <h2 className="mt-4 max-w-xl text-3xl font-extrabold tracking-tight sm:text-4xl">
                 Money and materials, reconciled instead of re-keyed.
               </h2>
+              <Link
+                href="/finance-fees"
+                className="mt-3 inline-flex items-center gap-1 text-sm font-medium text-marketing-gold-400 hover:text-marketing-gold-300"
+              >
+                More on fees &amp; M-Pesa reconciliation <ArrowRight className="h-3.5 w-3.5" />
+              </Link>
             </Reveal>
             <ModuleGrid modules={FINANCE_MODULES} tone="navy" cols={3} />
           </div>
@@ -437,6 +443,12 @@ export default function PlatformPage() {
           <h2 className="mt-4 max-w-xl text-3xl font-extrabold tracking-tight sm:text-4xl">
             What connects EduCore to the rest of how a school runs.
           </h2>
+          <Link
+            href="/security"
+            className="mt-3 inline-flex items-center gap-1 text-sm font-medium text-marketing-gold-400 hover:text-marketing-gold-300"
+          >
+            How data stays isolated between schools <ArrowRight className="h-3.5 w-3.5" />
+          </Link>
         </Reveal>
         <ModuleGrid modules={PLATFORM_WIDE_MODULES} tone="navy" cols={4} />
       </Section>

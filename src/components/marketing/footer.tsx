@@ -8,6 +8,8 @@ const FOOTER_GROUPS = [
       { href: "/platform", label: "Platform" },
       { href: "/solutions", label: "Solutions" },
       { href: "/ai-automation", label: "AI & Automation" },
+      { href: "/finance-fees", label: "Finance & Fees" },
+      { href: "/security", label: "Security & Privacy" },
       { href: "/pricing", label: "Pricing" },
     ],
   },
@@ -17,6 +19,8 @@ const FOOTER_GROUPS = [
       { href: "/about", label: "About" },
       { href: "/contact", label: "Contact" },
       { href: "/faq", label: "FAQ" },
+      { href: "https://wa.me/254702904562", label: "WhatsApp +254 702 904562" },
+      { href: "mailto:info@educore.co.ke", label: "info@educore.co.ke" },
     ],
   },
   {

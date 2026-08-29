@@ -29,7 +29,7 @@ export const APP_ROUTE_SEGMENTS = new Set([
 export const NEVER_PREFIX = new Set([
   "api", "apply", "login", "signup", "notifications", "parent-login", "portal", "admin", "change-password",
   "platform", "solutions", "ai-automation", "pricing", "about", "contact", "faq",
-  "privacy", "terms",
+  "privacy", "terms", "finance-fees", "security",
 ]);
 
 export type SlugRouting = { type: "next" } | { type: "redirect"; url: URL } | { type: "rewrite"; url: URL };

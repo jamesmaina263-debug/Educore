@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Mail, Clock, ShieldCheck } from "lucide-react";
+import { Mail, Clock, ShieldCheck, MessageCircle } from "lucide-react";
 
 import { Eyebrow } from "@/components/marketing/eyebrow";
 import { Section } from "@/components/marketing/section";
@@ -68,6 +68,31 @@ export default function ContactPage() {
                   <p className="mt-1 text-sm leading-relaxed text-marketing-navy-900/65">
                     Just your name, school, role, and contact details — enough
                     for us to reach out and take it from there.
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-start gap-3">
+                <MessageCircle className="mt-0.5 h-5 w-5 flex-shrink-0 text-marketing-blue" strokeWidth={1.75} />
+                <div>
+                  <p className="text-sm font-semibold text-marketing-navy-950">
+                    Prefer to reach us directly?
+                  </p>
+                  <p className="mt-1 text-sm leading-relaxed text-marketing-navy-900/65">
+                    WhatsApp{" "}
+                    <a
+                      href="https://wa.me/254702904562"
+                      className="font-medium text-marketing-blue underline underline-offset-2"
+                    >
+                      +254 702 904562
+                    </a>{" "}
+                    or email{" "}
+                    <a
+                      href="mailto:info@educore.co.ke"
+                      className="font-medium text-marketing-blue underline underline-offset-2"
+                    >
+                      info@educore.co.ke
+                    </a>
+                    .
                   </p>
                 </div>
               </div>
