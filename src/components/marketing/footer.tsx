@@ -19,8 +19,6 @@ const FOOTER_GROUPS = [
       { href: "/about", label: "About" },
       { href: "/contact", label: "Contact" },
       { href: "/faq", label: "FAQ" },
-      { href: "https://wa.me/254702904562", label: "WhatsApp +254 702 904562" },
-      { href: "mailto:info@educore.co.ke", label: "info@educore.co.ke" },
     ],
   },
   {
@@ -30,6 +28,15 @@ const FOOTER_GROUPS = [
       { href: "/signup", label: "Start a school" },
     ],
   },
+];
+
+// Kept separate from the Company nav links (rather than appended to that
+// list) so it reads as its own thing -- "skip the form, reach us directly"
+// -- instead of sitting flush under the /contact link and looking like a
+// near-duplicate of it.
+const DIRECT_CONTACTS = [
+  { href: "https://wa.me/254702904562", label: "WhatsApp +254 702 904562" },
+  { href: "mailto:info@educore.co.ke", label: "info@educore.co.ke" },
 ];
 
 export function MarketingFooter() {
@@ -68,6 +75,24 @@ export function MarketingFooter() {
                   </li>
                 ))}
               </ul>
+
+              {group.heading === "Company" && (
+                <div className="mt-6 border-t border-white/10 pt-4">
+                  <p className="text-xs text-white/40">Prefer to skip the form?</p>
+                  <ul className="mt-3 space-y-3">
+                    {DIRECT_CONTACTS.map((link) => (
+                      <li key={link.href}>
+                        <Link
+                          href={link.href}
+                          className="text-sm text-white/70 transition-colors hover:text-marketing-gold-400"
+                        >
+                          {link.label}
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
             </div>
           ))}
         </div>
