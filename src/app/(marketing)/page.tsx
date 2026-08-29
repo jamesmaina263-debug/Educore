@@ -18,6 +18,9 @@ import {
   WifiOff,
   Smartphone,
   Landmark,
+  Lock,
+  KeyRound,
+  ScrollText,
 } from "lucide-react";
 
 import { MarketingButton } from "@/components/marketing/button";
@@ -26,6 +29,8 @@ import { Section } from "@/components/marketing/section";
 import { Reveal } from "@/components/marketing/reveal";
 import { DashboardFrame } from "@/components/marketing/dashboard-frame";
 import { FeatureCard } from "@/components/marketing/feature-card";
+import { PricingCard } from "@/components/marketing/pricing-card";
+import { PLANS } from "./pricing/page";
 
 const PLATFORM_MODULES = [
   { icon: UserPlus, title: "Admissions", description: "From inquiry to enrollment, tracked in one pipeline instead of scattered forms and phone calls." },
@@ -77,6 +82,31 @@ const ROLES = [
   { role: "Students", value: "A clearer academic record, and a school that runs on time because the back office finally does too." },
 ];
 
+// Same verified claims as /security — see that page's source note: every
+// item here was checked directly against the live codebase (RLS policies,
+// SECURITY DEFINER search_path pinning, audit log usage), not asserted from
+// memory. No compliance certification is implied.
+const SECURITY_POINTS = [
+  {
+    icon: Lock,
+    title: "One school's data never appears in another's",
+    description:
+      "Every school's records are isolated at the database level by row-level security policies, not just filtered in the app's interface.",
+  },
+  {
+    icon: KeyRound,
+    title: "Role-based permissions, not all-or-nothing accounts",
+    description:
+      "Staff accounts hold only the permissions their role needs — a teacher's account can't reach payroll unless the school owner explicitly grants it.",
+  },
+  {
+    icon: ScrollText,
+    title: "An audit log, not a silent system",
+    description:
+      "Sensitive actions are recorded to an audit log a school owner can review, rather than disappearing the moment they happen.",
+  },
+];
+
 const TRUST_POINTS = [
   { icon: Landmark, title: "M-Pesa built in", description: "Fee payments reconcile automatically instead of being matched by hand against a paper ledger." },
   { icon: ShieldCheck, title: "Isolated per school", description: "Every school's data is architecturally separated at the database level — one school's records are never visible to another." },
@@ -109,16 +139,17 @@ export default function MarketingHomePage() {
     <>
       {/* 1 & 2 & 3 & 4 — Hero: value proposition, primary/secondary CTA, Dashboard Frame */}
       <Section tone="navy" className="pt-16 sm:pt-20">
-        <div className="grid items-center gap-16 lg:grid-cols-2">
+        <div className="grid items-center gap-16 lg:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)]">
           <Reveal>
-            <Eyebrow tone="light">School Management, Unified</Eyebrow>
+            <Eyebrow tone="light">Intelligent School Management</Eyebrow>
             <h1 className="mt-5 text-4xl font-extrabold leading-[1.1] tracking-tight sm:text-5xl lg:text-[3.25rem]">
-              Every part of running a school, on one connected platform.
+              Run your entire school from one intelligent platform.
             </h1>
             <p className="mt-6 max-w-lg text-lg text-white/70">
-              EduCore brings admissions, academics, finance, attendance, and
-              parent communication into a single system — so your team stops
-              reconciling spreadsheets and starts running the school.
+              EduCore connects admissions, academics, finance, attendance,
+              communication, and school operations in one secure platform —
+              giving your team one place to manage the school and your
+              parents one reliable way to stay connected.
             </p>
             <div className="mt-9 flex flex-wrap items-center gap-4">
               <MarketingButton size="lg" asChild>
@@ -127,9 +158,12 @@ export default function MarketingHomePage() {
                 </Link>
               </MarketingButton>
               <MarketingButton size="lg" variant="outline-on-dark" asChild>
-                <Link href="/platform">Explore EduCore</Link>
+                <Link href="/platform">See How It Works</Link>
               </MarketingButton>
             </div>
+            <p className="mt-6 text-xs font-medium uppercase tracking-[0.14em] text-white/40">
+              Built for modern schools &bull; Secure &bull; Cloud-based &bull; Scalable
+            </p>
           </Reveal>
 
           <Reveal delayMs={150}>
@@ -277,12 +311,74 @@ export default function MarketingHomePage() {
         </div>
       </Section>
 
+      {/* Security & Trust — condensed from /security, same verified claims */}
+      <Section tone="navy">
+        <Reveal>
+          <div className="flex flex-col items-start justify-between gap-6 sm:flex-row sm:items-end">
+            <div>
+              <Eyebrow tone="light">Security &amp; Trust</Eyebrow>
+              <h2 className="mt-4 max-w-xl text-3xl font-extrabold tracking-tight sm:text-4xl">
+                Student and financial records deserve more than a shared login.
+              </h2>
+            </div>
+            <Link
+              href="/security"
+              className="flex items-center gap-1.5 text-sm font-medium text-marketing-gold-400 hover:text-marketing-gold-300"
+            >
+              How security works <ArrowRight className="h-3.5 w-3.5" />
+            </Link>
+          </div>
+        </Reveal>
+        <div className="mt-10 grid gap-4 sm:grid-cols-3">
+          {SECURITY_POINTS.map((s, i) => (
+            <Reveal key={s.title} delayMs={i * 60}>
+              <FeatureCard tone="navy" icon={s.icon} title={s.title} description={s.description} />
+            </Reveal>
+          ))}
+        </div>
+      </Section>
+
+      {/* Pricing — same real plan data as /pricing */}
+      <Section tone="canvas">
+        <Reveal>
+          <div className="flex flex-col items-start justify-between gap-6 sm:flex-row sm:items-end">
+            <div>
+              <Eyebrow tone="dark">Pricing</Eyebrow>
+              <h2 className="mt-4 max-w-xl text-3xl font-extrabold tracking-tight text-marketing-navy-950 sm:text-4xl">
+                Three plans. Scaled to how many students you actually have.
+              </h2>
+            </div>
+            <Link
+              href="/pricing"
+              className="flex items-center gap-1.5 text-sm font-medium text-marketing-blue hover:text-marketing-blue/80"
+            >
+              See full plan details <ArrowRight className="h-3.5 w-3.5" />
+            </Link>
+          </div>
+        </Reveal>
+        <div className="mt-10 grid gap-6 lg:grid-cols-3">
+          {PLANS.map((plan, i) => (
+            <Reveal key={plan.name} delayMs={i * 60}>
+              <PricingCard
+                name={plan.name}
+                tagline={plan.tagline}
+                studentCap={plan.studentCap}
+                billingNote={plan.billingNote}
+                features={plan.features}
+                ctaLabel={plan.ctaLabel}
+                ctaHref="/contact"
+              />
+            </Reveal>
+          ))}
+        </div>
+      </Section>
+
       {/* 10 — Final conversion CTA */}
       <Section tone="navy">
         <Reveal className="flex flex-col items-center gap-6 text-center">
           <Eyebrow tone="light">Get Started</Eyebrow>
           <h2 className="max-w-2xl text-3xl font-extrabold tracking-tight sm:text-4xl">
-            See EduCore running your school&rsquo;s own workflows.
+            Ready to run your school smarter?
           </h2>
           <p className="max-w-xl text-white/65">
             A demo is built around your admissions, fees, and academics
