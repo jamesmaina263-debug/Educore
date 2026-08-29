@@ -59,9 +59,13 @@ export default function PrivacyPage() {
               If you submit the contact/demo request form on this site, we
               collect the information you provide: your name, school name,
               role, email address, and phone number and message if you choose
-              to include them. We do not collect this information anywhere
-              else on the marketing site — pages you simply browse do not
-              submit any personal information to us.
+              to include them. If you arrived via a marketing link containing
+              campaign parameters (for example, from an ad or a shared
+              link), we also record which campaign referred you at the time
+              you submit the form, so we understand which channels are
+              helpful. We do not collect this information anywhere else on
+              the marketing site — pages you simply browse do not submit any
+              personal information to us.
             </p>
           </div>
 

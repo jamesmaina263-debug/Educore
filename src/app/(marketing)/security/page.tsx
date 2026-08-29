@@ -114,11 +114,12 @@ export default function SecurityPage() {
           <Reveal delayMs={80}>
             <Eyebrow tone="light">Dependencies</Eyebrow>
             <h2 className="mt-4 text-2xl font-extrabold tracking-tight sm:text-3xl">
-              Kept current, checked before every release.
+              Reviewed for known vulnerabilities.
             </h2>
             <p className="mt-4 text-white/70">
-              Third-party packages are checked for known vulnerabilities as
-              part of the build process before code ships.
+              Third-party packages are reviewed for known vulnerabilities as
+              part of our security process. Automated scanning on every
+              change is on our roadmap, not yet in place.
             </p>
           </Reveal>
         </div>

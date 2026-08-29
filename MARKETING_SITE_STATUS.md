@@ -50,7 +50,13 @@ Some session(s) — not this line of continuity, and never logged here — did s
 - The new attribution migration (`*_marketing_demo_requests_attribution.sql`) only adds 3 nullable columns to the existing isolated, insert-only-RLS table from Phase 8 — no new table, no RLS change, no PII beyond what the form already collects.
 - All 4 new routes are present in `NEVER_PREFIX`.
 
-**What this session did NOT do:** a line-by-line content/copy audit of the new pages (`/privacy`, `/terms`, `/security`, `/finance-fees`) for the "never invent, verify before claiming" ground rule, or confirm the EduCore Connect / Timetable / NEMIS additions to Solutions were grep-verified against real modules the way earlier phases were. **Flag this to the owner** — this work skipped the greenlight policy (no explicit approval checkpoint between these batches, unlike every phase before it), and its content hasn't been independently verified the way Phases 1–9 were.
+**Content verification — done in this session (2026-08-29).** Read all 4 new pages in full, plus the EduCore Connect and Timetable/NEMIS additions to Platform/Solutions:
+- `/terms`, `/finance-fees`, EduCore Connect, and Timetable/NEMIS: all accurate. Connect independently re-verified against `(app)/connect/actions.ts` (category enum, resolved_at — matches exactly). Timetable's double-booking claim re-verified against `lib/timetable/auto-generate.ts`. Payroll's NSSF/SHIF/Housing-Levy/PAYE claim re-verified against `(app)/payroll`.
+- `/security` had one overstated claim: "third-party packages checked for known vulnerabilities as part of the build process before code ships" — CI (`.github/workflows/ci.yml`) has no `npm audit` step and there's no `dependabot.yml`, so this wasn't actually automated. **Fixed**: reworded to "reviewed... as part of our security process. Automated scanning on every change is on our roadmap, not yet in place." — honest about current state.
+- `/privacy`'s "What we collect" section didn't mention that UTM/campaign attribution (from the Phase 11 work) is also stored alongside form submissions when present. **Fixed**: added a sentence disclosing this, verified against `src/lib/attribution.ts` (client-side only until form submit, first-touch, no third-party transmission) and the migration that added the columns.
+- Re-verified after both fixes: `tsc` clean, `eslint` 0 new, 86/86 tests, `next build` clean, both pages still prerendered static.
+
+**Process note, separate from the content check above:** the greenlight policy (one phase, explicit owner approval before the next) was still skipped for the whole undocumented batch — that's a process fact this content check doesn't retroactively fix. Content is now verified accurate; it just wasn't approved phase-by-phase as it was built.
 
 ### Phase 1 — Routing audit & fix (commit `e240195`)
 - **Finding:** the app has a proxy (`src/proxy.ts` → `src/lib/school-slug-routing.ts`) that treats any unrecognized top-level path segment as a school slug and silently rewrites it to `/dashboard`. Without a fix, every new marketing route would have silently rendered the dashboard (then bounced to login) instead of marketing content.
@@ -181,7 +187,7 @@ Layout rhythm: `Section` component alternates `tone="canvas"` / `tone="navy"`, n
 
 ## 6. Complete roadmap — remaining phases
 
-**Phases 1–9 (this doc's original numbering) are done and verified.** Beyond that, substantial additional work happened but was never logged or explicitly approved phase-by-phase — see Section 3a. **A proper, owner-approved Phase 10 final audit has NOT genuinely happened yet** — despite the "Phase 10" label appearing in some of the undocumented commits, that was ad hoc fix work, not the structured, signed-off final pass this roadmap always intended. Do a real Phase 10 before merge, and as part of it, content-verify the pages/additions listed as unverified in Section 3a.
+**Phases 1–9 (this doc's original numbering) are done and verified.** The additional undocumented work from Section 3a has now had its content independently verified (2 issues found and fixed — see Section 3a) and its build re-confirmed clean. **What's genuinely still missing is a real, owner-approved Phase 10**: not content accuracy anymore, but the visual/UX/responsive/integration pass below, plus the owner's explicit sign-off before merge.
 
 ### Phase 10 — Final UX & quality audit
 Full pass across **everything currently on the branch**, not just the original Phases 1–9:
