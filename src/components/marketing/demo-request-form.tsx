@@ -30,7 +30,10 @@ export function DemoRequestForm() {
 
   if (state.status === "success") {
     return (
-      <div className="flex flex-col items-center rounded-xl border border-marketing-navy-950/10 bg-marketing-canvas px-8 py-12 text-center">
+      <div
+        role="status"
+        className="flex flex-col items-center rounded-xl border border-marketing-navy-950/10 bg-marketing-canvas px-8 py-12 text-center"
+      >
         <CheckCircle2 className="h-10 w-10 text-marketing-blue" strokeWidth={1.5} />
         <p className="mt-4 text-lg font-semibold text-marketing-navy-950">
           Thanks — we&apos;ve got it.
@@ -138,7 +141,9 @@ export function DemoRequestForm() {
       </Field>
 
       {state.status === "error" && (
-        <p className="text-sm font-medium text-destructive">{state.message}</p>
+        <p role="alert" className="text-sm font-medium text-destructive">
+          {state.message}
+        </p>
       )}
 
       <MarketingButton type="submit" size="lg" disabled={pending} className="w-full sm:w-auto">
