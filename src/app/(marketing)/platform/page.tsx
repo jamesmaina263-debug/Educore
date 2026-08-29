@@ -37,9 +37,9 @@ import { MiniFrame } from "@/components/marketing/mini-frame";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
-const TITLE = "Platform — EduCore";
+const TITLE = "School Management System Platform — EduCore Kenya";
 const DESCRIPTION =
-  "Every module EduCore runs for a school: academics, admissions, finance, operations, communication, and multi-campus tools, in one connected platform.";
+  "The school ERP modules EduCore runs for Kenyan schools: student management, academics, admissions, fees, and communication, in one connected school management software platform.";
 
 export const metadata: Metadata = {
   title: TITLE,

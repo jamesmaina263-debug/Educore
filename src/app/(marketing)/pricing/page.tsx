@@ -8,9 +8,9 @@ import { Section } from "@/components/marketing/section";
 import { Reveal } from "@/components/marketing/reveal";
 import { PricingCard } from "@/components/marketing/pricing-card";
 
-const TITLE = "Pricing — EduCore";
+const TITLE = "School Management System Pricing Kenya — EduCore";
 const DESCRIPTION =
-  "EduCore's three plans — Starter, Growth, and Enterprise — scale by student count and module coverage. Termly, per-student billing. Talk to us for a quote sized to your school.";
+  "EduCore's three plans — Starter, Growth, and Enterprise — scale by student count and module coverage. Termly, per-student billing. Talk to us for a school management software quote sized to your school.";
 
 export const metadata: Metadata = {
   title: TITLE,

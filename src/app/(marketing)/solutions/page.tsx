@@ -20,9 +20,9 @@ import { MiniFrame } from "@/components/marketing/mini-frame";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
-const TITLE = "Solutions — EduCore";
+const TITLE = "School Administration Software by Role — EduCore Kenya";
 const DESCRIPTION =
-  "What EduCore changes day to day for School Owners, Principals, Administrators, Teachers, Finance Teams, Parents, and Students — role by role.";
+  "How EduCore's school administration software changes day to day for School Owners, Principals, Administrators, Teachers, Finance Teams, Parents, and Students — role by role.";
 
 export const metadata: Metadata = {
   title: TITLE,

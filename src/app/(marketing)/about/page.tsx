@@ -7,9 +7,9 @@ import { Eyebrow } from "@/components/marketing/eyebrow";
 import { Section } from "@/components/marketing/section";
 import { Reveal } from "@/components/marketing/reveal";
 
-const TITLE = "About — EduCore";
+const TITLE = "About EduCore — School Management Software Built for Kenya";
 const DESCRIPTION =
-  "Why EduCore exists: one platform for the way schools actually run, instead of a patchwork of spreadsheets, WhatsApp groups, and paper registers.";
+  "Why EduCore exists: one school management system built for the way Kenyan schools actually run, instead of a patchwork of spreadsheets, WhatsApp groups, and paper registers.";
 
 export const metadata: Metadata = {
   title: TITLE,
