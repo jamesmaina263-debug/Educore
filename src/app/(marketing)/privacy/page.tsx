@@ -11,7 +11,7 @@ export const metadata: Metadata = {
   description: DESCRIPTION,
   alternates: { canonical: "/privacy" },
   openGraph: { title: TITLE, description: DESCRIPTION, url: "/privacy" },
-  twitter: { card: "summary", title: TITLE, description: DESCRIPTION },
+  twitter: { card: "summary_large_image", title: TITLE, description: DESCRIPTION },
 };
 
 // Every statement on this page describes something verifiable in the

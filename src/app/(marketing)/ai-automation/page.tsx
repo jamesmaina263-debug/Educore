@@ -27,7 +27,7 @@ export const metadata: Metadata = {
   description: DESCRIPTION,
   alternates: { canonical: "/ai-automation" },
   openGraph: { title: TITLE, description: DESCRIPTION, url: "/ai-automation" },
-  twitter: { card: "summary", title: TITLE, description: DESCRIPTION },
+  twitter: { card: "summary_large_image", title: TITLE, description: DESCRIPTION },
 };
 
 const AI_DRAFTED = [

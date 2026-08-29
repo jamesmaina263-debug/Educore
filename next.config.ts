@@ -64,6 +64,23 @@ const nextConfig: NextConfig = {
           { key: "X-Content-Type-Options", value: "nosniff" },
           { key: "X-Frame-Options", value: "DENY" },
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+          // Vercel serves everything over HTTPS already; this additionally
+          // tells browsers to never even attempt plain HTTP on repeat visits.
+          // 2 years + preload is the standard baseline for a domain that has
+          // no legitimate HTTP use case (this app has none).
+          {
+            key: "Strict-Transport-Security",
+            value: "max-age=63072000; includeSubDomains; preload",
+          },
+          // Disables browser features this app never uses. Deliberately
+          // conservative (deny-all) rather than allow-listing self for
+          // features already unused, since enabling something later is a
+          // one-line change and the safer default is off.
+          {
+            key: "Permissions-Policy",
+            value:
+              "camera=(), microphone=(), geolocation=(), interest-cohort=()",
+          },
           { key: "Content-Security-Policy-Report-Only", value: csp },
         ],
       },

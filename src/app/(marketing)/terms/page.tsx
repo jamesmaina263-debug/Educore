@@ -11,7 +11,7 @@ export const metadata: Metadata = {
   description: DESCRIPTION,
   alternates: { canonical: "/terms" },
   openGraph: { title: TITLE, description: DESCRIPTION, url: "/terms" },
-  twitter: { card: "summary", title: TITLE, description: DESCRIPTION },
+  twitter: { card: "summary_large_image", title: TITLE, description: DESCRIPTION },
 };
 
 // As with /privacy: factual, conservative, and explicitly flagged as

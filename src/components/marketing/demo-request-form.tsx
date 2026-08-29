@@ -1,10 +1,11 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useEffect, useState } from "react";
 import { CheckCircle2 } from "lucide-react";
 
 import { submitDemoRequest, type DemoRequestState } from "@/app/(marketing)/contact/actions";
 import { MarketingButton } from "@/components/marketing/button";
+import { trackEvent } from "@/components/marketing/analytics";
 
 const initialState: DemoRequestState = { status: "idle" };
 
@@ -19,6 +20,13 @@ const ROLE_OPTIONS = [
 
 export function DemoRequestForm() {
   const [state, formAction, pending] = useActionState(submitDemoRequest, initialState);
+  const [renderedAt] = useState(() => Date.now());
+
+  useEffect(() => {
+    if (state.status === "success") {
+      trackEvent("Demo Request Submitted");
+    }
+  }, [state.status]);
 
   if (state.status === "success") {
     return (
@@ -36,6 +44,26 @@ export function DemoRequestForm() {
 
   return (
     <form action={formAction} className="flex flex-col gap-5">
+      {/* Bot mitigation, not a visible/functional field for real users:
+          - honeypot ("company_website") is hidden from sighted users via CSS
+            and never announced by a screen reader (aria-hidden + tabIndex -1
+            + hidden from the accessibility tree), so a human never fills it,
+            but most naive form-filling bots do.
+          - "rendered_at" lets the server reject submissions completed faster
+            than any human could plausibly fill this form (see actions.ts).
+          Neither collects anything from real visitors or touches product data. */}
+      <div aria-hidden="true" className="absolute left-[-9999px] top-auto h-px w-px overflow-hidden">
+        <label htmlFor="company_website">Company website</label>
+        <input
+          id="company_website"
+          name="company_website"
+          type="text"
+          tabIndex={-1}
+          autoComplete="off"
+        />
+      </div>
+      <input type="hidden" name="rendered_at" value={renderedAt} />
+
       <div className="grid gap-5 sm:grid-cols-2">
         <Field label="Your name" htmlFor="name">
           <input

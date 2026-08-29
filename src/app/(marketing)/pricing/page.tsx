@@ -17,7 +17,7 @@ export const metadata: Metadata = {
   description: DESCRIPTION,
   alternates: { canonical: "/pricing" },
   openGraph: { title: TITLE, description: DESCRIPTION, url: "/pricing" },
-  twitter: { card: "summary", title: TITLE, description: DESCRIPTION },
+  twitter: { card: "summary_large_image", title: TITLE, description: DESCRIPTION },
 };
 
 // Tier names, student caps, module coverage, and billing cadence below are
