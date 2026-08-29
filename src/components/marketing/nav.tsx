@@ -1,6 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { MarketingButton } from "@/components/marketing/button";
+import { MobileNav } from "@/components/marketing/mobile-nav";
 
 const NAV_LINKS = [
   { href: "/platform", label: "Platform" },
@@ -49,6 +50,7 @@ export function MarketingNav() {
           <MarketingButton asChild size="sm">
             <Link href="/contact">Book a Demo</Link>
           </MarketingButton>
+          <MobileNav links={NAV_LINKS} />
         </div>
       </div>
     </header>
