@@ -1,7 +1,8 @@
 # EduCore Marketing Site — Status & Roadmap
 
-**Last updated:** 2026-08-28 (Phase 9 rebased onto Phase 8, both now done)
-**Branch:** `feature/marketing-site` — **NOT merged to `main`**. Merge only after Phase 10 (final audit) is complete and explicitly approved by the project owner.
+**Last updated:** 2026-08-29 (post-Phase-9 audit-and-remediation pass discovered and verified — see Section 3a)
+**Branch:** `feature/marketing-site` — **NOT merged to `main`**. Merge only after a proper, explicitly-approved final audit is complete. Confirmed via `git merge-base` this branch is still not an ancestor of `main` as of 2026-08-29.
+**⚠️ Branch history was rebased/force-pushed** at some point after Phase 9 closed out (all commit hashes on this branch changed, content preserved — verified nothing was lost). If a session's local clone predates this, `git fetch` + `git reset --hard origin/feature/marketing-site` before doing anything else, or drift-checks will misfire.
 **Live preview (latest):** deploys automatically from this branch on every push, via Vercel's GitHub integration. Get the current URL from Vercel → Deployments → filter by branch `feature/marketing-site`, or ask whichever Claude session is active to fetch the latest one. This is a preview deployment (`target: null`), not production — it never affects the live site.
 
 If you are a Claude session picking this up fresh: **read this whole document before writing any code.** It tells you what already exists, what's already been decided, and exactly what's left. Re-doing anything below wastes the user's time and risks conflicting with work already reviewed and approved.
@@ -16,7 +17,7 @@ A public marketing website for EduCore (a school management SaaS), added to the 
 
 | Decision | What was decided |
 |---|---|
-| Routing | `/` = marketing homepage (not a redirect to `/dashboard`). `/platform`, `/solutions`, `/ai-automation`, `/pricing`, `/about`, `/contact`, `/faq` = marketing pages. All existing app routes (`/login`, `/dashboard`, everything under the `(app)` route group) unchanged. |
+| Routing | `/` = marketing homepage (not a redirect to `/dashboard`). Marketing pages: `/platform`, `/solutions`, `/ai-automation`, `/pricing`, `/about`, `/contact`, `/faq` (original 7), plus `/privacy`, `/terms`, `/finance-fees`, `/security` (added in the undocumented audit pass — see Section 3a). All 11 are in `NEVER_PREFIX`. All existing app routes (`/login`, `/dashboard`, everything under the `(app)` route group) unchanged. |
 | Brand colours | Navy, gold, and blue (sampled from the actual logo), **not green**. See token list in Section 4. |
 | AI page route name | `/ai-automation`, not `/ai` — `/ai` already exists as a real authenticated module (`(app)/ai/`) and would be a build-breaking collision. |
 | Content honesty | Every module, AI feature, and "why EduCore" claim on the site must correspond to something that actually exists in the codebase — verified by grep, not assumed. No invented statistics, testimonials, customer logos, or planned-but-unbuilt features presented as live. |
@@ -28,6 +29,28 @@ A public marketing website for EduCore (a school management SaaS), added to the 
 **Note on ordering:** Phase 9 was built before Phase 8 landed, because a separate concurrent session was handling Phase 8 (About & Contact) at the time. Mid-Phase-9, that session pushed its work (About/Contact pages, a new isolated `marketing_demo_requests` table with insert-only RLS, plus a factual correction to the Solutions page's student-portal claim). This session rebased its Phase 9 commit cleanly on top with no conflicts, then updated `sitemap.ts` (added `/about`/`/contact`, which had deliberately been left out until they were real) and added OG/Twitter/canonical metadata to the About/Contact pages for consistency with the rest of Phase 9's SEO work, since Phase 8 predated that.
 
 All of this is committed to `feature/marketing-site`, verified (typecheck + lint + full existing test suite + full production build + live preview-deployment fetches confirming actual runtime behavior, not just code review), and reviewed/approved by the project owner at each step.
+
+## 3a. ⚠️ Undocumented work discovered after Phase 9 (2026-08-29)
+
+Some session(s) — not this line of continuity, and never logged here — did substantial additional work on this branch after Phase 9 closed out, then force-pushed a rebase onto the latest `main` on top of it. This was **discovered**, not planned by the session that found it: the branch's own commit log was the only record: `git log --oneline d0928b5..997a336` (old hash `d0928b5` = this doc's last known-good Phase 9 checkpoint; content-identical commit now lives at a different hash post-rebase).
+
+**What actually happened, in order** (17 commits, own "Phase 1–11" fix-batch numbering — ⚠️ **not the same phases as this doc's Section 6 roadmap**, a separate audit-severity numbering that happens to reuse 1–11):
+- P0/P1 severity fixes across the whole site: legal pages, structured data (JSON-LD), OG image generation (`opengraph-image.tsx` — resolves the "no OG image" gap flagged at the end of the real Phase 9), form hardening, security headers, an analytics integration point
+- SEO keyword mapping / reconciliation passes on existing pages
+- **3 new marketing pages, not in the original 7-route plan:** `/privacy`, `/terms`, `/security`, plus `/finance-fees` (4 new routes total) — all correctly added to `NEVER_PREFIX`
+- Mobile nav menu, a real `/_not-found` page, footer link reorganization
+- Content additions to existing pages: EduCore Connect added to Platform/Solutions, Timetable Management + NEMIS added to Solutions
+- Rate-limiting on the demo-request form
+- **An unplanned "Phase 11"**: CTA click tracking + first-touch marketing attribution (UTM params) on demo requests, plus a Plausible analytics integration (cookie-less, no-op until an env var is manually set, doesn't collect PII)
+
+**What this session verified about that work** (did not review every line, but checked the things that matter most):
+- `git merge-base --is-ancestor` confirms the branch is **not merged into `main`** — no merge-policy violation.
+- The rebase preserved content — verified by commit message + diff, not just trusting hashes.
+- Current full build is clean: `tsc --noEmit`, `eslint` (same 5 pre-existing warnings, 0 new), full test suite (86/86), `next build` (all 15 marketing/legal routes prerendered static, zero collisions) — all re-run fresh against the current `HEAD` as of this update, not assumed from commit messages.
+- The new attribution migration (`*_marketing_demo_requests_attribution.sql`) only adds 3 nullable columns to the existing isolated, insert-only-RLS table from Phase 8 — no new table, no RLS change, no PII beyond what the form already collects.
+- All 4 new routes are present in `NEVER_PREFIX`.
+
+**What this session did NOT do:** a line-by-line content/copy audit of the new pages (`/privacy`, `/terms`, `/security`, `/finance-fees`) for the "never invent, verify before claiming" ground rule, or confirm the EduCore Connect / Timetable / NEMIS additions to Solutions were grep-verified against real modules the way earlier phases were. **Flag this to the owner** — this work skipped the greenlight policy (no explicit approval checkpoint between these batches, unlike every phase before it), and its content hasn't been independently verified the way Phases 1–9 were.
 
 ### Phase 1 — Routing audit & fix (commit `e240195`)
 - **Finding:** the app has a proxy (`src/proxy.ts` → `src/lib/school-slug-routing.ts`) that treats any unrecognized top-level path segment as a school slug and silently rewrites it to `/dashboard`. Without a fix, every new marketing route would have silently rendered the dashboard (then bounced to login) instead of marketing content.
@@ -158,10 +181,10 @@ Layout rhythm: `Section` component alternates `tone="canvas"` / `tone="navy"`, n
 
 ## 6. Complete roadmap — remaining phases
 
-**Phases 1–9 are all done and verified** — see Section 3 for what was actually built and verified in each (Phase 9's live-preview fetch is the one open item, see its writeup). Pricing (Phase 7) is settled: real tier names/caps/modules shown, exact KES rates deliberately withheld per owner decision — don't re-ask this or re-litigate it. Only Phase 10 remains.
+**Phases 1–9 (this doc's original numbering) are done and verified.** Beyond that, substantial additional work happened but was never logged or explicitly approved phase-by-phase — see Section 3a. **A proper, owner-approved Phase 10 final audit has NOT genuinely happened yet** — despite the "Phase 10" label appearing in some of the undocumented commits, that was ad hoc fix work, not the structured, signed-off final pass this roadmap always intended. Do a real Phase 10 before merge, and as part of it, content-verify the pages/additions listed as unverified in Section 3a.
 
 ### Phase 10 — Final UX & quality audit
-Full pass across everything built in Phases 1–9:
+Full pass across **everything currently on the branch**, not just the original Phases 1–9:
 - Visual: premium feel, consistent spacing/typography/colour, balanced sections.
 - UX: intuitive nav, obvious CTAs, consistent cross-page patterns, good mobile interactions.
 - Technical: no broken routes/console errors/broken imports/duplicated components; confirm zero DB/API/auth changes beyond the Phase 1 `NEVER_PREFIX` addition and whatever Phase 8's contact-form backend decision required.
@@ -172,4 +195,4 @@ Full pass across everything built in Phases 1–9:
 
 ---
 
-**For the next session, in one sentence:** Phases 1–9 (routing fix, design system, homepage, platform, solutions, AI & automation, pricing, about/contact, FAQ & SEO) are all done, fully verified including live-preview fetches, and owner-approved on branch `feature/marketing-site`; start at Phase 10 (final UX & quality audit), follow the ground rules in Section 5, and do not merge to `main` until Phase 10 is explicitly signed off by the owner.
+**For the next session, in one sentence:** Phases 1–9 (this doc's numbering) are done and verified, but substantial additional undocumented work also landed on the branch afterward (new legal/security/finance pages, analytics/attribution, content additions — see Section 3a) that was never content-verified or explicitly approved phase-by-phase; the branch was also rebased onto `main` (safe, nothing lost, but re-sync via `git reset --hard origin/feature/marketing-site` if your clone predates this) — current full build is confirmed clean as of 2026-08-29, but a genuine, owner-approved Phase 10 final audit (including content-verifying Section 3a's additions) still needs to happen before merge to `main`.
