@@ -125,6 +125,8 @@ export default function SolutionsPage() {
               "Track every applicant from inquiry to enrollment in one pipeline, with a live status instead of a paper register.",
               "Keep one record per student that stays consistent across academics, attendance, health, and finance.",
               "Manage the staff directory and issue certificates from the same platform, without re-entering the same details twice.",
+              "Auto-generate a conflict-free timetable per stream — no teacher double-booked across two classes at once — then fine-tune individual slots by hand where it still needs a human call.",
+              "Generate NEMIS/KEMIS's ministry-format bulk-upload file straight from your student records instead of building it by hand. Kenya's NEMIS has no public submission API for schools, so you still upload the file yourself in the NEMIS portal — EduCore prepares it and tracks that it's done.",
             ]}
           />
         </Reveal>
