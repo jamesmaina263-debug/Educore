@@ -109,16 +109,17 @@ export default function MarketingHomePage() {
     <>
       {/* 1 & 2 & 3 & 4 — Hero: value proposition, primary/secondary CTA, Dashboard Frame */}
       <Section tone="navy" className="pt-16 sm:pt-20">
-        <div className="grid items-center gap-16 lg:grid-cols-2">
+        <div className="grid items-center gap-16 lg:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)]">
           <Reveal>
-            <Eyebrow tone="light">School Management, Unified</Eyebrow>
+            <Eyebrow tone="light">Intelligent School Management</Eyebrow>
             <h1 className="mt-5 text-4xl font-extrabold leading-[1.1] tracking-tight sm:text-5xl lg:text-[3.25rem]">
-              Every part of running a school, on one connected platform.
+              Run your entire school from one intelligent platform.
             </h1>
             <p className="mt-6 max-w-lg text-lg text-white/70">
-              EduCore brings admissions, academics, finance, attendance, and
-              parent communication into a single system — so your team stops
-              reconciling spreadsheets and starts running the school.
+              EduCore connects admissions, academics, finance, attendance,
+              communication, and school operations in one secure platform —
+              giving your team one place to manage the school and your
+              parents one reliable way to stay connected.
             </p>
             <div className="mt-9 flex flex-wrap items-center gap-4">
               <MarketingButton size="lg" asChild>
@@ -127,9 +128,12 @@ export default function MarketingHomePage() {
                 </Link>
               </MarketingButton>
               <MarketingButton size="lg" variant="outline-on-dark" asChild>
-                <Link href="/platform">Explore EduCore</Link>
+                <Link href="/platform">See How It Works</Link>
               </MarketingButton>
             </div>
+            <p className="mt-6 text-xs font-medium uppercase tracking-[0.14em] text-white/40">
+              Built for modern schools &bull; Secure &bull; Cloud-based &bull; Scalable
+            </p>
           </Reveal>
 
           <Reveal delayMs={150}>

@@ -54,8 +54,8 @@ export function DashboardFrame({ className }: { className?: string }) {
           </div>
 
           {[
+            { label: "Students", value: "812", tone: "default" as const },
             { label: "Attendance today", value: "96.2%", tone: "success" as const },
-            { label: "Fees collected", value: "KES 4.1M", tone: "info" as const },
             { label: "Open admissions", value: "23", tone: "warning" as const },
           ].map((stat) => (
             <div
@@ -66,8 +66,8 @@ export function DashboardFrame({ className }: { className?: string }) {
               <p
                 className={cn(
                   "mt-1 font-mono text-lg font-semibold",
+                  stat.tone === "default" && "text-foreground",
                   stat.tone === "success" && "text-success",
-                  stat.tone === "info" && "text-info",
                   stat.tone === "warning" && "text-warning",
                 )}
               >
@@ -75,6 +75,29 @@ export function DashboardFrame({ className }: { className?: string }) {
               </p>
             </div>
           ))}
+
+          <div className="col-span-3 grid grid-cols-2 gap-3">
+            {[
+              { label: "Fees collected", value: "KES 4.1M", tone: "info" as const },
+              { label: "Outstanding fees", value: "KES 620K", tone: "danger" as const },
+            ].map((stat) => (
+              <div
+                key={stat.label}
+                className="rounded-lg border border-border bg-card p-3"
+              >
+                <p className="text-[11px] text-muted-foreground">{stat.label}</p>
+                <p
+                  className={cn(
+                    "mt-1 font-mono text-lg font-semibold",
+                    stat.tone === "info" && "text-info",
+                    stat.tone === "danger" && "text-destructive",
+                  )}
+                >
+                  {stat.value}
+                </p>
+              </div>
+            ))}
+          </div>
 
           <div className="col-span-3 rounded-lg border border-border bg-card p-3">
             <p className="mb-2 text-[11px] text-muted-foreground">Fee collection — last 6 terms</p>
