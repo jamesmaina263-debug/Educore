@@ -38,29 +38,17 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y postgresql-client-17
 
-      # Diagnostic-only addition (temporary, until this run is confirmed
-      # green): surfaces pg_dump's real stderr as a GitHub annotation.
-      # GitHub's default failure annotation for a plain `run:` step is just
-      # "Process completed with exit code 1" with no detail, and this
-      # sandbox's network access can't reach the raw log storage host to
-      # read the full output any other way.
       - name: Dump database
         run: |
-          set +e
-          # Explicit versioned path, not bare `pg_dump` -- confirmed via a
-          # live diagnostic run that ubuntu-latest already ships a
-          # PGDG-built v16 pg_dump that stays first on PATH even after
-          # installing postgresql-client-17 alongside it, so PATH
-          # resolution alone doesn't guarantee which version actually
-          # runs. This sidesteps that entirely.
+          # Explicit versioned path, not bare `pg_dump` -- ubuntu-latest
+          # already ships a PGDG-built v16 pg_dump that stays first on
+          # PATH even after installing postgresql-client-17 alongside it
+          # (confirmed via a live diagnostic run), so PATH resolution
+          # alone doesn't guarantee which version actually runs. Calling
+          # the versioned binary directly sidesteps that.
           /usr/lib/postgresql/17/bin/pg_dump "${{ secrets.SUPABASE_DB_URL }}" \
             --no-owner --no-privileges --format=custom \
-            --file=educore-backup-$(date +%Y-%m-%d).dump 2>pg_dump_stderr.log
-          status=$?
-          if [ $status -ne 0 ]; then
-            echo "::error::pg_dump exited $status: $(tr '\n' ' ' < pg_dump_stderr.log | head -c 1500)"
-            exit $status
-          fi
+            --file=educore-backup-$(date +%Y-%m-%d).dump
 
       - name: Upload backup artifact
         uses: actions/upload-artifact@v4
