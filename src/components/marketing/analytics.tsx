@@ -43,8 +43,23 @@ export function MarketingAnalytics() {
   // the link's own visible text (label), so "nav Book a Demo" and "pricing
   // Book a Demo" show up distinctly in Plausible's custom-event breakdown
   // without needing per-CTA prop plumbing.
+  //
+  // Covers three link shapes, each its own event: /contact (the form),
+  // wa.me (WhatsApp -- also the link the visible phone number itself uses,
+  // there is no separate tel: link), and mailto: (email). No "Phone Click"
+  // event exists separately from "WhatsApp CTA Click" -- confirmed with
+  // the project owner that the phone number stays a WhatsApp-only link.
   useEffect(() => {
     if (!PLAUSIBLE_DOMAIN) return;
+
+    function eventNameFor(href: string): string | null {
+      if (href.startsWith("/contact")) return "Contact CTA Click";
+      if (href.startsWith("https://wa.me/") || href.startsWith("http://wa.me/")) {
+        return "WhatsApp CTA Click";
+      }
+      if (href.startsWith("mailto:")) return "Email CTA Click";
+      return null;
+    }
 
     function handleClick(event: MouseEvent) {
       const target = event.target;
@@ -52,9 +67,10 @@ export function MarketingAnalytics() {
       const anchor = target.closest("a[href]");
       if (!anchor) return;
       const href = anchor.getAttribute("href") ?? "";
-      if (!href.startsWith("/contact")) return;
-      const label = anchor.textContent?.trim().replace(/\s+/g, " ").slice(0, 60) || "Contact CTA";
-      trackEvent("Contact CTA Click", { location: window.location.pathname, label });
+      const eventName = eventNameFor(href);
+      if (!eventName) return;
+      const label = anchor.textContent?.trim().replace(/\s+/g, " ").slice(0, 60) || eventName;
+      trackEvent(eventName, { location: window.location.pathname, label });
     }
 
     document.addEventListener("click", handleClick);

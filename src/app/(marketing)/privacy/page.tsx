@@ -76,9 +76,9 @@ export default function PrivacyPage() {
             <p className="mt-3 text-marketing-navy-900/75">
               Demo request submissions are stored in a dedicated database
               table, separate from any school&apos;s student, academic, or
-              financial records, and are only ever written to, never read
-              back, by this website. Access is restricted to the EduCore
-              team for the purpose of following up on your enquiry.
+              financial records. This website itself never reads submissions
+              back — only members of the EduCore team with platform-admin
+              access can view them, in order to follow up on your enquiry.
             </p>
           </div>
 
@@ -107,12 +107,26 @@ export default function PrivacyPage() {
 
           <div>
             <h2 className="text-xl font-semibold text-marketing-navy-950">
+              Analytics
+            </h2>
+            <p className="mt-3 text-marketing-navy-900/75">
+              This site uses Plausible to understand how visitors use it —
+              which pages get traffic and which links get clicked. Plausible
+              is cookie-less and does not track you individually across
+              websites or build a personal profile; it does not collect your
+              IP address, device fingerprint, or any personal data.
+            </p>
+          </div>
+
+          <div>
+            <h2 className="text-xl font-semibold text-marketing-navy-950">
               Cookies
             </h2>
             <p className="mt-3 text-marketing-navy-900/75">
               This marketing website does not currently set analytics or
-              advertising cookies. If that changes, this page will be
-              updated first.
+              advertising cookies — Plausible, described above, is
+              cookie-less by design, which is why no cookie-consent banner is
+              shown. If that changes, this page will be updated first.
             </p>
           </div>
 
