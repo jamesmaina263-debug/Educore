@@ -17,8 +17,26 @@ jobs:
             exit 1
           fi
 
-      - name: Install postgresql-client
-        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+      # Pinned to match the Supabase project's server version (17.x, confirmed
+      # via `Supabase:get_project` -- postgres_engine: "17") rather than
+      # whatever `postgresql-client` Ubuntu's default repo happens to carry.
+      # pg_dump refuses (hard failure, not a warning) to dump from a server
+      # newer than itself -- ubuntu-latest is Ubuntu 24.04 (noble), whose
+      # default apt repo carries client v16, one major version behind. That
+      # mismatch is the confirmed root cause of the last two nights' runs
+      # both failing at exactly this step with "Process completed with exit
+      # code 1." Installs from PostgreSQL's own apt repo (apt.postgresql.org)
+      # instead, which carries every still-supported major version explicitly
+      # versioned as its own package (postgresql-client-17), so this stays
+      # correct even after Ubuntu's own default client version moves again.
+      - name: Install postgresql-client-17
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y wget gnupg lsb-release ca-certificates
+          wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo gpg --dearmor -o /usr/share/keyrings/postgresql.gpg
+          echo "deb [signed-by=/usr/share/keyrings/postgresql.gpg] https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" | sudo tee /etc/apt/sources.list.d/pgdg.list
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client-17
 
       - name: Dump database
         run: |
