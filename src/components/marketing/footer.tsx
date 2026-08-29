@@ -48,6 +48,7 @@ export function MarketingFooter() {
             <p className="mt-4 max-w-xs text-sm text-white/60">
               School operations, brought into one connected platform.
             </p>
+            <p className="mt-4 text-xs text-white/40">Nairobi, Kenya</p>
           </div>
 
           {FOOTER_GROUPS.map((group) => (

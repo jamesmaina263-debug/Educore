@@ -34,6 +34,9 @@ export default function AboutPage() {
           with tools that were never built to talk to each other. EduCore is
           what we built instead.
         </p>
+        <p className="mt-4 text-sm font-medium text-white/50">
+          Based in Nairobi, Kenya.
+        </p>
       </Section>
 
       {/* 2 — The problem */}
