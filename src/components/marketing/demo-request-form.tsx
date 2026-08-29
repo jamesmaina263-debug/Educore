@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useState } from "react";
+import { useActionState, useEffect, useRef, useState } from "react";
 import { CheckCircle2 } from "lucide-react";
 
 import { submitDemoRequest, type DemoRequestState } from "@/app/(marketing)/contact/actions";
@@ -35,6 +35,20 @@ export function DemoRequestForm() {
     }
   }, [state.status]);
 
+  // Fires once, on the visitor's first real interaction with any field --
+  // lets the funnel spec's "Demo Form Started -> Demo Request Submitted"
+  // stage measure abandonment, not just completions. Ignores the honeypot
+  // and hidden bot-mitigation fields (they're never focused by a real
+  // visitor, and a bot filling them shouldn't count as a real form start).
+  const startedRef = useRef(false);
+  function handleFormFocus(event: React.FocusEvent<HTMLFormElement>) {
+    if (startedRef.current) return;
+    const targetName = (event.target as HTMLElement).getAttribute("name");
+    if (targetName === "company_website") return;
+    startedRef.current = true;
+    trackEvent("Demo Form Started");
+  }
+
   if (state.status === "success") {
     return (
       <div
@@ -53,7 +67,7 @@ export function DemoRequestForm() {
   }
 
   return (
-    <form action={formAction} className="flex flex-col gap-5">
+    <form action={formAction} onFocusCapture={handleFormFocus} className="flex flex-col gap-5">
       {/* Bot mitigation, not a visible/functional field for real users:
           - honeypot ("company_website") is hidden from sighted users via CSS
             and never announced by a screen reader (aria-hidden + tabIndex -1
