@@ -180,9 +180,10 @@ export default function MarketingHomePage() {
             Most schools run on five systems that were never meant to talk to each other.
           </h2>
           <p className="mt-5 max-w-2xl text-lg text-marketing-navy-900/70">
-            A fee spreadsheet here, a WhatsApp group there, an admissions
-            notebook at the front desk, a separate payroll process at month
-            end. Nothing is wrong with any one of them — the problem is that
+            A fee spreadsheet here, a WhatsApp group there, a paper
+            attendance register in every classroom, an admissions notebook
+            at the front desk, a separate payroll process at month end.
+            Nothing is wrong with any one of them — the problem is that
             none of them share the same picture of the school.
           </p>
         </Reveal>
