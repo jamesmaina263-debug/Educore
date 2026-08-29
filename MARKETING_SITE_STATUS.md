@@ -1,11 +1,12 @@
-# EduCore Marketing Site — Status & Roadmap
+# EduCore Marketing Site — Status & Roadmap (historical engineering log)
 
-**Last updated:** 2026-08-29 (post-Phase-9 audit-and-remediation pass discovered and verified — see Section 3a)
-**Branch:** `feature/marketing-site` — **NOT merged to `main`**. Merge only after a proper, explicitly-approved final audit is complete. Confirmed via `git merge-base` this branch is still not an ancestor of `main` as of 2026-08-29.
-**⚠️ Branch history was rebased/force-pushed** at some point after Phase 9 closed out (all commit hashes on this branch changed, content preserved — verified nothing was lost). If a session's local clone predates this, `git fetch` + `git reset --hard origin/feature/marketing-site` before doing anything else, or drift-checks will misfire.
-**Live preview (latest):** deploys automatically from this branch on every push, via Vercel's GitHub integration. Get the current URL from Vercel → Deployments → filter by branch `feature/marketing-site`, or ask whichever Claude session is active to fetch the latest one. This is a preview deployment (`target: null`), not production — it never affects the live site.
+**Status: MERGED TO MAIN on 2026-08-29.** James reviewed the situation described in the old "Section 3a" below (undocumented work, two parallel phase-numbering schemes across sessions, no browser-based visual QA tool available in this environment) and explicitly authorized merge anyway, fully informed of that gap — see the merge record at the bottom of this file. He also closed out the other/parallel continuity thread that had been running independently of this doc, so this file is now the single source of truth going forward.
 
-If you are a Claude session picking this up fresh: **read this whole document before writing any code.** It tells you what already exists, what's already been decided, and exactly what's left. Re-doing anything below wastes the user's time and risks conflicting with work already reviewed and approved.
+**Numbering note, for any future session:** this doc used its own "Phase 1-10" numbering; a separate uploaded plan (`educore-marketing-site-implementation-plan.md`/`-audit-brief.md`) used an unrelated "Phase 1-15" numbering for the same branch. Both were tracking the same work from different sessions and are now reconciled by this merge. Going forward, refer to work by feature name (e.g. "the pricing page," "the drift-check fix"), not by phase number, to avoid resurrecting the ambiguity.
+
+**Live URL:** production is `educore-beige.vercel.app` (no custom domain purchased yet — swapping to one later is a one-file change in `src/lib/site.ts` plus manual Vercel/DNS steps, not yet done).
+
+If you are a Claude session picking this up fresh: **read this whole document before writing any code.** It tells you what already exists and what's already been decided. Re-doing anything below wastes the user's time.
 
 ---
 
@@ -30,9 +31,11 @@ A public marketing website for EduCore (a school management SaaS), added to the 
 
 All of this is committed to `feature/marketing-site`, verified (typecheck + lint + full existing test suite + full production build + live preview-deployment fetches confirming actual runtime behavior, not just code review), and reviewed/approved by the project owner at each step.
 
-## 3a. ⚠️ Undocumented work discovered after Phase 9 (2026-08-29)
+## 3a. Undocumented work discovered after Phase 9, then resolved (2026-08-29)
 
 Some session(s) — not this line of continuity, and never logged here — did substantial additional work on this branch after Phase 9 closed out, then force-pushed a rebase onto the latest `main` on top of it. This was **discovered**, not planned by the session that found it: the branch's own commit log was the only record: `git log --oneline d0928b5..997a336` (old hash `d0928b5` = this doc's last known-good Phase 9 checkpoint; content-identical commit now lives at a different hash post-rebase).
+
+**Resolution:** James was told about this gap directly — including that the "Phase 10" visual/UX audit below was never actually performed by any session, because no browser/screenshot tool is available in this sandbox — and explicitly authorized merging anyway. That is the "owner has said so explicitly" bar this doc's own merge policy required; it was satisfied with full disclosure, not by skipping the disclosure. See the merge record at the end of this file.
 
 **What actually happened, in order** (17 commits, own "Phase 1–11" fix-batch numbering — ⚠️ **not the same phases as this doc's Section 6 roadmap**, a separate audit-severity numbering that happens to reuse 1–11):
 - P0/P1 severity fixes across the whole site: legal pages, structured data (JSON-LD), OG image generation (`opengraph-image.tsx` — resolves the "no OG image" gap flagged at the end of the real Phase 9), form hardening, security headers, an analytics integration point
@@ -56,7 +59,9 @@ Some session(s) — not this line of continuity, and never logged here — did s
 - `/privacy`'s "What we collect" section didn't mention that UTM/campaign attribution (from the Phase 11 work) is also stored alongside form submissions when present. **Fixed**: added a sentence disclosing this, verified against `src/lib/attribution.ts` (client-side only until form submit, first-touch, no third-party transmission) and the migration that added the columns.
 - Re-verified after both fixes: `tsc` clean, `eslint` 0 new, 86/86 tests, `next build` clean, both pages still prerendered static.
 
-**Process note, separate from the content check above:** the greenlight policy (one phase, explicit owner approval before the next) was still skipped for the whole undocumented batch — that's a process fact this content check doesn't retroactively fix. Content is now verified accurate; it just wasn't approved phase-by-phase as it was built.
+**Process note, separate from the content check above:** the greenlight policy (one phase, explicit owner approval before the next) was still skipped for the whole undocumented batch — that's a process fact this content check doesn't retroactively fix. Content is now verified accurate; it just wasn't approved phase-by-phase as it was built. James was told this plainly before authorizing merge.
+
+**One more real issue found and fixed before merge:** `check-drift` CI was genuinely failing (not a false positive) — the `marketing_demo_requests_attribution` migration was committed under version `20260829032808` but production recorded it under `20260829032835` (27s later). Content was identical (diffed against live column definitions/comments before touching anything); this was a pure filename/timestamp mismatch, fixed by renaming the file to match what production actually applied. Re-verified full suite clean after the fix, pushed, `check-drift` and `ci` both green.
 
 ### Phase 1 — Routing audit & fix (commit `e240195`)
 - **Finding:** the app has a proxy (`src/proxy.ts` → `src/lib/school-slug-routing.ts`) that treats any unrecognized top-level path segment as a school slug and silently rewrites it to `/dashboard`. Without a fix, every new marketing route would have silently rendered the dashboard (then bounced to login) instead of marketing content.
@@ -201,4 +206,13 @@ Full pass across **everything currently on the branch**, not just the original P
 
 ---
 
-**For the next session, in one sentence:** Phases 1–9 (this doc's numbering) are done and verified, but substantial additional undocumented work also landed on the branch afterward (new legal/security/finance pages, analytics/attribution, content additions — see Section 3a) that was never content-verified or explicitly approved phase-by-phase; the branch was also rebased onto `main` (safe, nothing lost, but re-sync via `git reset --hard origin/feature/marketing-site` if your clone predates this) — current full build is confirmed clean as of 2026-08-29, but a genuine, owner-approved Phase 10 final audit (including content-verifying Section 3a's additions) still needs to happen before merge to `main`.
+**For the next session, in one sentence:** this branch is merged — see the merge record below — so start from `main`, not `feature/marketing-site`, for any new marketing work.
+
+---
+
+## Merge record (2026-08-29)
+
+- PR #100, `feature/marketing-site` → `main`. Full verification suite re-run post-rebase (`tsc`, `eslint`, 86/86 tests, `next build`, zero route collisions) plus a fresh migration-drift fix (see Section 3a) — both `ci` and `check-drift` GitHub Actions checks green on the final commit before merge.
+- James was told directly, before merge, that: (a) two parallel phase-numbering schemes existed across sessions for the same work, and (b) no session had performed actual browser-based visual/UX/responsive QA (this doc's own "Phase 10") because no such tool is available in this sandbox — only HTTP/HTML-level checks (titles, meta, alt text, broken links, status codes, structured data) were possible.
+- James explicitly authorized merging anyway, and closed out the other/parallel continuity thread so this file is the sole record going forward.
+- Not covered by anything above, still open post-merge: buying a production domain (`src/lib/site.ts` + Vercel/DNS), flipping CSP from `Report-Only` to enforcing after a monitoring window, legal review of `/privacy` and `/terms` (both explicitly self-flag as not-yet-reviewed by counsel), setting `NEXT_PUBLIC_PLAUSIBLE_DOMAIN` to activate analytics, and an actual human/visual pass over the live site.
