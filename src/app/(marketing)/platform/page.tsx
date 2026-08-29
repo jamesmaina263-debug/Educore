@@ -20,6 +20,7 @@ import {
   Banknote,
   Package,
   MessageCircle,
+  MessagesSquare,
   CalendarClock,
   BarChart3,
   Building,
@@ -212,6 +213,14 @@ const FINANCE_MODULES: Mod[] = [
 ];
 
 const COMMS_MODULES: Mod[] = [
+  {
+    icon: MessagesSquare,
+    title: "EduCore Connect",
+    audience: "Teachers & Parents",
+    description:
+      "Structured, per-student messages from a class teacher to that student's parents — a request, an academic note, an attendance flag — not an open group chat. Parents read, acknowledge, and reply on the thread; only the teacher who raised it can mark it resolved.",
+    capabilities: ["Per-student teacher-to-parent items", "Read receipts, acknowledge & reply", "Teacher-only resolution"],
+  },
   {
     icon: MessageCircle,
     title: "Communication",

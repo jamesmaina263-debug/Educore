@@ -149,6 +149,7 @@ export default function SolutionsPage() {
                 "Let Educore AI draft the first version of a report-card comment from the learner's actual marks; you edit and approve it, you don't start from a blank page.",
                 "Set homework, see submissions as they come in, and grade them without a separate app for it.",
                 "Manage your own parent-teacher meeting slots.",
+                "Raise a structured note to a specific student's parents — a request, an academic update, an attendance flag — and see when it's read, acknowledged, and replied to. You're the only one who can mark it resolved.",
               ]}
             />
             <div className="lg:pt-16">
@@ -251,6 +252,7 @@ export default function SolutionsPage() {
             changes={[
               "See your child's fee balance, recent payments, and latest report card in one view.",
               "Track attendance for the term, and follow up on homework submissions, grades, and teacher feedback as they're posted.",
+              "Receive a note from your child's teacher — a request, an academic update, an attendance flag — read it, acknowledge it, and reply on the same thread, instead of a message that goes nowhere.",
               "Book parent-teacher meeting slots directly, and choose how you're notified — SMS, email, or WhatsApp.",
               "Switch between children from one login if you have more than one at the school.",
             ]}
