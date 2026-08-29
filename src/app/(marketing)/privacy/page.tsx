@@ -110,11 +110,13 @@ export default function PrivacyPage() {
               Analytics
             </h2>
             <p className="mt-3 text-marketing-navy-900/75">
-              This site uses Plausible to understand how visitors use it —
-              which pages get traffic and which links get clicked. Plausible
-              is cookie-less and does not track you individually across
-              websites or build a personal profile; it does not collect your
-              IP address, device fingerprint, or any personal data.
+              This site is built to use Plausible, a privacy-focused analytics
+              tool, to understand how visitors use it — which pages get
+              traffic and which links get clicked. Plausible is cookie-less
+              and does not track you individually across websites or build a
+              personal profile; it does not collect your IP address, device
+              fingerprint, or any personal data. Once active, this section
+              will be updated to confirm that Plausible is live.
             </p>
           </div>
 
