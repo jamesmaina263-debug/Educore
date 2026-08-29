@@ -43,15 +43,21 @@ const nextConfig: NextConfig = {
       "default-src 'self'",
       // Next.js injects small inline bootstrap/hydration scripts; 'unsafe-inline'
       // is required for those specifically (not a general allowance for
-      // third-party script injection, since script-src still has no other
-      // origins listed).
-      "script-src 'self' 'unsafe-inline'",
+      // third-party script injection). https://plausible.io is listed here
+      // because src/components/marketing/analytics.tsx already loads its
+      // script from there -- currently a no-op until NEXT_PUBLIC_PLAUSIBLE_DOMAIN
+      // is set (see that file), but the CSP needs to allow it now so flipping
+      // that env var later doesn't also require a CSP change to un-break it.
+      "script-src 'self' 'unsafe-inline' https://plausible.io",
       // Tailwind v4 and Radix UI apply styles at runtime via inserted <style>
       // tags/inline style attributes -- 'unsafe-inline' is required here too.
       "style-src 'self' 'unsafe-inline'",
       "img-src 'self' data: blob: https:",
       "font-src 'self' data:",
-      `connect-src 'self' ${supabaseOrigin} https://*.ingest.de.sentry.io https://*.ingest.sentry.io`,
+      // plausible.io here too: the same script reports pageview/conversion
+      // events back via fetch/beacon calls to its own origin, not Sentry's
+      // or Supabase's.
+      `connect-src 'self' ${supabaseOrigin} https://*.ingest.de.sentry.io https://*.ingest.sentry.io https://plausible.io`,
       "frame-ancestors 'none'",
       "base-uri 'self'",
       "form-action 'self'",
