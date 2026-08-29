@@ -63,9 +63,9 @@ export default function PrivacyPage() {
               campaign parameters (for example, from an ad or a shared
               link), we also record which campaign referred you at the time
               you submit the form, so we understand which channels are
-              helpful. We do not collect this information anywhere else on
-              the marketing site — pages you simply browse do not submit any
-              personal information to us.
+              helpful. Separately, simply browsing this site generates
+              aggregate, non-identifying analytics — see &quot;Analytics&quot;
+              below for what that covers.
             </p>
           </div>
 
@@ -76,9 +76,11 @@ export default function PrivacyPage() {
             <p className="mt-3 text-marketing-navy-900/75">
               Demo request submissions are stored in a dedicated database
               table, separate from any school&apos;s student, academic, or
-              financial records, and are only ever written to, never read
-              back, by this website. Access is restricted to the EduCore
-              team for the purpose of following up on your enquiry.
+              financial records. The public website can only write new
+              submissions to this table, never read them back. A small
+              number of EduCore staff can read submissions, restricted to
+              those with platform-administrator access, solely to follow up
+              on your enquiry.
             </p>
           </div>
 
@@ -107,12 +109,36 @@ export default function PrivacyPage() {
 
           <div>
             <h2 className="text-xl font-semibold text-marketing-navy-950">
+              Analytics
+            </h2>
+            <p className="mt-3 text-marketing-navy-900/75">
+              This site is built to use Plausible, a privacy-focused
+              analytics service, to understand overall traffic and which
+              pages and links are useful — but analytics collection is not
+              switched on as of this writing. Once it is enabled, Plausible
+              will not use cookies, will not track you individually across
+              visits or across other websites, and will not collect your
+              name, email, IP address, or any other personal information.
+              It records only aggregate, anonymous information: which pages
+              were viewed, roughly how many people visited, the general
+              region and device type visitors are browsing from, and
+              whether certain links were clicked (for example,
+              &quot;Book a Demo&quot;, WhatsApp, or email links, and
+              starting to fill in the demo request form). None of this can
+              be tied back to you as an individual. This page will be
+              updated to confirm once analytics is actually live.
+            </p>
+          </div>
+
+          <div>
+            <h2 className="text-xl font-semibold text-marketing-navy-950">
               Cookies
             </h2>
             <p className="mt-3 text-marketing-navy-900/75">
-              This marketing website does not currently set analytics or
-              advertising cookies. If that changes, this page will be
-              updated first.
+              This marketing website does not set analytics or advertising
+              cookies. The Plausible analytics described above works without
+              cookies, so activating it will not change this. If that ever
+              changes, this page will be updated first.
             </p>
           </div>
 

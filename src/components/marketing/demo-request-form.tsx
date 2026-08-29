@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useState } from "react";
+import { useActionState, useEffect, useRef, useState } from "react";
 import { CheckCircle2 } from "lucide-react";
 
 import { submitDemoRequest, type DemoRequestState } from "@/app/(marketing)/contact/actions";
@@ -35,6 +35,18 @@ export function DemoRequestForm() {
     }
   }, [state.status]);
 
+  // Fires once, on the first time any field in the form receives focus --
+  // not on mount, so simply scrolling past the form on the page doesn't
+  // count as "started". A ref (not state) so this can never fire twice: a
+  // state-based guard would still let a second focus event slip through if
+  // it happened before the re-render from the first one committed.
+  const startedRef = useRef(false);
+  function handleFormFocus() {
+    if (startedRef.current) return;
+    startedRef.current = true;
+    trackEvent("Demo Form Started");
+  }
+
   if (state.status === "success") {
     return (
       <div
@@ -53,7 +65,7 @@ export function DemoRequestForm() {
   }
 
   return (
-    <form action={formAction} className="flex flex-col gap-5">
+    <form action={formAction} onFocus={handleFormFocus} className="flex flex-col gap-5">
       {/* Bot mitigation, not a visible/functional field for real users:
           - honeypot ("company_website") is hidden from sighted users via CSS
             and never announced by a screen reader (aria-hidden + tabIndex -1

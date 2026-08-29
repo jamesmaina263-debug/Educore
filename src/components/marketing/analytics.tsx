@@ -43,6 +43,16 @@ export function MarketingAnalytics() {
   // the link's own visible text (label), so "nav Book a Demo" and "pricing
   // Book a Demo" show up distinctly in Plausible's custom-event breakdown
   // without needing per-CTA prop plumbing.
+  //
+  // Three distinct event names, one per link type, so each shows up as its
+  // own row in Plausible rather than being lumped together:
+  //   - "/contact" links -> "Contact CTA Click" (Book a Demo, Get Started, etc.)
+  //   - "wa.me" links     -> "WhatsApp Click"
+  //   - "mailto:" links   -> "Email Click"
+  // No separate "Phone Click": there is no tel: link anywhere on the site
+  // today (the phone number on /contact is plain text), so there is nothing
+  // to attach that event to. WhatsApp is the only phone-adjacent channel
+  // that's an actual link, so it's tracked on its own.
   useEffect(() => {
     if (!PLAUSIBLE_DOMAIN) return;
 
@@ -52,9 +62,23 @@ export function MarketingAnalytics() {
       const anchor = target.closest("a[href]");
       if (!anchor) return;
       const href = anchor.getAttribute("href") ?? "";
-      if (!href.startsWith("/contact")) return;
-      const label = anchor.textContent?.trim().replace(/\s+/g, " ").slice(0, 60) || "Contact CTA";
-      trackEvent("Contact CTA Click", { location: window.location.pathname, label });
+
+      let eventName: string | null = null;
+      let defaultLabel = "";
+      if (href.startsWith("/contact")) {
+        eventName = "Contact CTA Click";
+        defaultLabel = "Contact CTA";
+      } else if (href.startsWith("https://wa.me/")) {
+        eventName = "WhatsApp Click";
+        defaultLabel = "WhatsApp";
+      } else if (href.startsWith("mailto:")) {
+        eventName = "Email Click";
+        defaultLabel = "Email";
+      }
+      if (!eventName) return;
+
+      const label = anchor.textContent?.trim().replace(/\s+/g, " ").slice(0, 60) || defaultLabel;
+      trackEvent(eventName, { location: window.location.pathname, label });
     }
 
     document.addEventListener("click", handleClick);
