@@ -26,7 +26,7 @@ export const metadata: Metadata = {
 // deliberately left off this public page per owner decision; the "Talk to
 // us" price slot in PricingCard is where a real number could go later
 // without a redesign.
-const PLANS = [
+export const PLANS = [
   {
     name: "Starter",
     tagline: "For small schools getting started with EduCore.",
