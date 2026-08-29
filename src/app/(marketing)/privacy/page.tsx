@@ -76,9 +76,11 @@ export default function PrivacyPage() {
             <p className="mt-3 text-marketing-navy-900/75">
               Demo request submissions are stored in a dedicated database
               table, separate from any school&apos;s student, academic, or
-              financial records. This website itself never reads submissions
-              back — only members of the EduCore team with platform-admin
-              access can view them, in order to follow up on your enquiry.
+              financial records. Only the EduCore team, signed in with a
+              platform-administrator account, can view these submissions —
+              through a dedicated internal screen, not through anything
+              public-facing — for the purpose of following up on your
+              enquiry.
             </p>
           </div>
 
@@ -110,11 +112,16 @@ export default function PrivacyPage() {
               Analytics
             </h2>
             <p className="mt-3 text-marketing-navy-900/75">
-              This site uses Plausible to understand how visitors use it —
-              which pages get traffic and which links get clicked. Plausible
-              is cookie-less and does not track you individually across
-              websites or build a personal profile; it does not collect your
-              IP address, device fingerprint, or any personal data.
+              This site is built to use Plausible, a privacy-focused visitor
+              analytics tool, to understand which pages are visited and how
+              people navigate the site — the kind of aggregate statistics
+              that help us improve it, not information about any individual
+              visitor. Plausible does not use cookies, does not track you
+              across other websites, and does not collect personally
+              identifiable information. As of this writing, this analytics
+              integration has not yet been switched on for this site; this
+              section is written in advance so the disclosure is already in
+              place if and when it is.
             </p>
           </div>
 
