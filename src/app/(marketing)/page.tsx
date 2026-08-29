@@ -384,11 +384,16 @@ export default function MarketingHomePage() {
             A demo is built around your admissions, fees, and academics
             setup &mdash; not a generic tour.
           </p>
-          <MarketingButton size="lg" asChild className="mt-2">
-            <Link href="/contact">
-              Book a Demo <ArrowRight className="h-4 w-4" />
-            </Link>
-          </MarketingButton>
+          <div className="mt-2 flex flex-wrap items-center justify-center gap-3">
+            <MarketingButton size="lg" asChild>
+              <Link href="/contact">
+                Book a Demo <ArrowRight className="h-4 w-4" />
+              </Link>
+            </MarketingButton>
+            <MarketingButton size="lg" variant="outline-on-dark" asChild>
+              <Link href="/platform">Explore the Platform</Link>
+            </MarketingButton>
+          </div>
         </Reveal>
       </Section>
     </>
