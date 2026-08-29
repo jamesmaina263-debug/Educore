@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { ServiceWorkerRegister } from "@/components/pwa/service-worker-register";
+import { SITE_URL, SITE_NAME } from "@/lib/site";
 
 // Deliberately not using next/font/google here: it requires a build-time
 // fetch to Google Fonts, which fails in restricted-network environments
@@ -11,6 +12,7 @@ import { ServiceWorkerRegister } from "@/components/pwa/service-worker-register"
 // design system calls for one.
 
 export const metadata: Metadata = {
+  metadataBase: new URL(SITE_URL),
   title: "EduCore",
   description: "School management platform for Kenyan schools",
   manifest: "/manifest.webmanifest",
@@ -25,6 +27,21 @@ export const metadata: Metadata = {
       { url: "/icon-512.png", sizes: "512x512", type: "image/png" },
     ],
     apple: [{ url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" }],
+  },
+  // App-wide fallback OG/Twitter data -- individual marketing pages
+  // (Section 9 of the roadmap) override title/description/url per page;
+  // this is what non-marketing routes (e.g. /login) fall back to.
+  openGraph: {
+    title: "EduCore",
+    description: "School management platform for Kenyan schools",
+    siteName: SITE_NAME,
+    locale: "en_US",
+    type: "website",
+  },
+  twitter: {
+    card: "summary",
+    title: "EduCore",
+    description: "School management platform for Kenyan schools",
   },
 };
 
