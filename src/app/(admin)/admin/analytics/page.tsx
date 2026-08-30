@@ -17,7 +17,7 @@ import {
   type PeriodKey,
 } from "@/lib/analytics-date-range";
 import {
-  isPlausibleConfigured,
+  isGa4Configured,
   getOverviewStats,
   getTimeseries,
   getTopPages,
@@ -33,7 +33,7 @@ import {
   getRegionBreakdown,
   getRealtimeVisitorCount,
   type TimeGranularity,
-} from "@/lib/plausible";
+} from "@/lib/ga4";
 
 const VALID_PERIODS: PeriodKey[] = ["today", "yesterday", "7d", "30d", "90d", "custom"];
 
@@ -60,7 +60,8 @@ export default async function AdminAnalyticsPage({
   const customRange =
     period === "custom" && isValidIsoDate(from) && isValidIsoDate(to) && from <= to ? { from, to } : undefined;
   if (period === "custom" && !customRange) period = "7d";
-  const { plausibleRange, startIso, endIso, label } = resolveDateRange(period, customRange);
+  const { startIso, endIso, label } = resolveDateRange(period, customRange);
+  const gaRange: [string, string] = [startIso, endIso];
   const prior = priorPeriod(startIso, endIso);
   const granularity: TimeGranularity =
     rawGranularity === "day" || rawGranularity === "week" || rawGranularity === "month"
@@ -88,7 +89,7 @@ export default async function AdminAnalyticsPage({
   }
   const convertedCount = statusCounts.get("converted") ?? 0;
 
-  const plausibleConfigured = isPlausibleConfigured();
+  const gaConfigured = isGa4Configured();
   const [
     overview,
     priorOverview,
@@ -105,27 +106,26 @@ export default async function AdminAnalyticsPage({
     countries,
     regions,
     realtimeVisitors,
-  ] = plausibleConfigured
+  ] = gaConfigured
     ? await Promise.all([
-        getOverviewStats(plausibleRange),
+        getOverviewStats(gaRange),
         // Prior-period overview, for "vs. prior period" on Visitors/Sessions/
         // Page views -- same equivalent-length-window comparison already
-        // used for the Demo requests KPI, just sourced from Plausible
-        // instead of Supabase. A fixed [start, end] pair, not a named
-        // Plausible shorthand, so it works for every period including custom.
+        // used for the Demo requests KPI. Both windows are real [start, end]
+        // ISO date pairs.
         getOverviewStats([prior.startIso, prior.endIso]),
-        getTimeseries(plausibleRange, granularity),
-        getTopPages(plausibleRange),
-        getLandingPages(plausibleRange),
-        getExitPages(plausibleRange),
-        getTrafficSources(plausibleRange),
-        getUtmCampaigns(plausibleRange),
-        getGoalBreakdown(plausibleRange),
-        getDeviceBreakdown(plausibleRange),
-        getBrowserBreakdown(plausibleRange),
-        getOsBreakdown(plausibleRange),
-        getCountryBreakdown(plausibleRange),
-        getRegionBreakdown(plausibleRange),
+        getTimeseries(gaRange, granularity),
+        getTopPages(gaRange),
+        getLandingPages(gaRange),
+        getExitPages(gaRange),
+        getTrafficSources(gaRange),
+        getUtmCampaigns(gaRange),
+        getGoalBreakdown(gaRange),
+        getDeviceBreakdown(gaRange),
+        getBrowserBreakdown(gaRange),
+        getOsBreakdown(gaRange),
+        getCountryBreakdown(gaRange),
+        getRegionBreakdown(gaRange),
         getRealtimeVisitorCount(),
       ])
     : [null, null, null, null, null, null, null, null, null, null, null, null, null, null, null];
@@ -162,7 +162,7 @@ export default async function AdminAnalyticsPage({
 
       {period === "custom" && <CustomRangePicker from={customRange?.from} to={customRange?.to} />}
 
-      {/* Top-line KPIs: mixes real Plausible numbers (when connected) with real
+      {/* Top-line KPIs: mixes real GA4 numbers (when connected) with real
           Supabase numbers (always available) -- never fabricated either way.
           Percent-change vs. prior period only renders when both periods
           actually returned data (priorOverview !== null); never a made-up
@@ -171,19 +171,19 @@ export default async function AdminAnalyticsPage({
         <KpiCard
           label="Visitors"
           value={overview ? overview.visitors.toLocaleString() : "—"}
-          sub={plausibleConfigured ? undefined : "Plausible not connected"}
+          sub={gaConfigured ? undefined : "Google Analytics not connected"}
           changePercent={overview && priorOverview ? percentChange(overview.visitors, priorOverview.visitors) : undefined}
         />
         <KpiCard
           label="Sessions"
           value={overview ? overview.visits.toLocaleString() : "—"}
-          sub={plausibleConfigured ? undefined : "Plausible not connected"}
+          sub={gaConfigured ? undefined : "Google Analytics not connected"}
           changePercent={overview && priorOverview ? percentChange(overview.visits, priorOverview.visits) : undefined}
         />
         <KpiCard
           label="Page views"
           value={overview ? overview.pageviews.toLocaleString() : "—"}
-          sub={plausibleConfigured ? undefined : "Plausible not connected"}
+          sub={gaConfigured ? undefined : "Google Analytics not connected"}
           changePercent={
             overview && priorOverview ? percentChange(overview.pageviews, priorOverview.pageviews) : undefined
           }
@@ -193,7 +193,7 @@ export default async function AdminAnalyticsPage({
 
       {/* Engagement KPIs the spec asks for under Website Traffic --
           previously fetched by getOverviewStats but never rendered. */}
-      {plausibleConfigured && overview && (
+      {gaConfigured && overview && (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           <KpiCard label="Pages / session" value={overview.viewsPerVisit.toFixed(2)} />
           <KpiCard
@@ -208,7 +208,7 @@ export default async function AdminAnalyticsPage({
         </div>
       )}
 
-      {plausibleConfigured && realtimeVisitors !== null && (
+      {gaConfigured && realtimeVisitors !== null && (
         <p className="text-xs text-muted-foreground">
           {realtimeVisitors} visitor{realtimeVisitors === 1 ? "" : "s"} active right now.
         </p>
@@ -218,14 +218,14 @@ export default async function AdminAnalyticsPage({
           Search Console below, per the spec. */}
       <div>
         <h2 className="mb-3 text-sm font-semibold text-muted-foreground">Website Analytics</h2>
-        {!plausibleConfigured ? (
+        {!gaConfigured ? (
           <NotConnectedCard
-            title="Plausible analytics isn't connected"
+            title="Google Analytics isn't connected"
             instructions={[
-              "Buy/point the production domain (src/lib/site.ts currently falls back to the Vercel preview alias).",
-              "Create a Plausible account (Business tier, for Stats API access) and add the production site.",
-              "Set NEXT_PUBLIC_PLAUSIBLE_DOMAIN and PLAUSIBLE_API_KEY as environment variables.",
-              'Configure "Book a Demo"/CTA, WhatsApp, Email, Demo Form Started, and Demo Request Submitted as Goals in Plausible\'s site settings, so the events already firing from analytics.tsx can be broken down here.',
+              "Create a Google Cloud service account with the Analytics Data API enabled.",
+              "Grant that service account Viewer access on the GA4 property (Admin \u2192 Property Access Management).",
+              "Set GOOGLE_SERVICE_ACCOUNT_JSON (the full service-account key JSON) and GA4_PROPERTY_ID as environment variables.",
+              'The "Events" breakdown below shows GA4\'s actual top event names \u2014 it only lines up with the CTA/demo-funnel labels above if GTM (GTM-MGV2XHBB) has been configured to fire matching events. Plausible\'s named Goals from analytics.tsx aren\'t automatically sent to GA4.',
             ]}
           />
         ) : (
@@ -251,7 +251,10 @@ export default async function AdminAnalyticsPage({
               }))}
             />
             <BreakdownList
-              title="CTA & event interactions"
+              // GA4's actual top event names, not filtered Plausible Goals --
+              // see src/lib/ga4.ts's module-level note. Only overlaps with
+              // the CTA/demo-funnel names above if GTM fires matching events.
+              title="Top events (GA4)"
               rows={(goals ?? []).map((r) => ({ label: r.goal, value: r.events }))}
               valueLabel="Events"
             />
@@ -273,7 +276,7 @@ export default async function AdminAnalyticsPage({
           instructions={[
             "Verify the production domain as a property in Google Search Console (needs a real, purchased domain first).",
             "Provision a Google Cloud service account with Search Console API access, or set up OAuth for the platform owner's account.",
-            "Wire a server-side client (analogous to src/lib/plausible.ts) once the above exists — not built yet, so this section has no numbers to show.",
+            "Wire a server-side client (analogous to src/lib/ga4.ts) once the above exists — not built yet, so this section has no numbers to show.",
           ]}
         />
       </div>

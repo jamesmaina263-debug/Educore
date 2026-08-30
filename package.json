@@ -32,6 +32,7 @@
     "cmdk": "^1.1.1",
     "docxtemplater": "^3.69.3",
     "exceljs": "^4.4.0",
+    "google-auth-library": "^11.0.2",
     "jspdf": "^4.2.1",
     "jspdf-autotable": "^5.0.8",
     "lucide-react": "^1.27.0",
