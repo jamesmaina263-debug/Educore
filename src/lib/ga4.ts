@@ -133,8 +133,13 @@ export async function getOverviewStats(dateRange: GaDateRangeInput): Promise<Ove
       { name: "bounceRate" },
       { name: "averageSessionDuration" },
     ],
+    // GA4 only populates `totals` when explicitly asked for it. With no
+    // dimensions in this request, `rows[0]` already holds the same
+    // whole-period aggregate, so it's used as the fallback below in case a
+    // future edit adds a dimension and `rows` becomes a real breakdown.
+    metricAggregations: ["TOTAL"],
   });
-  const row = result?.totals?.[0];
+  const row = result?.totals?.[0] ?? result?.rows?.[0];
   const values = row?.metricValues;
   if (!values || values.length < 6) return null;
   return {
