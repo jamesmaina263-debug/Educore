@@ -5,7 +5,7 @@ import { SCHOOL_SLUG_COOKIE } from "./school-slug-cookie";
 import { navGroups } from "@/components/app-shell/nav-items";
 
 function makeRequest(pathname: string, slugCookie?: string) {
-  const request = new NextRequest(new URL(pathname, "https://educore-beige.vercel.app"));
+  const request = new NextRequest(new URL(pathname, "https://educoreafrica.com"));
   if (slugCookie) request.cookies.set(SCHOOL_SLUG_COOKIE, slugCookie);
   return request;
 }

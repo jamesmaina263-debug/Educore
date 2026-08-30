@@ -17,7 +17,7 @@ export const metadata: Metadata = {
 // This page has two parts, deliberately kept distinct rather than merged
 // into one narrative, because they describe two different data flows with
 // two different roles for EduCore:
-//   Part A -- this marketing website (educore-beige.vercel.app): EduCore is
+//   Part A -- this marketing website (educoreafrica.com): EduCore is
 //     the data controller for whatever you submit through the contact/demo
 //     form. Small, self-contained, unchanged from the site's original
 //     narrower privacy notice.
@@ -80,7 +80,7 @@ export default function PrivacyPage() {
             </h2>
             <p className="mt-3 text-marketing-navy-900/75">
               This section covers only what happens when you use{" "}
-              <span className="font-mono text-sm">educore-beige.vercel.app</span>{" "}
+              <span className="font-mono text-sm">educoreafrica.com</span>{" "}
               itself — not the application schools use once enrolled, which
               is covered in Part B below.
             </p>
