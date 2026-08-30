@@ -7,7 +7,15 @@ import { CustomRangePicker } from "@/components/admin/analytics/custom-range-pic
 import { BreakdownList } from "@/components/admin/analytics/breakdown-list";
 import { TrafficTrendChart } from "@/components/admin/analytics/traffic-trend-chart";
 import { ConversionFunnel, type FunnelStage } from "@/components/admin/analytics/conversion-funnel";
-import { resolveDateRange, priorPeriod, percentChange, isValidIsoDate, type PeriodKey } from "@/lib/analytics-date-range";
+import { GranularityTabs } from "@/components/admin/analytics/granularity-tabs";
+import {
+  resolveDateRange,
+  priorPeriod,
+  percentChange,
+  isValidIsoDate,
+  defaultGranularity,
+  type PeriodKey,
+} from "@/lib/analytics-date-range";
 import {
   isPlausibleConfigured,
   getOverviewStats,
@@ -22,7 +30,9 @@ import {
   getBrowserBreakdown,
   getOsBreakdown,
   getCountryBreakdown,
+  getRegionBreakdown,
   getRealtimeVisitorCount,
+  type TimeGranularity,
 } from "@/lib/plausible";
 
 const VALID_PERIODS: PeriodKey[] = ["today", "yesterday", "7d", "30d", "90d", "custom"];
@@ -30,7 +40,7 @@ const VALID_PERIODS: PeriodKey[] = ["today", "yesterday", "7d", "30d", "90d", "c
 export default async function AdminAnalyticsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ period?: string; from?: string; to?: string }>;
+  searchParams: Promise<{ period?: string; from?: string; to?: string; granularity?: string }>;
 }) {
   const supabase = await createClient();
 
@@ -42,7 +52,7 @@ export default async function AdminAnalyticsPage({
   const { data: isSuperAdmin } = await supabase.rpc("auth_is_super_admin");
   if (isSuperAdmin !== true) redirect("/dashboard");
 
-  const { period: rawPeriod, from, to } = await searchParams;
+  const { period: rawPeriod, from, to, granularity: rawGranularity } = await searchParams;
   let period: PeriodKey = VALID_PERIODS.includes(rawPeriod as PeriodKey) ? (rawPeriod as PeriodKey) : "7d";
   // A custom range needs both dates, in order, and well-formed -- fall back
   // to the 7-day default rather than letting resolveDateRange see a
@@ -52,6 +62,10 @@ export default async function AdminAnalyticsPage({
   if (period === "custom" && !customRange) period = "7d";
   const { plausibleRange, startIso, endIso, label } = resolveDateRange(period, customRange);
   const prior = priorPeriod(startIso, endIso);
+  const granularity: TimeGranularity =
+    rawGranularity === "day" || rawGranularity === "week" || rawGranularity === "month"
+      ? rawGranularity
+      : defaultGranularity(period, startIso, endIso);
 
   const [{ data: demoRequests }, { count: priorPeriodDemoCount }] = await Promise.all([
     supabase
@@ -77,6 +91,7 @@ export default async function AdminAnalyticsPage({
   const plausibleConfigured = isPlausibleConfigured();
   const [
     overview,
+    priorOverview,
     timeseries,
     topPages,
     landingPages,
@@ -88,11 +103,18 @@ export default async function AdminAnalyticsPage({
     browsers,
     oses,
     countries,
+    regions,
     realtimeVisitors,
   ] = plausibleConfigured
     ? await Promise.all([
         getOverviewStats(plausibleRange),
-        getTimeseries(plausibleRange),
+        // Prior-period overview, for "vs. prior period" on Visitors/Sessions/
+        // Page views -- same equivalent-length-window comparison already
+        // used for the Demo requests KPI, just sourced from Plausible
+        // instead of Supabase. A fixed [start, end] pair, not a named
+        // Plausible shorthand, so it works for every period including custom.
+        getOverviewStats([prior.startIso, prior.endIso]),
+        getTimeseries(plausibleRange, granularity),
         getTopPages(plausibleRange),
         getLandingPages(plausibleRange),
         getExitPages(plausibleRange),
@@ -103,9 +125,10 @@ export default async function AdminAnalyticsPage({
         getBrowserBreakdown(plausibleRange),
         getOsBreakdown(plausibleRange),
         getCountryBreakdown(plausibleRange),
+        getRegionBreakdown(plausibleRange),
         getRealtimeVisitorCount(),
       ])
-    : [null, null, null, null, null, null, null, null, null, null, null, null, null];
+    : [null, null, null, null, null, null, null, null, null, null, null, null, null, null, null];
 
   const ctaClicks = goals
     ?.filter((g) => g.goal.includes("CTA") || g.goal.includes("WhatsApp") || g.goal.includes("Email"))
@@ -140,25 +163,50 @@ export default async function AdminAnalyticsPage({
       {period === "custom" && <CustomRangePicker from={customRange?.from} to={customRange?.to} />}
 
       {/* Top-line KPIs: mixes real Plausible numbers (when connected) with real
-          Supabase numbers (always available) -- never fabricated either way. */}
+          Supabase numbers (always available) -- never fabricated either way.
+          Percent-change vs. prior period only renders when both periods
+          actually returned data (priorOverview !== null); never a made-up
+          0% for "not connected". */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <KpiCard
           label="Visitors"
           value={overview ? overview.visitors.toLocaleString() : "—"}
           sub={plausibleConfigured ? undefined : "Plausible not connected"}
+          changePercent={overview && priorOverview ? percentChange(overview.visitors, priorOverview.visitors) : undefined}
         />
         <KpiCard
           label="Sessions"
           value={overview ? overview.visits.toLocaleString() : "—"}
           sub={plausibleConfigured ? undefined : "Plausible not connected"}
+          changePercent={overview && priorOverview ? percentChange(overview.visits, priorOverview.visits) : undefined}
         />
         <KpiCard
           label="Page views"
           value={overview ? overview.pageviews.toLocaleString() : "—"}
           sub={plausibleConfigured ? undefined : "Plausible not connected"}
+          changePercent={
+            overview && priorOverview ? percentChange(overview.pageviews, priorOverview.pageviews) : undefined
+          }
         />
         <KpiCard label="Demo requests" value={demoRequestCount} changePercent={demoRequestChange} />
       </div>
+
+      {/* Engagement KPIs the spec asks for under Website Traffic --
+          previously fetched by getOverviewStats but never rendered. */}
+      {plausibleConfigured && overview && (
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <KpiCard label="Pages / session" value={overview.viewsPerVisit.toFixed(2)} />
+          <KpiCard
+            label="Avg. session duration"
+            value={
+              overview.visitDurationSeconds >= 60
+                ? `${Math.floor(overview.visitDurationSeconds / 60)}m ${Math.round(overview.visitDurationSeconds % 60)}s`
+                : `${Math.round(overview.visitDurationSeconds)}s`
+            }
+          />
+          <KpiCard label="Bounce rate" value={`${overview.bounceRate.toFixed(1)}%`} />
+        </div>
+      )}
 
       {plausibleConfigured && realtimeVisitors !== null && (
         <p className="text-xs text-muted-foreground">
@@ -183,7 +231,11 @@ export default async function AdminAnalyticsPage({
         ) : (
           <div className="grid gap-3 lg:grid-cols-2">
             <div className="lg:col-span-2">
-              <TrafficTrendChart data={timeseries ?? []} />
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                <p className="text-sm font-medium">Traffic trend</p>
+                <GranularityTabs active={granularity} period={period} from={customRange?.from} to={customRange?.to} />
+              </div>
+              <TrafficTrendChart data={timeseries ?? []} granularity={granularity} />
             </div>
             <BreakdownList title="Top pages" rows={(topPages ?? []).map((r) => ({ label: r.label, value: r.visitors }))} />
             <BreakdownList title="Landing pages" rows={(landingPages ?? []).map((r) => ({ label: r.label, value: r.visitors }))} />
@@ -192,7 +244,9 @@ export default async function AdminAnalyticsPage({
             <BreakdownList
               title="Campaigns (UTM)"
               rows={(utmCampaigns ?? []).map((r) => ({
-                label: `${r.source} / ${r.medium}${r.campaign !== "(none)" ? ` / ${r.campaign}` : ""}`,
+                label: `${r.source} / ${r.medium}${r.campaign !== "(none)" ? ` / ${r.campaign}` : ""}${
+                  r.content !== "(none)" ? ` / ${r.content}` : ""
+                }`,
                 value: r.visitors,
               }))}
             />
@@ -202,6 +256,7 @@ export default async function AdminAnalyticsPage({
               valueLabel="Events"
             />
             <BreakdownList title="Country" rows={(countries ?? []).map((r) => ({ label: r.label, value: r.visitors }))} />
+            <BreakdownList title="Region" rows={(regions ?? []).map((r) => ({ label: r.label, value: r.visitors }))} />
             <BreakdownList title="Device" rows={(devices ?? []).map((r) => ({ label: r.label, value: r.visitors }))} />
             <BreakdownList title="Browser" rows={(browsers ?? []).map((r) => ({ label: r.label, value: r.visitors }))} />
             <BreakdownList title="Operating system" rows={(oses ?? []).map((r) => ({ label: r.label, value: r.visitors }))} />
