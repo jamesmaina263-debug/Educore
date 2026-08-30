@@ -37,7 +37,12 @@ export type SlugRouting = { type: "next" } | { type: "redirect"; url: URL } | { 
 // Pure function (no cookie writes, no response construction) so proxy.ts can
 // decide how to combine this with the session-refresh response it already
 // has, without either one silently dropping the other's cookies.
-export function resolveSlugRouting(request: NextRequest): SlugRouting {
+//
+// `isAuthenticated` comes from the `supabase.auth.getUser()` call
+// updateSession() already makes on every request -- this adds no new
+// network/DB call, it just threads through a result that was already being
+// computed. See the bare-single-segment branch below for why it's needed.
+export function resolveSlugRouting(request: NextRequest, isAuthenticated: boolean): SlugRouting {
   const { pathname } = request.nextUrl;
   const segments = pathname.split("/").filter(Boolean);
   const first = segments[0];
@@ -83,6 +88,28 @@ export function resolveSlugRouting(request: NextRequest): SlugRouting {
   // let the page render, then broke the first POST anyone actually fired
   // against it.
   const rest = "/" + segments.slice(1).join("/");
+
+  // Bare single-segment request ("/{unrecognized-segment}", nothing after
+  // it) -- this is the one shape this function cannot tell apart from a
+  // genuinely bogus/mistyped URL, since slugs are deliberately never
+  // validated here (see comment above). For an authenticated visitor this
+  // is unchanged: send them to /dashboard exactly as before, since RLS
+  // decides what they actually see regardless of what the slug text was --
+  // a stale/wrong slug in the address bar was already just cosmetic.
+  //
+  // For an UNAUTHENTICATED visitor, sending them to /dashboard used to mean
+  // silently landing on a bare, unbranded /login with no site chrome and no
+  // indication anything went wrong -- for a real dead/mistyped link, that's
+  // a lost visitor; for a genuine tenant's bare slug URL, they were already
+  // blocked either way (this layer never grants access), so nothing about
+  // whether the slug is real is gained or lost by *not* special-casing it.
+  // Returning "next" here lets Next.js's own router take over: no real page
+  // exists at this path, so the site-wide branded not-found.tsx renders --
+  // the same 404 every other unmatched route already gets.
+  if (rest === "/" && !isAuthenticated) {
+    return { type: "next" };
+  }
+
   const rewritten = request.nextUrl.clone();
   rewritten.pathname = rest === "/" ? "/dashboard" : rest;
   return { type: "rewrite", url: rewritten };
