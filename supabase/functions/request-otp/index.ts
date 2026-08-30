@@ -1,8 +1,10 @@
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { buildCorsHeaders } from "../_shared/cors.ts";
 import { getSmsProvider } from "../_shared/sms/index.ts";
+import { getEmailProvider } from "../_shared/email/index.ts";
 
 const KENYA_PHONE_RE = /^\+254\d{9}$/;
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 Deno.serve(async (req) => {
   const corsHeaders = buildCorsHeaders(req);
@@ -17,11 +19,27 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { phone, purpose = "login" } = await req.json();
+    // `channel` is optional and defaults to "sms" so every existing caller
+    // that only ever sent `{ phone, purpose }` (the parent-login page prior
+    // to this change, and src/app/apply/[slug]/actions.ts's guardian
+    // verification step) keeps working unchanged. `identifier` is the new,
+    // channel-agnostic field; `phone` is still accepted as an alias for it
+    // when channel is "sms" (or omitted) so old request bodies don't break.
+    const body = await req.json();
+    const purpose = body.purpose ?? "login";
+    const channel: "sms" | "email" = body.channel === "email" ? "email" : "sms";
+    const identifier: unknown = body.identifier ?? body.phone;
 
-    if (typeof phone !== "string" || !KENYA_PHONE_RE.test(phone)) {
-      return json({ error: "A valid phone number in +254XXXXXXXXX format is required." }, 400);
+    if (channel === "sms") {
+      if (typeof identifier !== "string" || !KENYA_PHONE_RE.test(identifier)) {
+        return json({ error: "A valid phone number in +254XXXXXXXXX format is required." }, 400);
+      }
+    } else {
+      if (typeof identifier !== "string" || !EMAIL_RE.test(identifier)) {
+        return json({ error: "A valid email address is required." }, 400);
+      }
     }
+    const phone = identifier as string; // kept as `phone` from here down to minimize the diff against the existing (working) body below
 
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
@@ -37,6 +55,7 @@ Deno.serve(async (req) => {
       .select("created_at")
       .eq("phone", phone)
       .eq("purpose", purpose)
+      .eq("channel", channel)
       .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle();
@@ -54,9 +73,13 @@ Deno.serve(async (req) => {
     // (SMS-cost abuse against one number, low-and-slow) and a per-IP hourly
     // ceiling (many numbers messaged from one source/script).
     const ipAddress = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+    // "otp-request-phone" kept exactly as-is for channel="sms" (the existing,
+    // already-live bucket key) so this change doesn't reset anyone's current
+    // SMS rate-limit counters; email gets its own bucket namespace.
+    const rateLimitBucketPrefix = channel === "sms" ? "otp-request-phone" : "otp-request-email";
     const [{ data: withinPhoneLimit }, { data: withinIpLimit }] = await Promise.all([
       supabase.rpc("increment_and_check_rate_limit", {
-        p_bucket: `otp-request-phone:${phone}:${purpose}`,
+        p_bucket: `${rateLimitBucketPrefix}:${phone}:${purpose}`,
         p_max_events: 10,
         p_window_seconds: 86_400,
       }),
@@ -68,7 +91,10 @@ Deno.serve(async (req) => {
     ]);
 
     if (withinPhoneLimit === false) {
-      return json({ error: "Too many code requests for this number today. Please try again tomorrow." }, 429);
+      return json(
+        { error: `Too many code requests for this ${channel === "sms" ? "number" : "address"} today. Please try again tomorrow.` },
+        429,
+      );
     }
     if (withinIpLimit === false) {
       return json({ error: "Too many requests from this network. Please try again later." }, 429);
@@ -77,6 +103,7 @@ Deno.serve(async (req) => {
     const { data: code, error } = await supabase.rpc("generate_otp", {
       p_phone: phone,
       p_purpose: purpose,
+      p_channel: channel,
     });
 
     if (error || !code) {
@@ -84,10 +111,18 @@ Deno.serve(async (req) => {
       return json({ error: "Could not generate a code. Try again shortly." }, 500);
     }
 
-    await getSmsProvider().send(
-      phone,
-      `Your EduCore verification code is ${code}. It expires in 10 minutes.`,
-    );
+    if (channel === "sms") {
+      await getSmsProvider().send(
+        phone,
+        `Your EduCore verification code is ${code}. It expires in 10 minutes.`,
+      );
+    } else {
+      await getEmailProvider().send(
+        phone, // holds the email address when channel === "email"
+        "Your EduCore verification code",
+        `Your EduCore verification code is ${code}. It expires in 10 minutes.`,
+      );
+    }
 
     return json({ success: true });
   } catch (err) {
