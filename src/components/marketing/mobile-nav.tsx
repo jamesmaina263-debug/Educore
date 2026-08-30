@@ -18,15 +18,15 @@ export function MobileNav({ links }: { links: NavLink[] }) {
         <button
           type="button"
           aria-label="Open menu"
-          className="inline-flex h-9 w-9 items-center justify-center rounded-md text-white/80 transition-colors hover:text-white md:hidden"
+          className="inline-flex h-9 w-9 items-center justify-center rounded-md text-white/80 transition-colors hover:text-white lg:hidden"
         >
           <Menu className="h-6 w-6" aria-hidden="true" />
         </button>
       </Dialog.Trigger>
       <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-50 bg-black/60 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 md:hidden" />
+        <Dialog.Overlay className="fixed inset-0 z-50 bg-black/60 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 lg:hidden" />
         <Dialog.Content
-          className="fixed inset-y-0 right-0 z-50 flex w-[85vw] max-w-sm flex-col bg-marketing-navy-950 p-6 shadow-xl data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:slide-out-to-right data-[state=open]:slide-in-from-right md:hidden"
+          className="fixed inset-y-0 right-0 z-50 flex w-[85vw] max-w-sm flex-col bg-marketing-navy-950 p-6 shadow-xl data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:slide-out-to-right data-[state=open]:slide-in-from-right lg:hidden"
           aria-describedby={undefined}
         >
           <div className="flex items-center justify-between">

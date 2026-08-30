@@ -28,7 +28,7 @@ export function MarketingNav() {
           />
         </Link>
 
-        <nav className="hidden items-center gap-5 md:flex">
+        <nav className="hidden items-center gap-5 lg:flex">
           {NAV_LINKS.map((link) => (
             <Link
               key={link.href}
