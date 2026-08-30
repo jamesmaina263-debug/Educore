@@ -45,7 +45,7 @@ export function DashboardFrame({ className }: { className?: string }) {
         <div className="grid grid-cols-3 gap-3 bg-background p-4">
           <div className="col-span-3 flex items-center justify-between">
             <div>
-              <p className="text-sm font-semibold text-foreground">Gititu High School</p>
+              <p className="text-sm font-semibold text-foreground">Northgate Academy</p>
               <p className="text-xs text-muted-foreground">Term 2 · Overview</p>
             </div>
             <Badge variant="secondary" className="font-mono text-[10px]">
