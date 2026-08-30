@@ -6,15 +6,26 @@ import { AuthLayout } from "@/components/shared/auth-layout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 const FUNCTIONS_BASE = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1`;
 
+type Channel = "sms" | "email";
+
 export default function ParentLoginPage() {
+  const [channel, setChannel] = useState<Channel>("sms");
+  // Two separate fields rather than one shared one: switching tabs shouldn't
+  // carry a half-typed phone number into the email field (or vice versa),
+  // and it lets "Sent to {identifier}" on the code step show the right value
+  // without extra bookkeeping.
   const [phone, setPhone] = useState("");
+  const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
-  const [step, setStep] = useState<"phone" | "code">("phone");
+  const [step, setStep] = useState<"identifier" | "code">("identifier");
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+
+  const identifier = channel === "sms" ? phone : email;
 
   async function requestCode(e: FormEvent) {
     e.preventDefault();
@@ -27,7 +38,7 @@ export default function ParentLoginPage() {
           "Content-Type": "application/json",
           apikey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
         },
-        body: JSON.stringify({ phone }),
+        body: JSON.stringify({ identifier, channel }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Could not send code.");
@@ -50,7 +61,7 @@ export default function ParentLoginPage() {
           "Content-Type": "application/json",
           apikey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
         },
-        body: JSON.stringify({ phone, code }),
+        body: JSON.stringify({ identifier, channel, code }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Invalid code.");
@@ -91,21 +102,50 @@ export default function ParentLoginPage() {
           </p>
         </div>
 
-        {step === "phone" && (
+        {step === "identifier" && (
           <form onSubmit={requestCode} className="space-y-5">
-            <div className="space-y-1.5">
-              <Label htmlFor="phone">Phone number</Label>
-              <Input
-                id="phone"
-                type="tel"
-                required
-                placeholder="+2547XXXXXXXX"
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                autoFocus
-                className={inputRingClass}
-              />
-            </div>
+            <Tabs
+              value={channel}
+              onValueChange={(v) => {
+                setChannel(v as Channel);
+                setError(null);
+              }}
+            >
+              <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="sms">SMS</TabsTrigger>
+                <TabsTrigger value="email">Email</TabsTrigger>
+              </TabsList>
+            </Tabs>
+
+            {channel === "sms" ? (
+              <div className="space-y-1.5">
+                <Label htmlFor="phone">Phone number</Label>
+                <Input
+                  id="phone"
+                  type="tel"
+                  required
+                  placeholder="+2547XXXXXXXX"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  autoFocus
+                  className={inputRingClass}
+                />
+              </div>
+            ) : (
+              <div className="space-y-1.5">
+                <Label htmlFor="email">Email address</Label>
+                <Input
+                  id="email"
+                  type="email"
+                  required
+                  placeholder="you@example.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  autoFocus
+                  className={inputRingClass}
+                />
+              </div>
+            )}
             {error && (
               <p
                 role="alert"
@@ -141,7 +181,7 @@ export default function ParentLoginPage() {
                 className={inputRingClass}
               />
               <p className="text-xs text-muted-foreground">
-                Sent to {phone}.
+                Sent to {identifier}.
               </p>
             </div>
             {error && (

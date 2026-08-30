@@ -2,6 +2,7 @@ import { createClient } from "jsr:@supabase/supabase-js@2";
 import { buildCorsHeaders } from "../_shared/cors.ts";
 
 const KENYA_PHONE_RE = /^\+254\d{9}$/;
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 Deno.serve(async (req) => {
   const corsHeaders = buildCorsHeaders(req);
@@ -16,11 +17,26 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { phone, code, purpose = "login" } = await req.json();
+    // Same backward-compatible shape as request-otp: `channel` defaults to
+    // "sms", and `phone` is still accepted as the identifier field when
+    // channel is "sms" (or omitted), so the existing parent-login flow
+    // keeps working with zero changes to its request body.
+    const body = await req.json();
+    const { code, purpose = "login" } = body;
+    const channel: "sms" | "email" = body.channel === "email" ? "email" : "sms";
+    const identifier: unknown = body.identifier ?? body.phone;
 
-    if (typeof phone !== "string" || !KENYA_PHONE_RE.test(phone)) {
-      return json({ error: "A valid phone number in +254XXXXXXXXX format is required." }, 400);
+    if (channel === "sms") {
+      if (typeof identifier !== "string" || !KENYA_PHONE_RE.test(identifier)) {
+        return json({ error: "A valid phone number in +254XXXXXXXXX format is required." }, 400);
+      }
+    } else {
+      if (typeof identifier !== "string" || !EMAIL_RE.test(identifier)) {
+        return json({ error: "A valid email address is required." }, 400);
+      }
     }
+    const phone = identifier as string; // kept as `phone` from here down to minimize the diff against the existing (working) body below
+
     if (typeof code !== "string" || !/^\d{6}$/.test(code)) {
       return json({ error: "A valid 6-digit code is required." }, 400);
     }
@@ -34,6 +50,7 @@ Deno.serve(async (req) => {
       p_phone: phone,
       p_code: code,
       p_purpose: purpose,
+      p_channel: channel,
     });
 
     if (verifyError) {
@@ -60,10 +77,11 @@ Deno.serve(async (req) => {
     // active guardian records at the same school locked that number out of
     // login entirely). Handling the array explicitly lets that case return
     // a clear, actionable message instead.
+    const lookupColumn = channel === "sms" ? "phone" : "email";
     const { data: schoolUsers, error: lookupError } = await supabase
       .from("school_users")
       .select("id, auth_user_id, full_name")
-      .eq("phone", phone)
+      .eq(lookupColumn, phone)
       .eq("status", "active");
 
     if (lookupError) {
@@ -72,7 +90,10 @@ Deno.serve(async (req) => {
     }
 
     if (!schoolUsers || schoolUsers.length === 0) {
-      return json({ error: "No account is registered to this phone number." }, 404);
+      return json(
+        { error: `No account is registered to this ${channel === "sms" ? "phone number" : "email address"}.` },
+        404,
+      );
     }
 
     if (schoolUsers.length > 1) {
@@ -83,7 +104,7 @@ Deno.serve(async (req) => {
       return json(
         {
           error:
-            "This phone number is linked to more than one account. Please contact your school office to resolve this before signing in.",
+            `This ${channel === "sms" ? "phone number" : "email address"} is linked to more than one account. Please contact your school office to resolve this before signing in.`,
         },
         409,
       );
@@ -104,8 +125,11 @@ Deno.serve(async (req) => {
       const { data: created, error: createError } = await supabase.auth.admin.createUser({
         email: syntheticEmail,
         email_confirm: true,
-        phone,
-        phone_confirm: true,
+        // `phone` holds an email address (not a real phone number) when
+        // channel === "email" — only attach it to the auth user as a phone
+        // when it actually is one, or Supabase Auth would reject it (or
+        // silently store an invalid phone) for email-channel logins.
+        ...(channel === "sms" ? { phone, phone_confirm: true } : {}),
         user_metadata: { full_name: schoolUser.full_name, auth_provider: "otp" },
       });
 
