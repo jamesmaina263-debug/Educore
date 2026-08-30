@@ -116,12 +116,21 @@ export async function login(
   }
 
   // Slug is cosmetic (see school-slug-cookie.ts) -- never block or fail the
-  // login itself if this lookup has any trouble.
+  // login itself if this lookup has any trouble. The actual redirect() call is
+  // deliberately kept outside this try/catch: redirect() works by throwing, so a bare
+  // catch{} around it would silently swallow that throw and fall through instead of
+  // navigating anywhere.
   const cookieStore = await cookies();
+  let destination = "/dashboard";
   try {
     const { data: isSuperAdmin } = await supabase.rpc("auth_is_super_admin");
     if (isSuperAdmin) {
       clearSchoolSlugCookie(cookieStore);
+      // Platform staff land on the Platform Admin Console (src/app/(admin)), not a school
+      // dashboard -- a super admin typically has no school_users row tied to a real school, so
+      // /dashboard previously rendered an empty/default school view with no way to tell that
+      // was expected behavior.
+      destination = "/admin";
     } else if (signInData.user) {
       const { data: schoolUser } = await supabase
         .from("school_users")
@@ -135,7 +144,7 @@ export async function login(
     // Fall through -- worst case the URL just isn't slug-prefixed this session.
   }
 
-  redirect("/dashboard");
+  redirect(destination);
 }
 
 export async function logout() {

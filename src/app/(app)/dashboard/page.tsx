@@ -59,6 +59,13 @@ export default async function DashboardPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
+  // Platform staff land on the Platform Admin Console (src/app/(admin)) instead -- a super
+  // admin typically has no school_users row tied to a real school, so this dashboard would
+  // otherwise render an empty/default view. Catches anyone navigating here directly (e.g. a
+  // bookmark) even though login/actions.ts already sends them to /admin on sign-in.
+  const { data: isSuperAdmin } = await supabase.rpc("auth_is_super_admin");
+  if (isSuperAdmin) redirect("/admin");
+
   const [
     { data: schoolUser },
     { data: canSeeStudents },
