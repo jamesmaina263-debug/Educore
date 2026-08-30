@@ -197,7 +197,7 @@ export function SignupForm() {
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="owner_name">Your Name</Label>
-            <Input id="owner_name" name="owner_name" required autoComplete="name" placeholder="e.g. Elena Lauren" />
+            <Input id="owner_name" name="owner_name" required autoComplete="name" placeholder="e.g. Joe Doe" />
           </div>
         </div>
         <div className="mt-3 space-y-1.5">
