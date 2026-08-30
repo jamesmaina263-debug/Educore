@@ -16,6 +16,7 @@ const ROUTES: { path: string; priority: number }[] = [
   { path: "/about", priority: 0.6 },
   { path: "/contact", priority: 0.7 },
   { path: "/faq", priority: 0.6 },
+  { path: "/blog/best-school-management-system-kenya", priority: 0.6 },
   { path: "/privacy", priority: 0.3 },
   { path: "/terms", priority: 0.3 },
 ];
