@@ -48,7 +48,17 @@ const nextConfig: NextConfig = {
       // script from there -- currently a no-op until NEXT_PUBLIC_PLAUSIBLE_DOMAIN
       // is set (see that file), but the CSP needs to allow it now so flipping
       // that env var later doesn't also require a CSP change to un-break it.
-      "script-src 'self' 'unsafe-inline' https://plausible.io",
+      // https://*.googletagmanager.com is GTM's own loader script
+      // (src/app/layout.tsx's <GoogleTagManager>) plus any tag GTM injects
+      // into the page afterward -- container-configured tags (GA4 included)
+      // load from the same host. This is a host-based allowlist, not a
+      // nonce: a real nonce would require reading a per-request value via
+      // next/headers in the root layout, which forces every page under it
+      // out of static prerendering (verified against a build -- all 11
+      // marketing pages would flip from prerendered to server-rendered per
+      // request). Deliberately traded a marginally weaker script-src for
+      // keeping those pages static.
+      "script-src 'self' 'unsafe-inline' https://plausible.io https://*.googletagmanager.com",
       // Tailwind v4 and Radix UI apply styles at runtime via inserted <style>
       // tags/inline style attributes -- 'unsafe-inline' is required here too.
       "style-src 'self' 'unsafe-inline'",
@@ -56,8 +66,12 @@ const nextConfig: NextConfig = {
       "font-src 'self' data:",
       // plausible.io here too: the same script reports pageview/conversion
       // events back via fetch/beacon calls to its own origin, not Sentry's
-      // or Supabase's.
-      `connect-src 'self' ${supabaseOrigin} https://*.ingest.de.sentry.io https://*.ingest.sentry.io https://plausible.io`,
+      // or Supabase's. google-analytics.com/analytics.google.com are GA4's
+      // own hit-collection endpoints -- these need a connect-src entry
+      // regardless of the script-src approach above, since that's a
+      // separate fetch/beacon call GA4 makes after GTM loads it, not a
+      // <script> element CSP already covers.
+      `connect-src 'self' ${supabaseOrigin} https://*.ingest.de.sentry.io https://*.ingest.sentry.io https://plausible.io https://*.googletagmanager.com https://*.google-analytics.com https://*.analytics.google.com`,
       "frame-ancestors 'none'",
       "base-uri 'self'",
       "form-action 'self'",
