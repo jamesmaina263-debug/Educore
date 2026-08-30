@@ -14,7 +14,17 @@ function isProtectedPath(pathname: string): boolean {
   return PROTECTED_PREFIXES.some((prefix) => withoutFirstSegment.startsWith(prefix));
 }
 
-export async function updateSession(request: NextRequest) {
+export type SessionUpdate = {
+  response: NextResponse;
+  // Whether supabase.auth.getUser() below found a valid session. Exposed so
+  // callers (school-slug-routing's fallback branch) can make an
+  // auth-aware routing decision without making their own DB/network call --
+  // this is the exact same getUser() result already computed here for
+  // every request, just threaded through instead of discarded.
+  isAuthenticated: boolean;
+};
+
+export async function updateSession(request: NextRequest): Promise<SessionUpdate> {
   let supabaseResponse = NextResponse.next({ request });
 
   const supabase = createServerClient(
@@ -50,7 +60,7 @@ export async function updateSession(request: NextRequest) {
     const loginUrl = request.nextUrl.clone();
     loginUrl.pathname = "/login";
     loginUrl.searchParams.set("redirectedFrom", request.nextUrl.pathname);
-    return NextResponse.redirect(loginUrl);
+    return { response: NextResponse.redirect(loginUrl), isAuthenticated: false };
   }
 
   // Defense in depth for forced password change / deactivation: the login
@@ -69,17 +79,17 @@ export async function updateSession(request: NextRequest) {
       const loginUrl = request.nextUrl.clone();
       loginUrl.pathname = "/login";
       loginUrl.searchParams.set("deactivated", "1");
-      return NextResponse.redirect(loginUrl);
+      return { response: NextResponse.redirect(loginUrl), isAuthenticated: false };
     }
 
     if (schoolUser?.must_change_password) {
       const changePasswordUrl = request.nextUrl.clone();
       changePasswordUrl.pathname = "/change-password";
-      return NextResponse.redirect(changePasswordUrl);
+      return { response: NextResponse.redirect(changePasswordUrl), isAuthenticated: true };
     }
   }
 
-  return supabaseResponse;
+  return { response: supabaseResponse, isAuthenticated: !!user };
 }
 
 function isChangePasswordPath(pathname: string): boolean {
