@@ -20,7 +20,14 @@ const BRAND_HIGHLIGHTS = [
  * compact logo badge -- everything auth-specific (form fields, step
  * state, submit handlers) stays in the page that renders as `children`.
  */
-export function AuthLayout({ children }: { children: ReactNode }) {
+export function AuthLayout({
+  children,
+  contentClassName = "max-w-sm",
+}: {
+  children: ReactNode;
+  /** Width of the form column. Defaults to the original narrow single-field-column width (login/parent-login); signup's wider multi-column form overrides this. */
+  contentClassName?: string;
+}) {
   return (
     <div className="grid min-h-screen w-full bg-background lg:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)]">
       {/* Brand panel — desktop/tablet only. The one deliberately branded,
@@ -97,7 +104,7 @@ export function AuthLayout({ children }: { children: ReactNode }) {
 
       {/* Form panel */}
       <div className="flex items-center justify-center px-6 py-14 sm:px-10 lg:px-16 xl:px-24">
-        <div className="w-full max-w-sm">
+        <div className={`w-full ${contentClassName}`}>
           {/* Compact brand mark — mobile/tablet only, where the brand panel
               above is hidden. */}
           <div className="mb-10 flex justify-center lg:hidden">

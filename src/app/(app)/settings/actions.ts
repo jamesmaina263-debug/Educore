@@ -1,9 +1,9 @@
 "use server";
 
-import { randomBytes } from "crypto";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { generateTemporaryPassword, temporaryPasswordExpiry } from "@/lib/temporary-password";
 
 type ActionResult = { error: string } | { success: true };
 type InviteResult = { error: string } | { success: true; temporaryPassword: string };
@@ -43,23 +43,6 @@ export async function updateBranding(input: {
 
   revalidatePath("/settings", "layout");
   return { success: true };
-}
-
-function generateTemporaryPassword() {
-  // Readable-ish but random — this is shown once to an admin to relay to
-  // the new staff member manually (no email/SMS invite infra exists yet),
-  // not something a user ever sees generated for themselves.
-  return randomBytes(9).toString("base64url");
-}
-
-// How long a temp password (invite or reset) is usable before the app
-// refuses to honor it. must_change_password forces a change well before
-// this if the staff member logs in promptly; this bounds the window for
-// one who never logs in at all.
-const TEMP_PASSWORD_TTL_MS = 3 * 24 * 60 * 60 * 1000; // 3 days
-
-function temporaryPasswordExpiry() {
-  return new Date(Date.now() + TEMP_PASSWORD_TTL_MS).toISOString();
 }
 
 export async function inviteStaffMember(input: {
