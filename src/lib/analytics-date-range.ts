@@ -85,3 +85,15 @@ export function percentChange(current: number, previous: number): number | null 
   if (previous === 0) return current === 0 ? 0 : null; // undefined % change from a true zero baseline
   return ((current - previous) / previous) * 100;
 }
+
+// A daily trend line over 90 days is 90 points -- technically correct but
+// unreadable, and the spec explicitly asks for "visitors by day/week/month".
+// This picks a reasonable default per period; the page still lets the user
+// override it via the granularity toggle.
+export function defaultGranularity(period: PeriodKey, startIso: string, endIso: string): "day" | "week" | "month" {
+  if (period === "today" || period === "yesterday" || period === "7d") return "day";
+  const days = Math.round((new Date(endIso).getTime() - new Date(startIso).getTime()) / 86_400_000) + 1;
+  if (days > 60) return "month";
+  if (days > 21) return "week";
+  return "day";
+}

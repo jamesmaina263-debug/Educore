@@ -23,6 +23,18 @@ export function isPlausibleConfigured(): boolean {
   return Boolean(SITE_ID && API_KEY);
 }
 
+// NOTE: "new vs. returning visitors" (spec ask under Website Traffic) has
+// no equivalent in Plausible's Stats API v2 -- verified against the
+// current official dimension list (https://plausible.io/docs/stats-api,
+// checked 2026-08-30). There is no visit-count/returning-visitor dimension
+// or metric at all; this is a deliberate consequence of Plausible being
+// cookie-less and not persisting cross-session visitor identity. Do not
+// build a fake version of this (e.g. inferring it from IP/UA hashing) --
+// that would reintroduce exactly the fingerprinting the spec explicitly
+// prohibits. If this is ever genuinely required, it needs a different
+// analytics tool entirely, with a materially different privacy posture
+// than the cookie-less one this project deliberately chose.
+
 export type DateRangeInput = "day" | "7d" | "30d" | "91d" | [string, string];
 
 type QueryFilter = [string, string, (string | number)[]] | [string, string, (string | number)[], Record<string, unknown>];
@@ -96,11 +108,16 @@ export async function getOverviewStats(dateRange: DateRangeInput): Promise<Overv
 
 export type TimeseriesPoint = { date: string; visitors: number; pageviews: number };
 
-export async function getTimeseries(dateRange: DateRangeInput): Promise<TimeseriesPoint[] | null> {
+export type TimeGranularity = "day" | "week" | "month";
+
+export async function getTimeseries(
+  dateRange: DateRangeInput,
+  granularity: TimeGranularity = "day",
+): Promise<TimeseriesPoint[] | null> {
   const result = await queryPlausible({
     metrics: ["visitors", "pageviews"],
     date_range: dateRange,
-    dimensions: ["time"],
+    dimensions: [`time:${granularity}`],
   });
   if (!result) return null;
   return result.results.map((row) => ({
@@ -164,17 +181,35 @@ export function getCountryBreakdown(dateRange: DateRangeInput, limit = 10) {
   return getBreakdown(dateRange, "visit:country_name", limit);
 }
 
-export type UtmCampaignRow = { source: string; medium: string; campaign: string; visitors: number };
+// Region/state-level geography, per the spec's "region/county where
+// sufficiently reliable" ask. Plausible's own geo hierarchy stops at
+// region (e.g. US states, admin-1 equivalents) -- it doesn't resolve to
+// Kenyan counties specifically, so this is the finest legitimate
+// granularity the Stats API actually offers; sparse/low-traffic regions
+// will simply return few or no rows rather than fabricated county names.
+export function getRegionBreakdown(dateRange: DateRangeInput, limit = 10) {
+  return getBreakdown(dateRange, "visit:region_name", limit);
+}
 
-// UTM breakdown, grouped by all three dimensions together so a single
-// campaign's rows aren't scattered across separate source/medium/campaign
-// tables -- this is what answers "which campaigns actually generate
-// traffic", per the spec, rather than three disconnected lists.
+export type UtmCampaignRow = {
+  source: string;
+  medium: string;
+  campaign: string;
+  content: string;
+  visitors: number;
+};
+
+// UTM breakdown, grouped by all four dimensions together (source, medium,
+// campaign, and content) so a single campaign's rows aren't scattered
+// across separate tables -- this is what answers "which campaigns actually
+// generate traffic", per the spec, rather than disconnected lists.
+// visit:utm_content is included per spec (ad/creative variant within a
+// campaign, e.g. distinguishing two banner designs in the same campaign).
 export async function getUtmCampaigns(dateRange: DateRangeInput, limit = 15): Promise<UtmCampaignRow[] | null> {
   const result = await queryPlausible({
     metrics: ["visitors"],
     date_range: dateRange,
-    dimensions: ["visit:utm_source", "visit:utm_medium", "visit:utm_campaign"],
+    dimensions: ["visit:utm_source", "visit:utm_medium", "visit:utm_campaign", "visit:utm_content"],
     filters: [["is_not", "visit:utm_source", [""]]],
     order_by: [["visitors", "desc"]],
     pagination: { limit },
@@ -184,6 +219,7 @@ export async function getUtmCampaigns(dateRange: DateRangeInput, limit = 15): Pr
     source: row.dimensions[0] || "(none)",
     medium: row.dimensions[1] || "(none)",
     campaign: row.dimensions[2] || "(none)",
+    content: row.dimensions[3] || "(none)",
     visitors: row.metrics[0] as number,
   }));
 }
