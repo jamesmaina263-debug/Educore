@@ -17,7 +17,7 @@
 //     analytics.tsx) are Plausible-specific and are NOT guaranteed to reach
 //     GA4. getGoalBreakdown() reports GA4's actual top event names instead
 //     of assuming those five exist; it will only show the demo-funnel-style
-//     names if GTM (GTM-MGV2XHBB, see src/app/layout.tsx) has separately
+//     names if GTM (GTM-MGV2XHBB, see src/app/(marketing)/layout.tsx) has separately
 //     been configured to fire matching events.
 //   - UTM breakdown drops the "content" (ad variant) column present in the
 //     Plausible version -- its GA4 dimension name wasn't confirmed against

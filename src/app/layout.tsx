@@ -2,7 +2,6 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { ServiceWorkerRegister } from "@/components/pwa/service-worker-register";
 import { SITE_URL, SITE_NAME } from "@/lib/site";
-import { GoogleTagManager } from "@next/third-parties/google";
 
 // Deliberately not using next/font/google here: it requires a build-time
 // fetch to Google Fonts, which fails in restricted-network environments
@@ -57,7 +56,18 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className="h-full antialiased">
-      <GoogleTagManager gtmId="GTM-MGV2XHBB" />
+      {/* GTM (GTM-MGV2XHBB) deliberately does NOT live here anymore -- this
+          layout wraps every route in the app, including the authenticated
+          school app ((app) route group: student, health, finance,
+          discipline, biometric-kiosk pages) and the platform admin console
+          ((admin) route group). GTM was briefly loaded here site-wide,
+          which meant analytics/advertising tags could fire on pages
+          showing real student PII -- a mismatch with both the site's
+          privacy page (which states no analytics cookies are set) and the
+          admin analytics page's own stated scope ("public marketing
+          website" performance only). It now lives in
+          src/app/(marketing)/layout.tsx instead, alongside
+          MarketingAnalytics (Plausible) -- see that file's comment. */}
       <body className="min-h-full flex flex-col">
         {children}
         <ServiceWorkerRegister />
