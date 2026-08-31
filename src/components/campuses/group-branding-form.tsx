@@ -42,8 +42,8 @@ export function GroupBrandingForm({ initial }: { initial: GroupBrandingData }) {
     return (
       <div className="panel max-w-md space-y-2 p-5">
         <p className="text-sm text-muted-foreground">
-          White-labeling isn&apos;t enabled for your group yet. This is a Trimora-managed
-          entitlement — reach out to Trimora to turn it on for your account.
+          White-labeling isn&apos;t enabled for your group yet. This is an EduCore-managed
+          entitlement — reach out to EduCore to turn it on for your account.
         </p>
       </div>
     );
@@ -99,7 +99,7 @@ export function GroupBrandingForm({ initial }: { initial: GroupBrandingData }) {
           )}
         </div>
         <p className="text-xs text-muted-foreground">
-          Saving a domain here records your request — Trimora still needs to verify DNS
+          Saving a domain here records your request — EduCore still needs to verify DNS
           ownership and attach it on our side before it goes live. Changing the domain resets
           verification, since a new domain string means starting the ownership check over.
         </p>
