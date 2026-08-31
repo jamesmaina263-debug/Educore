@@ -53,6 +53,7 @@ export function DemoRequestForm() {
       const cta = getStoredCtaSource();
       sendGTMEvent({
         event: "contact_form_submit",
+        page_path: window.location.pathname,
         contact_form_role: selectedRole,
         cta_location: cta.location ?? "",
         cta_label: cta.label ?? "",
