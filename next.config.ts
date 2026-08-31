@@ -13,23 +13,32 @@ const nextConfig: NextConfig = {
   },
   // Baseline hardening headers.
   async headers() {
-    // Best-effort CSP built from reading the code (Sentry's DSN/ingest host in
-    // instrumentation-client.ts, Supabase's URL pattern, Next/Tailwind's own
-    // requirements) rather than from a live browser pass -- this environment
-    // has no way to actually load the deployed app and watch what a real CSP
-    // blocks, which is exactly the risk the previous version of this comment
-    // called out. Shipping it directly in enforcing mode without that
-    // verification could silently break pages in production (a blocked
-    // Sentry beacon is harmless; a blocked Supabase fetch is not).
-    //
-    // So: Content-Security-Policy-Report-Only, not Content-Security-Policy.
-    // Report-only mode sends the exact same violation reports (visible in
-    // each browser's devtools Console/Network, and to report-uri if one is
-    // wired up later) without blocking anything -- it's a real dry run
-    // against production traffic. Once a deploy has run with this for a few
-    // days with no unexpected violations, switch the header key below from
-    // "Content-Security-Policy-Report-Only" to "Content-Security-Policy" to
-    // start enforcing it.
+    // CSP, now enforcing. This was Report-Only for a while because this
+    // environment has no live browser to verify against -- but a thorough
+    // static audit of every external resource this app actually loads (every
+    // <script>, <iframe>, fetch/connect call, grepped across src/) found two
+    // concrete gaps that the *original* Report-Only policy below would have
+    // silently broken in enforcing mode, neither caught before because
+    // nothing had actually exercised them against it:
+    //   1. Cloudflare Turnstile (the signup-page captcha, src/components/
+    //      turnstile-widget.tsx) loads its own script from
+    //      challenges.cloudflare.com and renders its widget in an iframe from
+    //      the same host -- script-src didn't allow the former and there was
+    //      no frame-src at all (falls back to default-src 'self') for the
+    //      latter. Enforcing the old policy as-is would have silently broken
+    //      new-school signup.
+    //   2. Document preview (src/components/document-preview-dialog.tsx,
+    //      used across Admissions/Students/Staff document review) renders
+    //      PDFs in an iframe pointed at a signed Supabase Storage URL -- same
+    //      missing-frame-src problem, would have broken every PDF preview in
+    //      the app app-wide.
+    // Both are fixed below (script-src gains challenges.cloudflare.com; a new
+    // frame-src covers 'self' + Supabase + Turnstile). A `report-to`/
+    // `report-uri` pair now also points at /api/csp-report, so if this audit
+    // still missed something, a real violation shows up in Vercel's runtime
+    // logs (and Sentry) immediately instead of just quietly breaking a page
+    // for whoever hit it -- enforcing mode still sends reports for anything
+    // it blocks, same as report-only did.
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
     let supabaseOrigin = "https://*.supabase.co";
     try {
@@ -58,12 +67,22 @@ const nextConfig: NextConfig = {
       // marketing pages would flip from prerendered to server-rendered per
       // request). Deliberately traded a marginally weaker script-src for
       // keeping those pages static.
-      "script-src 'self' 'unsafe-inline' https://plausible.io https://*.googletagmanager.com",
+      // https://challenges.cloudflare.com is Turnstile's own loader script
+      // (src/components/turnstile-widget.tsx, used on the signup-page
+      // captcha) -- missing here would silently break new-school signup the
+      // moment this policy started enforcing.
+      "script-src 'self' 'unsafe-inline' https://plausible.io https://*.googletagmanager.com https://challenges.cloudflare.com",
       // Tailwind v4 and Radix UI apply styles at runtime via inserted <style>
       // tags/inline style attributes -- 'unsafe-inline' is required here too.
       "style-src 'self' 'unsafe-inline'",
       "img-src 'self' data: blob: https:",
       "font-src 'self' data:",
+      // Two real consumers, both would break under the default (default-src
+      // 'self') without this: Turnstile renders its widget in an iframe from
+      // its own host, and src/components/document-preview-dialog.tsx renders
+      // PDF documents (admission/student/staff uploads) in an iframe pointed
+      // at a short-lived signed Supabase Storage URL.
+      `frame-src 'self' ${supabaseOrigin} https://challenges.cloudflare.com`,
       // plausible.io here too: the same script reports pageview/conversion
       // events back via fetch/beacon calls to its own origin, not Sentry's
       // or Supabase's. google-analytics.com/analytics.google.com are GA4's
@@ -75,7 +94,20 @@ const nextConfig: NextConfig = {
       "frame-ancestors 'none'",
       "base-uri 'self'",
       "form-action 'self'",
+      // report-uri is deprecated but still the only directive older/some
+      // mobile browsers honor; report-to is the modern replacement and needs
+      // a matching Report-To response header (below) naming the same group.
+      // Sent together so violations are visible regardless of which one a
+      // given browser supports -- see /api/csp-report for what receives them.
+      "report-uri /api/csp-report",
+      "report-to csp-endpoint",
     ].join("; ");
+
+    const reportTo = JSON.stringify({
+      group: "csp-endpoint",
+      max_age: 10886400,
+      endpoints: [{ url: "/api/csp-report" }],
+    });
 
     return [
       {
@@ -101,7 +133,8 @@ const nextConfig: NextConfig = {
             value:
               "camera=(), microphone=(), geolocation=(), interest-cohort=()",
           },
-          { key: "Content-Security-Policy-Report-Only", value: csp },
+          { key: "Report-To", value: reportTo },
+          { key: "Content-Security-Policy", value: csp },
         ],
       },
     ];
