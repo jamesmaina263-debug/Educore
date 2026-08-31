@@ -57,7 +57,7 @@ Deno.serve(async (req) => {
     payload.student_count ? `<li><strong>Student count:</strong> ${payload.student_count}</li>` : "",
     payload.message ? `<li><strong>Message:</strong> ${payload.message}</li>` : "",
     `</ul>`,
-    `<p><a href="https://educoreafrica.com/admin/demo-requests">View in the Platform Admin Console</a></p>`,
+    `<p><a href="https://www.educoreafrica.com/admin/demo-requests">View in the Platform Admin Console</a></p>`,
   ]
     .filter(Boolean)
     .join("\n");
