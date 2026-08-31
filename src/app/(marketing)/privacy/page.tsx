@@ -46,7 +46,7 @@ export default function PrivacyPage() {
           role is different in each.
         </p>
         <p className="mt-4 max-w-2xl text-sm leading-relaxed text-white/50">
-          Effective August 30, 2026 · Published by EduCore Technologies Ltd
+          Effective August 31, 2026 · Published by EduCore Technologies Ltd
           (registration no. PVT-93SSQEELA), 7th Floor, Sanlam Towers, Waiyaki
           Way, Westlands, Nairobi, Kenya.
         </p>
@@ -129,11 +129,27 @@ export default function PrivacyPage() {
               deliberately switched off in this configuration; Sentry
               receives only what is needed to identify and fix bugs, via an
               EU-region endpoint (see Section 9 in Part B for what that
-              means for cross-border transfer). This site does not currently
-              set analytics or advertising cookies — an analytics script
-              (Plausible, cookie-less by design) is integrated but inactive
-              until we choose to turn it on, and this page will be updated
-              first if that changes.
+              means for cross-border transfer).
+            </p>
+            <p className="mt-3 text-marketing-navy-900/75">
+              This site uses Google Analytics (via Google Tag Manager) to
+              understand aggregate visitor traffic — pages viewed, how
+              visitors arrived, and general engagement — so we can see how
+              the site is performing. This sets analytics cookies in your
+              browser when you visit{" "}
+              <span className="font-mono text-sm">educoreafrica.com</span>.
+              It is scoped to this marketing website only; it is never
+              active in the EduCore application that enrolled schools and
+              families use, which instead uses a separate, cookie-less
+              analytics tool (Plausible, described below) that does not
+              track individuals. When you submit the contact/demo form,
+              Google Analytics separately records that a form was
+              submitted, so we can measure how many visitors convert into
+              enquiries — it does not receive the name, email, phone
+              number, or message you entered. We do not use Google
+              Analytics for advertising or retargeting, and we do not share
+              the data it collects with any third party beyond Google as
+              the analytics processor.
             </p>
           </div>
 
@@ -337,6 +353,7 @@ export default function PrivacyPage() {
                     ["Safaricom (M-Pesa)", "Fee payment processing", "Payment amount, phone number, transaction reference — not full financial account details"],
                     ["Twilio (WhatsApp Business API) / SMS gateway", "Sending parent communications the School initiates", "Recipient phone number, message content"],
                     ["Sentry", "Error monitoring", "Technical error data only — default PII collection is disabled in every environment. Ingest endpoint is EU-region (*.ingest.de.sentry.io) — see Section 9."],
+                    ["Google Analytics (via Google Tag Manager)", "Website analytics (marketing site only, not the application)", "Aggregated visitor traffic (pages viewed, referral source, device/browser type) and anonymous form-submission events; sets analytics cookies on the marketing site only"],
                     ["Plausible", "Website analytics (marketing site only, not the application)", "Aggregated, cookie-less traffic data — not currently active"],
                   ].map(([name, purpose, data]) => (
                     <tr key={name}>
