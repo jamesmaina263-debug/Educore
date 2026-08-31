@@ -7,6 +7,7 @@ import { getMyNotificationPreferences } from "@/app/notifications/actions";
 import { PortalHomeworkSection, type PortalAssignmentRow } from "@/components/portal/portal-homework";
 import { PortalPtMeetingsSection, type PortalSlotRow } from "@/components/portal/portal-pt-meetings";
 import { PortalConnectSection, type PortalConnectItemRow } from "@/components/portal/portal-connect";
+import { PortalAnnouncementsSection, type PortalAnnouncementRow } from "@/components/portal/portal-announcements";
 
 const WEEKDAY_NAMES = ["", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 
@@ -162,6 +163,45 @@ export default async function PortalPage({ searchParams }: { searchParams: Promi
     });
   }
 
+  // Announcements are guardian-only this phase, same as Connect, and are not
+  // filtered to the selected child: whole_school/grade scoped notices apply
+  // across all of a guardian's children, not just the one currently selected.
+  let announcementItems: PortalAnnouncementRow[] = [];
+  if (roleName === "parent") {
+    const { data: recipientRows } = await supabase
+      .from("announcement_recipients")
+      .select(
+        "read_at, acknowledged_at, announcements(id, title, body, urgency, status, created_at, withdrawal_reason)",
+      )
+      .eq("guardian_user_id", schoolUser.id);
+    announcementItems = (recipientRows ?? [])
+      .map((r) => {
+        const a = r.announcements as unknown as {
+          id: string;
+          title: string;
+          body: string;
+          urgency: "normal" | "action_required" | "urgent";
+          status: string;
+          created_at: string;
+          withdrawal_reason: string | null;
+        } | null;
+        if (!a) return null;
+        return {
+          id: a.id,
+          title: a.title,
+          body: a.body,
+          urgency: a.urgency,
+          status: a.status,
+          created_at: a.created_at,
+          withdrawal_reason: a.withdrawal_reason,
+          my_read_at: r.read_at,
+          my_acknowledged_at: r.acknowledged_at,
+        };
+      })
+      .filter((a): a is PortalAnnouncementRow => a !== null)
+      .sort((a, b) => b.created_at.localeCompare(a.created_at));
+  }
+
   let attendanceRate: number | null = null;
   if (activeTerm) {
     const { data: attendanceRows } = await supabase
@@ -300,6 +340,13 @@ export default async function PortalPage({ searchParams }: { searchParams: Promi
         <div className="panel p-4">
           <p className="label-eyebrow mb-2">Parent-teacher meetings</p>
           <PortalPtMeetingsSection studentId={selected.id} slots={ptSlots} />
+        </div>
+      )}
+
+      {roleName === "parent" && (
+        <div className="panel p-4">
+          <p className="label-eyebrow mb-2">Announcements</p>
+          <PortalAnnouncementsSection items={announcementItems} />
         </div>
       )}
 

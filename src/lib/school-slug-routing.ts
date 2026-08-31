@@ -7,7 +7,7 @@ import { SCHOOL_SLUG_COOKIE } from "@/lib/school-slug-cookie";
 // first path segment can be handled correctly either way. Keep in sync with
 // src/app/(app)'s folder list if a new top-level module is ever added.
 export const APP_ROUTE_SEGMENTS = new Set([
-  "academics", "admin", "admissions", "ai", "attendance", "boarding", "campuses",
+  "academics", "admin", "admissions", "ai", "announcements", "attendance", "boarding", "campuses",
   "communication", "connect", "dashboard", "discipline", "exams", "finance", "health",
   "homework", "integrations", "inventory", "library", "parents", "payroll", "performance", "pt-meetings",
   "reports", "settings", "staff", "students", "transport",
