@@ -80,3 +80,19 @@ export async function replyConnectItemAction(itemId: string, body: string): Prom
   return { success: true };
 }
 
+export async function markAnnouncementReadAction(id: string): Promise<ActionResult> {
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("mark_announcement_read", { p_id: id });
+  if (error) return { error: error.message };
+  revalidatePath("/portal");
+  return { success: true };
+}
+
+export async function acknowledgeAnnouncementAction(id: string): Promise<ActionResult> {
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("acknowledge_announcement", { p_id: id });
+  if (error) return { error: error.message };
+  revalidatePath("/portal");
+  return { success: true };
+}
+
