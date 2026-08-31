@@ -2,6 +2,7 @@
 
 import { useActionState, useEffect, useRef, useState } from "react";
 import { CheckCircle2 } from "lucide-react";
+import { sendGTMEvent } from "@next/third-parties/google";
 
 import { submitDemoRequest, type DemoRequestState } from "@/app/(marketing)/contact/actions";
 import { MarketingButton } from "@/components/marketing/button";
@@ -47,6 +48,22 @@ export function DemoRequestForm() {
     if (targetName === "company_website") return;
     startedRef.current = true;
     trackEvent("Demo Form Started");
+  }
+
+  // GTM's "JS - Contact Form Role" variable was reading document.getElementById
+  // ("role") live at submit time, racing the Server Action's success-state
+  // swap (which unmounts the form, including #role, the instant the request
+  // resolves) -- resolved to undefined in every Preview-mode test. Fix:
+  // capture the role the moment it's chosen and push it straight into
+  // dataLayer, so GTM's variable/trigger reads an already-present value at
+  // submit time instead of reading a DOM node that may already be gone.
+  // Non-content only -- the role selection itself, never name/email/phone/
+  // message. GTM-side still needs a matching change: point the
+  // contact_sales / generate_lead role condition at a Data Layer Variable
+  // (Version 2) named "contact_form_role" instead of the old DOM-reading
+  // Custom JS variable.
+  function handleRoleChange(event: React.ChangeEvent<HTMLSelectElement>) {
+    sendGTMEvent({ event: "contact_form_role_selected", contact_form_role: event.target.value });
   }
 
   if (state.status === "success") {
@@ -118,7 +135,14 @@ export function DemoRequestForm() {
 
       <div className="grid gap-5 sm:grid-cols-2">
         <Field label="Your role" htmlFor="role">
-          <select id="role" name="role" required defaultValue="" className={inputClass}>
+          <select
+            id="role"
+            name="role"
+            required
+            defaultValue=""
+            onChange={handleRoleChange}
+            className={inputClass}
+          >
             <option value="" disabled>
               Select a role
             </option>
