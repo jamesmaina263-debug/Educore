@@ -99,6 +99,7 @@ export default function PricingPage() {
                 features={plan.features}
                 ctaLabel={plan.ctaLabel}
                 ctaHref="/contact"
+                ctaTier={plan.name}
               />
             ))}
           </div>
