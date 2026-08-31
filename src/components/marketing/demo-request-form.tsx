@@ -30,11 +30,39 @@ export function DemoRequestForm() {
   // visit, no UTM params anywhere in this session) -- the server action
   // treats an empty string the same as "not provided".
   const [attribution] = useState(() => getStoredAttribution());
+  // Mirrors whatever handleRoleChange last pushed to dataLayer -- kept here
+  // too so the submit-time event below can read it directly as a React
+  // value instead of re-deriving it, without changing how GTM itself reads
+  // it (still the contact_form_role_selected -> DLV v2 path, see that
+  // handler's comment).
+  const [selectedRole, setSelectedRole] = useState("");
 
   useEffect(() => {
     if (state.status === "success") {
       trackEvent("Demo Request Submitted");
+
+      // Dedicated conversion event: contact_form_context (above) fires on
+      // mount, before the visitor has picked a role or submitted anything,
+      // so it can't carry contact_form_role or represent an actual
+      // completed submission -- it's context, not a conversion. This fires
+      // exactly once, only on a confirmed successful submission, with the
+      // full payload GA4's contact_sales / generate_lead tags should
+      // actually key off. cta_* re-read from storage (not from the
+      // contact_form_context push above) since that's the same
+      // source-of-truth the earlier push used and it hasn't changed.
+      const cta = getStoredCtaSource();
+      sendGTMEvent({
+        event: "contact_form_submit",
+        contact_form_role: selectedRole,
+        cta_location: cta.location ?? "",
+        cta_label: cta.label ?? "",
+        cta_tier: cta.tier ?? "",
+        utm_source: attribution.utm_source ?? "",
+        utm_medium: attribution.utm_medium ?? "",
+        utm_campaign: attribution.utm_campaign ?? "",
+      });
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.status]);
 
   // Pushes UTM attribution + on-site CTA context into dataLayer once, at
@@ -89,6 +117,7 @@ export function DemoRequestForm() {
   // (Version 2) named "contact_form_role" instead of the old DOM-reading
   // Custom JS variable.
   function handleRoleChange(event: React.ChangeEvent<HTMLSelectElement>) {
+    setSelectedRole(event.target.value);
     sendGTMEvent({ event: "contact_form_role_selected", contact_form_role: event.target.value });
   }
 
