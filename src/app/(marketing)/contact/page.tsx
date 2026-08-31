@@ -87,10 +87,10 @@ export default function ContactPage() {
                     </a>{" "}
                     or email{" "}
                     <a
-                      href="mailto:info@educore.co.ke"
+                      href="mailto:info@educoreafrica.com"
                       className="font-medium text-marketing-blue underline underline-offset-2"
                     >
-                      info@educore.co.ke
+                      info@educoreafrica.com
                     </a>
                     .
                   </p>
