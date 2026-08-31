@@ -52,9 +52,16 @@ export function MarketingAnalytics() {
   // there is no separate tel: link), and mailto: (email). No "Phone Click"
   // event exists separately from "WhatsApp CTA Click" -- confirmed with
   // the project owner that the phone number stays a WhatsApp-only link.
+  // NOTE: this listener always runs, independent of PLAUSIBLE_DOMAIN.
+  // It used to be gated behind `if (!PLAUSIBLE_DOMAIN) return`, which meant
+  // that on an unconfigured Plausible instance (the actual state of `main`
+  // as of Aug 2026 -- account creation is still an ops-only pending step)
+  // the whole listener no-opped, captureCtaSource() never ran, sessionStorage
+  // never got written, and demo-request-form.tsx's GTM push for
+  // cta_location/cta_label/cta_tier always read back {} -> "". CTA-source
+  // capture for GTM/GA4 and Plausible's own event tracking are separate
+  // concerns; only the latter should depend on Plausible being configured.
   useEffect(() => {
-    if (!PLAUSIBLE_DOMAIN) return;
-
     function eventNameFor(href: string): string | null {
       if (href.startsWith("/contact")) return "Contact CTA Click";
       if (href.startsWith("https://wa.me/") || href.startsWith("http://wa.me/")) {
@@ -74,14 +81,18 @@ export function MarketingAnalytics() {
       if (!eventName) return;
       const label = anchor.textContent?.trim().replace(/\s+/g, " ").slice(0, 60) || eventName;
       const location = window.location.pathname;
-      trackEvent(eventName, { location, label });
 
-      // For a /contact click specifically, also stash which page/label (and,
-      // for pricing-tier CTAs, which tier -- see data-cta-tier in
-      // pricing-card.tsx) sent them there. demo-request-form.tsx reads this
-      // back at mount and pushes it into dataLayer, so the eventual
-      // contact_sales/generate_lead GA4 event can carry non-content
-      // "which CTA drove this" context. Never sent to the server.
+      // Plausible-specific: only fires once an account/domain exists.
+      if (PLAUSIBLE_DOMAIN) {
+        trackEvent(eventName, { location, label });
+      }
+
+      // GTM/GA4-specific: stash which page/label (and, for pricing-tier
+      // CTAs, which tier -- see data-cta-tier in pricing-card.tsx) sent
+      // them to /contact. demo-request-form.tsx reads this back at mount
+      // and pushes it into dataLayer, so the eventual contact_sales/
+      // generate_lead GA4 event can carry "which CTA drove this" context.
+      // Runs regardless of Plausible config. Never sent to the server.
       if (eventName === "Contact CTA Click") {
         const tier = anchor instanceof HTMLElement ? anchor.dataset.ctaTier : undefined;
         captureCtaSource({ location, label, tier });
