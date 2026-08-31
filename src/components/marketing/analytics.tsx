@@ -2,14 +2,16 @@
 // no-op until manually configured -- see the setup note below. Uses
 // Plausible (cookie-less, no personal data collection, no consent banner
 // required) rather than a cookie-based analytics platform, since this site
-// has no cookie-consent UI yet (see /privacy: "does not currently set
-// analytics cookies" -- adding one silently here would make that false).
+// has no cookie-consent UI yet (see /privacy Section "Error monitoring,
+// analytics, and cookies" for the current, accurate statement of what sets
+// cookies -- GA4/GTM does, on marketing pages, as of PR #135; Plausible
+// itself remains cookie-less and inactive, per the MANUAL SETUP note below).
 //
 // MANUAL SETUP REQUIRED (outside this codebase) to activate:
 //   1. Create a Plausible account (or self-hosted instance) for the
 //      production domain.
 //   2. Set NEXT_PUBLIC_PLAUSIBLE_DOMAIN as a Vercel env var to that domain
-//      (e.g. "educore.co.ke"). Not a secret -- safe to expose client-side.
+//      (e.g. "educoreafrica.com"). Not a secret -- safe to expose client-side.
 //   3. Optionally set NEXT_PUBLIC_PLAUSIBLE_SCRIPT_URL if self-hosting
 //      instead of using Plausible's default script host.
 // Until step 2 is done, this component renders nothing and trackEvent()
