@@ -32,6 +32,15 @@ verify_jwt = false
 [functions.mpesa-stk-push]
 verify_jwt = true
 
+# Called only by the notify_admin_new_demo_request() Postgres trigger via pg_net (see
+# supabase/migrations/20260830120000_platform_admin_notifications.sql) -- no user session exists
+# at that point, so it can't present a Supabase JWT. Authenticated instead by the
+# x-webhook-secret header checked inside the function itself (same shape as the other
+# verify_jwt=false webhook endpoints below, just with a secret this project controls rather than
+# a signature scheme owned by Safaricom/Twilio).
+[functions.notify-platform-admin]
+verify_jwt = false
+
 [functions.request-otp]
 verify_jwt = false
 

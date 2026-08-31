@@ -7,6 +7,7 @@ import { LayoutDashboard, CreditCard, BarChart3, Inbox, Palette } from "lucide-r
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { clearOfflineCaches } from "@/lib/offline/clear-on-logout";
+import { PlatformNotificationBell } from "@/components/admin/platform-notification-bell";
 
 const NAV_ITEMS = [
   { href: "/admin", label: "Overview", icon: LayoutDashboard },
@@ -64,6 +65,8 @@ export function AdminConsoleFrame({
               );
             })}
           </nav>
+
+          <PlatformNotificationBell />
 
           <span className="hidden shrink-0 text-sm text-muted-foreground sm:inline">{userName}</span>
           <Button variant="outline" size="sm" onClick={handleSignOut}>
