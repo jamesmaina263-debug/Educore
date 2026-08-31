@@ -9,10 +9,11 @@ export async function createAnnouncementAction(input: {
   title: string;
   body: string;
   urgency: "normal" | "action_required" | "urgent";
-  scope: "whole_school" | "grade" | "class" | "student";
+  scope: "whole_school" | "grade" | "class" | "student" | "boarding_house";
   targetClassId: string | null;
   targetStreamId: string | null;
   targetStudentId: string | null;
+  targetHouseId: string | null;
   publishNow: boolean;
 }): Promise<ActionResult> {
   const supabase = await createClient();
@@ -24,6 +25,7 @@ export async function createAnnouncementAction(input: {
     p_target_class_id: input.targetClassId,
     p_target_stream_id: input.targetStreamId,
     p_target_student_id: input.targetStudentId,
+    p_target_house_id: input.targetHouseId,
   });
   if (error) return { error: error.message };
 

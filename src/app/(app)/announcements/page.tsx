@@ -8,6 +8,7 @@ import {
   type GradeOption,
   type StreamOption,
   type StudentOption,
+  type HouseOption,
 } from "@/components/announcements/announcements-section";
 
 export default async function AnnouncementsPage() {
@@ -27,15 +28,23 @@ export default async function AnnouncementsPage() {
   const schoolName = (schoolUser.schools as unknown as { name: string } | null)?.name;
   const canPublishAny = canPublishSchoolWide === true;
 
-  const [{ data: classRows }, { data: streamRows }, { data: ownStreamRows }] = await Promise.all([
+  const [{ data: classRows }, { data: streamRows }, { data: ownStreamRows }, { data: houseRows }] = await Promise.all([
     supabase.from("classes").select("id, name, level_order").order("level_order"),
     supabase.from("streams").select("id, name, class_teacher_id, classes(name)").order("name"),
     supabase.from("streams").select("id").eq("class_teacher_id", schoolUser.id),
+    supabase.from("boarding_houses").select("id, name, master_id, assistant_id").eq("status", "active").order("name"),
   ]);
 
   const ownStreamIds = new Set((ownStreamRows ?? []).map((s) => s.id));
 
   const grades: GradeOption[] = (classRows ?? []).map((c) => ({ id: c.id, name: c.name }));
+
+  // Boarding-house-scope targets: everyone sees only house(s) they're master/assistant
+  // of unless they hold announcements.publish (leadership can target any house).
+  const houses: HouseOption[] = (houseRows ?? [])
+    .filter((h) => canPublishAny || h.master_id === schoolUser.id || h.assistant_id === schoolUser.id)
+    .map((h) => ({ id: h.id, name: h.name }));
+  const houseNameById = new Map((houseRows ?? []).map((h) => [h.id, h.name]));
 
   // Class-scope targets: everyone sees only their own stream(s) unless they hold
   // announcements.publish (leadership can target any class).
@@ -66,7 +75,7 @@ export default async function AnnouncementsPage() {
   const { data: rows } = await supabase
     .from("announcements")
     .select(
-      "id, created_by, title, body, urgency, scope, status, created_at, published_at, withdrawn_at, withdrawal_reason, classes(name), streams(name, classes(name)), students(first_name, last_name), announcement_recipients(read_at, acknowledged_at)",
+      "id, created_by, title, body, urgency, scope, status, created_at, published_at, withdrawn_at, withdrawal_reason, target_house_id, classes(name), streams(name, classes(name)), students(first_name, last_name), announcement_recipients(read_at, acknowledged_at)",
     )
     .order("created_at", { ascending: false });
 
@@ -79,6 +88,7 @@ export default async function AnnouncementsPage() {
     if (r.scope === "grade") targetLabel = cls?.name ?? "—";
     if (r.scope === "class") targetLabel = stream ? `${stream.classes?.name ?? ""} ${stream.name}`.trim() : "—";
     if (r.scope === "student") targetLabel = student ? `${student.first_name} ${student.last_name}` : "—";
+    if (r.scope === "boarding_house") targetLabel = houseNameById.get(r.target_house_id ?? "") ?? "—";
     return {
       id: r.id,
       created_by: r.created_by,
@@ -118,6 +128,7 @@ export default async function AnnouncementsPage() {
           grades={grades}
           streams={streams}
           students={students}
+          houses={houses}
           canPublishSchoolWide={canPublishAny}
           currentSchoolUserId={schoolUser.id}
         />

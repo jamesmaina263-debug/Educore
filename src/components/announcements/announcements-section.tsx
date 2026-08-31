@@ -32,6 +32,11 @@ export interface StudentOption {
   stream_label: string;
 }
 
+export interface HouseOption {
+  id: string;
+  name: string;
+}
+
 export interface AnnouncementRow {
   id: string;
   created_by: string;
@@ -67,6 +72,7 @@ const SCOPE_LABEL: Record<string, string> = {
   grade: "Grade",
   class: "Class",
   student: "Student",
+  boarding_house: "Boarding house",
 };
 
 export function AnnouncementsSection({
@@ -74,6 +80,7 @@ export function AnnouncementsSection({
   grades,
   streams,
   students,
+  houses,
   canPublishSchoolWide,
   currentSchoolUserId,
 }: {
@@ -81,6 +88,7 @@ export function AnnouncementsSection({
   grades: GradeOption[];
   streams: StreamOption[];
   students: StudentOption[];
+  houses: HouseOption[];
   canPublishSchoolWide: boolean;
   currentSchoolUserId: string;
 }) {
@@ -91,7 +99,7 @@ export function AnnouncementsSection({
   const [error, setError] = useState<string | null>(null);
   const [withdrawReason, setWithdrawReason] = useState<Record<string, string>>({});
 
-  const [scope, setScope] = useState<"whole_school" | "grade" | "class" | "student">(
+  const [scope, setScope] = useState<"whole_school" | "grade" | "class" | "student" | "boarding_house">(
     canPublishSchoolWide ? "whole_school" : "class",
   );
   const [urgency, setUrgency] = useState<"normal" | "action_required" | "urgent">("normal");
@@ -99,7 +107,7 @@ export function AnnouncementsSection({
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
 
-  const canCompose = canPublishSchoolWide || streams.length > 0 || students.length > 0;
+  const canCompose = canPublishSchoolWide || streams.length > 0 || students.length > 0 || houses.length > 0;
 
   function resetForm() {
     setScope(canPublishSchoolWide ? "whole_school" : "class");
@@ -120,6 +128,7 @@ export function AnnouncementsSection({
       targetClassId: scope === "grade" ? targetId : null,
       targetStreamId: scope === "class" ? targetId : null,
       targetStudentId: scope === "student" ? targetId : null,
+      targetHouseId: scope === "boarding_house" ? targetId : null,
       publishNow,
     });
     setPendingId(null);
@@ -156,10 +165,11 @@ export function AnnouncementsSection({
     router.refresh();
   }
 
-  const needsTarget = scope === "grade" || scope === "class" || scope === "student";
+  const needsTarget = scope === "grade" || scope === "class" || scope === "student" || scope === "boarding_house";
   const targetOptions = scope === "grade" ? grades.map((g) => ({ id: g.id, label: g.name }))
     : scope === "class" ? streams.map((s) => ({ id: s.id, label: s.label }))
     : scope === "student" ? students.map((s) => ({ id: s.id, label: `${s.name} — ${s.stream_label}` }))
+    : scope === "boarding_house" ? houses.map((h) => ({ id: h.id, label: h.name }))
     : [];
 
   return (
@@ -194,6 +204,9 @@ export function AnnouncementsSection({
                       {canPublishSchoolWide && <SelectItem value="grade">A grade</SelectItem>}
                       <SelectItem value="class">A class</SelectItem>
                       <SelectItem value="student">A single student&apos;s guardians</SelectItem>
+                      {(canPublishSchoolWide || houses.length > 0) && (
+                        <SelectItem value="boarding_house">A boarding house</SelectItem>
+                      )}
                     </SelectContent>
                   </Select>
                 </div>
@@ -217,6 +230,8 @@ export function AnnouncementsSection({
                       <p className="text-xs text-muted-foreground">
                         {scope === "class"
                           ? "No class found where you're the class teacher."
+                          : scope === "boarding_house"
+                          ? "No house found where you're the master or assistant."
                           : "No students found in a class you're the class teacher of."}
                       </p>
                     )}
