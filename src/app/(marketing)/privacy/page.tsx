@@ -144,12 +144,15 @@ export default function PrivacyPage() {
               analytics tool (Plausible, described below) that does not
               track individuals. When you submit the contact/demo form,
               Google Analytics separately records that a form was
-              submitted, so we can measure how many visitors convert into
-              enquiries — it does not receive the name, email, phone
-              number, or message you entered. We do not use Google
-              Analytics for advertising or retargeting, and we do not share
-              the data it collects with any third party beyond Google as
-              the analytics processor.
+              submitted, along with which page and marketing campaign or
+              link brought you there and, for sales-qualified submissions,
+              which pricing tier CTA you came from — so we can measure how
+              many visitors convert into enquiries and which channels drive
+              that. It does not receive the name, email, phone number, or
+              message you entered, or the role you selected in the form.
+              We do not use Google Analytics for advertising or
+              retargeting, and we do not share the data it collects with
+              any third party beyond Google as the analytics processor.
             </p>
           </div>
 

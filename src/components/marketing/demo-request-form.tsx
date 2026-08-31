@@ -8,6 +8,7 @@ import { submitDemoRequest, type DemoRequestState } from "@/app/(marketing)/cont
 import { MarketingButton } from "@/components/marketing/button";
 import { trackEvent } from "@/components/marketing/analytics";
 import { getStoredAttribution } from "@/lib/attribution";
+import { getStoredCtaSource } from "@/lib/cta-source";
 
 const initialState: DemoRequestState = { status: "idle" };
 
@@ -35,6 +36,31 @@ export function DemoRequestForm() {
       trackEvent("Demo Request Submitted");
     }
   }, [state.status]);
+
+  // Pushes UTM attribution + on-site CTA context into dataLayer once, at
+  // mount -- not read live off the DOM at submit time, so this can't hit
+  // the same undefined-at-submit race the role field had (see the
+  // "JS - Contact Form Role" fix below). Values are already known the
+  // instant this component renders (attribution captured earlier this
+  // session; CTA context captured on whichever /contact link was just
+  // clicked, see src/lib/cta-source.ts) -- pushing immediately just makes
+  // them available to GTM well before any eventual submit. Non-content
+  // only: page/campaign/CTA identifiers, never name/email/phone/message.
+  useEffect(() => {
+    const cta = getStoredCtaSource();
+    sendGTMEvent({
+      event: "contact_form_context",
+      utm_source: attribution.utm_source ?? "",
+      utm_medium: attribution.utm_medium ?? "",
+      utm_campaign: attribution.utm_campaign ?? "",
+      cta_location: cta.location ?? "",
+      cta_label: cta.label ?? "",
+      cta_tier: cta.tier ?? "",
+    });
+    // attribution is captured once via useState(() => ...) and never
+    // changes for the life of this component -- safe as a dep, won't
+    // cause a second push.
+  }, [attribution]);
 
   // Fires once, on the visitor's first real interaction with any field --
   // lets the funnel spec's "Demo Form Started -> Demo Request Submitted"

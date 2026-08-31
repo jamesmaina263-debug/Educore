@@ -21,6 +21,7 @@
 import { useEffect } from "react";
 import Script from "next/script";
 import { captureAttribution } from "@/lib/attribution";
+import { captureCtaSource } from "@/lib/cta-source";
 
 const PLAUSIBLE_DOMAIN = process.env.NEXT_PUBLIC_PLAUSIBLE_DOMAIN;
 const PLAUSIBLE_SCRIPT_URL =
@@ -72,7 +73,19 @@ export function MarketingAnalytics() {
       const eventName = eventNameFor(href);
       if (!eventName) return;
       const label = anchor.textContent?.trim().replace(/\s+/g, " ").slice(0, 60) || eventName;
-      trackEvent(eventName, { location: window.location.pathname, label });
+      const location = window.location.pathname;
+      trackEvent(eventName, { location, label });
+
+      // For a /contact click specifically, also stash which page/label (and,
+      // for pricing-tier CTAs, which tier -- see data-cta-tier in
+      // pricing-card.tsx) sent them there. demo-request-form.tsx reads this
+      // back at mount and pushes it into dataLayer, so the eventual
+      // contact_sales/generate_lead GA4 event can carry non-content
+      // "which CTA drove this" context. Never sent to the server.
+      if (eventName === "Contact CTA Click") {
+        const tier = anchor instanceof HTMLElement ? anchor.dataset.ctaTier : undefined;
+        captureCtaSource({ location, label, tier });
+      }
     }
 
     document.addEventListener("click", handleClick);

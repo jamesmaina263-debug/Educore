@@ -15,6 +15,7 @@ export function PricingCard({
   features,
   ctaLabel,
   ctaHref,
+  ctaTier,
   className,
 }: {
   name: string;
@@ -24,6 +25,12 @@ export function PricingCard({
   features: string[];
   ctaLabel: string;
   ctaHref: string;
+  // Which tier this card's CTA represents, e.g. "Starter" -- surfaced as a
+  // data attribute so the site-wide CTA click tracker (analytics.tsx) can
+  // tell tiers apart even though all three currently share the same
+  // visible label ("Talk to Sales"). Purely a non-content analytics tag,
+  // never rendered or sent to the server.
+  ctaTier?: string;
   className?: string;
 }) {
   return (
@@ -68,7 +75,9 @@ export function PricingCard({
       </ul>
 
       <MarketingButton asChild variant="outline" className="mt-8 w-full">
-        <Link href={ctaHref}>{ctaLabel}</Link>
+        <Link href={ctaHref} data-cta-tier={ctaTier}>
+          {ctaLabel}
+        </Link>
       </MarketingButton>
     </div>
   );
