@@ -34,6 +34,14 @@ import {
   getRealtimeVisitorCount,
   type TimeGranularity,
 } from "@/lib/ga4";
+import {
+  isSearchConsoleConfigured,
+  getSearchOverviewStats,
+  getTopQueries,
+  getTopSearchPages,
+  getSearchDeviceBreakdown,
+  getSearchCountryBreakdown,
+} from "@/lib/search-console";
 
 const VALID_PERIODS: PeriodKey[] = ["today", "yesterday", "7d", "30d", "90d", "custom"];
 
@@ -129,6 +137,22 @@ export default async function AdminAnalyticsPage({
         getRealtimeVisitorCount(),
       ])
     : [null, null, null, null, null, null, null, null, null, null, null, null, null, null, null];
+
+  // Search Console -- a separate config check and a separate, smaller
+  // Promise.all than GA4's, since it's a distinct data source (see
+  // src/lib/search-console.ts's module note on why the two are never
+  // blended). Its own [null, ...] fallback so one being unconfigured never
+  // affects the other's rendering.
+  const scConfigured = isSearchConsoleConfigured();
+  const [scOverview, topQueries, topSearchPages, scDevices, scCountries] = scConfigured
+    ? await Promise.all([
+        getSearchOverviewStats(gaRange),
+        getTopQueries(gaRange),
+        getTopSearchPages(gaRange),
+        getSearchDeviceBreakdown(gaRange),
+        getSearchCountryBreakdown(gaRange),
+      ])
+    : [null, null, null, null, null];
 
   const ctaClicks = goals
     ?.filter((g) => g.goal.includes("CTA") || g.goal.includes("WhatsApp") || g.goal.includes("Email"))
@@ -271,14 +295,44 @@ export default async function AdminAnalyticsPage({
           per the spec's instruction never to blend the two data sources. */}
       <div>
         <h2 className="mb-3 text-sm font-semibold text-muted-foreground">Search Console Data</h2>
-        <NotConnectedCard
-          title="Google Search Console isn't connected"
-          instructions={[
-            "Verify the production domain as a property in Google Search Console (needs a real, purchased domain first).",
-            "Provision a Google Cloud service account with Search Console API access, or set up OAuth for the platform owner's account.",
-            "Wire a server-side client (analogous to src/lib/ga4.ts) once the above exists — not built yet, so this section has no numbers to show.",
-          ]}
-        />
+        {!scConfigured ? (
+          <NotConnectedCard
+            title="Google Search Console isn't connected"
+            instructions={[
+              "educoreafrica.com is already verified in Search Console (as a Domain property) and educore-ga4-reader@educore-analytics.iam.gserviceaccount.com already has Restricted access — no further Google-side setup needed.",
+              'Set SEARCH_CONSOLE_SITE_URL="sc-domain:educoreafrica.com" as a production environment variable (exact string — Search Console\'s Domain-property identifier, not the site\'s https:// URL) to finish connecting this section.',
+            ]}
+          />
+        ) : (
+          <div className="grid gap-3 lg:grid-cols-2">
+            <div className="grid grid-cols-2 gap-3 sm:col-span-2 sm:grid-cols-4">
+              <KpiCard label="Clicks" value={scOverview ? scOverview.clicks.toLocaleString() : "—"} />
+              <KpiCard label="Impressions" value={scOverview ? scOverview.impressions.toLocaleString() : "—"} />
+              <KpiCard label="Avg. CTR" value={scOverview ? `${scOverview.ctr.toFixed(1)}%` : "—"} />
+              <KpiCard label="Avg. position" value={scOverview ? scOverview.position.toFixed(1) : "—"} />
+            </div>
+            <BreakdownList
+              title="Top queries"
+              rows={(topQueries ?? []).map((r) => ({ label: r.label, value: r.clicks }))}
+              valueLabel="Clicks"
+            />
+            <BreakdownList
+              title="Top pages (Search)"
+              rows={(topSearchPages ?? []).map((r) => ({ label: r.label, value: r.clicks }))}
+              valueLabel="Clicks"
+            />
+            <BreakdownList
+              title="Device (Search)"
+              rows={(scDevices ?? []).map((r) => ({ label: r.label, value: r.clicks }))}
+              valueLabel="Clicks"
+            />
+            <BreakdownList
+              title="Country (Search)"
+              rows={(scCountries ?? []).map((r) => ({ label: r.label, value: r.clicks }))}
+              valueLabel="Clicks"
+            />
+          </div>
+        )}
       </div>
 
       <ConversionFunnel stages={funnelStages} />
