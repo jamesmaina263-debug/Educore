@@ -11,6 +11,14 @@ name: announcements-cron
 # (Production environment) -- deliberately a separate value from CRON_SECRET,
 # not shared with it, so this workflow and Vercel's own cron can be revoked
 # independently of one another.
+#
+# Calls the "www" host directly, not the bare "educoreafrica.com" domain --
+# Vercel's Domains config 308-redirects bare -> www (see src/lib/site.ts's
+# own comment on why www is canonical here), and curl without -L doesn't
+# follow redirects, so the bare host previously made every single run of
+# this workflow fail with "status 308" and the Authorization header never
+# actually reaching the route. Confirmed live: the www host returns 401 as
+# expected for an unauthenticated request, the bare host returns 308.
 
 on:
   schedule:
@@ -25,7 +33,7 @@ jobs:
         run: |
           status=$(curl -s -o /tmp/response.json -w "%{http_code}" \
             -H "Authorization: Bearer ${{ secrets.EXTERNAL_CRON_SECRET }}" \
-            "https://educoreafrica.com/api/cron/announcements")
+            "https://www.educoreafrica.com/api/cron/announcements")
           echo "HTTP status: $status"
           cat /tmp/response.json
           if [ "$status" -ge 300 ]; then
