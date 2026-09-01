@@ -178,6 +178,13 @@ export default async function AdminOverviewPage({
             sub="For comparison"
           />
         </div>
+        {/* Same "say what's approximated" convention as the funnel's stage notes below --
+            these two are the actual known gaps, not a blanket disclaimer. */}
+        <p className="mt-2 text-xs text-muted-foreground">
+          MRR is a run-rate estimate (today&apos;s active subscriptions × current student counts), not a
+          reconciliation of invoiced amounts. Paid totals reflect <code>platform_invoices.status = &apos;paid&apos;</code>
+          {" "}only — there is no refunded/reversed status today, so a later refund won&apos;t reduce these figures.
+        </p>
       </div>
 
       <div>
