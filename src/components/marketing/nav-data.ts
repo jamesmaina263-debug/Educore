@@ -30,6 +30,7 @@ const PLATFORM: NavDropdown = {
         { href: "/platform#admissions", label: "Admissions" },
         { href: "/platform#academics", label: "Academic Management" },
         { href: "/school-attendance-management", label: "Attendance" },
+        { href: "/cbc-school-management", label: "CBC Grading" },
         { href: "/platform#academics", label: "Timetables" },
         { href: "/platform#academics", label: "Exams & Assessments" },
       ],
