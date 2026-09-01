@@ -141,9 +141,9 @@ export default function MarketingHomePage() {
       <Section tone="navy" className="pt-16 sm:pt-20">
         <div className="grid items-center gap-16 lg:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)]">
           <Reveal>
-            <Eyebrow tone="light">Intelligent School Management</Eyebrow>
+            <Eyebrow tone="light">School Management System for Kenya</Eyebrow>
             <h1 className="mt-5 text-4xl font-extrabold leading-[1.1] tracking-tight sm:text-5xl lg:text-[3.25rem]">
-              Run your entire school from one intelligent platform.
+              School management software built for Kenyan schools.
             </h1>
             <p className="mt-6 max-w-lg text-lg text-white/70">
               EduCore connects admissions, academics, finance, attendance,
