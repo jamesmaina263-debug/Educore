@@ -17,6 +17,7 @@ import { Reveal } from "@/components/marketing/reveal";
 import { FeatureCard } from "@/components/marketing/feature-card";
 import { MiniFrame } from "@/components/marketing/mini-frame";
 import { Badge } from "@/components/ui/badge";
+import { BreadcrumbJsonLd, HOME_CRUMB } from "@/components/marketing/breadcrumb-json-ld";
 
 const TITLE = "AI & Automation — EduCore";
 const DESCRIPTION =
@@ -81,6 +82,7 @@ const AUTOMATION = [
 export default function AIAutomationPage() {
   return (
     <>
+      <BreadcrumbJsonLd items={[HOME_CRUMB, { name: "AI & Automation", path: "/ai-automation" }]} />
       {/* 1 — Hero */}
       <Section tone="navy" className="pb-14 pt-20 sm:pb-16 sm:pt-28">
         <Eyebrow tone="dark">AI &amp; Automation</Eyebrow>

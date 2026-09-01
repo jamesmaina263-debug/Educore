@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Eyebrow } from "@/components/marketing/eyebrow";
 import { Section } from "@/components/marketing/section";
+import { BreadcrumbJsonLd, HOME_CRUMB } from "@/components/marketing/breadcrumb-json-ld";
 
 const TITLE = "Privacy Policy — EduCore";
 const DESCRIPTION =
@@ -34,6 +35,7 @@ export const metadata: Metadata = {
 export default function PrivacyPage() {
   return (
     <>
+      <BreadcrumbJsonLd items={[HOME_CRUMB, { name: "Privacy Policy", path: "/privacy" }]} />
       <Section tone="navy" className="pb-14 pt-20 sm:pb-16 sm:pt-28">
         <Eyebrow tone="dark">Legal</Eyebrow>
         <h1 className="mt-4 max-w-3xl text-4xl font-semibold tracking-tight text-white sm:text-5xl">

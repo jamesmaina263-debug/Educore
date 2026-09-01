@@ -10,6 +10,7 @@ import { ModuleBlock } from "@/components/marketing/module-block";
 import { MiniFrame } from "@/components/marketing/mini-frame";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import { BreadcrumbJsonLd, HOME_CRUMB } from "@/components/marketing/breadcrumb-json-ld";
 
 const TITLE = "School Attendance Management System — EduCore Kenya";
 const DESCRIPTION =
@@ -66,6 +67,7 @@ const ATTENDANCE_MODULES = [
 export default function SchoolAttendanceManagementPage() {
   return (
     <>
+      <BreadcrumbJsonLd items={[HOME_CRUMB, { name: "Attendance Management", path: "/school-attendance-management" }]} />
       <Section tone="navy" className="pt-16 sm:pt-20">
         <Reveal>
           <Eyebrow tone="light">Attendance</Eyebrow>

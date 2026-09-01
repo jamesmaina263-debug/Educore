@@ -8,6 +8,7 @@ import { Section } from "@/components/marketing/section";
 import { Reveal } from "@/components/marketing/reveal";
 import { ModuleBlock } from "@/components/marketing/module-block";
 import { MiniFrame } from "@/components/marketing/mini-frame";
+import { BreadcrumbJsonLd, HOME_CRUMB } from "@/components/marketing/breadcrumb-json-ld";
 
 const TITLE = "Parent Communication Platform Kenya — EduCore";
 const DESCRIPTION =
@@ -74,6 +75,7 @@ const COMMUNICATION_MODULES = [
 export default function ParentCommunicationPage() {
   return (
     <>
+      <BreadcrumbJsonLd items={[HOME_CRUMB, { name: "Parent Communication", path: "/parent-communication" }]} />
       <Section tone="navy" className="pt-16 sm:pt-20">
         <Reveal>
           <Eyebrow tone="light">Parent Communication</Eyebrow>
