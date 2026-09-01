@@ -22,6 +22,18 @@ import type { NavDropdown } from "@/components/marketing/nav-data";
 // reading as a "blinking" menu. Fade-only avoids that; the close delay
 // below covers the (now small, fixed) trigger-to-panel gap instead of
 // relying on a moving hit box.
+//
+// modal={false} on the Root below is load-bearing, not cosmetic: Radix's
+// default modal mode sets `pointer-events: none` on document.body (every-
+// thing except the portaled panel) while open, to block interaction with
+// the rest of the page -- correct for a click-triggered menu, but this
+// trigger lives outside the portal. With modal mode on, opening the menu
+// makes the trigger itself briefly un-hoverable, which reads as the mouse
+// "leaving" it -> closeSoon() -> closes -> pointer-events restored ->
+// trigger hoverable again -> reopens -> repeat, forever, even with the
+// cursor perfectly still. That self-sustaining loop is a separate root
+// cause from the hit-test-box issue above; both had to be fixed for the
+// menu to actually stay open on hover.
 const CLOSE_DELAY_MS = 200;
 
 export function NavDropdownMenu({ item }: { item: NavDropdown }) {
@@ -50,7 +62,7 @@ export function NavDropdownMenu({ item }: { item: NavDropdown }) {
   const isMega = item.groups.length > 2;
 
   return (
-    <DropdownMenu.Root open={open} onOpenChange={setOpen}>
+    <DropdownMenu.Root open={open} onOpenChange={setOpen} modal={false}>
       <div onMouseEnter={openNow} onMouseLeave={closeSoon}>
         <DropdownMenu.Trigger
           className="group flex items-center gap-1 rounded-md px-3 py-2 text-sm font-medium text-white/80 outline-none transition-colors hover:bg-white/5 hover:text-white focus-visible:ring-2 focus-visible:ring-marketing-gold-500 data-[state=open]:bg-white/5 data-[state=open]:text-white"
