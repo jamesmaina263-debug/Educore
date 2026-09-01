@@ -1,11 +1,23 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { StatusBadge } from "@/components/status-badge";
-import { markAnnouncementReadAction, acknowledgeAnnouncementAction } from "@/app/portal/actions";
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
+import {
+  markAnnouncementReadAction,
+  acknowledgeAnnouncementAction,
+  getAnnouncementAttachmentUrlAction,
+} from "@/app/portal/actions";
+
+export interface PortalAnnouncementAttachment {
+  id: string;
+  storage_path: string;
+  file_name: string;
+}
 
 export interface PortalAnnouncementRow {
   id: string;
@@ -17,6 +29,7 @@ export interface PortalAnnouncementRow {
   withdrawal_reason: string | null;
   my_read_at: string | null;
   my_acknowledged_at: string | null;
+  attachments: PortalAnnouncementAttachment[];
 }
 
 const URGENCY_TONE: Record<string, "success" | "info" | "neutral" | "danger"> = {
@@ -37,6 +50,20 @@ export function PortalAnnouncementsSection({ items }: { items: PortalAnnouncemen
   const [openedOnce, setOpenedOnce] = useState<Set<string>>(new Set());
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // PA-10: guardian-side search/filter over notice history.
+  const [query, setQuery] = useState("");
+  const [urgencyFilter, setUrgencyFilter] = useState<"all" | "normal" | "action_required" | "urgent">("all");
+  const [readFilter, setReadFilter] = useState<"all" | "unread">("all");
+
+  const filteredItems = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return items.filter((item) => {
+      if (urgencyFilter !== "all" && item.urgency !== urgencyFilter) return false;
+      if (readFilter === "unread" && item.my_read_at) return false;
+      if (q && !item.title.toLowerCase().includes(q) && !item.body.toLowerCase().includes(q)) return false;
+      return true;
+    });
+  }, [items, query, urgencyFilter, readFilter]);
 
   async function handleExpand(item: PortalAnnouncementRow) {
     const wasExpanded = expandedId === item.id;
@@ -60,14 +87,62 @@ export function PortalAnnouncementsSection({ items }: { items: PortalAnnouncemen
     router.refresh();
   }
 
+  async function handleDownloadAttachment(storagePath: string) {
+    const result = await getAnnouncementAttachmentUrlAction(storagePath);
+    if ("error" in result) {
+      setError(result.error);
+      return;
+    }
+    window.open(result.url, "_blank", "noopener,noreferrer");
+  }
+
   if (items.length === 0) {
     return <p className="text-sm text-muted-foreground">School announcements will appear here.</p>;
   }
 
   return (
-    <div className="flex flex-col gap-2">
+    <div className="flex flex-col gap-3">
       {error && <p className="text-sm text-danger">{error}</p>}
-      {items.map((item) => {
+
+      <div className="flex flex-col gap-2 sm:flex-row">
+        <div className="relative flex-1">
+          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search announcements…"
+            className="pl-8"
+          />
+        </div>
+        <Select value={urgencyFilter} onValueChange={(v) => setUrgencyFilter(v as typeof urgencyFilter)}>
+          <SelectTrigger className="sm:w-40">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All urgencies</SelectItem>
+            <SelectItem value="normal">Notice</SelectItem>
+            <SelectItem value="action_required">Action required</SelectItem>
+            <SelectItem value="urgent">Urgent</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select value={readFilter} onValueChange={(v) => setReadFilter(v as typeof readFilter)}>
+          <SelectTrigger className="sm:w-32">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All</SelectItem>
+            <SelectItem value="unread">Unread</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      {filteredItems.length === 0 ? (
+        <p className="rounded-md border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
+          No announcements match your search.
+        </p>
+      ) : (
+      <div className="flex flex-col gap-2">
+      {filteredItems.map((item) => {
         const expanded = expandedId === item.id;
         const withdrawn = item.status === "withdrawn";
         return (
@@ -96,6 +171,20 @@ export function PortalAnnouncementsSection({ items }: { items: PortalAnnouncemen
                     This announcement was withdrawn{item.withdrawal_reason ? `: ${item.withdrawal_reason}` : "."}
                   </p>
                 )}
+                {item.attachments.length > 0 && (
+                  <div className="mt-3 flex flex-col gap-1 border-t border-border pt-3">
+                    {item.attachments.map((att) => (
+                      <button
+                        key={att.id}
+                        type="button"
+                        onClick={() => handleDownloadAttachment(att.storage_path)}
+                        className="cursor-pointer truncate text-left text-sm text-primary hover:underline"
+                      >
+                        {att.file_name}
+                      </button>
+                    ))}
+                  </div>
+                )}
                 {!withdrawn && (
                   <div className="mt-3 flex items-center gap-2 border-t border-border pt-3">
                     {item.my_acknowledged_at ? (
@@ -114,6 +203,8 @@ export function PortalAnnouncementsSection({ items }: { items: PortalAnnouncemen
           </div>
         );
       })}
+      </div>
+      )}
     </div>
   );
 }

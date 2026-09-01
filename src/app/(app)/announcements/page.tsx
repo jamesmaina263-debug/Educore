@@ -75,7 +75,7 @@ export default async function AnnouncementsPage() {
   const { data: rows } = await supabase
     .from("announcements")
     .select(
-      "id, created_by, title, body, urgency, scope, status, created_at, published_at, withdrawn_at, withdrawal_reason, target_house_id, classes(name), streams(name, classes(name)), students(first_name, last_name), announcement_recipients(read_at, acknowledged_at)",
+      "id, created_by, title, body, urgency, scope, status, created_at, published_at, withdrawn_at, withdrawal_reason, scheduled_at, target_house_id, classes(name), streams(name, classes(name)), students(first_name, last_name), announcement_recipients(read_at, acknowledged_at), announcement_attachments(id, storage_path, file_name, file_size)",
     )
     .order("created_at", { ascending: false });
 
@@ -102,6 +102,8 @@ export default async function AnnouncementsPage() {
       published_at: r.published_at,
       withdrawn_at: r.withdrawn_at,
       withdrawal_reason: r.withdrawal_reason,
+      scheduled_at: r.scheduled_at,
+      attachments: (r.announcement_attachments ?? []) as AnnouncementRow["attachments"],
       recipient_count: recipients.length,
       read_count: recipients.filter((rr) => rr.read_at !== null).length,
       acknowledged_count: recipients.filter((rr) => rr.acknowledged_at !== null).length,

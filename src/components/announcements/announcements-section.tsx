@@ -14,6 +14,9 @@ import {
   createAnnouncementAction,
   publishAnnouncementAction,
   withdrawAnnouncementAction,
+  uploadAnnouncementAttachmentAction,
+  deleteAnnouncementAttachmentAction,
+  getAnnouncementAttachmentUrlAction,
 } from "@/app/(app)/announcements/actions";
 
 export interface GradeOption {
@@ -37,6 +40,13 @@ export interface HouseOption {
   name: string;
 }
 
+export interface AttachmentRow {
+  id: string;
+  storage_path: string;
+  file_name: string;
+  file_size: number | null;
+}
+
 export interface AnnouncementRow {
   id: string;
   created_by: string;
@@ -50,6 +60,8 @@ export interface AnnouncementRow {
   published_at: string | null;
   withdrawn_at: string | null;
   withdrawal_reason: string | null;
+  scheduled_at: string | null;
+  attachments: AttachmentRow[];
   recipient_count: number;
   read_count: number;
   acknowledged_count: number;
@@ -106,6 +118,7 @@ export function AnnouncementsSection({
   const [targetId, setTargetId] = useState("");
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
+  const [scheduledAt, setScheduledAt] = useState(""); // datetime-local string, empty = no schedule
 
   const canCompose = canPublishSchoolWide || streams.length > 0 || students.length > 0 || houses.length > 0;
 
@@ -115,9 +128,10 @@ export function AnnouncementsSection({
     setTargetId("");
     setTitle("");
     setBody("");
+    setScheduledAt("");
   }
 
-  async function handleCreate(publishNow: boolean) {
+  async function handleCreate(mode: "draft" | "publish" | "schedule") {
     setPendingId("compose");
     setError(null);
     const result = await createAnnouncementAction({
@@ -129,7 +143,8 @@ export function AnnouncementsSection({
       targetStreamId: scope === "class" ? targetId : null,
       targetStudentId: scope === "student" ? targetId : null,
       targetHouseId: scope === "boarding_house" ? targetId : null,
-      publishNow,
+      publishNow: mode === "publish",
+      scheduledAt: mode === "schedule" && scheduledAt ? new Date(scheduledAt).toISOString() : null,
     });
     setPendingId(null);
     if ("error" in result) {
@@ -163,6 +178,41 @@ export function AnnouncementsSection({
       return;
     }
     router.refresh();
+  }
+
+  async function handleUploadAttachment(announcementId: string, file: File) {
+    setPendingId(`attach-${announcementId}`);
+    setError(null);
+    const formData = new FormData();
+    formData.set("file", file);
+    const result = await uploadAnnouncementAttachmentAction(announcementId, formData);
+    setPendingId(null);
+    if ("error" in result) {
+      setError(result.error);
+      return;
+    }
+    router.refresh();
+  }
+
+  async function handleDeleteAttachment(attachmentId: string) {
+    setPendingId(`delete-attach-${attachmentId}`);
+    setError(null);
+    const result = await deleteAnnouncementAttachmentAction(attachmentId);
+    setPendingId(null);
+    if ("error" in result) {
+      setError(result.error);
+      return;
+    }
+    router.refresh();
+  }
+
+  async function handleDownloadAttachment(storagePath: string) {
+    const result = await getAnnouncementAttachmentUrlAction(storagePath);
+    if ("error" in result) {
+      setError(result.error);
+      return;
+    }
+    window.open(result.url, "_blank", "noopener,noreferrer");
   }
 
   const needsTarget = scope === "grade" || scope === "class" || scope === "student" || scope === "boarding_house";
@@ -259,21 +309,42 @@ export function AnnouncementsSection({
                   <Label>Message</Label>
                   <Textarea value={body} onChange={(e) => setBody(e.target.value)} rows={5} />
                 </div>
+                <div className="space-y-1.5">
+                  <Label>Schedule for later (optional)</Label>
+                  <Input
+                    type="datetime-local"
+                    value={scheduledAt}
+                    onChange={(e) => setScheduledAt(e.target.value)}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Leave blank to publish immediately or save as a draft. If set, this is published
+                    automatically — no need to come back.
+                  </p>
+                </div>
               </div>
               <DialogFooter className="gap-2">
                 <Button
                   variant="outline"
-                  onClick={() => handleCreate(false)}
+                  onClick={() => handleCreate("draft")}
                   disabled={pendingId === "compose" || !title.trim() || !body.trim() || (needsTarget && !targetId)}
                 >
                   Save draft
                 </Button>
-                <Button
-                  onClick={() => handleCreate(true)}
-                  disabled={pendingId === "compose" || !title.trim() || !body.trim() || (needsTarget && !targetId)}
-                >
-                  {pendingId === "compose" ? "Publishing…" : "Publish now"}
-                </Button>
+                {scheduledAt ? (
+                  <Button
+                    onClick={() => handleCreate("schedule")}
+                    disabled={pendingId === "compose" || !title.trim() || !body.trim() || (needsTarget && !targetId)}
+                  >
+                    {pendingId === "compose" ? "Scheduling…" : "Schedule"}
+                  </Button>
+                ) : (
+                  <Button
+                    onClick={() => handleCreate("publish")}
+                    disabled={pendingId === "compose" || !title.trim() || !body.trim() || (needsTarget && !targetId)}
+                  >
+                    {pendingId === "compose" ? "Publishing…" : "Publish now"}
+                  </Button>
+                )}
               </DialogFooter>
             </DialogContent>
           </Dialog>
@@ -307,7 +378,15 @@ export function AnnouncementsSection({
                     <StatusBadge tone={URGENCY_TONE[item.urgency]} label={URGENCY_LABEL[item.urgency]} />
                     <StatusBadge
                       tone={item.status === "published" ? "success" : item.status === "withdrawn" ? "danger" : "neutral"}
-                      label={item.status === "published" ? "Published" : item.status === "withdrawn" ? "Withdrawn" : "Draft"}
+                      label={
+                        item.status === "published"
+                          ? "Published"
+                          : item.status === "withdrawn"
+                          ? "Withdrawn"
+                          : item.scheduled_at
+                          ? "Scheduled"
+                          : "Draft"
+                      }
                     />
                     <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${expanded ? "rotate-180" : ""}`} />
                   </div>
@@ -316,6 +395,46 @@ export function AnnouncementsSection({
                 {expanded && (
                   <div className="mt-3 border-t border-border pt-3">
                     <p className="text-sm whitespace-pre-wrap">{item.body}</p>
+
+                    {(item.attachments.length > 0 || (canManage && item.status !== "withdrawn")) && (
+                      <div className="mt-3 flex flex-col gap-1.5 border-t border-border pt-3">
+                        <Label className="text-xs">Attachments</Label>
+                        {item.attachments.map((att) => (
+                          <div key={att.id} className="flex items-center justify-between gap-2 text-sm">
+                            <button
+                              type="button"
+                              onClick={() => handleDownloadAttachment(att.storage_path)}
+                              className="cursor-pointer truncate text-left text-primary hover:underline"
+                            >
+                              {att.file_name}
+                              {att.file_size ? ` (${Math.max(1, Math.round(att.file_size / 1024))} KB)` : ""}
+                            </button>
+                            {canManage && (
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteAttachment(att.id)}
+                                disabled={pendingId === `delete-attach-${att.id}`}
+                                className="cursor-pointer text-xs text-danger hover:underline"
+                              >
+                                Remove
+                              </button>
+                            )}
+                          </div>
+                        ))}
+                        {canManage && item.status !== "withdrawn" && (
+                          <Input
+                            type="file"
+                            className="mt-1"
+                            disabled={pendingId === `attach-${item.id}`}
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (file) void handleUploadAttachment(item.id, file);
+                              e.target.value = "";
+                            }}
+                          />
+                        )}
+                      </div>
+                    )}
 
                     {item.status === "published" && (
                       <p className="mt-2 text-xs text-muted-foreground">
@@ -331,8 +450,14 @@ export function AnnouncementsSection({
 
                     {canManage && item.status === "draft" && (
                       <div className="mt-3 border-t border-border pt-3">
+                        {item.scheduled_at && (
+                          <p className="mb-2 text-xs text-muted-foreground">
+                            Scheduled to publish automatically at {new Date(item.scheduled_at).toLocaleString()}.
+                            You can still publish it now instead.
+                          </p>
+                        )}
                         <Button size="sm" onClick={() => handlePublish(item.id)} disabled={pendingId === item.id}>
-                          {pendingId === item.id ? "Publishing…" : "Publish"}
+                          {pendingId === item.id ? "Publishing…" : "Publish now"}
                         </Button>
                       </div>
                     )}
