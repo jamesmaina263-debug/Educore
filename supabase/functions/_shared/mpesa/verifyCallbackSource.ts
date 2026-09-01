@@ -19,6 +19,8 @@
 // (e.g. sandbox testing from a non-Safaricom IP) -- every callback logs a warning while disabled
 // so it can't be silently left off in production.
 
+import { getRealClientIp } from "../getRealClientIp.ts";
+
 const DEFAULT_ALLOWLIST = ["196.201.214.0/24", "196.201.213.0/24"];
 
 function parseCidr(cidr: string): { base: number; mask: number } | null {
@@ -45,13 +47,14 @@ function ipInCidr(ip: string, cidr: string): boolean {
   return (ipInt & parsedCidr.mask) === (parsedCidr.base & parsedCidr.mask);
 }
 
-// x-forwarded-for's first entry is the original client IP as seen by the first proxy hop in
-// front of this function. Supabase's edge network appends to (rather than replaces) this header,
-// so the first entry is the one that matters here, not the last.
+// SECURITY FIX: this used to read the FIRST entry of x-forwarded-for, on the reasoning that
+// Supabase's edge appends to (rather than replaces) the header. That reasoning was actually an
+// argument for the opposite conclusion -- see getRealClientIp.ts. Reading the first entry meant
+// this allowlist check could be bypassed entirely by anyone who could set an X-Forwarded-For
+// header on their request (i.e. anyone), which defeated the "still has to originate from inside
+// Safaricom's network" guarantee this file's own comments claim it provides.
 function getSourceIp(req: Request): string | null {
-  const xff = req.headers.get("x-forwarded-for");
-  if (!xff) return null;
-  return xff.split(",")[0]?.trim() || null;
+  return getRealClientIp(req);
 }
 
 export interface CallbackSourceCheck {
