@@ -158,6 +158,15 @@ export default function MarketingHomePage() {
                 </Link>
               </MarketingButton>
               <MarketingButton size="lg" variant="outline-on-dark" asChild>
+                <Link
+                  href="https://wa.me/254702904562?text=Hi%2C%20I%27d%20like%20to%20know%20more%20about%20EduCore%20for%20my%20school."
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  <MessageCircle className="h-4 w-4" /> Chat on WhatsApp
+                </Link>
+              </MarketingButton>
+              <MarketingButton size="lg" variant="ghost-on-dark" asChild>
                 <Link href="/platform">See How It Works</Link>
               </MarketingButton>
             </div>
