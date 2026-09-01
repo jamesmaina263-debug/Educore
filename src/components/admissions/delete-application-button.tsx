@@ -47,8 +47,9 @@ export function DeleteApplicationButton({
             <DialogTitle>Permanently delete this application?</DialogTitle>
           </DialogHeader>
           <p className="text-sm text-muted-foreground">
-            This removes {applicantLabel}&apos;s application, including any uploaded documents, for good. This
-            can&apos;t be undone.
+            This removes {applicantLabel}&apos;s application, including any uploaded documents, for good. If the
+            parent/guardian has no other application or admitted child on file, their account and personal details
+            are removed too. This can&apos;t be undone.
           </p>
           {error && <p className="text-sm text-danger">{error}</p>}
           <DialogFooter>

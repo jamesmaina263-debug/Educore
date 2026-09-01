@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { logout } from "@/app/login/actions";
 import { AppShell } from "@/components/app-shell/app-shell";
 import { ParentsTable, type ParentRow } from "@/components/parents/parents-table";
+import { deleteGuardianPermanentlyAction } from "./actions";
 
 export default async function ParentsDirectoryPage() {
   const supabase = await createClient();
@@ -18,12 +19,17 @@ export default async function ParentsDirectoryPage() {
     .eq("auth_user_id", user.id)
     .maybeSingle();
 
-  const { data: parentRows } = await supabase
-    .from("school_users")
-    .select("id, full_name, email, phone, status, roles!inner(name)")
-    .eq("roles.name", "parent")
-    .order("full_name");
-
+  // Guardian accounts are created the moment an online/walk-in application is
+  // submitted, well before any admission decision -- that's how a parent logs in
+  // to check status, respond to an interview, pay a deposit, etc. while their
+  // application is still live. But this directory is the *permanent* record of
+  // the school's parents, so it must only ever surface guardians whose child was
+  // actually admitted -- student_guardians is only ever written on real enrollment
+  // completion (see admission_enrollment_history), never on a bare application
+  // decision. A guardian whose application was rejected/withdrawn, or is still
+  // pending, has no row here and correctly stays out of this list -- their
+  // account (and its PII) can still exist for portal login/audit purposes, but it
+  // is not "stored" in the sense of appearing as one of the school's parents.
   const { data: guardianLinks } = await supabase
     .from("student_guardians")
     .select("guardian_user_id, students(first_name, last_name)");
@@ -37,6 +43,21 @@ export default async function ParentsDirectoryPage() {
     list.push(name);
     childrenByParent.set(link.guardian_user_id, list);
   }
+
+  const admittedGuardianIds = Array.from(childrenByParent.keys());
+
+  const { data: parentRows } = admittedGuardianIds.length
+    ? await supabase
+        .from("school_users")
+        .select("id, full_name, email, phone, status, roles!inner(name)")
+        .eq("roles.name", "parent")
+        .in("id", admittedGuardianIds)
+        .order("full_name")
+    : { data: [] };
+
+  const { data: canDeleteGuardians } = await supabase.rpc("auth_has_permission", {
+    p_permission_key: "guardians.delete",
+  });
 
   const rows: ParentRow[] = (parentRows ?? []).map((p) => ({
     id: p.id,
@@ -68,7 +89,7 @@ export default async function ParentsDirectoryPage() {
             No parent accounts yet.
           </div>
         ) : (
-          <ParentsTable rows={rows} />
+          <ParentsTable rows={rows} canDelete={!!canDeleteGuardians} deleteAction={deleteGuardianPermanentlyAction} />
         )}
       </div>
     </AppShell>
