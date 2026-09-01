@@ -3,6 +3,7 @@
 import { headers } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { getRealClientIp } from "@/lib/get-real-client-ip";
 
 export type DemoRequestState = {
   status: "idle" | "success" | "error";
@@ -81,8 +82,10 @@ export async function submitDemoRequest(
   // admin client since the function is revoked from anon/authenticated.
   // Keyed by IP, generous enough for a shared office/cybercafé connection
   // but well below what a script spamming the form would need.
+  // SECURITY: use the last (trusted, edge-appended) X-Forwarded-For entry,
+  // not the first (caller-controlled) -- see getRealClientIp.ts.
   const forwardedFor = (await headers()).get("x-forwarded-for");
-  const clientIp = forwardedFor?.split(",")[0]?.trim() || "unknown";
+  const clientIp = getRealClientIp(forwardedFor);
   const admin = createAdminClient();
   const { data: withinLimit } = await admin.rpc("increment_and_check_rate_limit", {
     p_bucket: `demo-request:${clientIp}`,

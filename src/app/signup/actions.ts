@@ -3,6 +3,7 @@
 import { headers } from "next/headers";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { slugify } from "@/lib/slug";
+import { getRealClientIp } from "@/lib/get-real-client-ip";
 import { safeStorageFilename } from "@/lib/storage-path";
 import { generateTemporaryPassword, temporaryPasswordExpiry } from "@/lib/temporary-password";
 import { verifyTurnstileToken } from "@/lib/turnstile";
@@ -95,8 +96,10 @@ export async function signUpSchool(
     return { error: e instanceof Error ? e.message : "Signup is not configured yet." };
   }
 
+  // SECURITY: use the last (trusted, edge-appended) X-Forwarded-For entry,
+  // not the first (caller-controlled) -- see getRealClientIp.ts.
   const forwardedFor = (await headers()).get("x-forwarded-for");
-  const clientIp = forwardedFor?.split(",")[0]?.trim() || "unknown";
+  const clientIp = getRealClientIp(forwardedFor);
 
   // Abuse guard — this endpoint is public/unauthenticated and a successful
   // call creates a real Supabase Auth user + school + trial subscription +
