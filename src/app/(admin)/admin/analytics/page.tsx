@@ -19,6 +19,7 @@ import {
 import {
   isGa4Configured,
   getOverviewStats,
+  getEngagedVisitors,
   getTimeseries,
   getTopPages,
   getLandingPages,
@@ -101,6 +102,7 @@ export default async function AdminAnalyticsPage({
   const [
     overview,
     priorOverview,
+    engagedVisitors,
     timeseries,
     topPages,
     landingPages,
@@ -122,6 +124,7 @@ export default async function AdminAnalyticsPage({
         // used for the Demo requests KPI. Both windows are real [start, end]
         // ISO date pairs.
         getOverviewStats([prior.startIso, prior.endIso]),
+        getEngagedVisitors(gaRange),
         getTimeseries(gaRange, granularity),
         getTopPages(gaRange),
         getLandingPages(gaRange),
@@ -136,7 +139,7 @@ export default async function AdminAnalyticsPage({
         getRegionBreakdown(gaRange),
         getRealtimeVisitorCount(),
       ])
-    : [null, null, null, null, null, null, null, null, null, null, null, null, null, null, null];
+    : [null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null];
 
   // Search Console -- a separate config check and a separate, smaller
   // Promise.all than GA4's, since it's a distinct data source (see
@@ -162,7 +165,11 @@ export default async function AdminAnalyticsPage({
 
   const funnelStages: FunnelStage[] = [
     { label: "Website Visitors", value: overview?.visitors ?? null },
-    { label: "Engaged Visitors", value: null, note: "No defined engagement threshold configured yet" },
+    {
+      label: "Engaged Visitors",
+      value: engagedVisitors,
+      note: "GA4 engaged sessions (10s+ engaged, 2+ pageviews, or a conversion) — a session count, not unique users",
+    },
     { label: "CTA Clicks", value: ctaClicks ?? null },
     { label: "Demo Form Started", value: demoFormStarted },
     // Real regardless of Plausible -- backed directly by marketing_demo_requests.
