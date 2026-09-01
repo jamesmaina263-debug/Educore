@@ -7,6 +7,10 @@ const FOOTER_GROUPS = [
     links: [
       { href: "/platform", label: "Platform" },
       { href: "/solutions", label: "Solutions" },
+      { href: "/student-management-system", label: "Student Management" },
+      { href: "/cbc-school-management", label: "CBC School Management" },
+      { href: "/school-attendance-management", label: "Attendance Management" },
+      { href: "/parent-communication", label: "Parent Communication" },
       { href: "/ai-automation", label: "AI & Automation" },
       { href: "/finance-fees", label: "Finance & Fees" },
       { href: "/security", label: "Security & Privacy" },

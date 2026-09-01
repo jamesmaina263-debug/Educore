@@ -314,9 +314,9 @@ export default function PlatformPage() {
       {/* Hero */}
       <Section tone="navy" className="pt-16 sm:pt-20">
         <Reveal>
-          <Eyebrow tone="light">The Platform</Eyebrow>
+          <Eyebrow tone="light">School Management System</Eyebrow>
           <h1 className="mt-5 max-w-3xl text-4xl font-extrabold leading-[1.1] tracking-tight sm:text-5xl">
-            Every part of running a school, mapped to a real module.
+            The school management system platform, mapped to every real module.
           </h1>
           <p className="mt-6 max-w-2xl text-lg text-white/70">
             Nothing below is a roadmap slide. Every module on this page runs
@@ -335,6 +335,12 @@ export default function PlatformPage() {
               <h2 className="mt-4 max-w-xl text-3xl font-extrabold tracking-tight text-marketing-navy-950 sm:text-4xl">
                 The academic year, structured once, used everywhere.
               </h2>
+              <Link
+                href="/cbc-school-management"
+                className="mt-3 inline-flex items-center gap-1 text-sm font-medium text-marketing-blue hover:text-marketing-blue/80"
+              >
+                More on CBC &amp; numeric grading <ArrowRight className="h-3.5 w-3.5" />
+              </Link>
             </Reveal>
             <ModuleGrid modules={ACADEMICS_MODULES} tone="canvas" cols={2} />
           </div>
@@ -369,6 +375,12 @@ export default function PlatformPage() {
           <h2 className="mt-4 max-w-xl text-3xl font-extrabold tracking-tight sm:text-4xl">
             Every person in the school, one record each.
           </h2>
+          <Link
+            href="/student-management-system"
+            className="mt-3 inline-flex items-center gap-1 text-sm font-medium text-marketing-gold-400 hover:text-marketing-gold-300"
+          >
+            More on student records &amp; ID cards <ArrowRight className="h-3.5 w-3.5" />
+          </Link>
         </Reveal>
         <ModuleGrid modules={PEOPLE_MODULES} tone="navy" cols={4} />
       </Section>
@@ -380,6 +392,12 @@ export default function PlatformPage() {
           <h2 className="mt-4 max-w-xl text-3xl font-extrabold tracking-tight text-marketing-navy-950 sm:text-4xl">
             The parts of school life that don&rsquo;t stop at the classroom door.
           </h2>
+          <Link
+            href="/school-attendance-management"
+            className="mt-3 inline-flex items-center gap-1 text-sm font-medium text-marketing-blue hover:text-marketing-blue/80"
+          >
+            More on attendance &amp; biometric check-in <ArrowRight className="h-3.5 w-3.5" />
+          </Link>
         </Reveal>
         <ModuleGrid modules={OPERATIONS_MODULES} tone="canvas" cols={3} />
       </Section>
@@ -441,6 +459,12 @@ export default function PlatformPage() {
           <h2 className="mt-4 max-w-xl text-3xl font-extrabold tracking-tight text-marketing-navy-950 sm:text-4xl">
             Keeping everyone in the loop, and knowing what happened after.
           </h2>
+          <Link
+            href="/parent-communication"
+            className="mt-3 inline-flex items-center gap-1 text-sm font-medium text-marketing-blue hover:text-marketing-blue/80"
+          >
+            More on WhatsApp, SMS &amp; the parent portal <ArrowRight className="h-3.5 w-3.5" />
+          </Link>
         </Reveal>
         <ModuleGrid modules={COMMS_MODULES} tone="canvas" cols={3} />
       </Section>
