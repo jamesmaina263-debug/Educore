@@ -26,6 +26,7 @@ export interface SettingsContext {
   canViewBiometricProfiles: boolean;
   canReadAudit: boolean;
   canReadStaff: boolean;
+  canExportData: boolean;
   staff: StaffRow[];
   roles: RoleOption[];
   leaveTypes: LeaveTypeRow[];
@@ -60,6 +61,7 @@ export async function loadSettingsContext(): Promise<SettingsContext> {
     { data: canViewBiometricProfiles },
     { data: canReadAudit },
     { data: canReadStaff },
+    { data: canExportData },
   ] = await Promise.all([
     supabase
       .from("school_users")
@@ -79,6 +81,7 @@ export async function loadSettingsContext(): Promise<SettingsContext> {
     supabase.rpc("auth_has_permission", { p_permission_key: "biometric.view" }),
     supabase.rpc("auth_has_permission", { p_permission_key: "audit.read" }),
     supabase.rpc("auth_has_permission", { p_permission_key: "staff.read" }),
+    supabase.rpc("auth_has_permission", { p_permission_key: "settings.data_export" }),
   ]);
 
   const roleName = (schoolUser?.roles as unknown as { display_name: string } | null)?.display_name;
@@ -272,6 +275,7 @@ export async function loadSettingsContext(): Promise<SettingsContext> {
     canViewBiometricProfiles: canViewBiometricProfiles === true,
     canReadAudit: canReadAudit === true,
     canReadStaff: canReadStaff === true,
+    canExportData: canExportData === true,
     staff,
     roles,
     leaveTypes,

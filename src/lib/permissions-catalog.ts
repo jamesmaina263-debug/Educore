@@ -249,6 +249,7 @@ export const PERMISSION_CATALOG: PermissionGroup[] = [
     permissions: [
       { key: "settings.branding.write", label: "Edit school branding" },
       { key: "settings.roles.manage", label: "Manage roles & permissions" },
+      { key: "settings.data_export", label: "Export the school's full data" },
     ],
   },
   {
