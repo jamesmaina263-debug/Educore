@@ -3,7 +3,16 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
-export function CustomRangePicker({ from, to }: { from?: string; to?: string }) {
+export function CustomRangePicker({
+  from,
+  to,
+  basePath = "/admin/analytics",
+}: {
+  from?: string;
+  to?: string;
+  /** Which page to navigate back to on apply -- defaults to the original analytics page so existing callers are unaffected. */
+  basePath?: string;
+}) {
   const router = useRouter();
   const today = new Date().toISOString().slice(0, 10);
   const [localFrom, setLocalFrom] = useState(from ?? today);
@@ -11,7 +20,7 @@ export function CustomRangePicker({ from, to }: { from?: string; to?: string }) 
 
   function apply() {
     if (!localFrom || !localTo || localFrom > localTo) return;
-    router.push(`/admin/analytics?period=custom&from=${localFrom}&to=${localTo}`);
+    router.push(`${basePath}?period=custom&from=${localFrom}&to=${localTo}`);
   }
 
   return (
