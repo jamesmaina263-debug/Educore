@@ -17,6 +17,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { TurnstileWidget } from "@/components/turnstile-widget";
+import { sendGTMEvent } from "@next/third-parties/google";
 import { signUpSchool, type SignupState } from "./actions";
 import {
   TITLE_OPTIONS,
@@ -94,6 +95,18 @@ export function SignupForm() {
     setProgress({ filled, total: required.length });
   };
   useEffect(recomputeProgress, [values]);
+
+  // Fires once, the render after state.success flips true -- a new school
+  // account was actually created, not just that the form validated. No
+  // sign_up event existed anywhere on the site before this -- the funnel
+  // in the SEO brief (Search -> Landing -> Feature -> Demo CTA -> Demo
+  // Request -> Lead) stops at the lead; this closes the gap for the
+  // self-serve "Start a school" path that skips the demo entirely.
+  useEffect(() => {
+    if (state.success) {
+      sendGTMEvent({ event: "sign_up" });
+    }
+  }, [state.success]);
 
   const set = (field: SelectField) => (v: string) => setValues((prev) => ({ ...prev, [field]: v }));
 
