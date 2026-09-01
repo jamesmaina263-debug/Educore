@@ -5,6 +5,7 @@ import { Eyebrow } from "@/components/marketing/eyebrow";
 import { Section } from "@/components/marketing/section";
 import { Reveal } from "@/components/marketing/reveal";
 import { DemoRequestForm } from "@/components/marketing/demo-request-form";
+import { BreadcrumbJsonLd, HOME_CRUMB } from "@/components/marketing/breadcrumb-json-ld";
 
 const TITLE = "Contact — EduCore";
 const DESCRIPTION =
@@ -21,6 +22,7 @@ export const metadata: Metadata = {
 export default function ContactPage() {
   return (
     <>
+      <BreadcrumbJsonLd items={[HOME_CRUMB, { name: "Contact", path: "/contact" }]} />
       <Section tone="navy" className="pb-14 pt-20 sm:pb-16 sm:pt-28">
         <Eyebrow tone="dark">Contact</Eyebrow>
         <h1 className="mt-4 max-w-2xl text-4xl font-semibold tracking-tight text-white sm:text-5xl">

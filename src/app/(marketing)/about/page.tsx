@@ -6,6 +6,7 @@ import { MarketingButton } from "@/components/marketing/button";
 import { Eyebrow } from "@/components/marketing/eyebrow";
 import { Section } from "@/components/marketing/section";
 import { Reveal } from "@/components/marketing/reveal";
+import { BreadcrumbJsonLd, HOME_CRUMB } from "@/components/marketing/breadcrumb-json-ld";
 
 const TITLE = "About EduCore — School Management Software Built for Kenya";
 const DESCRIPTION =
@@ -22,6 +23,7 @@ export const metadata: Metadata = {
 export default function AboutPage() {
   return (
     <>
+      <BreadcrumbJsonLd items={[HOME_CRUMB, { name: "About", path: "/about" }]} />
       {/* 1 — Hero */}
       <Section tone="navy" className="pb-14 pt-20 sm:pb-16 sm:pt-28">
         <Eyebrow tone="dark">About EduCore</Eyebrow>

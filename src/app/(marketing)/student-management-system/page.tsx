@@ -18,6 +18,7 @@ import { Section } from "@/components/marketing/section";
 import { Reveal } from "@/components/marketing/reveal";
 import { ModuleBlock } from "@/components/marketing/module-block";
 import { MiniFrame } from "@/components/marketing/mini-frame";
+import { BreadcrumbJsonLd, HOME_CRUMB } from "@/components/marketing/breadcrumb-json-ld";
 
 const TITLE = "Student Management System Kenya — EduCore";
 const DESCRIPTION =
@@ -90,6 +91,7 @@ const STUDENT_MODULES = [
 export default function StudentManagementSystemPage() {
   return (
     <>
+      <BreadcrumbJsonLd items={[HOME_CRUMB, { name: "Student Management System", path: "/student-management-system" }]} />
       <Section tone="navy" className="pt-16 sm:pt-20">
         <Reveal>
           <Eyebrow tone="light">Student Management</Eyebrow>

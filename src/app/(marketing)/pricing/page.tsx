@@ -7,6 +7,7 @@ import { Eyebrow } from "@/components/marketing/eyebrow";
 import { Section } from "@/components/marketing/section";
 import { Reveal } from "@/components/marketing/reveal";
 import { PricingCard } from "@/components/marketing/pricing-card";
+import { BreadcrumbJsonLd, HOME_CRUMB } from "@/components/marketing/breadcrumb-json-ld";
 
 const TITLE = "School Management System Pricing Kenya — EduCore";
 const DESCRIPTION =
@@ -72,6 +73,7 @@ export const PLANS = [
 export default function PricingPage() {
   return (
     <>
+      <BreadcrumbJsonLd items={[HOME_CRUMB, { name: "Pricing", path: "/pricing" }]} />
       {/* 1 — Hero */}
       <Section tone="navy" className="pb-14 pt-20 sm:pb-16 sm:pt-28">
         <Eyebrow tone="dark">Pricing</Eyebrow>

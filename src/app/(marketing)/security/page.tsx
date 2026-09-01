@@ -6,6 +6,7 @@ import { MarketingButton } from "@/components/marketing/button";
 import { Eyebrow } from "@/components/marketing/eyebrow";
 import { Section } from "@/components/marketing/section";
 import { Reveal } from "@/components/marketing/reveal";
+import { BreadcrumbJsonLd, HOME_CRUMB } from "@/components/marketing/breadcrumb-json-ld";
 
 const TITLE = "Security & Data Privacy — EduCore Kenya";
 const DESCRIPTION =
@@ -56,6 +57,7 @@ const PRINCIPLES = [
 export default function SecurityPage() {
   return (
     <>
+      <BreadcrumbJsonLd items={[HOME_CRUMB, { name: "Security", path: "/security" }]} />
       <Section tone="navy" className="pt-16 sm:pt-20">
         <Reveal>
           <Eyebrow tone="light">Security & Privacy</Eyebrow>
