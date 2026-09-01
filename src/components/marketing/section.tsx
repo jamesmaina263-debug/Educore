@@ -21,6 +21,10 @@ export function Section({
       id={id}
       className={cn(
         "py-20 sm:py-28",
+        // Anchor targets need to clear the sticky navbar (h-16) plus a
+        // little breathing room, matching the offset role-panel already
+        // uses for the same reason (see role-panel.tsx).
+        id && "scroll-mt-24",
         tone === "canvas" && "bg-marketing-canvas text-marketing-navy-950",
         tone === "navy" && "bg-marketing-navy-950 text-white",
         className,

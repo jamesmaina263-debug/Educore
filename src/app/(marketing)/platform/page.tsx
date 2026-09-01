@@ -327,7 +327,7 @@ export default function PlatformPage() {
       </Section>
 
       {/* Academics & Assessment */}
-      <Section tone="canvas">
+      <Section id="academics" tone="canvas">
         <div className="grid gap-10 lg:grid-cols-[1fr_320px] lg:items-start">
           <div>
             <Reveal>
@@ -369,7 +369,7 @@ export default function PlatformPage() {
       </Section>
 
       {/* Admissions & People */}
-      <Section tone="navy">
+      <Section id="admissions" tone="navy">
         <Reveal>
           <Eyebrow tone="light">Admissions &amp; People</Eyebrow>
           <h2 className="mt-4 max-w-xl text-3xl font-extrabold tracking-tight sm:text-4xl">
@@ -386,7 +386,7 @@ export default function PlatformPage() {
       </Section>
 
       {/* Day-to-Day Operations & Student Care */}
-      <Section tone="canvas">
+      <Section id="operations" tone="canvas">
         <Reveal>
           <Eyebrow tone="dark">Day-to-Day Operations &amp; Student Care</Eyebrow>
           <h2 className="mt-4 max-w-xl text-3xl font-extrabold tracking-tight text-marketing-navy-950 sm:text-4xl">
@@ -403,7 +403,7 @@ export default function PlatformPage() {
       </Section>
 
       {/* Finance & Resources */}
-      <Section tone="navy">
+      <Section id="finance" tone="navy">
         <div className="grid gap-10 lg:grid-cols-[1fr_320px] lg:items-start">
           <div>
             <Reveal>
@@ -453,7 +453,7 @@ export default function PlatformPage() {
       </Section>
 
       {/* Communication & Reporting */}
-      <Section tone="canvas">
+      <Section id="communication" tone="canvas">
         <Reveal>
           <Eyebrow tone="dark">Communication &amp; Reporting</Eyebrow>
           <h2 className="mt-4 max-w-xl text-3xl font-extrabold tracking-tight text-marketing-navy-950 sm:text-4xl">
@@ -470,7 +470,7 @@ export default function PlatformPage() {
       </Section>
 
       {/* Multi-Campus, Integrations & AI */}
-      <Section tone="navy">
+      <Section id="integrations" tone="navy">
         <Reveal>
           <Eyebrow tone="light">Multi-Campus, Integrations &amp; AI</Eyebrow>
           <h2 className="mt-4 max-w-xl text-3xl font-extrabold tracking-tight sm:text-4xl">
