@@ -96,3 +96,12 @@ export async function acknowledgeAnnouncementAction(id: string): Promise<ActionR
   return { success: true };
 }
 
+export async function getAnnouncementAttachmentUrlAction(storagePath: string): Promise<{ url: string } | { error: string }> {
+  const supabase = await createClient();
+  // Bucket RLS (announcement_attachments_storage_select) already restricts this to
+  // announcements the caller is an actual recipient of -- no extra check needed here.
+  const { data, error } = await supabase.storage.from("announcement-attachments").createSignedUrl(storagePath, 60 * 5);
+  if (error || !data) return { error: error?.message ?? "could not create download link" };
+  return { url: data.signedUrl };
+}
+
