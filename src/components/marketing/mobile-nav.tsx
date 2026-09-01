@@ -7,9 +7,10 @@ import { Menu, X } from "lucide-react";
 
 import { MarketingButton } from "@/components/marketing/button";
 
-type NavLink = { href: string; label: string };
+type NavLink = { href: string; label: string; description?: string };
+type NavItem = NavLink | { label: string; children: NavLink[] };
 
-export function MobileNav({ links }: { links: NavLink[] }) {
+export function MobileNav({ links }: { links: NavItem[] }) {
   const [open, setOpen] = React.useState(false);
 
   return (
@@ -45,16 +46,36 @@ export function MobileNav({ links }: { links: NavLink[] }) {
           </div>
 
           <nav className="mt-8 flex flex-col gap-1">
-            {links.map((link) => (
-              <Dialog.Close asChild key={link.href}>
-                <Link
-                  href={link.href}
-                  className="rounded-md px-2 py-3 text-lg font-medium text-white/90 transition-colors hover:bg-white/5 hover:text-marketing-gold-400"
-                >
-                  {link.label}
-                </Link>
-              </Dialog.Close>
-            ))}
+            {links.map((item) =>
+              "children" in item ? (
+                <div key={item.label} className="py-1">
+                  <p className="px-2 pb-1 text-lg font-medium text-white/90">
+                    {item.label}
+                  </p>
+                  <div className="flex flex-col gap-0.5 border-l border-white/10 pl-3">
+                    {item.children.map((link) => (
+                      <Dialog.Close asChild key={link.href}>
+                        <Link
+                          href={link.href}
+                          className="rounded-md px-2 py-2 text-sm font-medium text-white/70 transition-colors hover:bg-white/5 hover:text-marketing-gold-400"
+                        >
+                          {link.label}
+                        </Link>
+                      </Dialog.Close>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <Dialog.Close asChild key={item.href}>
+                  <Link
+                    href={item.href}
+                    className="rounded-md px-2 py-3 text-lg font-medium text-white/90 transition-colors hover:bg-white/5 hover:text-marketing-gold-400"
+                  >
+                    {item.label}
+                  </Link>
+                </Dialog.Close>
+              ),
+            )}
           </nav>
 
           <div className="mt-auto flex flex-col gap-3 border-t border-white/10 pt-6">
