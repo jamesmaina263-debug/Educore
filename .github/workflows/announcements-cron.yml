@@ -1,0 +1,34 @@
+name: announcements-cron
+
+# Restores real-time-ish responsiveness for PA-07 scheduled announcements,
+# which vercel.json's own cron can no longer provide on the Hobby plan (see
+# PR #153 -- Vercel only allows daily schedules there, and the limit is
+# enforced against vercel.json specifically, not against external callers
+# hitting the same route). This workflow is that external caller.
+#
+# Requires a repository secret EXTERNAL_CRON_SECRET whose value matches the
+# EXTERNAL_CRON_SECRET environment variable set on the Vercel project
+# (Production environment) -- deliberately a separate value from CRON_SECRET,
+# not shared with it, so this workflow and Vercel's own cron can be revoked
+# independently of one another.
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch: {}
+
+jobs:
+  trigger:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call /api/cron/announcements
+        run: |
+          status=$(curl -s -o /tmp/response.json -w "%{http_code}" \
+            -H "Authorization: Bearer ${{ secrets.EXTERNAL_CRON_SECRET }}" \
+            "https://educoreafrica.com/api/cron/announcements")
+          echo "HTTP status: $status"
+          cat /tmp/response.json
+          if [ "$status" -ge 300 ]; then
+            echo "::error::announcements cron call failed with status $status"
+            exit 1
+          fi

@@ -4,35 +4,34 @@ import { isValidCronRequest } from "@/lib/cron-auth";
 
 export const dynamic = "force-dynamic";
 
-// Same auth pattern as /api/cron/school-comms and /api/cron/billing: Vercel
-// Cron sends a GET with Authorization: Bearer <CRON_SECRET>.
-//
-// INTERIM DEGRADATION, not the original design: this was meant to run every
-// 15 minutes (a scheduled announcement is time-sensitive in a way a term
-// newsletter isn't -- "remind guardians at 7am" published hours late because
-// it shared a daily sweep defeats the point of scheduling it). That schedule
-// broke every deploy of `main`: this project is on Vercel's Hobby plan,
-// which only allows daily cron jobs, and vercel.json is validated at deploy
-// time -- so PR #149 merging it left `main` unable to deploy at all until
-// this was reduced to the "0 6 * * *" schedule below.
-//
-// Two ways to restore real 15-minute responsiveness, neither of which this
-// fix attempts (both need a human, not code):
-//   1. Upgrade the Vercel project to the Pro plan.
-//   2. Trigger this same endpoint from an external scheduler (e.g. a GitHub
-//      Actions cron workflow) instead of vercel.json -- Vercel's own cron
-//      limit doesn't apply to external callers. Needs a CRON_SECRET-equivalent
-//      value added as both a GitHub Actions secret and read here (or a new
-//      dedicated secret), since it isn't currently readable outside Vercel's
-//      own environment.
-// Until one of those happens, a school scheduling an announcement for a
-// specific time may see it publish up to ~24h late.
+// Two callers now hit this route with the same Authorization: Bearer <secret>
+// shape (see isValidCronRequest):
+//   1. Vercel's own native cron (vercel.json), still on its Hobby-plan-forced
+//      daily "0 6 * * *" schedule (see PR #153) -- kept as a same-day safety
+//      net even now that (2) exists, in case the GitHub Actions run is ever
+//      disabled/failing silently. Authenticates with CRON_SECRET, same as
+//      every other route under /api/cron.
+//   2. A GitHub Actions workflow (.github/workflows/announcements-cron.yml)
+//      running every 15 minutes, restoring the original real-time-ish
+//      responsiveness the Hobby plan limit took away. Vercel's cron-schedule
+//      restriction only applies to schedules *defined in vercel.json* -- an
+//      external caller hitting the same route on any cadence is unaffected,
+//      which is what PR #153's own writeup identified as the real fix.
+//      Authenticates with EXTERNAL_CRON_SECRET, a separate value from
+//      CRON_SECRET (not reused) so this route's two callers can be revoked
+//      independently and so this workflow never needs the same secret every
+//      other /api/cron route trusts.
 export async function GET(request: Request) {
   const cronSecret = process.env.CRON_SECRET;
-  if (!cronSecret) {
-    return NextResponse.json({ error: "CRON_SECRET is not configured." }, { status: 500 });
+  const externalCronSecret = process.env.EXTERNAL_CRON_SECRET;
+  if (!cronSecret && !externalCronSecret) {
+    return NextResponse.json({ error: "Neither CRON_SECRET nor EXTERNAL_CRON_SECRET is configured." }, { status: 500 });
   }
-  if (!isValidCronRequest(request, cronSecret)) {
+
+  const authorized =
+    (!!cronSecret && isValidCronRequest(request, cronSecret)) ||
+    (!!externalCronSecret && isValidCronRequest(request, externalCronSecret));
+  if (!authorized) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
