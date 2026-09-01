@@ -1,17 +1,10 @@
 import Image from "next/image";
 import Link from "next/link";
+
 import { MarketingButton } from "@/components/marketing/button";
 import { MobileNav } from "@/components/marketing/mobile-nav";
-
-const NAV_LINKS = [
-  { href: "/platform", label: "Platform" },
-  { href: "/solutions", label: "Solutions" },
-  { href: "/ai-automation", label: "AI & Automation" },
-  { href: "/finance-fees", label: "Finance & Fees" },
-  { href: "/security", label: "Security" },
-  { href: "/pricing", label: "Pricing" },
-  { href: "/about", label: "About" },
-];
+import { NavDropdownMenu } from "@/components/marketing/nav-dropdown";
+import { NAV_ITEMS, isDropdown } from "@/components/marketing/nav-data";
 
 export function MarketingNav() {
   return (
@@ -28,16 +21,20 @@ export function MarketingNav() {
           />
         </Link>
 
-        <nav className="hidden items-center gap-5 lg:flex">
-          {NAV_LINKS.map((link) => (
-            <Link
-              key={link.href}
-              href={link.href}
-              className="text-sm font-medium text-white/80 transition-colors hover:text-marketing-gold-400"
-            >
-              {link.label}
-            </Link>
-          ))}
+        <nav className="hidden items-center gap-1 lg:flex" aria-label="Primary">
+          {NAV_ITEMS.map((item) =>
+            isDropdown(item) ? (
+              <NavDropdownMenu key={item.label} item={item} />
+            ) : (
+              <Link
+                key={item.href}
+                href={item.href}
+                className="rounded-md px-3 py-2 text-sm font-medium text-white/80 transition-colors hover:bg-white/5 hover:text-white"
+              >
+                {item.label}
+              </Link>
+            ),
+          )}
         </nav>
 
         <div className="flex items-center gap-3">
@@ -50,7 +47,7 @@ export function MarketingNav() {
           <MarketingButton asChild size="sm">
             <Link href="/contact">Book a Demo</Link>
           </MarketingButton>
-          <MobileNav links={NAV_LINKS} />
+          <MobileNav />
         </div>
       </div>
     </header>
