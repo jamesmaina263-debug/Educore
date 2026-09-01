@@ -6,6 +6,7 @@ import {
   BookOpen,
   CalendarCheck,
   FileText,
+  FileDown,
   Wallet,
   Banknote,
   TrendingUp,
@@ -186,6 +187,7 @@ const settingsChildren: NavChild[] = [
   { label: "Biometric Devices", href: "/settings/biometric-devices", icon: Fingerprint },
   { label: "Biometric Events", href: "/settings/biometric-events", icon: History },
   { label: "Audit Log", href: "/settings/audit", icon: History },
+  { label: "Data Export", href: "/settings/data-export", icon: FileDown },
 ];
 
 export const navGroups: NavGroup[] = [
