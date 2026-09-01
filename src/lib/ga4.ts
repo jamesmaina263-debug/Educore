@@ -155,6 +155,31 @@ export async function getOverviewStats(dateRange: GaDateRangeInput): Promise<Ove
   };
 }
 
+// "Engaged Visitors" funnel stage. GA4 defines an engaged session
+// automatically -- 10+ seconds of engagement time, 1+ conversion event, or
+// 2+ page/screen views -- with no manual threshold to configure in the
+// GA4 UI (that was a leftover assumption from Universal Analytics, which
+// this dashboard replaced; UA's session-timeout setting doesn't carry
+// over). `engagedSessions` is a standard Data API metric, so this needed
+// no new GA4/GTM configuration, just wiring up the query.
+//
+// Note this counts engaged *sessions*, not unique engaged *users* -- GA4's
+// Data API has no "engaged users" metric, only session-level engagement.
+// Wired into the funnel as an honest session-count alongside the
+// user-count stages above and below it; see the note passed at the call
+// site in the analytics page.
+export async function getEngagedVisitors(dateRange: GaDateRangeInput): Promise<number | null> {
+  const result = await runReport({
+    dateRanges: toDateRange(dateRange),
+    metrics: [{ name: "engagedSessions" }],
+    metricAggregations: ["TOTAL"],
+  });
+  const row = result?.totals?.[0] ?? result?.rows?.[0];
+  const value = row?.metricValues?.[0]?.value;
+  if (value === undefined) return null;
+  return Number(value);
+}
+
 export type TimeseriesPoint = { date: string; visitors: number; pageviews: number };
 export type TimeGranularity = "day" | "week" | "month";
 
