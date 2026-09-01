@@ -9,6 +9,7 @@ import { Reveal } from "@/components/marketing/reveal";
 import { ModuleBlock } from "@/components/marketing/module-block";
 import { MiniFrame } from "@/components/marketing/mini-frame";
 import { Badge } from "@/components/ui/badge";
+import { BreadcrumbJsonLd, HOME_CRUMB } from "@/components/marketing/breadcrumb-json-ld";
 
 const TITLE = "CBC School Management System — EduCore Kenya";
 const DESCRIPTION =
@@ -65,6 +66,7 @@ const CBC_MODULES = [
 export default function CbcSchoolManagementPage() {
   return (
     <>
+      <BreadcrumbJsonLd items={[HOME_CRUMB, { name: "CBC School Management", path: "/cbc-school-management" }]} />
       <Section tone="navy" className="pt-16 sm:pt-20">
         <Reveal>
           <Eyebrow tone="light">CBC &amp; Competency-Based Curriculum</Eyebrow>

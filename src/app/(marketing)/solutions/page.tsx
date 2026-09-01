@@ -19,6 +19,7 @@ import { RolePanel } from "@/components/marketing/role-panel";
 import { MiniFrame } from "@/components/marketing/mini-frame";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import { BreadcrumbJsonLd, HOME_CRUMB } from "@/components/marketing/breadcrumb-json-ld";
 
 const TITLE = "School Administration Software by Role — EduCore Kenya";
 const DESCRIPTION =
@@ -45,6 +46,7 @@ const ROLE_NAV = [
 export default function SolutionsPage() {
   return (
     <>
+      <BreadcrumbJsonLd items={[HOME_CRUMB, { name: "Solutions", path: "/solutions" }]} />
       {/* 1 — Hero */}
       <Section tone="navy" className="pb-14 pt-20 sm:pb-16 sm:pt-28">
         <Eyebrow tone="dark">Solutions</Eyebrow>

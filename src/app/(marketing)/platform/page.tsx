@@ -37,6 +37,7 @@ import { ModuleBlock } from "@/components/marketing/module-block";
 import { MiniFrame } from "@/components/marketing/mini-frame";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import { BreadcrumbJsonLd, HOME_CRUMB } from "@/components/marketing/breadcrumb-json-ld";
 
 const TITLE = "School Management System Platform — EduCore Kenya";
 const DESCRIPTION =
@@ -311,6 +312,7 @@ function ModuleGrid({ modules, tone, cols = 3 }: { modules: Mod[]; tone: "canvas
 export default function PlatformPage() {
   return (
     <>
+      <BreadcrumbJsonLd items={[HOME_CRUMB, { name: "Platform", path: "/platform" }]} />
       {/* Hero */}
       <Section tone="navy" className="pt-16 sm:pt-20">
         <Reveal>
