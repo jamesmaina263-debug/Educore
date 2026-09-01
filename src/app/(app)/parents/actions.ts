@@ -20,3 +20,21 @@ export async function deleteGuardianPermanentlyAction(guardianId: string): Promi
   revalidatePath("/parents", "layout");
   return { success: true };
 }
+
+// Wraps merge_guardian_accounts (20260823044534) -- the correct fix for two
+// accounts that should be one (the same parent registered twice): reassigns
+// the duplicate's children/bookings/applications/notifications onto the
+// account being kept, then deletes the now-empty duplicate. Prefer this over
+// deleteGuardianPermanentlyAction whenever the account being removed has real
+// history (children, etc.) that shouldn't just be lost.
+export async function mergeGuardianAccountsAction(keepId: string, duplicateId: string): Promise<ActionResult> {
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("merge_guardian_accounts", {
+    p_keep_id: keepId,
+    p_duplicate_id: duplicateId,
+    p_reason: "Merged from Parents directory",
+  });
+  if (error) return { error: error.message };
+  revalidatePath("/parents", "layout");
+  return { success: true };
+}

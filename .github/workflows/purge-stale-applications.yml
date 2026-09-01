@@ -1,0 +1,103 @@
+name: Purge stale rejected/withdrawn applications
+
+# Lucy's retention policy: a rejected or withdrawn online application, and the
+# parent/guardian account behind it, should be permanently deleted 14 days
+# after the decision if nobody in the school has already deleted it by hand
+# via the admissions list. This is the automatic side of that; the manual
+# "Delete permanently" button (delete_application_permanently RPC) still works
+# independently for anyone who doesn't want to wait 14 days.
+#
+# Storage objects (uploaded application documents) have to go through the
+# Storage REST API -- they aren't reachable from SQL -- so this always removes
+# them *before* calling the DB-side purge, same ordering the manual delete
+# button already uses. list_purge_candidates()/purge_stale_non_admitted_applications()
+# (20260901043052_scheduled_stale_application_purge.sql) are revoked from
+# anon/authenticated -- only reachable via a direct postgres connection, which
+# is exactly what SUPABASE_DB_URL here provides (same secret nightly-backup.yml
+# and migration-drift-check.yml already use).
+
+on:
+  schedule:
+    # 04:00 UTC daily = 07:00 Nairobi time.
+    - cron: "0 4 * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Preview only -- list what would be purged without deleting anything"
+        type: boolean
+        default: false
+
+jobs:
+  purge:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check required secrets are set
+        run: |
+          MISSING=""
+          [ -z "${{ secrets.SUPABASE_DB_URL }}" ] && MISSING="$MISSING SUPABASE_DB_URL"
+          [ -z "${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}" ] && MISSING="$MISSING SUPABASE_SERVICE_ROLE_KEY"
+          if [ -n "$MISSING" ]; then
+            echo "Missing repo secret(s):$MISSING -- failing loudly instead of skipping silently."
+            exit 1
+          fi
+
+      - name: Install postgresql-client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client jq
+
+      - name: List purge candidates
+        id: candidates
+        run: |
+          RESULT=$(psql "${{ secrets.SUPABASE_DB_URL }}" -Atqc \
+            "select coalesce(json_agg(row_to_json(t)), '[]') from public.list_purge_candidates(14) t;")
+          echo "count: $(echo "$RESULT" | jq 'length')"
+          {
+            echo "json<<CANDIDATES_EOF"
+            echo "$RESULT"
+            echo "CANDIDATES_EOF"
+          } >> "$GITHUB_ENV"
+
+      - name: Remove storage objects
+        if: ${{ github.event.inputs.dry_run != 'true' }}
+        env:
+          CANDIDATES_JSON: ${{ env.json }}
+          SUPABASE_URL: https://alzqlvfaftwegptfbfej.supabase.co
+        run: |
+          BUCKETS=$(echo "$CANDIDATES_JSON" | jq -r '[.[].storage_bucket] | unique | .[]')
+          if [ -z "$BUCKETS" ]; then
+            echo "No documents to remove."
+            exit 0
+          fi
+          for BUCKET in $BUCKETS; do
+            PATHS_JSON=$(echo "$CANDIDATES_JSON" | jq -c --arg b "$BUCKET" '[.[] | select(.storage_bucket == $b) | .storage_path]')
+            echo "Removing $(echo "$PATHS_JSON" | jq 'length') object(s) from bucket $BUCKET"
+            HTTP_STATUS=$(curl -s -o /tmp/storage_delete_response.json -w "%{http_code}" \
+              -X DELETE "$SUPABASE_URL/storage/v1/object/$BUCKET" \
+              -H "Authorization: Bearer ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}" \
+              -H "apikey: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}" \
+              -H "Content-Type: application/json" \
+              -d "{\"prefixes\": $PATHS_JSON}")
+            cat /tmp/storage_delete_response.json
+            if [ "$HTTP_STATUS" -ge 300 ]; then
+              echo "::error::Storage delete for bucket $BUCKET failed with HTTP $HTTP_STATUS -- aborting before touching the database, so nothing goes db-orphaned."
+              exit 1
+            fi
+          done
+
+      - name: Purge database rows (applications + orphaned guardians)
+        if: ${{ github.event.inputs.dry_run != 'true' }}
+        run: |
+          RESULT=$(psql "${{ secrets.SUPABASE_DB_URL }}" -Atqc \
+            "select coalesce(json_agg(row_to_json(t)), '[]') from public.purge_stale_non_admitted_applications(14) t;")
+          echo "Purged: $RESULT"
+          echo "purged_count=$(echo "$RESULT" | jq 'length')" >> "$GITHUB_STEP_SUMMARY"
+          echo "$RESULT" | jq '.'
+
+      - name: Dry run summary
+        if: ${{ github.event.inputs.dry_run == 'true' }}
+        env:
+          CANDIDATES_JSON: ${{ env.json }}
+        run: |
+          echo "Dry run -- would remove documents for these applications, then purge the applications and any now-orphaned guardians:"
+          echo "$CANDIDATES_JSON" | jq '.'
+          psql "${{ secrets.SUPABASE_DB_URL }}" -Atqc \
+            "select a.id, a.application_number, a.status, a.decision_at, a.guardian_id from public.applications a where a.status in ('rejected','withdrawn') and coalesce(a.decision_at, a.updated_at) < now() - interval '14 days';"

@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { logout } from "@/app/login/actions";
 import { AppShell } from "@/components/app-shell/app-shell";
 import { ParentsTable, type ParentRow } from "@/components/parents/parents-table";
-import { deleteGuardianPermanentlyAction } from "./actions";
+import { deleteGuardianPermanentlyAction, mergeGuardianAccountsAction } from "./actions";
 
 export default async function ParentsDirectoryPage() {
   const supabase = await createClient();
@@ -89,7 +89,12 @@ export default async function ParentsDirectoryPage() {
             No parent accounts yet.
           </div>
         ) : (
-          <ParentsTable rows={rows} canDelete={!!canDeleteGuardians} deleteAction={deleteGuardianPermanentlyAction} />
+          <ParentsTable
+            rows={rows}
+            canDelete={!!canDeleteGuardians}
+            deleteAction={deleteGuardianPermanentlyAction}
+            mergeAction={mergeGuardianAccountsAction}
+          />
         )}
       </div>
     </AppShell>

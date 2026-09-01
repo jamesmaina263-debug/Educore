@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { type ColumnDef } from "@tanstack/react-table";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -8,6 +8,7 @@ import { StatusBadge } from "@/components/status-badge";
 import { DataTable } from "@/components/ui/data-table";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 
 export interface ParentRow {
   id: string;
@@ -18,7 +19,9 @@ export interface ParentRow {
   children: string[];
 }
 
-type DeleteGuardianAction = (guardianId: string) => Promise<{ error: string } | { success: true }>;
+type ActionResult = { error: string } | { success: true };
+type DeleteGuardianAction = (guardianId: string) => Promise<ActionResult>;
+type MergeGuardianAction = (keepId: string, duplicateId: string) => Promise<ActionResult>;
 
 function initials(name: string) {
   return name
@@ -70,7 +73,8 @@ function DeleteGuardianButton({ row, deleteAction }: { row: ParentRow; deleteAct
                 {" "}
                 <span className="font-medium text-danger">
                   This will also unlink them from {row.children.join(", ")} — do this only if the account is a
-                  mistake or duplicate, not to remove a real parent of an enrolled student.
+                  mistake or duplicate, not to remove a real parent of an enrolled student. If it&apos;s a duplicate
+                  account, Merge keeps their history instead of losing it.
                 </span>
               </>
             )}
@@ -90,7 +94,98 @@ function DeleteGuardianButton({ row, deleteAction }: { row: ParentRow; deleteAct
   );
 }
 
-function buildColumns(canDelete: boolean, deleteAction?: DeleteGuardianAction): ColumnDef<ParentRow>[] {
+function MergeGuardianButton({
+  row,
+  otherRows,
+  mergeAction,
+}: {
+  row: ParentRow;
+  otherRows: ParentRow[];
+  mergeAction: MergeGuardianAction;
+}) {
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [keepId, setKeepId] = useState<string | undefined>(undefined);
+  const [error, setError] = useState<string | null>(null);
+  const [pending, startTransition] = useTransition();
+
+  const keeper = otherRows.find((r) => r.id === keepId);
+
+  function handleConfirm() {
+    if (!keepId) return;
+    setError(null);
+    startTransition(async () => {
+      const result = await mergeAction(keepId, row.id);
+      if ("error" in result) {
+        setError(result.error);
+        return;
+      }
+      setOpen(false);
+      setKeepId(undefined);
+      router.refresh();
+    });
+  }
+
+  if (otherRows.length === 0) return null;
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="ml-3 text-[0.8125rem] font-medium text-muted-foreground hover:text-foreground hover:underline"
+      >
+        Merge
+      </button>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Merge {row.full_name}&apos;s account into another parent</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            Use this when the same parent has two accounts by mistake. Pick the account to keep — every child,
+            booking, application, and notification history on {row.full_name}&apos;s account moves onto it, then{" "}
+            {row.full_name}&apos;s duplicate account is permanently deleted.
+          </p>
+          <Select value={keepId} onValueChange={setKeepId}>
+            <SelectTrigger>
+              <SelectValue placeholder="Select the account to keep…" />
+            </SelectTrigger>
+            <SelectContent>
+              {otherRows.map((r) => (
+                <SelectItem key={r.id} value={r.id}>
+                  {r.full_name}
+                  {r.children.length > 0 ? ` (${r.children.join(", ")})` : ""}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {keeper && (
+            <p className="text-sm font-medium text-danger">
+              {row.full_name}&apos;s account will be deleted; {keeper.full_name} will keep everything.
+            </p>
+          )}
+          {error && <p className="text-sm text-danger">{error}</p>}
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setOpen(false)} disabled={pending}>
+              Cancel
+            </Button>
+            <Button type="button" variant="destructive" onClick={handleConfirm} disabled={pending || !keepId}>
+              {pending ? "Merging…" : "Merge accounts"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
+function buildColumns(
+  rows: ParentRow[],
+  canDelete: boolean,
+  deleteAction?: DeleteGuardianAction,
+  mergeAction?: MergeGuardianAction,
+): ColumnDef<ParentRow>[] {
   const columns: ColumnDef<ParentRow>[] = [
     {
       accessorKey: "full_name",
@@ -139,7 +234,18 @@ function buildColumns(canDelete: boolean, deleteAction?: DeleteGuardianAction): 
     columns.push({
       id: "actions",
       header: "",
-      cell: ({ row }) => <DeleteGuardianButton row={row.original} deleteAction={deleteAction} />,
+      cell: ({ row }) => (
+        <div className="flex items-center">
+          <DeleteGuardianButton row={row.original} deleteAction={deleteAction} />
+          {mergeAction && (
+            <MergeGuardianButton
+              row={row.original}
+              otherRows={rows.filter((r) => r.id !== row.original.id)}
+              mergeAction={mergeAction}
+            />
+          )}
+        </div>
+      ),
     });
   }
 
@@ -150,12 +256,17 @@ export function ParentsTable({
   rows,
   canDelete = false,
   deleteAction,
+  mergeAction,
 }: {
   rows: ParentRow[];
   canDelete?: boolean;
   deleteAction?: DeleteGuardianAction;
+  mergeAction?: MergeGuardianAction;
 }) {
-  const columns = buildColumns(canDelete, deleteAction);
+  const columns = useMemo(
+    () => buildColumns(rows, canDelete, deleteAction, mergeAction),
+    [rows, canDelete, deleteAction, mergeAction],
+  );
   return (
     <DataTable columns={columns} data={rows} searchColumnId="full_name" searchPlaceholder="Search parents by name…" />
   );
