@@ -6,6 +6,7 @@ import { MarketingButton } from "@/components/marketing/button";
 import { Eyebrow } from "@/components/marketing/eyebrow";
 import { Section } from "@/components/marketing/section";
 import { Reveal } from "@/components/marketing/reveal";
+import { BreadcrumbJsonLd, HOME_CRUMB } from "@/components/marketing/breadcrumb-json-ld";
 
 const TITLE = "FAQ — EduCore";
 const DESCRIPTION =
@@ -83,6 +84,7 @@ export default function FaqPage() {
 
   return (
     <>
+      <BreadcrumbJsonLd items={[HOME_CRUMB, { name: "FAQ", path: "/faq" }]} />
       {/* Structured data for search engines -- mirrors the visible Q&A
           below exactly, so it can never say something the page doesn't. */}
       <script
