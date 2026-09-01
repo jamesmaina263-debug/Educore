@@ -148,8 +148,8 @@ export default function MarketingHomePage() {
             <p className="mt-6 max-w-lg text-lg text-white/70">
               EduCore connects admissions, academics, finance, attendance,
               communication, and school operations in one secure platform —
-              giving your team one place to manage the school and your
-              parents one reliable way to stay connected.
+              with M-Pesa fee reconciliation and CBC grading built in from
+              day one, not bolted on later.
             </p>
             <div className="mt-9 flex flex-wrap items-center gap-4">
               <MarketingButton size="lg" asChild>
