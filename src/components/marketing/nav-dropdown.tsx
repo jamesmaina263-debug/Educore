@@ -14,7 +14,15 @@ import type { NavDropdown } from "@/components/marketing/nav-data";
 // Radix still owns focus management, Escape-to-close, outside-click, and
 // keyboard navigation between items -- this component only adds the
 // optional hover affordance on top of that.
-const CLOSE_DELAY_MS = 150;
+//
+// Deliberately no scale/zoom transform on open: an animating transform
+// changes the panel's effective hit-test box every frame, so a cursor
+// sitting near the (still-growing) edge repeatedly falls in and out of
+// bounds mid-animation, firing mouseenter/mouseleave back and forth and
+// reading as a "blinking" menu. Fade-only avoids that; the close delay
+// below covers the (now small, fixed) trigger-to-panel gap instead of
+// relying on a moving hit box.
+const CLOSE_DELAY_MS = 200;
 
 export function NavDropdownMenu({ item }: { item: NavDropdown }) {
   const [open, setOpen] = React.useState(false);
@@ -56,12 +64,12 @@ export function NavDropdownMenu({ item }: { item: NavDropdown }) {
         <DropdownMenu.Portal>
           <DropdownMenu.Content
             align="start"
-            sideOffset={10}
+            sideOffset={6}
             onMouseEnter={openNow}
             onMouseLeave={closeSoon}
             className={cn(
               "z-50 rounded-xl border border-white/10 bg-marketing-navy-900 p-4 shadow-xl",
-              "data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95",
+              "data-[state=open]:animate-in data-[state=open]:fade-in-0",
               "data-[state=closed]:animate-out data-[state=closed]:fade-out-0",
               isMega ? "grid w-[640px] grid-cols-4 gap-6" : "grid w-[420px] grid-cols-2 gap-6",
             )}
