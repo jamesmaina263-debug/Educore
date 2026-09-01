@@ -11,9 +11,9 @@ import { MiniFrame } from "@/components/marketing/mini-frame";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
-const TITLE = "School Fees Management System — EduCore Kenya";
+const TITLE = "M-Pesa School Fees Management System — EduCore Kenya";
 const DESCRIPTION =
-  "How EduCore handles school fees: fee structures, invoicing, per-student balances, and M-Pesa reconciliation — the school fees management system built for how Kenyan schools actually get paid.";
+  "M-Pesa fee reconciliation built in, not bolted on: fee structures, invoicing, per-student balances, and automatic M-Pesa matching — the school fees management system built for how Kenyan schools actually get paid.";
 
 export const metadata: Metadata = {
   title: TITLE,
@@ -65,7 +65,7 @@ export default function FinancePage() {
         <Reveal>
           <Eyebrow tone="light">Finance & Fees</Eyebrow>
           <h1 className="mt-5 max-w-3xl text-4xl font-extrabold leading-[1.1] tracking-tight sm:text-5xl">
-            A school fees management system built for how Kenyan schools actually get paid.
+            M-Pesa-native school fees management — built for how Kenyan schools actually get paid.
           </h1>
           <p className="mt-6 max-w-2xl text-lg text-white/70">
             Fee structures, invoices, and per-student balances stay in one
