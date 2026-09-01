@@ -148,8 +148,8 @@ export default function MarketingHomePage() {
             <p className="mt-6 max-w-lg text-lg text-white/70">
               EduCore connects admissions, academics, finance, attendance,
               communication, and school operations in one secure platform —
-              giving your team one place to manage the school and your
-              parents one reliable way to stay connected.
+              with M-Pesa fee reconciliation and CBC grading built in from
+              day one, not bolted on later.
             </p>
             <div className="mt-9 flex flex-wrap items-center gap-4">
               <MarketingButton size="lg" asChild>
@@ -158,6 +158,15 @@ export default function MarketingHomePage() {
                 </Link>
               </MarketingButton>
               <MarketingButton size="lg" variant="outline-on-dark" asChild>
+                <Link
+                  href="https://wa.me/254702904562?text=Hi%2C%20I%27d%20like%20to%20know%20more%20about%20EduCore%20for%20my%20school."
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  <MessageCircle className="h-4 w-4" /> Chat on WhatsApp
+                </Link>
+              </MarketingButton>
+              <MarketingButton size="lg" variant="ghost-on-dark" asChild>
                 <Link href="/platform">See How It Works</Link>
               </MarketingButton>
             </div>
