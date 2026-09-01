@@ -187,7 +187,7 @@ export default function MarketingHomePage() {
       {/* Traction — one verified figure, not padded with invented stats */}
       <Section tone="navy" className="border-t border-white/10 py-10 sm:py-12">
         <Reveal className="flex flex-col items-center gap-1.5 text-center">
-          <p className="font-mono text-4xl font-bold text-marketing-gold-400 sm:text-5xl">40+</p>
+          <p className="font-mono text-4xl font-semibold text-marketing-gold-400 sm:text-5xl">40+</p>
           <p className="text-sm text-white/60">Schools onboarded and running on EduCore</p>
         </Reveal>
       </Section>
