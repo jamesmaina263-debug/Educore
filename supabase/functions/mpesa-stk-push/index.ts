@@ -1,4 +1,4 @@
-import { createClient } from "jsr:@supabase/supabase-js@2";
+import { createClient } from "jsr:@supabase/supabase-js@2.112.4";
 import { buildCorsHeaders } from "../_shared/cors.ts";
 import {
   getDarajaOAuthToken,
@@ -88,20 +88,27 @@ Deno.serve(async (req) => {
       return json({ error: "This request is already being processed." }, 409);
     }
 
-    const [{ data: settings }, { data: credsRow }] = await Promise.all([
+    // mpesa_credentials no longer has plaintext consumer_key/consumer_secret/passkey
+    // columns as of 20260828064348_encrypt_mpesa_credentials_via_vault.sql -- they were
+    // moved into Supabase Vault and are only readable via this SECURITY DEFINER RPC,
+    // which is locked to service_role (see that migration for the grant/revoke).
+    const [{ data: settings }, { data: credsRows, error: credsError }] = await Promise.all([
       serviceClient
         .from("mpesa_settings")
         .select("shortcode, shortcode_type, environment, is_active, callback_token")
         .eq("school_id", request.school_id)
         .maybeSingle(),
-      serviceClient
-        .from("mpesa_credentials")
-        .select("consumer_key, consumer_secret, passkey")
-        .eq("school_id", request.school_id)
-        .maybeSingle(),
+      serviceClient.rpc("get_mpesa_credentials_decrypted", { p_school_id: request.school_id }),
     ]);
+    const credsRow = credsRows?.[0];
 
-    if (!settings || !settings.is_active || !credsRow || !settings.shortcode) {
+    if (
+      !settings || !settings.is_active || !settings.shortcode ||
+      credsError || !credsRow || !credsRow.consumer_key || !credsRow.consumer_secret || !credsRow.passkey
+    ) {
+      if (credsError) {
+        console.error("get_mpesa_credentials_decrypted failed", credsError);
+      }
       return json({ error: "M-Pesa is not configured for this school." }, 422);
     }
 

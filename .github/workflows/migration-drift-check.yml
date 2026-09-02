@@ -24,6 +24,9 @@ on:
 jobs:
   check-drift:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
     steps:
       - uses: actions/checkout@v4
 
@@ -49,6 +52,37 @@ jobs:
           } >> "$GITHUB_ENV"
 
       - name: Compare against supabase/migrations/
+        id: compare
         env:
           PROD_MIGRATIONS_JSON: ${{ env.json }}
-        run: python3 scripts/check_migration_drift.py
+        run: |
+          set +e
+          python3 scripts/check_migration_drift.py > /tmp/drift_output.txt 2>&1
+          code=$?
+          cat /tmp/drift_output.txt
+          exit $code
+
+      # The raw Actions log for a failed run isn't easy to get at outside the GitHub UI
+      # (no stable API for it). Posting the script's own stdout as a PR comment when it
+      # fails means the exact missing-version detail is visible right where the check
+      # ran, not just a pass/fail dot -- doesn't change what the check itself decides.
+      # Looks up an open PR for the current ref rather than trusting github.event.pull_request
+      # directly, so this also works when the run comes from workflow_dispatch or a push to a
+      # branch with an open PR, not just a genuine pull_request-triggered run.
+      - name: Post drift summary as PR comment on failure
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          {
+            echo "### Migration drift check failed"
+            echo '```'
+            cat /tmp/drift_output.txt
+            echo '```'
+          } > /tmp/drift_comment.md
+          PR_NUMBER=$(gh pr list --repo "${{ github.repository }}" --head "${{ github.ref_name }}" --state open --json number --jq '.[0].number // empty')
+          if [ -n "$PR_NUMBER" ]; then
+            gh pr comment "$PR_NUMBER" --body-file /tmp/drift_comment.md --repo "${{ github.repository }}"
+          else
+            echo "No open PR found for ref ${{ github.ref_name }} -- skipping comment post (output is above in the job log)."
+          fi

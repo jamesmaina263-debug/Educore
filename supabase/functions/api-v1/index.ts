@@ -18,7 +18,7 @@
 // (RLS on that table has no insert policy for regular users on purpose — only this function,
 // running as service_role, writes to it).
 
-import { createClient } from "jsr:@supabase/supabase-js@2";
+import { createClient } from "jsr:@supabase/supabase-js@2.112.4";
 import { buildCorsHeaders } from "./cors.ts";
 import { timingSafeEqual } from "../_shared/timingSafeEqual.ts";
 import { getRealClientIp } from "../_shared/getRealClientIp.ts";

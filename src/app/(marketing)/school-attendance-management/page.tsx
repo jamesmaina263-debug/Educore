@@ -69,18 +69,16 @@ export default function SchoolAttendanceManagementPage() {
     <>
       <BreadcrumbJsonLd items={[HOME_CRUMB, { name: "Attendance Management", path: "/school-attendance-management" }]} />
       <Section tone="navy" className="pt-16 sm:pt-20">
-        <Reveal>
-          <Eyebrow tone="light">Attendance</Eyebrow>
-          <h1 className="mt-5 max-w-3xl text-4xl font-extrabold leading-[1.1] tracking-tight sm:text-5xl">
-            A school attendance management system that texts the guardian the moment a student checks in.
-          </h1>
-          <p className="mt-6 max-w-2xl text-lg text-white/70">
-            Biometric check-in where a school has a device, a stream-based
-            register where it doesn&rsquo;t — either way, the same
-            record, and a correction workflow that keeps an audit trail
-            instead of a silent overwrite.
-          </p>
-        </Reveal>
+        <Eyebrow tone="light">Attendance</Eyebrow>
+        <h1 className="mt-5 max-w-3xl text-4xl font-extrabold leading-[1.1] tracking-tight sm:text-5xl">
+          A school attendance management system that texts the guardian the moment a student checks in.
+        </h1>
+        <p className="mt-6 max-w-2xl text-lg text-white/70">
+          Biometric check-in where a school has a device, a stream-based
+          register where it doesn&rsquo;t — either way, the same
+          record, and a correction workflow that keeps an audit trail
+          instead of a silent overwrite.
+        </p>
       </Section>
 
       <Section tone="canvas">
