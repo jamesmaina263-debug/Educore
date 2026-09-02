@@ -56,14 +56,19 @@ export function ReferralsSection({
     }
     setPending(true);
     setError(null);
+    // Generated once here so a queued-then-replayed retry (lost ack after the original
+    // request actually landed) reuses the same key instead of creating a second referral
+    // for the same incident -- same pattern as medication-section.tsx.
+    const clientMutationId = crypto.randomUUID();
+    const input = { ...form, client_mutation_id: clientMutationId };
     if (!online) {
-      await queueMutation("health", "createReferral", form);
+      await queueMutation("health", "createReferral", input);
       setPending(false);
       setOpen(false);
       setForm({ student_id: "", referred_to: "", reason: "", referral_date: new Date().toISOString().slice(0, 10), guardian_notified: false });
       return;
     }
-    const result = await createReferral(form);
+    const result = await createReferral(input);
     setPending(false);
     if ("error" in result) return setError(result.error);
     setOpen(false);

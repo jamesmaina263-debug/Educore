@@ -143,10 +143,29 @@ export async function createReferral(input: {
   reason: string;
   referral_date: string;
   guardian_notified: boolean;
+  // Idempotency: generated once by the caller at queue time (see referrals-section.tsx),
+  // same pattern as administerMedication's own client_mutation_id -- a queued offline
+  // retry after a lost ack (the referral was actually created, but the response never
+  // reached the browser) is recognized here and short-circuited before it can create a
+  // second referral for the same incident.
+  client_mutation_id?: string;
 }): Promise<ActionResult> {
   const supabase = await createClient();
   const me = await currentActor(supabase);
   if (!me) return { error: "Could not resolve your account." };
+
+  if (input.client_mutation_id) {
+    const { data: existing } = await supabase
+      .from("health_referrals")
+      .select("id")
+      .eq("school_id", me.school_id)
+      .eq("client_mutation_id", input.client_mutation_id)
+      .maybeSingle();
+    if (existing) {
+      revalidatePath("/health", "layout");
+      return { success: true };
+    }
+  }
 
   const { error } = await supabase.from("health_referrals").insert({
     school_id: me.school_id,
@@ -158,6 +177,7 @@ export async function createReferral(input: {
     guardian_notified: input.guardian_notified,
     status: "pending",
     referred_by: me.id,
+    client_mutation_id: input.client_mutation_id || null,
   });
   if (error) return { error: error.message };
   revalidatePath("/health", "layout");
@@ -186,10 +206,27 @@ export async function logEmergency(input: {
   action_taken?: string;
   hospital_name?: string;
   guardian_notified: boolean;
+  // Idempotency: same client_mutation_id pattern as administerMedication/createReferral --
+  // an emergency record is exactly the kind of write where a duplicate from a replayed
+  // offline retry would be actively misleading (looks like two separate incidents).
+  client_mutation_id?: string;
 }): Promise<ActionResult> {
   const supabase = await createClient();
   const me = await currentActor(supabase);
   if (!me) return { error: "Could not resolve your account." };
+
+  if (input.client_mutation_id) {
+    const { data: existing } = await supabase
+      .from("health_emergencies")
+      .select("id")
+      .eq("school_id", me.school_id)
+      .eq("client_mutation_id", input.client_mutation_id)
+      .maybeSingle();
+    if (existing) {
+      revalidatePath("/health", "layout");
+      return { success: true };
+    }
+  }
 
   const { error } = await supabase.from("health_emergencies").insert({
     school_id: me.school_id,
@@ -203,6 +240,7 @@ export async function logEmergency(input: {
     guardian_notified: input.guardian_notified,
     guardian_notified_at: input.guardian_notified ? new Date().toISOString() : null,
     reported_by: me.id,
+    client_mutation_id: input.client_mutation_id || null,
   });
   if (error) return { error: error.message };
   revalidatePath("/health", "layout");

@@ -61,7 +61,16 @@ export function EmergenciesSection({
     }
     setPending(true);
     setError(null);
-    const input = { ...form, action_taken: form.action_taken || undefined, hospital_name: form.hospital_name || undefined };
+    // Generated once here so a queued-then-replayed retry (lost ack after the original
+    // request actually landed) reuses the same key instead of creating a second
+    // emergency record for the same incident -- same pattern as medication-section.tsx.
+    const clientMutationId = crypto.randomUUID();
+    const input = {
+      ...form,
+      action_taken: form.action_taken || undefined,
+      hospital_name: form.hospital_name || undefined,
+      client_mutation_id: clientMutationId,
+    };
     if (!online) {
       await queueMutation("health", "logEmergency", input);
       setPending(false);
