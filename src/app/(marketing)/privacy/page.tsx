@@ -493,10 +493,10 @@ export default function PrivacyPage() {
               you&apos;re unable to resolve a request with your school, you
               may contact us at{" "}
               <a
-                href="mailto:dpo@educoreafrica.com"
+                href="mailto:support@educoreafrica.com"
                 className="text-marketing-blue underline underline-offset-2"
               >
-                dpo@educoreafrica.com
+                support@educoreafrica.com
               </a>
               .
             </p>
@@ -509,10 +509,10 @@ export default function PrivacyPage() {
             <p className="mt-3 text-marketing-navy-900/75">
               Email:{" "}
               <a
-                href="mailto:dpo@educoreafrica.com"
+                href="mailto:support@educoreafrica.com"
                 className="text-marketing-blue underline underline-offset-2"
               >
-                dpo@educoreafrica.com
+                support@educoreafrica.com
               </a>
               <br />
               Data Protection Officer: James Maina, Founder
