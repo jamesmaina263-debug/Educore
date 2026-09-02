@@ -110,6 +110,21 @@ export async function uploadStatusDocument(
     return { error: "This application isn't linked to a guardian account yet — please contact the school before uploading documents." };
   }
 
+  // `category` is a Server Action argument, callable directly with an arbitrary string that
+  // bypasses the fixed set of buttons the status page renders. Previously it was interpolated
+  // straight into the storage key below, so a crafted category (containing "../" or "/") could
+  // escape this application's folder and write into another path in the bucket. Constrain it to
+  // one of this application's actual requirement categories -- the same trusted, school-scoped
+  // list the read side already uses -- before it ever reaches the storage path or the DB row.
+  const { data: allowedCategories } = await admin
+    .from("application_document_requirements")
+    .select("category")
+    .eq("school_id", application.school_id);
+  const isKnownCategory = (allowedCategories ?? []).some((r) => r.category === category);
+  if (!isKnownCategory) {
+    return { error: "Unrecognized document category." };
+  }
+
   const path = `${application.school_id}/${application.id}/${category}-${Date.now()}-${safeStorageFilename(file.name)}`;
   const { error: uploadError } = await admin.storage.from("application-documents").upload(path, file);
   if (uploadError) {
