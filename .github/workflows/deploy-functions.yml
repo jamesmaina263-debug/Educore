@@ -16,6 +16,16 @@ name: Deploy edge functions
 # see that file for why. Deploys every function it finds as a local directory under
 # supabase/functions/; a function only present in Supabase (deployed out-of-band, bypassing git)
 # is untouched either way.
+#
+# Gap closed 2026-09-02: this workflow and deploy-migrations.yml both trigger on push to
+# main independently, with no ordering between them. On 2026-09-02, deploy-migrations.yml
+# failed (a migration had been applied directly to prod without a matching git file, so
+# `db push` refused to run anything behind it) while this workflow succeeded anyway and
+# shipped a function that depended on the column the failed migration would have added --
+# every STK push then failed for ~75 minutes. Fix: this workflow now runs `supabase db
+# push` itself (same idempotent command as deploy-migrations.yml -- a no-op if already in
+# sync) before deploying functions, and refuses to deploy if it fails. That makes "schema
+# is up to date" a precondition of this job instead of an assumption about the other one.
 
 on:
   push:
@@ -39,6 +49,18 @@ jobs:
           # release" lookup and the actual published assets fall out of sync
           # (supabase/setup-cli#5257). Bump deliberately, as a reviewed diff, not silently.
           version: "2.116.0"
+
+      - name: Verify database schema is in sync before deploying functions
+        run: |
+          set +e
+          OUTPUT=$(supabase db push --db-url "${{ secrets.SUPABASE_DB_URL }}" --include-all 2>&1)
+          STATUS=$?
+          echo "$OUTPUT"
+          if [ $STATUS -ne 0 ]; then
+            SAFE=$(echo "$OUTPUT" | sed -E 's#(postgres(ql)?://[^:]+):[^@]*@#\1:REDACTED@#g' | tr '\n' ' ' | tail -c 900)
+            echo "::error::Database is not in sync (db push failed) -- refusing to deploy functions against a schema they don't match. Fix migrations first: $SAFE"
+            exit 1
+          fi
 
       - name: Deploy functions
         env:

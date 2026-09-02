@@ -59,17 +59,15 @@ export default function SecurityPage() {
     <>
       <BreadcrumbJsonLd items={[HOME_CRUMB, { name: "Security", path: "/security" }]} />
       <Section tone="navy" className="pt-16 sm:pt-20">
-        <Reveal>
-          <Eyebrow tone="light">Security & Privacy</Eyebrow>
-          <h1 className="mt-5 max-w-3xl text-4xl font-extrabold leading-[1.1] tracking-tight sm:text-5xl">
-            Student and financial records deserve more than a shared login.
-          </h1>
-          <p className="mt-6 max-w-2xl text-lg text-white/70">
-            EduCore is multi-tenant by design — many schools share the same
-            platform, but never each other&apos;s data. Here&apos;s what
-            that actually means underneath the interface.
-          </p>
-        </Reveal>
+        <Eyebrow tone="light">Security & Privacy</Eyebrow>
+        <h1 className="mt-5 max-w-3xl text-4xl font-extrabold leading-[1.1] tracking-tight sm:text-5xl">
+          Student and financial records deserve more than a shared login.
+        </h1>
+        <p className="mt-6 max-w-2xl text-lg text-white/70">
+          EduCore is multi-tenant by design — many schools share the same
+          platform, but never each other&apos;s data. Here&apos;s what
+          that actually means underneath the interface.
+        </p>
       </Section>
 
       <Section tone="canvas">

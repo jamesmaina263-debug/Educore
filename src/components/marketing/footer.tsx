@@ -60,12 +60,12 @@ export function MarketingFooter() {
             <p className="mt-4 max-w-xs text-sm text-white/60">
               School operations, brought into one connected platform.
             </p>
-            <p className="mt-4 text-xs text-white/40">Nairobi, Kenya</p>
+            <p className="mt-4 text-xs text-white/50">Nairobi, Kenya</p>
           </div>
 
           {FOOTER_GROUPS.map((group) => (
             <div key={group.heading}>
-              <p className="font-mono text-xs font-medium uppercase tracking-[0.14em] text-white/40">
+              <p className="font-mono text-xs font-medium uppercase tracking-[0.14em] text-white/50">
                 {group.heading}
               </p>
               <ul className="mt-4 space-y-3">
@@ -83,7 +83,7 @@ export function MarketingFooter() {
 
               {group.heading === "Company" && (
                 <div className="mt-6 border-t border-white/10 pt-4">
-                  <p className="text-xs text-white/40">Prefer to skip the form?</p>
+                  <p className="text-xs text-white/50">Prefer to skip the form?</p>
                   <ul className="mt-3 space-y-3">
                     {DIRECT_CONTACTS.map((link) => (
                       <li key={link.href}>
@@ -103,10 +103,10 @@ export function MarketingFooter() {
         </div>
 
         <div className="mt-12 flex flex-col gap-4 border-t border-white/10 pt-6 sm:flex-row sm:items-center sm:justify-between">
-          <p className="text-xs text-white/40">
+          <p className="text-xs text-white/50">
             © {new Date().getFullYear()} EduCore. All rights reserved.
           </p>
-          <div className="flex gap-6 text-xs text-white/40">
+          <div className="flex gap-6 text-xs text-white/50">
             <Link href="/privacy" className="hover:text-white/70">
               Privacy Policy
             </Link>

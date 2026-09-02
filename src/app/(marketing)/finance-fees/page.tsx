@@ -64,17 +64,15 @@ export default function FinancePage() {
     <>
       <BreadcrumbJsonLd items={[HOME_CRUMB, { name: "Finance & Fees", path: "/finance-fees" }]} />
       <Section tone="navy" className="pt-16 sm:pt-20">
-        <Reveal>
-          <Eyebrow tone="light">Finance & Fees</Eyebrow>
-          <h1 className="mt-5 max-w-3xl text-4xl font-extrabold leading-[1.1] tracking-tight sm:text-5xl">
-            M-Pesa-native school fees management — built for how Kenyan schools actually get paid.
-          </h1>
-          <p className="mt-6 max-w-2xl text-lg text-white/70">
-            Fee structures, invoices, and per-student balances stay in one
-            place, reconciled directly against M-Pesa payments — not
-            matched by hand at the end of the week.
-          </p>
-        </Reveal>
+        <Eyebrow tone="light">Finance & Fees</Eyebrow>
+        <h1 className="mt-5 max-w-3xl text-4xl font-extrabold leading-[1.1] tracking-tight sm:text-5xl">
+          M-Pesa-native school fees management — built for how Kenyan schools actually get paid.
+        </h1>
+        <p className="mt-6 max-w-2xl text-lg text-white/70">
+          Fee structures, invoices, and per-student balances stay in one
+          place, reconciled directly against M-Pesa payments — not
+          matched by hand at the end of the week.
+        </p>
       </Section>
 
       <Section tone="canvas">
