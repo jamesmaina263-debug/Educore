@@ -63,25 +63,31 @@ async function submitRollCallMutation(payload: {
 
 // The admissions wizard's step-save actions take (applicationId, input) --
 // two args -- rather than a single object. Same adapter pattern as above.
+// `base` (OS-09) is an optional snapshot of the touched fields as the form
+// last loaded them, carried through unchanged so the underlying action can
+// do its field-level conflict merge -- see mergeOfflineFields in actions.ts.
 async function updateAdmissionDetailsMutation(payload: {
   applicationId: string;
   input: AdmissionDetailsInput;
+  base?: Record<string, unknown>;
 }): Promise<MutationResult> {
-  return updateAdmissionDetails(payload.applicationId, payload.input);
+  return updateAdmissionDetails(payload.applicationId, payload.input, payload.base);
 }
 
 async function updateApplicantIdentityMutation(payload: {
   applicationId: string;
   input: ApplicantIdentityInput;
+  base?: Record<string, unknown>;
 }): Promise<MutationResult> {
-  return updateApplicantIdentity(payload.applicationId, payload.input);
+  return updateApplicantIdentity(payload.applicationId, payload.input, payload.base);
 }
 
 async function saveHealthProfileForApplicationMutation(payload: {
   applicationId: string;
   input: HealthProfileInput;
+  base?: Record<string, unknown>;
 }): Promise<MutationResult> {
-  return saveHealthProfileForApplication(payload.applicationId, payload.input);
+  return saveHealthProfileForApplication(payload.applicationId, payload.input, payload.base);
 }
 
 // returnLoanAction(id) takes a bare string, not an object -- same adapter

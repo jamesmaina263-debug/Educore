@@ -61,6 +61,55 @@ async function currentStaff(supabase: Awaited<ReturnType<typeof createClient>>) 
   return data;
 }
 
+// OS-09: field-level merge for the admissions wizard's three offline-queueable field-save steps
+// (updateAdmissionDetails / updateApplicantIdentity / saveHealthProfileForApplication -- the only
+// offline-queued mutations that UPDATE an existing shared record rather than INSERT a new one; see
+// the header comment on the os09 migration for why the other ~20 queued mutations don't need this).
+//
+// `base` is a snapshot of the touched fields as they stood when the form was loaded/last synced,
+// captured client-side (step-forms.tsx) and passed through on every save, online or offline --
+// cheap when nothing's changed (base === current, every field applies normally) and is what makes
+// the offline case safe (base reflects what the device saw before it went offline and started
+// queuing, however stale that now is). For each field: if the record's current value still matches
+// `base`, nobody else touched it since this edit was drafted, so the new value applies. If it
+// doesn't match, someone else changed that specific field in the meantime -- keep their (newer,
+// already-committed) value, discard this edit's value for that field only, and log the discard.
+// Fields the base snapshot doesn't cover apply unconditionally (unaffected by this record's own
+// staleness check).
+async function mergeOfflineFields(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  tableName: string,
+  recordId: string,
+  current: Record<string, unknown>,
+  base: Record<string, unknown>,
+  proposed: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
+  const merged: Record<string, unknown> = {};
+  for (const [field, newValue] of Object.entries(proposed)) {
+    if (!(field in base) || JSON.stringify(base[field]) === JSON.stringify(current[field])) {
+      merged[field] = newValue;
+      continue;
+    }
+    // Current value has drifted from what this edit was drafted against -- someone else changed
+    // it. Keep their value, discard ours, log it. Never let this throw and block the rest of the
+    // save; a missed conflict-log row matters far less than silently losing every other field too.
+    merged[field] = current[field];
+    try {
+      await supabase.rpc("log_offline_field_conflict", {
+        p_table_name: tableName,
+        p_record_id: recordId,
+        p_field: field,
+        p_kept_value: current[field] as never,
+        p_discarded_value: newValue as never,
+        p_base_value: base[field] as never,
+      });
+    } catch {
+      // best-effort logging only, see comment above
+    }
+  }
+  return merged;
+}
+
 // ---------- Step 1: Admission Details ----------
 
 export interface AdmissionDetailsInput {
@@ -77,22 +126,41 @@ export interface AdmissionDetailsInput {
   walk_in_screening_confirmed?: boolean;
 }
 
-export async function updateAdmissionDetails(applicationId: string, input: AdmissionDetailsInput): Promise<ActionResult> {
+export async function updateAdmissionDetails(
+  applicationId: string,
+  input: AdmissionDetailsInput,
+  base?: Record<string, unknown>,
+): Promise<ActionResult> {
   const supabase = await createClient();
-  const updatePayload: Record<string, unknown> = {
+  const proposed: Record<string, unknown> = {
     admission_type: input.admission_type,
     academic_year_id: input.academic_year_id,
     term_id: input.term_id,
-    intended_class_id: input.intended_class_id,
     boarding_preference: input.boarding_preference,
     transport_required: input.transport_required,
     previous_school: input.previous_school || null,
     previous_class: input.previous_class || null,
-    updated_at: new Date().toISOString(),
   };
   if (input.walk_in_screening_confirmed !== undefined) {
-    updatePayload.walk_in_screening_confirmed = input.walk_in_screening_confirmed;
+    proposed.walk_in_screening_confirmed = input.walk_in_screening_confirmed;
   }
+
+  let updatePayload = proposed;
+  if (base) {
+    const { data: current } = await supabase
+      .from("applications")
+      .select("admission_type, academic_year_id, term_id, boarding_preference, transport_required, previous_school, previous_class, walk_in_screening_confirmed")
+      .eq("id", applicationId)
+      .maybeSingle();
+    if (current) {
+      updatePayload = await mergeOfflineFields(supabase, "applications", applicationId, current, base, proposed);
+    }
+  }
+  // intended_class_id is always reset to null by this step regardless (real assignment happens
+  // later, in Academic Placement) -- not part of the merge, same as before this change.
+  updatePayload.intended_class_id = input.intended_class_id;
+  updatePayload.updated_at = new Date().toISOString();
+
   const { error } = await supabase.from("applications").update(updatePayload).eq("id", applicationId);
   if (error) return { error: error.message };
   revalidatePath(`/admissions/${applicationId}/wizard`);
@@ -114,15 +182,36 @@ export interface ApplicantIdentityInput {
 // public form. This lets the officer set them at Step 2 before duplicate-checking / creating the
 // student record. Online-sourced applications can also use this to correct a typo before the
 // student record is created.
-export async function updateApplicantIdentity(applicationId: string, input: ApplicantIdentityInput): Promise<ActionResult> {
+export async function updateApplicantIdentity(
+  applicationId: string,
+  input: ApplicantIdentityInput,
+  base?: Record<string, unknown>,
+): Promise<ActionResult> {
   const supabase = await createClient();
+  let merged: Record<string, unknown> = {
+    first_name: input.first_name,
+    last_name: input.last_name,
+    other_names: input.other_names,
+    date_of_birth: input.date_of_birth,
+    gender: input.gender,
+  };
+  if (base) {
+    const { data: current } = await supabase
+      .from("applications")
+      .select("first_name, last_name, other_names, date_of_birth, gender")
+      .eq("id", applicationId)
+      .maybeSingle();
+    if (current) {
+      merged = await mergeOfflineFields(supabase, "applications", applicationId, current, base, merged);
+    }
+  }
   const { error } = await supabase.rpc("update_admission_identity", {
     p_application_id: applicationId,
-    p_first_name: input.first_name.trim(),
-    p_last_name: input.last_name.trim(),
-    p_other_names: input.other_names?.trim() || null,
-    p_date_of_birth: input.date_of_birth,
-    p_gender: input.gender,
+    p_first_name: String(merged.first_name ?? "").trim(),
+    p_last_name: String(merged.last_name ?? "").trim(),
+    p_other_names: (merged.other_names ? String(merged.other_names).trim() : null) || null,
+    p_date_of_birth: merged.date_of_birth as string,
+    p_gender: merged.gender as string,
   });
   if (error) return { error: error.message };
   revalidatePath(`/admissions/${applicationId}/wizard`);
@@ -519,7 +608,11 @@ export interface HealthProfileInput {
   notes?: string;
 }
 
-export async function saveHealthProfileForApplication(applicationId: string, input: HealthProfileInput): Promise<ActionResult> {
+export async function saveHealthProfileForApplication(
+  applicationId: string,
+  input: HealthProfileInput,
+  base?: Record<string, unknown>,
+): Promise<ActionResult> {
   const supabase = await createClient();
   const { data: application } = await supabase.from("applications").select("resulting_student_id").eq("id", applicationId).maybeSingle();
   if (!application?.resulting_student_id) return { error: "Complete the Student step first." };
@@ -527,8 +620,22 @@ export async function saveHealthProfileForApplication(applicationId: string, inp
   const canWrite = await supabase.rpc("auth_has_permission", { p_permission_key: "students.medical.write" });
   if (canWrite.data !== true) return { error: "You don't have permission to record medical information. A nurse or authorized staff member can complete this step." };
 
+  let mergedInput: Record<string, unknown> = { ...input };
+  if (base) {
+    const { data: current } = await supabase
+      .from("medical_records")
+      .select("blood_group, allergies, conditions, emergency_contact_name, emergency_contact_phone, notes")
+      .eq("student_id", application.resulting_student_id)
+      .maybeSingle();
+    // No existing row (first time this student's health profile is saved) -- nothing to conflict
+    // with yet, apply as-is, same as the online path always has.
+    if (current) {
+      mergedInput = await mergeOfflineFields(supabase, "medical_records", application.resulting_student_id, current, base, mergedInput);
+    }
+  }
+
   const { error } = await supabase.from("medical_records").upsert(
-    { student_id: application.resulting_student_id, ...input },
+    { student_id: application.resulting_student_id, ...mergedInput },
     { onConflict: "student_id" },
   );
   if (error) return { error: error.message };
