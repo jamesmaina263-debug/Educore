@@ -19,7 +19,9 @@ export default async function HomeworkPage() {
       supabase.from("subjects").select("id, name").eq("is_active", true).order("name"),
       supabase
         .from("assignments")
-        .select("id, title, description, due_date, stream_id, subject_id, teacher_id, streams(name, classes(name)), subjects(name), assignment_submissions(id, status)")
+        .select(
+          "id, title, description, due_date, stream_id, subject_id, teacher_id, streams(name, classes(name)), subjects(name), assignment_submissions(id, status), assignment_attachments(id, file_name, storage_path, file_size)",
+        )
         .order("due_date", { ascending: false }),
     ]);
 
@@ -36,6 +38,7 @@ export default async function HomeworkPage() {
     const stream = a.streams as unknown as { name: string; classes: { name: string } | null } | null;
     const subject = a.subjects as unknown as { name: string } | null;
     const submissions = (a.assignment_submissions ?? []) as { id: string; status: string }[];
+    const attachments = (a.assignment_attachments ?? []) as { id: string; file_name: string; storage_path: string; file_size: number | null }[];
     return {
       id: a.id,
       title: a.title,
@@ -49,6 +52,7 @@ export default async function HomeworkPage() {
       is_own: a.teacher_id === schoolUser?.id,
       submitted_count: submissions.length,
       graded_count: submissions.filter((s) => s.status === "graded").length,
+      attachments,
     };
   });
 
