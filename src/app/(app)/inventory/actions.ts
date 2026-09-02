@@ -233,17 +233,22 @@ export async function createSupplierAction(formData: FormData): Promise<ActionRe
 // ---------------------------------------------------------------------------
 // Procurement: Requisition -> Purchase Order -> Goods Received -> Supplier Invoice
 // ---------------------------------------------------------------------------
-export async function createRequisitionAction(formData: FormData): Promise<ActionResult> {
+// Storekeeper requisitions: accepts one or more catalog items in a single
+// submission (mirrors requestMedicalSuppliesAction's shape/behavior below,
+// which already supported this -- this form was the one left behind at
+// single-item only).
+export async function createRequisitionAction(input: {
+  purpose: string;
+  items: { item_description: string; quantity: number; estimated_unit_cost?: number; inventory_item_id: string }[];
+}): Promise<ActionResult> {
   const { supabase, schoolUser } = await currentSchoolUser();
   if (!schoolUser) return { error: "Could not resolve your account." };
 
-  const purpose = String(formData.get("purpose") ?? "").trim();
-  const itemDescription = String(formData.get("item_description") ?? "").trim();
-  const quantity = String(formData.get("quantity") ?? "");
-  const estimatedCost = String(formData.get("estimated_unit_cost") ?? "") || null;
-  const inventoryItemId = String(formData.get("inventory_item_id") ?? "") || null;
-  if (!purpose || !itemDescription || !quantity) return { error: "Purpose, item, and quantity are required." };
-  if (!inventoryItemId) return { error: "Select an item from the stock catalog." };
+  const purpose = input.purpose.trim();
+  const items = input.items.filter((i) => i.inventory_item_id && i.item_description.trim() && i.quantity > 0);
+  if (!purpose || items.length === 0) {
+    return { error: "Purpose and at least one catalog item with a quantity are required." };
+  }
 
   const { data: requisition, error } = await supabase
     .from("purchase_requisitions")
@@ -252,34 +257,34 @@ export async function createRequisitionAction(formData: FormData): Promise<Actio
     .single();
   if (error) return { error: error.message };
 
-  if (requisition) {
-    // inventory_item_id links this line to the stock catalog (and so to a
-    // defined category) whenever a catalog item was picked -- left null for a
-    // genuinely custom/off-catalog request, which approve_requisition then
-    // has no purchase history to auto-resolve a supplier from.
-    const { error: itemError } = await supabase.from("purchase_requisition_items").insert({
+  // inventory_item_id links each line to the stock catalog (and so to a
+  // defined category), which is what lets approve_requisition auto-resolve
+  // a supplier and cost for it from purchase history.
+  const { error: itemError } = await supabase.from("purchase_requisition_items").insert(
+    items.map((i) => ({
       requisition_id: requisition.id,
       school_id: schoolUser.school_id,
-      item_description: itemDescription,
-      quantity,
-      estimated_unit_cost: estimatedCost,
-      inventory_item_id: inventoryItemId,
-    });
-    if (itemError) {
-      // Don't leave an itemless requisition behind claiming success -- roll the header back.
-      await supabase.from("purchase_requisitions").delete().eq("id", requisition.id);
-      return { error: `Could not save the requisition item: ${itemError.message}` };
-    }
+      item_description: i.item_description,
+      quantity: i.quantity,
+      estimated_unit_cost: i.estimated_unit_cost ?? null,
+      inventory_item_id: i.inventory_item_id,
+    })),
+  );
+  if (itemError) {
+    // Don't leave an itemless requisition behind claiming success -- roll the header back.
+    await supabase.from("purchase_requisitions").delete().eq("id", requisition.id);
+    return { error: `Could not save the requisition items: ${itemError.message}` };
   }
 
   revalidatePath("/inventory", "layout");
 
   // Best-effort: let everyone who can approve procurement know a requisition
   // is waiting on them. Never block the requisition itself on this.
+  const summary = items.map((i) => `${i.item_description} (qty ${i.quantity})`).join(", ");
   await supabase.rpc("notify_users_with_permission", {
     p_permission_key: "inventory.procurement.approve",
     p_subject: "Procurement requisition needs approval",
-    p_body: `${schoolUser.full_name ?? "Someone"} requested: ${itemDescription} (qty ${quantity}) — ${purpose}.`,
+    p_body: `${schoolUser.full_name ?? "Someone"} requested: ${summary} — ${purpose}.`,
     p_action_url: "/inventory/procurement",
     p_category: "other",
   });
