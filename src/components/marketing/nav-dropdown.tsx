@@ -88,7 +88,7 @@ export function NavDropdownMenu({ item }: { item: NavDropdown }) {
           >
             {item.groups.map((group) => (
               <div key={group.heading}>
-                <p className="font-mono text-[11px] font-medium uppercase tracking-[0.14em] text-white/40">
+                <p className="font-mono text-[11px] font-medium uppercase tracking-[0.14em] text-white/50">
                   {group.heading}
                 </p>
                 <ul className="mt-3 space-y-0.5">

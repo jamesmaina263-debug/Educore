@@ -261,7 +261,7 @@ export function DemoRequestForm() {
 }
 
 const inputClass =
-  "w-full rounded-md border border-marketing-navy-950/15 bg-white px-3 py-2 text-sm text-marketing-navy-950 shadow-sm placeholder:text-marketing-navy-900/40 focus:outline-none focus:ring-2 focus:ring-marketing-blue/40 focus:border-marketing-blue";
+  "w-full rounded-md border border-marketing-navy-950/15 bg-white px-3 py-2 text-sm text-marketing-navy-950 shadow-sm placeholder:text-marketing-navy-900/60 focus:outline-none focus:ring-2 focus:ring-marketing-blue/40 focus:border-marketing-blue";
 
 function Field({
   label,
@@ -279,7 +279,7 @@ function Field({
       <label htmlFor={htmlFor} className="text-sm font-medium text-marketing-navy-950">
         {label}
         {optional && (
-          <span className="ml-1 font-normal text-marketing-navy-900/40">(optional)</span>
+          <span className="ml-1 font-normal text-marketing-navy-900/60">(optional)</span>
         )}
       </label>
       {children}
