@@ -11,6 +11,10 @@ import {
   createCurriculumSubStrand,
   submitCompetencyMarks,
   editCompetencyMark,
+  uploadCompetencyEvidenceAction,
+  deleteCompetencyEvidenceAction,
+  listCompetencyEvidenceAction,
+  getCompetencyEvidenceUrlAction,
 } from "@/app/(app)/exams/actions";
 import { useOfflineSync } from "@/hooks/use-offline-sync";
 import { queueMutation } from "@/lib/offline/queue";
@@ -23,6 +27,7 @@ export interface StrandOption {
 }
 
 export interface CompetencyRatingRow {
+  id: string;
   student_id: string;
   sub_strand_id: string;
   band_id: string;
@@ -31,6 +36,13 @@ export interface CompetencyRatingRow {
 export interface CompetencyRosterRow {
   student_id: string;
   full_name: string;
+}
+
+interface EvidenceItem {
+  id: string;
+  file_name: string;
+  storage_path: string;
+  created_at: string;
 }
 
 interface Props {
@@ -44,6 +56,115 @@ interface Props {
   examStatus: "open" | "closed";
   canEnter: boolean;
   canManageCurriculum: boolean;
+}
+
+/**
+ * Small inline panel for one saved competency_marks rating -- lists/uploads/
+ * deletes evidence files. Only rendered for ratings that already have a real
+ * DB row (a competency_mark_id to attach evidence to) -- evidence cannot be
+ * attached to an unsaved cell. Kept self-contained so the parent grid
+ * doesn't need to track evidence state for every cell up front.
+ */
+function EvidenceButton({ competencyMarkId, canEnter }: { competencyMarkId: string; canEnter: boolean }) {
+  const [open, setOpen] = useState(false);
+  const [items, setItems] = useState<EvidenceItem[] | null>(null);
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+
+  function load() {
+    startTransition(async () => {
+      const result = await listCompetencyEvidenceAction(competencyMarkId);
+      if ("error" in result) return setError(result.error);
+      setItems(result.items);
+    });
+  }
+
+  function toggle() {
+    const next = !open;
+    setOpen(next);
+    if (next && items === null) load();
+  }
+
+  function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    const formData = new FormData();
+    formData.append("file", file);
+    startTransition(async () => {
+      const result = await uploadCompetencyEvidenceAction(competencyMarkId, formData);
+      if ("error" in result) return setError(result.error);
+      load();
+    });
+  }
+
+  function handleDelete(id: string) {
+    startTransition(async () => {
+      const result = await deleteCompetencyEvidenceAction(id);
+      if ("error" in result) return setError(result.error);
+      load();
+    });
+  }
+
+  function handleView(storagePath: string) {
+    startTransition(async () => {
+      const result = await getCompetencyEvidenceUrlAction(storagePath);
+      if ("error" in result) return setError(result.error);
+      window.open(result.url, "_blank", "noopener,noreferrer");
+    });
+  }
+
+  return (
+    <div className="mt-1">
+      <button
+        type="button"
+        onClick={toggle}
+        className="text-[0.625rem] text-muted-foreground underline decoration-dotted hover:text-foreground"
+      >
+        {open ? "Hide evidence" : "Evidence"}
+        {items && items.length > 0 ? ` (${items.length})` : ""}
+      </button>
+      {open && (
+        <div className="mt-1 flex flex-col gap-1 rounded-sm border border-border bg-muted/30 p-2">
+          {error && <p className="text-[0.625rem] text-danger">{error}</p>}
+          {items === null ? (
+            <p className="text-[0.625rem] text-muted-foreground">Loading…</p>
+          ) : items.length === 0 ? (
+            <p className="text-[0.625rem] text-muted-foreground">No evidence attached.</p>
+          ) : (
+            items.map((it) => (
+              <div key={it.id} className="flex items-center justify-between gap-2 text-[0.625rem]">
+                <button
+                  type="button"
+                  className="truncate text-left underline decoration-dotted hover:text-foreground"
+                  onClick={() => handleView(it.storage_path)}
+                  title={it.file_name}
+                >
+                  {it.file_name}
+                </button>
+                {canEnter && (
+                  <button
+                    type="button"
+                    className="shrink-0 text-danger hover:underline"
+                    disabled={pending}
+                    onClick={() => handleDelete(it.id)}
+                  >
+                    Remove
+                  </button>
+                )}
+              </div>
+            ))
+          )}
+          {canEnter && (
+            <label className="mt-1 cursor-pointer text-[0.625rem] text-primary underline decoration-dotted hover:no-underline">
+              {pending ? "Working…" : "Attach file"}
+              <input type="file" className="hidden" disabled={pending} onChange={handleUpload} />
+            </label>
+          )}
+        </div>
+      )}
+    </div>
+  );
 }
 
 export function CompetencyMarksSection({
@@ -65,6 +186,11 @@ export function CompetencyMarksSection({
   const [ratings, setRatings] = useState<Map<string, string>>(
     new Map(existingRatings.map((r) => [`${r.student_id}:${r.sub_strand_id}`, r.band_id])),
   );
+  // Maps the same "student:sub_strand" key to the saved row's real id, so
+  // evidence can be attached to it. Only present for ratings that already
+  // exist in the database -- a freshly-typed, not-yet-saved cell has no id
+  // yet and therefore shows no evidence control until after a save+refresh.
+  const savedRatingIds = new Map(existingRatings.map((r) => [`${r.student_id}:${r.sub_strand_id}`, r.id]));
   // Ratings queued while offline, keyed the same way as `ratings` -- kept
   // separate so they render distinctly and aren't re-submitted before the
   // sync confirms them. Mirrors marks-entry-form.tsx.
@@ -164,7 +290,8 @@ export function CompetencyMarksSection({
         <h2 className="text-sm font-semibold">Competency marks (by sub-strand)</h2>
         <p className="text-sm text-muted-foreground">
           CBC assessment at the sub-strand level — a rating per student per sub-strand, separate from the
-          overall subject-level competency above.
+          overall subject-level competency above. Once a rating is saved, evidence (a photo, recording, or work
+          sample) can be attached to it below the rating.
         </p>
       </div>
       <ExamsOfflineBanner online={online} pendingCount={pendingCount} failed={failed} syncing={syncing} sync={sync} discard={discard} />
@@ -225,6 +352,7 @@ export function CompetencyMarksSection({
                     {subStrandList.map((ss) => {
                       const key = `${r.student_id}:${ss.id}`;
                       const isQueued = queued.has(key);
+                      const savedId = savedRatingIds.get(key);
                       return (
                         <TableCell key={ss.id}>
                           <Select
@@ -244,6 +372,7 @@ export function CompetencyMarksSection({
                             </SelectContent>
                           </Select>
                           {isQueued && <p className="mt-1 text-[0.625rem] text-muted-foreground">Saved offline</p>}
+                          {savedId && <EvidenceButton competencyMarkId={savedId} canEnter={canEnter} />}
                         </TableCell>
                       );
                     })}
