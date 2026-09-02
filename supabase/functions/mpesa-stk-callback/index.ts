@@ -1,4 +1,4 @@
-import { createClient } from "jsr:@supabase/supabase-js@2";
+import { createClient } from "jsr:@supabase/supabase-js@2.112.4";
 import { verifyCallbackSource } from "../_shared/mpesa/verifyCallbackSource.ts";
 import { sendSecurityAlert } from "../_shared/securityAlert.ts";
 

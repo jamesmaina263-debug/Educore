@@ -74,7 +74,7 @@ export default function PrivacyPage() {
           {/* ---------------------------------------------------------- */}
 
           <div>
-            <p className="font-mono text-xs font-medium uppercase tracking-[0.14em] text-marketing-navy-900/40">
+            <p className="font-mono text-xs font-medium uppercase tracking-[0.14em] text-marketing-navy-900/60">
               Part A
             </p>
             <h2 className="mt-2 text-2xl font-semibold text-marketing-navy-950">
@@ -163,7 +163,7 @@ export default function PrivacyPage() {
           {/* ---------------------------------------------------------- */}
 
           <div className="border-t border-marketing-navy-900/10 pt-14">
-            <p className="font-mono text-xs font-medium uppercase tracking-[0.14em] text-marketing-navy-900/40">
+            <p className="font-mono text-xs font-medium uppercase tracking-[0.14em] text-marketing-navy-900/60">
               Part B
             </p>
             <h2 className="mt-2 text-2xl font-semibold text-marketing-navy-950">
@@ -534,7 +534,7 @@ export default function PrivacyPage() {
             </p>
           </div>
 
-          <p className="text-xs text-marketing-navy-900/50">
+          <p className="text-xs text-marketing-navy-900/60">
             Last updated: August 30, 2026.
           </p>
         </div>

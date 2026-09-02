@@ -1,4 +1,4 @@
-import { createClient } from "jsr:@supabase/supabase-js@2";
+import { createClient } from "jsr:@supabase/supabase-js@2.112.4";
 import { verifyTwilioSignature } from "../_shared/whatsapp/verifyTwilioSignature.ts";
 import { sendSecurityAlert } from "../_shared/securityAlert.ts";
 import { getRealClientIp } from "../_shared/getRealClientIp.ts";
