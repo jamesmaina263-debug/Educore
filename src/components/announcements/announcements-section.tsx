@@ -65,6 +65,7 @@ export interface AnnouncementRow {
   recipient_count: number;
   read_count: number;
   acknowledged_count: number;
+  completed_count: number;
 }
 
 const URGENCY_TONE: Record<string, "success" | "info" | "neutral" | "danger"> = {
@@ -440,6 +441,7 @@ export function AnnouncementsSection({
                       <p className="mt-2 text-xs text-muted-foreground">
                         {item.recipient_count} guardian{item.recipient_count === 1 ? "" : "s"} notified · {item.read_count} read ·{" "}
                         {item.acknowledged_count} acknowledged
+                        {item.urgency === "action_required" && <> · {item.completed_count} completed</>}
                       </p>
                     )}
                     {item.status === "withdrawn" && (

@@ -10,6 +10,7 @@ import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@
 import {
   markAnnouncementReadAction,
   acknowledgeAnnouncementAction,
+  completeAnnouncementAction,
   getAnnouncementAttachmentUrlAction,
 } from "@/app/portal/actions";
 
@@ -29,6 +30,7 @@ export interface PortalAnnouncementRow {
   withdrawal_reason: string | null;
   my_read_at: string | null;
   my_acknowledged_at: string | null;
+  my_completed_at: string | null;
   attachments: PortalAnnouncementAttachment[];
 }
 
@@ -79,6 +81,18 @@ export function PortalAnnouncementsSection({ items }: { items: PortalAnnouncemen
     setPendingId(id);
     setError(null);
     const result = await acknowledgeAnnouncementAction(id);
+    setPendingId(null);
+    if ("error" in result) {
+      setError(result.error);
+      return;
+    }
+    router.refresh();
+  }
+
+  async function handleComplete(id: string) {
+    setPendingId(id);
+    setError(null);
+    const result = await completeAnnouncementAction(id);
     setPendingId(null);
     if ("error" in result) {
       setError(result.error);
@@ -186,7 +200,7 @@ export function PortalAnnouncementsSection({ items }: { items: PortalAnnouncemen
                   </div>
                 )}
                 {!withdrawn && (
-                  <div className="mt-3 flex items-center gap-2 border-t border-border pt-3">
+                  <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-border pt-3">
                     {item.my_acknowledged_at ? (
                       <p className="text-xs text-muted-foreground">
                         Acknowledged {new Date(item.my_acknowledged_at).toLocaleString()}
@@ -195,6 +209,20 @@ export function PortalAnnouncementsSection({ items }: { items: PortalAnnouncemen
                       <Button size="sm" variant="outline" onClick={() => handleAcknowledge(item.id)} disabled={pendingId === item.id}>
                         {pendingId === item.id ? "Acknowledging…" : "Acknowledge"}
                       </Button>
+                    )}
+                    {/* PA-14: "completed" is a distinct fourth state, only meaningful
+                        when the notice actually asked for an action -- acknowledging
+                        just means "I saw this", completing means "I did the thing". */}
+                    {item.urgency === "action_required" && (
+                      item.my_completed_at ? (
+                        <p className="text-xs font-medium text-success">
+                          Completed {new Date(item.my_completed_at).toLocaleString()}
+                        </p>
+                      ) : (
+                        <Button size="sm" onClick={() => handleComplete(item.id)} disabled={pendingId === item.id}>
+                          {pendingId === item.id ? "Marking complete…" : "Mark action complete"}
+                        </Button>
+                      )
                     )}
                   </div>
                 )}

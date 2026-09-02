@@ -75,7 +75,7 @@ export default async function AnnouncementsPage() {
   const { data: rows } = await supabase
     .from("announcements")
     .select(
-      "id, created_by, title, body, urgency, scope, status, created_at, published_at, withdrawn_at, withdrawal_reason, scheduled_at, target_house_id, classes(name), streams(name, classes(name)), students(first_name, last_name), announcement_recipients(read_at, acknowledged_at), announcement_attachments(id, storage_path, file_name, file_size)",
+      "id, created_by, title, body, urgency, scope, status, created_at, published_at, withdrawn_at, withdrawal_reason, scheduled_at, target_house_id, classes(name), streams(name, classes(name)), students(first_name, last_name), announcement_recipients(read_at, acknowledged_at, completed_at), announcement_attachments(id, storage_path, file_name, file_size)",
     )
     .order("created_at", { ascending: false });
 
@@ -83,7 +83,7 @@ export default async function AnnouncementsPage() {
     const cls = r.classes as unknown as { name: string } | null;
     const stream = r.streams as unknown as { name: string; classes: { name: string } | null } | null;
     const student = r.students as unknown as { first_name: string; last_name: string } | null;
-    const recipients = (r.announcement_recipients ?? []) as { read_at: string | null; acknowledged_at: string | null }[];
+    const recipients = (r.announcement_recipients ?? []) as { read_at: string | null; acknowledged_at: string | null; completed_at: string | null }[];
     let targetLabel = "Whole school";
     if (r.scope === "grade") targetLabel = cls?.name ?? "—";
     if (r.scope === "class") targetLabel = stream ? `${stream.classes?.name ?? ""} ${stream.name}`.trim() : "—";
@@ -107,6 +107,7 @@ export default async function AnnouncementsPage() {
       recipient_count: recipients.length,
       read_count: recipients.filter((rr) => rr.read_at !== null).length,
       acknowledged_count: recipients.filter((rr) => rr.acknowledged_at !== null).length,
+      completed_count: recipients.filter((rr) => rr.completed_at !== null).length,
     };
   });
 
