@@ -1,4 +1,4 @@
-import { createClient } from "jsr:@supabase/supabase-js@2";
+import { createClient } from "jsr:@supabase/supabase-js@2.112.4";
 import { buildCorsHeaders } from "../_shared/cors.ts";
 import {
   getDarajaOAuthToken,
@@ -68,20 +68,47 @@ Deno.serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
 
-    const [{ data: settings }, { data: credsRow }] = await Promise.all([
+    // Atomic claim, BEFORE the Daraja call: without this, two overlapping invocations for the
+    // same request_id (double-tap, client retry) could both pass the checks above and both send
+    // a real STK push prompt to the customer's phone -- mpesa_stk_request_dispatched()'s own
+    // guard only stops the second DB write, not the second Daraja call that already happened by
+    // then. A stale claim (crashed invocation, never reached its failure handler) doesn't block
+    // retries indefinitely -- 2 minutes is generously longer than a Daraja call should ever take.
+    const { data: claimed, error: claimError } = await serviceClient
+      .from("mpesa_stk_requests")
+      .update({ dispatch_claimed_at: new Date().toISOString() })
+      .eq("id", request.id)
+      .eq("status", "pending")
+      .is("checkout_request_id", null)
+      .or(`dispatch_claimed_at.is.null,dispatch_claimed_at.lt.${new Date(Date.now() - 2 * 60 * 1000).toISOString()}`)
+      .select("id")
+      .maybeSingle();
+
+    if (claimError || !claimed) {
+      return json({ error: "This request is already being processed." }, 409);
+    }
+
+    // mpesa_credentials no longer has plaintext consumer_key/consumer_secret/passkey
+    // columns as of 20260828064348_encrypt_mpesa_credentials_via_vault.sql -- they were
+    // moved into Supabase Vault and are only readable via this SECURITY DEFINER RPC,
+    // which is locked to service_role (see that migration for the grant/revoke).
+    const [{ data: settings }, { data: credsRows, error: credsError }] = await Promise.all([
       serviceClient
         .from("mpesa_settings")
         .select("shortcode, shortcode_type, environment, is_active, callback_token")
         .eq("school_id", request.school_id)
         .maybeSingle(),
-      serviceClient
-        .from("mpesa_credentials")
-        .select("consumer_key, consumer_secret, passkey")
-        .eq("school_id", request.school_id)
-        .maybeSingle(),
+      serviceClient.rpc("get_mpesa_credentials_decrypted", { p_school_id: request.school_id }),
     ]);
+    const credsRow = credsRows?.[0];
 
-    if (!settings || !settings.is_active || !credsRow || !settings.shortcode) {
+    if (
+      !settings || !settings.is_active || !settings.shortcode ||
+      credsError || !credsRow || !credsRow.consumer_key || !credsRow.consumer_secret || !credsRow.passkey
+    ) {
+      if (credsError) {
+        console.error("get_mpesa_credentials_decrypted failed", credsError);
+      }
       return json({ error: "M-Pesa is not configured for this school." }, 422);
     }
 

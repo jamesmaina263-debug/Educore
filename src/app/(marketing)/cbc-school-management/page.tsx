@@ -68,18 +68,16 @@ export default function CbcSchoolManagementPage() {
     <>
       <BreadcrumbJsonLd items={[HOME_CRUMB, { name: "CBC School Management", path: "/cbc-school-management" }]} />
       <Section tone="navy" className="pt-16 sm:pt-20">
-        <Reveal>
-          <Eyebrow tone="light">CBC &amp; Competency-Based Curriculum</Eyebrow>
-          <h1 className="mt-5 max-w-3xl text-4xl font-extrabold leading-[1.1] tracking-tight sm:text-5xl">
-            A CBC school management system that doesn&rsquo;t force out numeric grading.
-          </h1>
-          <p className="mt-6 max-w-2xl text-lg text-white/70">
-            Most systems pick one grading model and make every class fit it.
-            EduCore lets a school run CBC competency bands and numeric
-            grading side by side — set per school, grade, or class — because
-            most Kenyan schools genuinely need both during the transition.
-          </p>
-        </Reveal>
+        <Eyebrow tone="light">CBC &amp; Competency-Based Curriculum</Eyebrow>
+        <h1 className="mt-5 max-w-3xl text-4xl font-extrabold leading-[1.1] tracking-tight sm:text-5xl">
+          A CBC school management system that doesn&rsquo;t force out numeric grading.
+        </h1>
+        <p className="mt-6 max-w-2xl text-lg text-white/70">
+          Most systems pick one grading model and make every class fit it.
+          EduCore lets a school run CBC competency bands and numeric
+          grading side by side — set per school, grade, or class — because
+          most Kenyan schools genuinely need both during the transition.
+        </p>
       </Section>
 
       <Section tone="canvas">

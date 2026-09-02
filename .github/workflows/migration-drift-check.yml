@@ -24,6 +24,9 @@ on:
 jobs:
   check-drift:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
     steps:
       - uses: actions/checkout@v4
 
@@ -49,6 +52,89 @@ jobs:
           } >> "$GITHUB_ENV"
 
       - name: Compare against supabase/migrations/
+        id: compare
         env:
           PROD_MIGRATIONS_JSON: ${{ env.json }}
-        run: python3 scripts/check_migration_drift.py
+        run: |
+          set +e
+          python3 scripts/check_migration_drift.py > /tmp/drift_output.txt 2>&1
+          code=$?
+          cat /tmp/drift_output.txt
+          exit $code
+
+      # The raw Actions log for a failed run isn't easy to get at outside the GitHub UI
+      # (no stable API for it). Posting the script's own stdout as a PR comment when it
+      # fails means the exact missing-version detail is visible right where the check
+      # ran, not just a pass/fail dot -- doesn't change what the check itself decides.
+      - name: Fetch recorded statements for any missing versions
+        if: failure() && steps.compare.outcome == 'failure'
+        run: |
+          # Matches check_migration_drift.py's exact `f"  {v}  ({name})"` line format for
+          # the "missing from repo" case. Won't match the collision-failure case's different
+          # format (`f"  {v}:"` + nested `- {name}` lines), so this only fires for the case
+          # where fetching statements actually makes sense.
+          VERSIONS=$(grep -oP '^  \K[0-9]{8,14}(?=  \()' /tmp/drift_output.txt | sort -u)
+          > /tmp/missing_statements.md
+          if [ -z "$VERSIONS" ]; then
+            echo "(No individually-missing versions parsed from the output -- likely a collision failure instead. See the drift output above for detail.)" > /tmp/missing_statements.md
+          else
+            echo "### Recorded statements for the missing version(s)" >> /tmp/missing_statements.md
+            echo "" >> /tmp/missing_statements.md
+            echo "Reconstruct any reconciliation migration from these verbatim -- not from live schema introspection (see the drift output above for why)." >> /tmp/missing_statements.md
+            for V in $VERSIONS; do
+              NAME=$(psql "${{ secrets.SUPABASE_DB_URL }}" -Atqc \
+                "select coalesce(name, '(no name recorded)') from supabase_migrations.schema_migrations where version = '$V';")
+              STMT=$(psql "${{ secrets.SUPABASE_DB_URL }}" -Atqc \
+                "select coalesce(array_to_string(statements, E'\n---STATEMENT---\n'), '(no statements recorded)') from supabase_migrations.schema_migrations where version = '$V';")
+              {
+                echo ""
+                echo "#### ${V} (${NAME})"
+                echo '```sql'
+                echo "$STMT"
+                echo '```'
+              } >> /tmp/missing_statements.md
+            done
+          fi
+
+      # Same webhook and safe-by-default posture as sendSecurityAlert() in
+      # src/lib/security-alert.ts: no-op if SECURITY_ALERT_WEBHOOK_URL isn't configured,
+      # never fails the job on a Slack-side error. This is the piece that actually closes
+      # the loop -- a red check or an open PR sitting unnoticed is exactly how the last
+      # few drift gaps went unaddressed for multiple pushes in a row.
+      - name: Notify Slack on failure
+        if: failure()
+        env:
+          WEBHOOK_URL: ${{ secrets.SECURITY_ALERT_WEBHOOK_URL }}
+          RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          if [ -z "$WEBHOOK_URL" ]; then
+            echo "SECURITY_ALERT_WEBHOOK_URL not set -- skipping Slack notification (same no-op-by-default posture as src/lib/security-alert.ts)."
+            exit 0
+          fi
+          MISSING_COUNT=$(grep -oP '^  \K[0-9]{8,14}(?=  \()' /tmp/drift_output.txt | sort -u | wc -l | tr -d ' ')
+          python3 -c "import json, os, sys; text = ':rotating_light: *Migration drift check failed*\n\u2022 *ref*: ' + os.environ['REF_NAME'] + '\n\u2022 *missing versions*: ' + (sys.argv[1] or 'see log') + '\n\u2022 *run*: ' + os.environ['RUN_URL']; json.dump({'text': text}, open('/tmp/slack_payload.json', 'w'))" "$MISSING_COUNT"
+          curl -s -X POST -H "Content-Type: application/json" -d @/tmp/slack_payload.json "$WEBHOOK_URL" > /dev/null || true
+
+      # Looks up an open PR for the current ref rather than trusting github.event.pull_request
+      # directly, so this also works when the run comes from workflow_dispatch or a push to a
+      # branch with an open PR, not just a genuine pull_request-triggered run.
+      - name: Post drift summary as PR comment on failure
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          {
+            echo "### Migration drift check failed"
+            echo '```'
+            cat /tmp/drift_output.txt
+            echo '```'
+            echo ""
+            cat /tmp/missing_statements.md 2>/dev/null || true
+          } > /tmp/drift_comment.md
+          PR_NUMBER=$(gh pr list --repo "${{ github.repository }}" --head "${{ github.ref_name }}" --state open --json number --jq '.[0].number // empty')
+          if [ -n "$PR_NUMBER" ]; then
+            gh pr comment "$PR_NUMBER" --body-file /tmp/drift_comment.md --repo "${{ github.repository }}"
+          else
+            echo "No open PR found for ref ${{ github.ref_name }} -- skipping comment post (output is above in the job log)."
+          fi

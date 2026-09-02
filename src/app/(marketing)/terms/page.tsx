@@ -98,7 +98,7 @@ export default function TermsPage() {
             </p>
           </div>
 
-          <p className="text-xs text-marketing-navy-900/50">
+          <p className="text-xs text-marketing-navy-900/60">
             Last updated: this page reflects the current codebase as of
             launch preparation and will be revised as the site changes.
           </p>

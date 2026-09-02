@@ -56,11 +56,11 @@ export function PricingCard({
 
       <dl className="mt-6 grid grid-cols-2 gap-4 border-t border-marketing-navy-900/10 pt-6 text-sm">
         <div>
-          <dt className="text-marketing-navy-900/50">Students</dt>
+          <dt className="text-marketing-navy-900/60">Students</dt>
           <dd className="mt-0.5 font-medium text-marketing-navy-950">{studentCap}</dd>
         </div>
         <div>
-          <dt className="text-marketing-navy-900/50">Billing</dt>
+          <dt className="text-marketing-navy-900/60">Billing</dt>
           <dd className="mt-0.5 font-medium text-marketing-navy-950">{billingNote}</dd>
         </div>
       </dl>

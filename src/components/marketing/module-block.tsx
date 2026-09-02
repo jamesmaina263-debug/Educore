@@ -47,7 +47,7 @@ export function ModuleBlock({
         <span
           className={cn(
             "font-mono text-[10px] font-medium uppercase tracking-[0.1em]",
-            tone === "canvas" ? "text-marketing-navy-900/45" : "text-white/40",
+            tone === "canvas" ? "text-marketing-navy-900/60" : "text-white/50",
           )}
         >
           {audience}

@@ -1,5 +1,7 @@
-import { createClient } from "jsr:@supabase/supabase-js@2";
+import { createClient } from "jsr:@supabase/supabase-js@2.112.4";
 import { verifyTwilioSignature } from "../_shared/whatsapp/verifyTwilioSignature.ts";
+import { sendSecurityAlert } from "../_shared/securityAlert.ts";
+import { getRealClientIp } from "../_shared/getRealClientIp.ts";
 import { getWhatsAppProvider } from "../_shared/whatsapp/index.ts";
 import { handleInboundMessage, ESCALATION_ACK } from "../_shared/chatbot/dispatcher.ts";
 import type { EscalationReason } from "../_shared/chatbot/types.ts";
@@ -54,6 +56,9 @@ Deno.serve(async (req) => {
   const isValid = await verifyTwilioSignature(requestUrl, params, signature, authToken);
   if (!isValid) {
     console.warn("[whatsapp-webhook] Signature verification failed -- rejecting request.");
+    void sendSecurityAlert("WhatsApp webhook rejected: invalid Twilio signature", {
+      ip: getRealClientIp(req) ?? "unknown",
+    });
     return new Response("Invalid signature", { status: 403 });
   }
 

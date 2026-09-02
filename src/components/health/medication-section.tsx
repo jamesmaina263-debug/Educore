@@ -91,6 +91,10 @@ export function MedicationSection({
     }
     setPending(true);
     setError(null);
+    // OS-08: generated once here so a queued-then-replayed retry (lost ack after the
+    // original request actually landed) reuses the same key instead of double-deducting
+    // stock or recording a second dose that was never actually given.
+    const clientMutationId = crypto.randomUUID();
     const input = {
       student_id: form.student_id,
       medication_name: form.medication_name,
@@ -99,6 +103,7 @@ export function MedicationSection({
       inventory_item_id: form.inventory_item_id === "none" ? undefined : form.inventory_item_id,
       quantity: form.inventory_item_id === "none" ? undefined : parsedQuantity,
       notes: form.notes || undefined,
+      client_mutation_id: clientMutationId,
     };
     if (!online) {
       // Inventory deduction (if any) only happens when this replays on

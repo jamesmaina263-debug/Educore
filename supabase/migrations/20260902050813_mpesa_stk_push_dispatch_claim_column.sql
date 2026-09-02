@@ -1,0 +1,23 @@
+-- Edge function business logic finding (finance/payments follow-up):
+-- mpesa-stk-push checks status = 'pending' and checkout_request_id is null,
+-- THEN calls Daraja's STK push API, THEN calls mpesa_stk_request_dispatched()
+-- to mark the row dispatched. mpesa_stk_request_dispatched() already guards
+-- the DB write atomically (20260822053847_mpesa_prevent_double_dispatch.sql),
+-- but that only stops a second concurrent invocation from corrupting the row
+-- -- it does nothing to stop a second concurrent invocation from ALSO calling
+-- Daraja before either one has written back. Two overlapping calls to this
+-- function for the same request_id (a user double-tapping "Pay" before the
+-- button disables, or a client-side network retry) can both pass the initial
+-- check and both send a real STK push prompt to the customer's phone for the
+-- same invoice. Only one dispatch gets recorded; the other's Daraja
+-- checkout_request_id is never persisted anywhere, so if the customer
+-- approves that prompt instead, the resulting mpesa-stk-callback has no
+-- matching row to reconcile against -- money taken with no clean path to
+-- credit it.
+--
+-- Fix: a dedicated claim column, set with an atomic UPDATE ... WHERE ...
+-- immediately before the Daraja call (in the edge function), so only one
+-- concurrent invocation proceeds. A short staleness window (rather than an
+-- explicit unclaim) means a crashed invocation that never reaches its own
+-- failure handler doesn't permanently block retries on that row.
+alter table public.mpesa_stk_requests add column if not exists dispatch_claimed_at timestamptz;

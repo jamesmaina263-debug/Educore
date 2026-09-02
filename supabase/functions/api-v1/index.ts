@@ -18,9 +18,10 @@
 // (RLS on that table has no insert policy for regular users on purpose — only this function,
 // running as service_role, writes to it).
 
-import { createClient } from "jsr:@supabase/supabase-js@2";
+import { createClient } from "jsr:@supabase/supabase-js@2.112.4";
 import { buildCorsHeaders } from "./cors.ts";
 import { timingSafeEqual } from "../_shared/timingSafeEqual.ts";
+import { getRealClientIp } from "../_shared/getRealClientIp.ts";
 
 type Resource = "students" | "attendance" | "fees" | "exams";
 
@@ -42,7 +43,9 @@ Deno.serve(async (req) => {
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
   );
 
-  const ipAddress = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? null;
+  // Was reading the first x-forwarded-for entry -- caller-controlled, so it was falsifying the
+  // audit log's ip_address column. See getRealClientIp.ts.
+  const ipAddress = getRealClientIp(req);
   const url = new URL(req.url);
   // Path is /functions/v1/api-v1/{resource} — take the last non-empty segment.
   const segments = url.pathname.split("/").filter(Boolean);

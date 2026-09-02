@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
@@ -572,6 +573,7 @@ export function ProcurementPanel({
   canApprove: boolean;
   healthStockRequests: HealthStockRequestRow[];
 }) {
+  const router = useRouter();
   const { isPending, error, run } = useAction();
   const [reqOpen, setReqOpen] = useState(false);
   const [poOpen, setPoOpen] = useState(false);
@@ -580,7 +582,57 @@ export function ProcurementPanel({
   const [poItemMode, setPoItemMode] = useState<string>("__custom__");
   const [receiveItemId, setReceiveItemId] = useState<string | null>(null);
   const [customItemMatch, setCustomItemMatch] = useState<string | null>(null);
-  const [reqItemMode, setReqItemMode] = useState<string>("");
+  // Requisition dialog: one or more lines can be requested in a single
+  // submission (mirrors the Nurse's "Request medical supplies" pattern).
+  const [reqPurpose, setReqPurpose] = useState("");
+  const [reqLines, setReqLines] = useState([
+    { item_mode: "", item_description: "", quantity: "", estimated_unit_cost: "" },
+  ]);
+  const [reqPending, setReqPending] = useState(false);
+  const [reqError, setReqError] = useState<string | null>(null);
+
+  function updateReqLine(
+    index: number,
+    patch: Partial<{ item_mode: string; item_description: string; quantity: string; estimated_unit_cost: string }>,
+  ) {
+    setReqLines((lines) => lines.map((l, i) => (i === index ? { ...l, ...patch } : l)));
+  }
+  function selectReqLineItem(index: number, itemMode: string) {
+    const catalogItem = items.find((it) => it.id === itemMode);
+    updateReqLine(index, { item_mode: itemMode, item_description: catalogItem ? catalogItem.name : "" });
+  }
+  function addReqLine() {
+    setReqLines((lines) => [...lines, { item_mode: "", item_description: "", quantity: "", estimated_unit_cost: "" }]);
+  }
+  function removeReqLine(index: number) {
+    setReqLines((lines) => (lines.length > 1 ? lines.filter((_, i) => i !== index) : lines));
+  }
+  function resetReqForm() {
+    setReqPurpose("");
+    setReqLines([{ item_mode: "", item_description: "", quantity: "", estimated_unit_cost: "" }]);
+    setReqError(null);
+  }
+  const validReqLines = reqLines.filter((l) => l.item_mode && l.item_description.trim() && Number(l.quantity) > 0);
+
+  async function submitRequisition() {
+    if (!reqPurpose.trim() || validReqLines.length === 0) return;
+    setReqPending(true);
+    setReqError(null);
+    const result = await createRequisitionAction({
+      purpose: reqPurpose,
+      items: validReqLines.map((l) => ({
+        item_description: l.item_description,
+        quantity: Number(l.quantity),
+        estimated_unit_cost: l.estimated_unit_cost ? Number(l.estimated_unit_cost) : undefined,
+        inventory_item_id: l.item_mode,
+      })),
+    });
+    setReqPending(false);
+    if ("error" in result) return setReqError(result.error);
+    setReqOpen(false);
+    resetReqForm();
+    router.refresh();
+  }
 
   return (
     <div className="flex flex-col gap-4">
@@ -591,7 +643,7 @@ export function ProcurementPanel({
             open={reqOpen}
             onOpenChange={(o) => {
               setReqOpen(o);
-              if (!o) setReqItemMode("");
+              if (!o) resetReqForm();
             }}
           >
             <DialogTrigger asChild>
@@ -601,50 +653,75 @@ export function ProcurementPanel({
               <DialogHeader>
                 <DialogTitle>New Requisition</DialogTitle>
               </DialogHeader>
-              <form className="flex flex-col gap-3" action={(fd) => run(createRequisitionAction, fd, () => setReqOpen(false))}>
+              <div className="space-y-3">
+                <p className="text-xs text-muted-foreground">Add as many items as you need in one request.</p>
                 <div className="flex flex-col gap-1.5">
                   <Label>Purpose</Label>
-                  <Textarea name="purpose" required />
+                  <Textarea value={reqPurpose} onChange={(e) => setReqPurpose(e.target.value)} required />
                 </div>
-                <div className="flex flex-col gap-1.5">
-                  <Label>Item</Label>
-                  <Select value={reqItemMode} onValueChange={setReqItemMode} required>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select a stock item" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {items.map((i) => (
-                        <SelectItem key={i.id} value={i.id}>{i.name}{i.category_name ? ` (${i.category_name})` : ""}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                <div className="space-y-2">
+                  {reqLines.map((line, i) => (
+                    <div key={i} className="flex flex-col gap-1.5 rounded-md border border-border/60 p-2">
+                      <Select value={line.item_mode} onValueChange={(v) => selectReqLineItem(i, v)}>
+                        <SelectTrigger className="h-8">
+                          <SelectValue placeholder="Select a stock item" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {items.map((it) => (
+                            <SelectItem key={it.id} value={it.id}>{it.name}{it.category_name ? ` (${it.category_name})` : ""}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <div className="flex items-start gap-2">
+                        <div className="grid flex-1 grid-cols-1 gap-2 sm:grid-cols-[1fr_auto_auto]">
+                          <Input
+                            placeholder="Item description"
+                            value={line.item_description}
+                            readOnly
+                            className="bg-muted"
+                          />
+                          <Input
+                            type="number"
+                            min={1}
+                            step="0.01"
+                            placeholder="Qty"
+                            className="sm:w-24"
+                            value={line.quantity}
+                            onChange={(e) => updateReqLine(i, { quantity: e.target.value })}
+                          />
+                          <Input
+                            type="number"
+                            min={0}
+                            step="0.01"
+                            placeholder="Est. cost"
+                            className="sm:w-28"
+                            value={line.estimated_unit_cost}
+                            onChange={(e) => updateReqLine(i, { estimated_unit_cost: e.target.value })}
+                          />
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => removeReqLine(i)}
+                          disabled={reqLines.length === 1}
+                          className="mt-1.5 px-1 text-sm text-muted-foreground hover:text-danger disabled:opacity-30"
+                          aria-label="Remove item"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                  <Button type="button" size="sm" variant="ghost" onClick={addReqLine}>
+                    + Add another item
+                  </Button>
                 </div>
-                {reqItemMode && <input type="hidden" name="inventory_item_id" value={reqItemMode} />}
-                <div className="flex flex-col gap-1.5">
-                  <Label>Item Description</Label>
-                  <Input
-                    name="item_description"
-                    required
-                    readOnly
-                    placeholder="Select an item above"
-                    value={items.find((i) => i.id === reqItemMode)?.name ?? ""}
-                    className="bg-muted"
-                  />
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="flex flex-col gap-1.5">
-                    <Label>Quantity</Label>
-                    <Input type="number" step="0.01" name="quantity" required />
-                  </div>
-                  <div className="flex flex-col gap-1.5">
-                    <Label>Est. Unit Cost</Label>
-                    <Input type="number" step="0.01" name="estimated_unit_cost" />
-                  </div>
-                </div>
-                <DialogFooter>
-                  <Button type="submit" disabled={isPending}>Submit</Button>
-                </DialogFooter>
-              </form>
+                {reqError && <p className="text-sm text-danger">{reqError}</p>}
+              </div>
+              <DialogFooter>
+                <Button onClick={submitRequisition} disabled={reqPending || !reqPurpose.trim() || validReqLines.length === 0}>
+                  {reqPending ? "Submitting…" : "Submit"}
+                </Button>
+              </DialogFooter>
             </DialogContent>
           </Dialog>
         )}

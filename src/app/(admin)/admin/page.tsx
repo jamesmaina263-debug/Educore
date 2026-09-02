@@ -54,6 +54,7 @@ export default async function AdminOverviewPage({
     { data: classes },
     { data: streams },
     { data: feeStructures },
+    { data: lastActive },
   ] = await Promise.all([
     supabase.from("schools").select("id, name, slug, status, created_at").order("name"),
     supabase.from("school_subscriptions").select("school_id, plan_id, status, trial_ends_at"),
@@ -69,6 +70,10 @@ export default async function AdminOverviewPage({
     supabase.from("classes").select("school_id"),
     supabase.from("streams").select("school_id"),
     supabase.from("fee_structures").select("school_id").eq("is_active", true),
+    // Last authenticated activity per school. Not a plain table select -- auth.users isn't
+    // exposed through PostgREST, so this goes through the admin_school_last_active() RPC
+    // (super_admin/service_role only; see that migration for why).
+    supabase.rpc("admin_school_last_active"),
   ]);
 
   const planNameById = new Map((plans ?? []).map((p) => [p.id, p.name]));
@@ -90,6 +95,12 @@ export default async function AdminOverviewPage({
   const schoolIdsWithClasses = new Set((classes ?? []).map((c) => c.school_id));
   const schoolIdsWithStreams = new Set((streams ?? []).map((s) => s.school_id));
   const schoolIdsWithFeeStructure = new Set((feeStructures ?? []).map((f) => f.school_id));
+  const lastActiveBySchool = new Map(
+    ((lastActive ?? []) as { school_id: string; last_active_at: string | null }[]).map((r) => [
+      r.school_id,
+      r.last_active_at,
+    ]),
+  );
 
   function onboardingStage(schoolId: string): SchoolListRow["onboarding_stage"] {
     const hasClasses = schoolIdsWithClasses.has(schoolId);
@@ -162,6 +173,7 @@ export default async function AdminOverviewPage({
       plan_name: sub?.plan_id ? (planNameById.get(sub.plan_id) ?? null) : null,
       trial_ends_at: sc.status === "trial" ? (sub?.trial_ends_at ?? null) : null,
       onboarding_stage: onboardingStage(sc.id),
+      last_active_at: lastActiveBySchool.get(sc.id) ?? null,
     };
   });
 

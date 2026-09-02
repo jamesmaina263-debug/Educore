@@ -25,6 +25,14 @@ export interface SchoolListRow {
    * "Approximated from status" notes on /admin/analytics.
    */
   onboarding_stage: "not_started" | "in_progress" | "complete";
+  /**
+   * Latest auth.users.last_sign_in_at across everyone with a school_users row at this
+   * school (sourced from the admin_school_last_active() RPC). Null covers two different
+   * cases the UI can't tell apart from this field alone: no one there has ever signed in,
+   * or the school has no auth-linked school_users rows at all -- both render as "No login
+   * activity recorded" rather than guessing which.
+   */
+  last_active_at: string | null;
 }
 
 const STATUS_TONE: Record<SchoolListRow["status"], "success" | "warning" | "danger" | "neutral"> = {
@@ -51,6 +59,16 @@ const ONBOARDING_TONE: Record<SchoolListRow["onboarding_stage"], "success" | "wa
 function trialDaysLeft(trialEndsAt: string): number {
   const ms = new Date(trialEndsAt).getTime() - Date.now();
   return Math.ceil(ms / 86_400_000);
+}
+
+// null covers "no one has ever signed in" and "no auth-linked users at all" -- both surface
+// as the same honest "no recorded activity" label rather than a fabricated date.
+function formatLastActive(lastActiveAt: string | null): { label: string; stale: boolean } {
+  if (!lastActiveAt) return { label: "No login activity recorded", stale: false };
+  const days = Math.floor((Date.now() - new Date(lastActiveAt).getTime()) / 86_400_000);
+  if (days <= 0) return { label: "Active today", stale: false };
+  if (days === 1) return { label: "Active yesterday", stale: false };
+  return { label: `Last active ${days}d ago`, stale: days > 30 };
 }
 
 type FilterKey = "all" | "active" | "suspended";
@@ -112,6 +130,14 @@ export function AdminSchoolList({ schools }: { schools: SchoolListRow[] }) {
                     className="mt-1"
                     title="Based on whether the school has any classes, streams, and an active fee structure -- not a tracked setup checklist"
                   />
+                  <p
+                    className={cn(
+                      "mt-1 text-xs",
+                      formatLastActive(school.last_active_at).stale ? "text-destructive" : "text-muted-foreground",
+                    )}
+                  >
+                    {formatLastActive(school.last_active_at).label}
+                  </p>
                 </div>
               </div>
               <div className="flex flex-col items-end gap-1">
