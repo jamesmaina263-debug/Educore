@@ -10,7 +10,8 @@
 // physical machine -- unlikely, but not impossible during setup -- can't
 // show one device's roster under another's key.
 
-import { idbGet, idbPut, STORES } from "@/lib/offline/db";
+import { STORES } from "@/lib/offline/db";
+import { getEncrypted, putEncrypted } from "@/lib/offline/crypto";
 import type { RosterEntry } from "./kiosk-client";
 
 interface CachedRoster {
@@ -30,13 +31,15 @@ export function devicePrefixOf(deviceKey: string): string {
 
 export async function cacheRoster(deviceKey: string, deviceName: string, roster: RosterEntry[]): Promise<void> {
   const value: CachedRoster = { deviceName, roster, cached_at: new Date().toISOString() };
-  await idbPut(STORES.cachedReads, { key: cacheKey(devicePrefixOf(deviceKey)), value: JSON.stringify(value) });
+  // OS-10: `value` is encrypted at rest -- exactly the sensitive data (student names tied to a
+  // paired kiosk device) that motivated encrypting cached_reads in the first place.
+  await putEncrypted(STORES.cachedReads, { key: cacheKey(devicePrefixOf(deviceKey)), value: JSON.stringify(value) }, "value");
 }
 
 export async function getCachedRoster(deviceKey: string): Promise<CachedRoster | null> {
   try {
-    const row = await idbGet<{ key: string; value: string }>(STORES.cachedReads, cacheKey(devicePrefixOf(deviceKey)));
-    if (!row) return null;
+    const row = await getEncrypted<{ key: string; value: string }>(STORES.cachedReads, cacheKey(devicePrefixOf(deviceKey)), "value");
+    if (!row?.value) return null;
     return JSON.parse(row.value) as CachedRoster;
   } catch {
     return null;

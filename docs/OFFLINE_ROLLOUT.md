@@ -521,3 +521,49 @@ cell collisions are lower-frequency than admissions edits in practice
 edited from two devices). Wiring the same `base`-snapshot pattern through
 the marks-entry grid is a reasonable fast-follow, not done here to keep
 this change reviewable as one thing.
+
+## OS-10 -- on-device encryption (GTM Readiness Protocol)
+
+Applies to the same two generic stores everything above shares:
+`pending_mutations`.payload and `cached_reads`.value are the two fields
+that can hold real PII while a device is offline -- everything else in
+those records (id, module, type, queued_at, status, the cache key) is
+routing metadata and stays plaintext on purpose, since `by_module` needs
+to stay a queryable index.
+
+**Key management (founder decision):** a single AES-GCM 256 key per
+device, generated non-extractable via Web Crypto (`extractable: false`),
+stored as a CryptoKey object directly in a new `device_key` IndexedDB
+store (schema v3). Non-extractable means the raw key bytes can never be
+read out via JS, by this app's own code or anyone else's -- only used
+in-place by `crypto.subtle.encrypt`/`decrypt`. See `src/lib/offline/crypto.ts`.
+
+**Deliberately not cleared on logout.** The options considered included
+tying the key to the session and wiping it at sign-out, matching
+`clearOfflineCaches`'s cache-clearing. That would be wrong here:
+`pending_mutations` is deliberately *preserved* across a sign-out (see the
+comment in `clear-on-logout.ts`) so a queued-but-not-yet-synced offline
+write still syncs correctly the next time anyone with the right
+permissions signs in. Destroying the key on logout would make that data
+permanently undecryptable instead -- silently losing real queued work.
+The actual threat OS-10 protects against (someone extracting the raw
+browser storage files off the device) is covered either way, since the
+key is non-extractable and only ever usable from inside this browser
+profile, signed in or not.
+
+**Where it lives:** `crypto.ts` exports `putEncrypted`/`getEncrypted`/
+`getAllEncrypted`/`getAllByIndexEncrypted` -- drop-in replacements for
+`db.ts`'s raw `idbPut`/`idbGet`/`idbGetAll`/`idbGetAllByIndex` that also
+take which field to encrypt. `queue.ts` and `kiosk-cache.ts` (the two
+real call sites for the sensitive field in each store) now use these
+instead; `db.ts`'s own primitives stay untouched and plaintext-only, both
+to avoid a circular import (crypto.ts already calls back into db.ts for
+the key row itself) and so any future module adding offline support to a
+third field just needs to call the encrypted variant with that field's
+name -- no new plumbing.
+
+**Backward compatible by construction:** a record written before this
+shipped has its sensitive field as plain data, not the `{__enc:true,...}`
+wrapper shape. The decrypt path checks for that shape and returns
+anything else as-is rather than guessing -- same stance as OS-09's `base`
+snapshot -- so nothing already queued on a device breaks on upgrade.

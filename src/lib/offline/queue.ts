@@ -1,4 +1,5 @@
-import { idbDelete, idbGetAll, idbGetAllByIndex, idbPut, STORES } from "./db";
+import { idbDelete, STORES } from "./db";
+import { getAllByIndexEncrypted, getAllEncrypted, putEncrypted } from "./crypto";
 import { mutationHandlers } from "./handlers";
 
 export interface QueuedMutation<TPayload = unknown> {
@@ -33,14 +34,18 @@ export async function queueMutation<TPayload>(
     queued_at: new Date().toISOString(),
     status: "pending",
   };
-  await idbPut(STORES.pendingMutations, record);
+  // OS-10: `payload` is encrypted at rest -- it's the field that actually carries PII
+  // (attendance marks, health notes, admissions identity fields, etc).
+  await putEncrypted(STORES.pendingMutations, record as unknown as Record<string, unknown>, "payload");
   return record;
 }
 
 /** List everything still waiting to sync, optionally scoped to one module. */
 export async function getPendingMutations<TPayload = unknown>(module?: string): Promise<QueuedMutation<TPayload>[]> {
-  if (module) return idbGetAllByIndex<QueuedMutation<TPayload>>(STORES.pendingMutations, "by_module", module);
-  return idbGetAll<QueuedMutation<TPayload>>(STORES.pendingMutations);
+  if (module) {
+    return getAllByIndexEncrypted<QueuedMutation<TPayload> & Record<string, unknown>>(STORES.pendingMutations, "by_module", module, "payload");
+  }
+  return getAllEncrypted<QueuedMutation<TPayload> & Record<string, unknown>>(STORES.pendingMutations, "payload");
 }
 
 /**
@@ -76,22 +81,22 @@ export async function syncPendingMutations(module?: string): Promise<{ synced: n
     const handler = mutationHandlers[`${mutation.module}:${mutation.type}`];
     if (!handler) continue;
 
-    await idbPut(STORES.pendingMutations, { ...mutation, status: "syncing" });
+    await putEncrypted(STORES.pendingMutations, { ...mutation, status: "syncing" } as unknown as Record<string, unknown>, "payload");
     try {
       const result = await handler(mutation.payload as never);
       if (result && typeof result === "object" && "error" in result) {
-        await idbPut(STORES.pendingMutations, {
-          ...mutation,
-          status: "failed",
-          last_error: String((result as { error: unknown }).error),
-        });
+        await putEncrypted(
+          STORES.pendingMutations,
+          { ...mutation, status: "failed", last_error: String((result as { error: unknown }).error) } as unknown as Record<string, unknown>,
+          "payload",
+        );
         failed += 1;
       } else {
         await idbDelete(STORES.pendingMutations, mutation.id);
         synced += 1;
       }
     } catch (e) {
-      await idbPut(STORES.pendingMutations, { ...mutation, status: "pending" });
+      await putEncrypted(STORES.pendingMutations, { ...mutation, status: "pending" } as unknown as Record<string, unknown>, "payload");
       failed += 1;
       if (e instanceof TypeError) break;
     }

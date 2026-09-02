@@ -1,10 +1,18 @@
 // Tiny, dependency-free IndexedDB wrapper shared by every module's offline
 // support. Deliberately minimal -- not a general-purpose ORM.
 //
-// Schema (v2): two generic stores shared by all modules, instead of one
-// store per module. This means adding offline support to a new module never
-// requires another DB_VERSION bump / onupgradeneeded migration -- it just
-// needs a new `module` value when it calls queueMutation().
+// Schema (v3): three stores.
+//  - pending_mutations / cached_reads: the two generic, module-agnostic
+//    stores every module's offline support shares (see below) -- adding
+//    offline support to a new module never requires another DB_VERSION
+//    bump, just a new `module` value passed to queueMutation().
+//  - device_key (v3, OS-10): a single row holding this device's
+//    non-extractable AES-GCM key, used by crypto.ts to encrypt the
+//    sensitive field in the two stores above before it ever reaches disk.
+//    See crypto.ts for why encryption lives there, not in this file --
+//    keeping these low-level idb* functions plaintext-only avoids a
+//    circular import (crypto.ts already needs to call back into this file
+//    to read/write the key itself).
 //
 //  - pending_mutations: queued writes waiting to be replayed against the
 //    server, indexed by `module` so a screen can show/sync just its own
@@ -20,13 +28,17 @@
 // device that hasn't been online since) are migrated into the new
 // `pending_mutations` store rather than dropped, so upgrading the app never
 // loses a queued submission.
+//
+// v2 -> v3 migration: just adds the new `device_key` store -- nothing to
+// migrate, crypto.ts creates the one row it needs on first use.
 
 const DB_NAME = "educore-offline";
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 
 export const STORES = {
   pendingMutations: "pending_mutations",
   cachedReads: "cached_reads",
+  deviceKey: "device_key",
 } as const;
 
 const LEGACY_PENDING_ATTENDANCE_STORE = "pending_attendance";
@@ -69,6 +81,12 @@ function openDb(): Promise<IDBDatabase> {
         }
         if (!db.objectStoreNames.contains(STORES.cachedReads)) {
           db.createObjectStore(STORES.cachedReads, { keyPath: "key" });
+        }
+      }
+
+      if (event.oldVersion < 3) {
+        if (!db.objectStoreNames.contains(STORES.deviceKey)) {
+          db.createObjectStore(STORES.deviceKey, { keyPath: "id" });
         }
       }
 
