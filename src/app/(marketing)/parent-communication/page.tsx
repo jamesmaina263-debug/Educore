@@ -77,17 +77,15 @@ export default function ParentCommunicationPage() {
     <>
       <BreadcrumbJsonLd items={[HOME_CRUMB, { name: "Parent Communication", path: "/parent-communication" }]} />
       <Section tone="navy" className="pt-16 sm:pt-20">
-        <Reveal>
-          <Eyebrow tone="light">Parent Communication</Eyebrow>
-          <h1 className="mt-5 max-w-3xl text-4xl font-extrabold leading-[1.1] tracking-tight sm:text-5xl">
-            A parent communication platform, not an admin&rsquo;s personal WhatsApp.
-          </h1>
-          <p className="mt-6 max-w-2xl text-lg text-white/70">
-            WhatsApp, SMS, structured per-student items, and a parent
-            portal — all from one place, with a human approving anything
-            that touches a fee balance before it ever reaches a parent.
-          </p>
-        </Reveal>
+        <Eyebrow tone="light">Parent Communication</Eyebrow>
+        <h1 className="mt-5 max-w-3xl text-4xl font-extrabold leading-[1.1] tracking-tight sm:text-5xl">
+          A parent communication platform, not an admin&rsquo;s personal WhatsApp.
+        </h1>
+        <p className="mt-6 max-w-2xl text-lg text-white/70">
+          WhatsApp, SMS, structured per-student items, and a parent
+          portal — all from one place, with a human approving anything
+          that touches a fee balance before it ever reaches a parent.
+        </p>
       </Section>
 
       <Section tone="canvas">
