@@ -41,7 +41,7 @@ const FOOTER_GROUPS = [
 // near-duplicate of it.
 const DIRECT_CONTACTS = [
   { href: "https://wa.me/254702904562", label: "WhatsApp +254 702 904562" },
-  { href: "mailto:info@educoreafrica.com", label: "info@educoreafrica.com" },
+  { href: "mailto:support@educoreafrica.com", label: "support@educoreafrica.com" },
 ];
 
 export function MarketingFooter() {
