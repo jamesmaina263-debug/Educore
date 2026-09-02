@@ -91,12 +91,23 @@ export default async function PortalPage({ searchParams }: { searchParams: Promi
 
   const { data: assignmentRows } = await supabase
     .from("assignments")
-    .select("id, title, description, due_date, subjects(name), assignment_submissions(submission_text, status, grade, feedback, student_id)")
+    .select(
+      "id, title, description, due_date, subjects(name), assignment_attachments(id, file_name, storage_path, file_size), assignment_submissions(id, submission_text, status, grade, feedback, student_id, assignment_submission_attachments(id, file_name, storage_path, file_size))",
+    )
     .eq("stream_id", selected.current_class_id)
     .order("due_date", { ascending: false });
   const assignments: PortalAssignmentRow[] = (assignmentRows ?? []).map((a) => {
     const subject = a.subjects as unknown as { name: string } | null;
-    const submissions = (a.assignment_submissions ?? []) as { submission_text: string; status: string; grade: string | null; feedback: string | null; student_id: string }[];
+    const taskAttachments = (a.assignment_attachments ?? []) as { id: string; file_name: string; storage_path: string; file_size: number | null }[];
+    const submissions = (a.assignment_submissions ?? []) as {
+      id: string;
+      submission_text: string;
+      status: string;
+      grade: string | null;
+      feedback: string | null;
+      student_id: string;
+      assignment_submission_attachments: { id: string; file_name: string; storage_path: string; file_size: number | null }[];
+    }[];
     const mine = submissions.find((s) => s.student_id === selected.id) ?? null;
     return {
       id: a.id,
@@ -104,7 +115,17 @@ export default async function PortalPage({ searchParams }: { searchParams: Promi
       description: a.description,
       due_date: a.due_date,
       subject_name: subject?.name ?? "—",
-      submission: mine ? { submission_text: mine.submission_text, status: mine.status as "submitted" | "graded", grade: mine.grade, feedback: mine.feedback } : null,
+      attachments: taskAttachments,
+      submission: mine
+        ? {
+            id: mine.id,
+            submission_text: mine.submission_text,
+            status: mine.status as "submitted" | "graded",
+            grade: mine.grade,
+            feedback: mine.feedback,
+            attachments: mine.assignment_submission_attachments ?? [],
+          }
+        : null,
     };
   });
 
