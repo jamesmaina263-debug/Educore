@@ -468,3 +468,56 @@ from the module name too, until the audit showed otherwise.
 Each module should get its own review pass (this checklist, then a real
 device/offline test) rather than being batch-applied -- that's what keeps
 "don't break what's already working" true as this expands.
+
+## OS-09 -- conflict resolution for offline-queued edits (GTM Readiness Protocol)
+
+Read every entry in `handlers.ts` before touching anything, specifically
+looking for which queued mutations UPDATE an existing shared record rather
+than INSERT a new one -- only those can genuinely conflict with a change
+made elsewhere while a device was offline. Everything else queued above
+(attendance, health check-ins, roll call, loans, stock movements,
+discipline incidents, staff attendance) is a create, already protected from
+duplicate replay by OS-08's idempotency keys, and structurally can't
+collide the way an update can. Every non-create-type follow-up/correction
+action (`editMark`, `editAttendanceRecord`, `updateIncidentStatus`,
+`updateReferralOutcome`, and so on) was already deliberately excluded from
+offline queueing before this, for the desk-based-work reasons documented
+throughout this file -- so the actual surface needing conflict rules turned
+out to be exactly three: `admissions:updateAdmissionDetails`,
+`admissions:updateApplicantIdentity`, `admissions:saveHealthProfileForApplication`.
+
+**Policy (founder decision):** field-level merge, not last-write-wins. A
+queued edit only overwrites the specific field(s) it touches, and only if
+nobody else changed that field since the edit was drafted. If someone else
+did change it, their (already-committed, newer) value is kept, this edit's
+value for that one field is discarded, and the discard is logged to
+`audit_log` via `log_offline_field_conflict` -- action
+`offline_conflict_field_discarded`, visible to anyone with `audit.read`.
+Every other field in the same save still applies normally; one field
+colliding doesn't block the rest of the edit.
+
+**How the comparison works:** each of the three actions now takes an
+optional third argument, `base` -- a snapshot of the touched fields exactly
+as the form loaded them, taken from the same `initial`/`applicantSummary`
+props the form already receives (no new fetch). It's threaded through
+`queueMutation`'s payload alongside `input`, unchanged by the offline
+engine, and passed on both the online and offline save paths (not just
+offline) -- so the same protection covers the ordinary "opened it in two
+tabs" case too, at zero extra cost when nothing has actually changed. See
+`mergeOfflineFields` in
+`src/app/(app)/admissions/[id]/wizard/actions.ts` for the actual
+comparison. A queued mutation from before this shipped simply has no
+`base` key, which the merge treats as "no staleness check possible" and
+applies exactly as it always did -- so nothing already sitting in a
+device's IndexedDB queue breaks.
+
+**What this doesn't cover, on purpose, for now:** `exams:submitMarks` /
+`exams:submitCompetencyMarks` are also update-type (an upsert keyed on
+exam+student+subject) and could theoretically collide the same way, but
+each cell is already its own row -- a coarser but real form of isolation
+two different students'/subjects' marks can never collide at all, and same-
+cell collisions are lower-frequency than admissions edits in practice
+(marks entry is usually one teacher, one subject, not simultaneously
+edited from two devices). Wiring the same `base`-snapshot pattern through
+the marks-entry grid is a reasonable fast-follow, not done here to keep
+this change reviewable as one thing.
