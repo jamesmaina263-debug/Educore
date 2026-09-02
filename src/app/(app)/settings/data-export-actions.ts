@@ -76,9 +76,15 @@ export async function exportSchoolData(): Promise<DataExportOutcome> {
       .select(
         "relationship, primary_contact, students(admission_number, first_name, last_name), school_users:guardian_user_id(full_name, phone, email)",
       ),
+    // staff_number is deliberately excluded from school_users' column-level SELECT grant
+    // (see the "close staff statutory numbers read leak" migration) -- selecting it directly
+    // here, even alongside ordinary columns, fails the whole query with "permission denied
+    // for table school_users" for every caller, owner/principal included, since that's a
+    // Postgres object-privilege error, not a row-level permission check. Fetched separately
+    // below via get_staff_statutory_numbers(), the one sanctioned read path for that column.
     supabase
       .from("school_users")
-      .select("full_name, email, phone, status, position, department, hire_date, staff_number, roles(display_name)")
+      .select("id, full_name, email, phone, status, position, department, hire_date, roles(display_name)")
       .order("full_name"),
     supabase.from("academic_years").select("name, start_date, end_date, status").order("start_date"),
     supabase.from("terms").select("name, term_number, start_date, end_date, status, academic_years(name)").order("start_date"),
@@ -107,6 +113,16 @@ export async function exportSchoolData(): Promise<DataExportOutcome> {
     invoicesErr ||
     paymentsErr;
   if (firstError) return { error: firstError.message };
+
+  // Staff numbers only, via the sanctioned RPC (see the school_users select above). Returns a
+  // row only for staff the caller may see -- their own, or all of them with payroll.read_any
+  // (which school_owner/principal hold by default) -- so this degrades to "blank for staff you
+  // can't see" rather than erroring for a caller without that permission.
+  const staffIds = (staff ?? []).map((s) => s.id as string);
+  const { data: statutoryNumbers } = await supabase.rpc("get_staff_statutory_numbers", { p_staff_ids: staffIds });
+  const staffNumberById = new Map(
+    ((statutoryNumbers ?? []) as { staff_id: string; staff_number: string | null }[]).map((r) => [r.staff_id, r.staff_number]),
+  );
 
   const sheets: DataExportSheet[] = [
     {
@@ -152,7 +168,7 @@ export async function exportSchoolData(): Promise<DataExportOutcome> {
         s.phone ?? "",
         s.position ?? "",
         s.department ?? "",
-        s.staff_number ?? "",
+        staffNumberById.get(s.id as string) ?? "",
         fmtDate(s.hire_date),
         s.status ?? "",
       ]),
