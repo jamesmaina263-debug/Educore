@@ -96,6 +96,26 @@ jobs:
             done
           fi
 
+      # Same webhook and safe-by-default posture as sendSecurityAlert() in
+      # src/lib/security-alert.ts: no-op if SECURITY_ALERT_WEBHOOK_URL isn't configured,
+      # never fails the job on a Slack-side error. This is the piece that actually closes
+      # the loop -- a red check or an open PR sitting unnoticed is exactly how the last
+      # few drift gaps went unaddressed for multiple pushes in a row.
+      - name: Notify Slack on failure
+        if: failure()
+        env:
+          WEBHOOK_URL: ${{ secrets.SECURITY_ALERT_WEBHOOK_URL }}
+          RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          if [ -z "$WEBHOOK_URL" ]; then
+            echo "SECURITY_ALERT_WEBHOOK_URL not set -- skipping Slack notification (same no-op-by-default posture as src/lib/security-alert.ts)."
+            exit 0
+          fi
+          MISSING_COUNT=$(grep -oP '^  \K[0-9]{8,14}(?=  \()' /tmp/drift_output.txt | sort -u | wc -l | tr -d ' ')
+          python3 -c "import json, os, sys; text = ':rotating_light: *Migration drift check failed*\n\u2022 *ref*: ' + os.environ['REF_NAME'] + '\n\u2022 *missing versions*: ' + (sys.argv[1] or 'see log') + '\n\u2022 *run*: ' + os.environ['RUN_URL']; json.dump({'text': text}, open('/tmp/slack_payload.json', 'w'))" "$MISSING_COUNT"
+          curl -s -X POST -H "Content-Type: application/json" -d @/tmp/slack_payload.json "$WEBHOOK_URL" > /dev/null || true
+
       # Looks up an open PR for the current ref rather than trusting github.event.pull_request
       # directly, so this also works when the run comes from workflow_dispatch or a push to a
       # branch with an open PR, not just a genuine pull_request-triggered run.
