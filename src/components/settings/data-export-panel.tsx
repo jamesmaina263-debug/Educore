@@ -34,7 +34,7 @@ export function DataExportPanel({ canExport }: { canExport: boolean }) {
   if (!canExport) {
     return (
       <div className="panel border-dashed p-10 text-center text-sm text-muted-foreground">
-        Data export is available to the school owner account.
+        Data export is available to the school owner and principal accounts.
       </div>
     );
   }

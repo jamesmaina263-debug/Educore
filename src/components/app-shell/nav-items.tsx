@@ -7,6 +7,7 @@ import {
   CalendarCheck,
   FileText,
   FileDown,
+  FileUp,
   Wallet,
   Banknote,
   TrendingUp,
@@ -188,6 +189,7 @@ const settingsChildren: NavChild[] = [
   { label: "Biometric Events", href: "/settings/biometric-events", icon: History },
   { label: "Audit Log", href: "/settings/audit", icon: History },
   { label: "Data Export", href: "/settings/data-export", icon: FileDown },
+  { label: "Data Import", href: "/settings/data-import", icon: FileUp },
 ];
 
 export const navGroups: NavGroup[] = [
