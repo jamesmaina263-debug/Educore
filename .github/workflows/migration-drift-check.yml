@@ -66,8 +66,11 @@ jobs:
       # (no stable API for it). Posting the script's own stdout as a PR comment when it
       # fails means the exact missing-version detail is visible right where the check
       # ran, not just a pass/fail dot -- doesn't change what the check itself decides.
+      # Looks up an open PR for the current ref rather than trusting github.event.pull_request
+      # directly, so this also works when the run comes from workflow_dispatch or a push to a
+      # branch with an open PR, not just a genuine pull_request-triggered run.
       - name: Post drift summary as PR comment on failure
-        if: failure() && github.event_name == 'pull_request'
+        if: failure()
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -77,4 +80,9 @@ jobs:
             cat /tmp/drift_output.txt
             echo '```'
           } > /tmp/drift_comment.md
-          gh pr comment "${{ github.event.pull_request.number }}" --body-file /tmp/drift_comment.md --repo "${{ github.repository }}"
+          PR_NUMBER=$(gh pr list --repo "${{ github.repository }}" --head "${{ github.ref_name }}" --state open --json number --jq '.[0].number // empty')
+          if [ -n "$PR_NUMBER" ]; then
+            gh pr comment "$PR_NUMBER" --body-file /tmp/drift_comment.md --repo "${{ github.repository }}"
+          else
+            echo "No open PR found for ref ${{ github.ref_name }} -- skipping comment post (output is above in the job log)."
+          fi
