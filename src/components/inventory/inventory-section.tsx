@@ -131,6 +131,9 @@ export function InventorySection({
       movement_type: moveType,
       quantity: Number(moveQuantity),
       reason: moveReason,
+      // OS-08: generated once here so a queued-then-replayed retry (lost ack after the
+      // original request actually landed) reuses the same key instead of moving stock twice.
+      client_mutation_id: crypto.randomUUID(),
     };
     if (!online) {
       await queueMutation("inventory", "recordStockMovementAction", input);

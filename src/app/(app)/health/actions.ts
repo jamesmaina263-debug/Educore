@@ -76,10 +76,28 @@ export async function administerMedication(input: {
   inventory_item_id?: string;
   quantity?: number;
   notes?: string;
+  // OS-08: generated once by the caller at queue time (see medication-section.tsx) so an
+  // offline-queue retry after a lost ack (the original call actually landed, but the
+  // response never reached the browser) is recognized here and short-circuited before
+  // it can double-deduct stock or record a second dose that was never actually given.
+  client_mutation_id?: string;
 }): Promise<ActionResult> {
   const supabase = await createClient();
   const me = await currentActor(supabase);
   if (!me) return { error: "Could not resolve your account." };
+
+  if (input.client_mutation_id) {
+    const { data: existing } = await supabase
+      .from("medication_administrations")
+      .select("id")
+      .eq("school_id", me.school_id)
+      .eq("client_mutation_id", input.client_mutation_id)
+      .maybeSingle();
+    if (existing) {
+      revalidatePath("/health", "layout");
+      return { success: true };
+    }
+  }
 
   // If drawn from tracked medical inventory, deduct from the Nurse's own stock pool (never
   // Main Store's directly -- she only ever draws from what's already been transferred to her).
@@ -92,6 +110,7 @@ export async function administerMedication(input: {
       p_item_id: input.inventory_item_id,
       p_quantity: quantity,
       p_reason: `Administered to student — ${input.medication_name}`,
+      p_client_mutation_id: input.client_mutation_id || null,
     });
     if (stockError) return { error: `Stock deduction failed: ${stockError.message}` };
   }
@@ -108,6 +127,7 @@ export async function administerMedication(input: {
     inventory_item_id: input.inventory_item_id || null,
     quantity_administered: quantity,
     notes: input.notes || null,
+    client_mutation_id: input.client_mutation_id || null,
   });
   if (error) return { error: error.message };
   revalidatePath("/health", "layout");
