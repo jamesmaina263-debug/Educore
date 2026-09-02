@@ -96,6 +96,14 @@ export async function acknowledgeAnnouncementAction(id: string): Promise<ActionR
   return { success: true };
 }
 
+export async function completeAnnouncementAction(id: string): Promise<ActionResult> {
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("complete_announcement_action", { p_id: id });
+  if (error) return { error: error.message };
+  revalidatePath("/portal");
+  return { success: true };
+}
+
 export async function getAnnouncementAttachmentUrlAction(storagePath: string): Promise<{ url: string } | { error: string }> {
   const supabase = await createClient();
   // Bucket RLS (announcement_attachments_storage_select) already restricts this to

@@ -171,7 +171,7 @@ export default async function PortalPage({ searchParams }: { searchParams: Promi
     const { data: recipientRows } = await supabase
       .from("announcement_recipients")
       .select(
-        "read_at, acknowledged_at, announcements(id, title, body, urgency, status, created_at, withdrawal_reason, announcement_attachments(id, storage_path, file_name))",
+        "read_at, acknowledged_at, completed_at, announcements(id, title, body, urgency, status, created_at, withdrawal_reason, announcement_attachments(id, storage_path, file_name))",
       )
       .eq("guardian_user_id", schoolUser.id);
     announcementItems = (recipientRows ?? [])
@@ -197,6 +197,7 @@ export default async function PortalPage({ searchParams }: { searchParams: Promi
           withdrawal_reason: a.withdrawal_reason,
           my_read_at: r.read_at,
           my_acknowledged_at: r.acknowledged_at,
+          my_completed_at: r.completed_at,
           attachments: a.announcement_attachments ?? [],
         };
       })
