@@ -93,18 +93,16 @@ export default function StudentManagementSystemPage() {
     <>
       <BreadcrumbJsonLd items={[HOME_CRUMB, { name: "Student Management System", path: "/student-management-system" }]} />
       <Section tone="navy" className="pt-16 sm:pt-20">
-        <Reveal>
-          <Eyebrow tone="light">Student Management</Eyebrow>
-          <h1 className="mt-5 max-w-3xl text-4xl font-extrabold leading-[1.1] tracking-tight sm:text-5xl">
-            A student management system built for Kenyan schools — one record per learner, not five.
-          </h1>
-          <p className="mt-6 max-w-2xl text-lg text-white/70">
-            Academics, attendance, medical history, discipline, guardians, and
-            fees all point back to the same student record — so the same
-            learner doesn&apos;t look different depending on which
-            spreadsheet you happen to open.
-          </p>
-        </Reveal>
+        <Eyebrow tone="light">Student Management</Eyebrow>
+        <h1 className="mt-5 max-w-3xl text-4xl font-extrabold leading-[1.1] tracking-tight sm:text-5xl">
+          A student management system built for Kenyan schools — one record per learner, not five.
+        </h1>
+        <p className="mt-6 max-w-2xl text-lg text-white/70">
+          Academics, attendance, medical history, discipline, guardians, and
+          fees all point back to the same student record — so the same
+          learner doesn&apos;t look different depending on which
+          spreadsheet you happen to open.
+        </p>
       </Section>
 
       <Section tone="canvas">

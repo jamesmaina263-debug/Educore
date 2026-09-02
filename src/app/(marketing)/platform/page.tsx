@@ -315,17 +315,15 @@ export default function PlatformPage() {
       <BreadcrumbJsonLd items={[HOME_CRUMB, { name: "Platform", path: "/platform" }]} />
       {/* Hero */}
       <Section tone="navy" className="pt-16 sm:pt-20">
-        <Reveal>
-          <Eyebrow tone="light">School Management System</Eyebrow>
-          <h1 className="mt-5 max-w-3xl text-4xl font-extrabold leading-[1.1] tracking-tight sm:text-5xl">
-            The school management system platform, mapped to every real module.
-          </h1>
-          <p className="mt-6 max-w-2xl text-lg text-white/70">
-            Nothing below is a roadmap slide. Every module on this page runs
-            inside EduCore today, grouped the way a school actually uses
-            them — not the way a sales deck would organize them.
-          </p>
-        </Reveal>
+        <Eyebrow tone="light">School Management System</Eyebrow>
+        <h1 className="mt-5 max-w-3xl text-4xl font-extrabold leading-[1.1] tracking-tight sm:text-5xl">
+          The school management system platform, mapped to every real module.
+        </h1>
+        <p className="mt-6 max-w-2xl text-lg text-white/70">
+          Nothing below is a roadmap slide. Every module on this page runs
+          inside EduCore today, grouped the way a school actually uses
+          them — not the way a sales deck would organize them.
+        </p>
       </Section>
 
       {/* Academics & Assessment */}
