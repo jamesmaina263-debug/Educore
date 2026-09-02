@@ -33,12 +33,21 @@ export async function createLibraryItemAction(input: {
   return { success: true };
 }
 
-export async function issueLoanAction(input: { library_item_id: string; student_id: string; due_date: string }): Promise<ActionResult> {
+export async function issueLoanAction(input: {
+  library_item_id: string;
+  student_id: string;
+  due_date: string;
+  // OS-08: generated once by the caller at queue time (see library-section.tsx) so an
+  // offline-queue retry after a lost ack reuses the same key -- issue_library_loan()
+  // recognizes it and returns the already-issued loan instead of issuing a second one.
+  client_mutation_id?: string;
+}): Promise<ActionResult> {
   const supabase = await createClient();
   const { error } = await supabase.rpc("issue_library_loan", {
     p_item_id: input.library_item_id,
     p_student_id: input.student_id,
     p_due_date: input.due_date,
+    p_client_mutation_id: input.client_mutation_id || null,
   });
   if (error) return { error: error.message };
   revalidatePath("/library", "layout");
@@ -63,12 +72,18 @@ async function currentSchoolUser() {
   return { supabase, schoolUser };
 }
 
-export async function issueLoanToStaffAction(input: { library_item_id: string; staff_id: string; due_date: string }): Promise<ActionResult> {
+export async function issueLoanToStaffAction(input: {
+  library_item_id: string;
+  staff_id: string;
+  due_date: string;
+  client_mutation_id?: string;
+}): Promise<ActionResult> {
   const supabase = await createClient();
   const { error } = await supabase.rpc("issue_library_loan_to_staff", {
     p_item_id: input.library_item_id,
     p_staff_id: input.staff_id,
     p_due_date: input.due_date,
+    p_client_mutation_id: input.client_mutation_id || null,
   });
   if (error) return { error: error.message };
   revalidatePath("/library", "layout");

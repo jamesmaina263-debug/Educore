@@ -3,6 +3,8 @@
 import { headers } from "next/headers";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { safeStorageFilename } from "@/lib/storage-path";
+import { getRealClientIp } from "@/lib/get-real-client-ip";
+import { sendSecurityAlert } from "@/lib/security-alert";
 
 const KENYA_PHONE_RE = /^\+254\d{9}$/;
 const GUARDIAN_VERIFICATION_PURPOSE = "guardian_verification";
@@ -80,14 +82,20 @@ export async function submitApplication(
   // numbers the sender doesn't own. Same increment_and_check_rate_limit() primitive
   // signUpSchool() and request-otp already use; keyed by IP, generous enough for a school
   // office or cybercafé submitting several walk-in applications from one connection.
+  // SECURITY: use the last (trusted, edge-appended) X-Forwarded-For entry,
+  // not the first (caller-controlled) -- see getRealClientIp.ts.
   const forwardedFor = (await headers()).get("x-forwarded-for");
-  const clientIp = forwardedFor?.split(",")[0]?.trim() || "unknown";
+  const clientIp = getRealClientIp(forwardedFor);
   const { data: withinLimit } = await admin.rpc("increment_and_check_rate_limit", {
     p_bucket: `apply-submit:${clientIp}`,
     p_max_events: 10,
     p_window_seconds: 3_600,
   });
   if (withinLimit === false) {
+    void sendSecurityAlert("Admission-application rate limit tripped", {
+      limit: "per-IP (10/hr)",
+      ip: clientIp,
+    });
     return { error: "Too many applications submitted from this network. Please try again later." };
   }
 

@@ -3,6 +3,8 @@
 import { redirect } from "next/navigation";
 import { cookies, headers } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
+import { getRealClientIp } from "@/lib/get-real-client-ip";
+import { sendSecurityAlert } from "@/lib/security-alert";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { setSchoolSlugCookie, clearSchoolSlugCookie } from "@/lib/school-slug-cookie";
 
@@ -26,8 +28,13 @@ export async function login(
   // buckets, since either could be abused independently -- IP catches one
   // source hammering many accounts, email catches many sources (e.g. a
   // botnet) hammering one account.
+  // SECURITY: use the last X-Forwarded-For entry (the one Vercel's edge
+  // itself appended), not the first (fully caller-controlled) -- see
+  // getRealClientIp.ts. Reading the first entry let anyone bypass this
+  // IP-based login rate limit just by sending a different fake first
+  // entry on every request.
   const forwardedFor = (await headers()).get("x-forwarded-for");
-  const clientIp = forwardedFor?.split(",")[0]?.trim() || "unknown";
+  const clientIp = getRealClientIp(forwardedFor);
   try {
     const adminClient = createAdminClient();
     const [{ data: withinIpLimit }, { data: withinEmailLimit }] = await Promise.all([
@@ -43,6 +50,13 @@ export async function login(
       }),
     ]);
     if (withinIpLimit === false || withinEmailLimit === false) {
+      void sendSecurityAlert("Login rate limit tripped", {
+        limit: withinIpLimit === false ? "per-IP (20/hr)" : "per-email (10/hr)",
+        ip: clientIp,
+        // Not the raw email -- enough to spot "one account under attack"
+        // in the alert without echoing full PII into Slack.
+        email_domain: email.toLowerCase().split("@").at(-1) ?? "unknown",
+      });
       return { error: "Too many login attempts. Please wait a while and try again." };
     }
   } catch {

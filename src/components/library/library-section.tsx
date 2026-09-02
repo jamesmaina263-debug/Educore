@@ -169,12 +169,15 @@ export function LibrarySection({
   async function handleIssue() {
     setPending(true);
     setError(null);
+    // OS-08: generated once here so a queued-then-replayed retry (lost ack after the
+    // original request actually landed) reuses the same key instead of issuing a second loan.
+    const clientMutationId = crypto.randomUUID();
     if (!online) {
       const type = borrowerType === "student" ? "issueLoanAction" : "issueLoanToStaffAction";
       const payload =
         borrowerType === "student"
-          ? { library_item_id: issueItemId, student_id: issueBorrowerId, due_date: dueDate }
-          : { library_item_id: issueItemId, staff_id: issueBorrowerId, due_date: dueDate };
+          ? { library_item_id: issueItemId, student_id: issueBorrowerId, due_date: dueDate, client_mutation_id: clientMutationId }
+          : { library_item_id: issueItemId, staff_id: issueBorrowerId, due_date: dueDate, client_mutation_id: clientMutationId };
       await queueMutation("library", type, payload);
       setPending(false);
       setIssueOpen(false);
@@ -184,8 +187,8 @@ export function LibrarySection({
     }
     const result =
       borrowerType === "student"
-        ? await issueLoanAction({ library_item_id: issueItemId, student_id: issueBorrowerId, due_date: dueDate })
-        : await issueLoanToStaffAction({ library_item_id: issueItemId, staff_id: issueBorrowerId, due_date: dueDate });
+        ? await issueLoanAction({ library_item_id: issueItemId, student_id: issueBorrowerId, due_date: dueDate, client_mutation_id: clientMutationId })
+        : await issueLoanToStaffAction({ library_item_id: issueItemId, staff_id: issueBorrowerId, due_date: dueDate, client_mutation_id: clientMutationId });
     setPending(false);
     if ("error" in result) return setError(result.error);
     setIssueOpen(false);
