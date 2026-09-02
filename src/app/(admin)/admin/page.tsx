@@ -44,17 +44,37 @@ export default async function AdminOverviewPage({
   // convention as /admin/billing and /admin/analytics (this platform has a small number of
   // tenant schools, so a single unaggregated fetch per table is simpler and cheap -- not a
   // pattern to reach for once school counts grow into the thousands).
-  const [{ data: schools }, { data: subs }, { data: plans }, { data: invoices }, { data: students }, { data: staff }] =
-    await Promise.all([
-      supabase.from("schools").select("id, name, slug, status, created_at").order("name"),
-      supabase.from("school_subscriptions").select("school_id, plan_id, status"),
-      supabase.from("subscription_plans").select("id, name, price_per_student_kes, billing_period"),
-      // Unfiltered (all statuses, all time) -- lifetime revenue, this-period vs. prior-period,
-      // and the overdue total all need to be derived from the same full set below.
-      supabase.from("platform_invoices").select("school_id, amount_kes, status, paid_at, due_at"),
-      supabase.from("students").select("school_id"),
-      supabase.from("school_users").select("school_id"),
-    ]);
+  const [
+    { data: schools },
+    { data: subs },
+    { data: plans },
+    { data: invoices },
+    { data: students },
+    { data: staff },
+    { data: classes },
+    { data: streams },
+    { data: feeStructures },
+    { data: lastActive },
+  ] = await Promise.all([
+    supabase.from("schools").select("id, name, slug, status, created_at").order("name"),
+    supabase.from("school_subscriptions").select("school_id, plan_id, status, trial_ends_at"),
+    supabase.from("subscription_plans").select("id, name, price_per_student_kes, billing_period"),
+    // Unfiltered (all statuses, all time) -- lifetime revenue, this-period vs. prior-period,
+    // and the overdue total all need to be derived from the same full set below.
+    supabase.from("platform_invoices").select("school_id, amount_kes, status, paid_at, due_at"),
+    supabase.from("students").select("school_id"),
+    supabase.from("school_users").select("school_id"),
+    // Onboarding-completeness signal for the school list below: has this school set up any
+    // classes, streams, and an active fee structure? Just school_id -- only presence/absence
+    // per school matters here, not the rows themselves.
+    supabase.from("classes").select("school_id"),
+    supabase.from("streams").select("school_id"),
+    supabase.from("fee_structures").select("school_id").eq("is_active", true),
+    // Last authenticated activity per school. Not a plain table select -- auth.users isn't
+    // exposed through PostgREST, so this goes through the admin_school_last_active() RPC
+    // (super_admin/service_role only; see that migration for why).
+    supabase.rpc("admin_school_last_active"),
+  ]);
 
   const planNameById = new Map((plans ?? []).map((p) => [p.id, p.name]));
   const planById = new Map((plans ?? []).map((p) => [p.id, p]));
@@ -70,6 +90,25 @@ export default async function AdminOverviewPage({
   for (const s of staff ?? []) {
     if (!s.school_id) continue;
     staffCountBySchool.set(s.school_id, (staffCountBySchool.get(s.school_id) ?? 0) + 1);
+  }
+
+  const schoolIdsWithClasses = new Set((classes ?? []).map((c) => c.school_id));
+  const schoolIdsWithStreams = new Set((streams ?? []).map((s) => s.school_id));
+  const schoolIdsWithFeeStructure = new Set((feeStructures ?? []).map((f) => f.school_id));
+  const lastActiveBySchool = new Map(
+    ((lastActive ?? []) as { school_id: string; last_active_at: string | null }[]).map((r) => [
+      r.school_id,
+      r.last_active_at,
+    ]),
+  );
+
+  function onboardingStage(schoolId: string): SchoolListRow["onboarding_stage"] {
+    const hasClasses = schoolIdsWithClasses.has(schoolId);
+    const hasStreams = schoolIdsWithStreams.has(schoolId);
+    const hasFees = schoolIdsWithFeeStructure.has(schoolId);
+    if (hasClasses && hasStreams && hasFees) return "complete";
+    if (hasClasses || hasStreams || hasFees) return "in_progress";
+    return "not_started";
   }
 
   const totalSchools = schools?.length ?? 0;
@@ -132,6 +171,9 @@ export default async function AdminOverviewPage({
       student_count: studentCountBySchool.get(sc.id) ?? 0,
       staff_count: staffCountBySchool.get(sc.id) ?? 0,
       plan_name: sub?.plan_id ? (planNameById.get(sub.plan_id) ?? null) : null,
+      trial_ends_at: sc.status === "trial" ? (sub?.trial_ends_at ?? null) : null,
+      onboarding_stage: onboardingStage(sc.id),
+      last_active_at: lastActiveBySchool.get(sc.id) ?? null,
     };
   });
 
