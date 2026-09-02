@@ -4,6 +4,7 @@ import { headers } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getRealClientIp } from "@/lib/get-real-client-ip";
+import { sendSecurityAlert } from "@/lib/security-alert";
 
 export type DemoRequestState = {
   status: "idle" | "success" | "error";
@@ -93,6 +94,10 @@ export async function submitDemoRequest(
     p_window_seconds: 3600,
   });
   if (withinLimit === false) {
+    void sendSecurityAlert("Demo-request rate limit tripped", {
+      limit: "per-IP (5/hr)",
+      ip: clientIp,
+    });
     return {
       status: "error",
       message: "Too many requests from this network. Please try again later, or email us directly.",

@@ -1,5 +1,6 @@
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { verifyCallbackSource } from "../_shared/mpesa/verifyCallbackSource.ts";
+import { sendSecurityAlert } from "../_shared/securityAlert.ts";
 
 // Public webhook Safaricom calls directly -- no Supabase session, so this function must be
 // deployed with verify_jwt disabled (`supabase functions deploy mpesa-stk-callback --no-verify-jwt`).
@@ -41,6 +42,9 @@ Deno.serve(async (req) => {
         "mpesa-stk-callback: rejected callback from IP outside Safaricom's allowlist",
         sourceCheck.sourceIp,
       );
+      void sendSecurityAlert("M-Pesa callback rejected: IP outside Safaricom allowlist", {
+        ip: sourceCheck.sourceIp ?? "unknown",
+      });
       return alwaysOk();
     }
 
@@ -69,6 +73,10 @@ Deno.serve(async (req) => {
 
     if (!settings) {
       console.error("mpesa-stk-callback: school_id/token mismatch -- possible spoofed callback", schoolId);
+      void sendSecurityAlert("M-Pesa callback rejected: school_id/token mismatch", {
+        school_id: schoolId,
+        source_ip: sourceCheck.sourceIp ?? "unknown",
+      });
       return alwaysOk();
     }
 
