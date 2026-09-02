@@ -68,6 +68,26 @@ Deno.serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
 
+    // Atomic claim, BEFORE the Daraja call: without this, two overlapping invocations for the
+    // same request_id (double-tap, client retry) could both pass the checks above and both send
+    // a real STK push prompt to the customer's phone -- mpesa_stk_request_dispatched()'s own
+    // guard only stops the second DB write, not the second Daraja call that already happened by
+    // then. A stale claim (crashed invocation, never reached its failure handler) doesn't block
+    // retries indefinitely -- 2 minutes is generously longer than a Daraja call should ever take.
+    const { data: claimed, error: claimError } = await serviceClient
+      .from("mpesa_stk_requests")
+      .update({ dispatch_claimed_at: new Date().toISOString() })
+      .eq("id", request.id)
+      .eq("status", "pending")
+      .is("checkout_request_id", null)
+      .or(`dispatch_claimed_at.is.null,dispatch_claimed_at.lt.${new Date(Date.now() - 2 * 60 * 1000).toISOString()}`)
+      .select("id")
+      .maybeSingle();
+
+    if (claimError || !claimed) {
+      return json({ error: "This request is already being processed." }, 409);
+    }
+
     const [{ data: settings }, { data: credsRow }] = await Promise.all([
       serviceClient
         .from("mpesa_settings")
