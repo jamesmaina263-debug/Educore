@@ -16,6 +16,18 @@ export const metadata: Metadata = {
   title: "EduCore",
   description: "School management platform for Kenyan schools",
   manifest: "/manifest.webmanifest",
+  // Google Search Console site-ownership verification. Left unset until a
+  // real token exists -- Next.js only emits the meta tag when the value is
+  // present, so this is a no-op today. To activate: create the property in
+  // Search Console (as a URL-prefix property against SITE_URL, or a Domain
+  // property once a custom domain is live -- see the comment on SITE_URL in
+  // src/lib/site.ts), choose the "HTML tag" verification method, copy the
+  // content="..." value Google gives you, and set it as
+  // NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION in Vercel's env vars. No code
+  // change or redeploy needed beyond that.
+  verification: process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION
+    ? { google: process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION }
+    : undefined,
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
