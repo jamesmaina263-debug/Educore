@@ -48,6 +48,10 @@ export async function recordStockMovementAction(input: {
   movement_type: "in" | "out";
   quantity: number;
   reason?: string;
+  // OS-08: generated once by the caller at queue time (see inventory-section.tsx) so an
+  // offline-queue retry after a lost ack replays with the same key -- record_stock_movement()
+  // recognizes it and returns the already-applied result instead of moving stock twice.
+  client_mutation_id?: string;
 }): Promise<ActionResult> {
   const supabase = await createClient();
   const { error } = await supabase.rpc("record_stock_movement", {
@@ -55,6 +59,7 @@ export async function recordStockMovementAction(input: {
     p_movement_type: input.movement_type,
     p_quantity: input.quantity,
     p_reason: input.reason || null,
+    p_client_mutation_id: input.client_mutation_id || null,
   });
   if (error) return { error: error.message };
   revalidatePath("/inventory", "layout");
