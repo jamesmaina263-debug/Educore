@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { cookies, headers } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { getRealClientIp } from "@/lib/get-real-client-ip";
+import { sendSecurityAlert } from "@/lib/security-alert";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { setSchoolSlugCookie, clearSchoolSlugCookie } from "@/lib/school-slug-cookie";
 
@@ -49,6 +50,13 @@ export async function login(
       }),
     ]);
     if (withinIpLimit === false || withinEmailLimit === false) {
+      void sendSecurityAlert("Login rate limit tripped", {
+        limit: withinIpLimit === false ? "per-IP (20/hr)" : "per-email (10/hr)",
+        ip: clientIp,
+        // Not the raw email -- enough to spot "one account under attack"
+        // in the alert without echoing full PII into Slack.
+        email_domain: email.toLowerCase().split("@").at(-1) ?? "unknown",
+      });
       return { error: "Too many login attempts. Please wait a while and try again." };
     }
   } catch {

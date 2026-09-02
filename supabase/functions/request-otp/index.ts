@@ -3,6 +3,7 @@ import { buildCorsHeaders } from "../_shared/cors.ts";
 import { getSmsProvider } from "../_shared/sms/index.ts";
 import { getEmailProvider } from "../_shared/email/index.ts";
 import { getRealClientIp } from "../_shared/getRealClientIp.ts";
+import { sendSecurityAlert } from "../_shared/securityAlert.ts";
 
 const KENYA_PHONE_RE = /^\+254\d{9}$/;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -94,12 +95,23 @@ Deno.serve(async (req) => {
     ]);
 
     if (withinPhoneLimit === false) {
+      void sendSecurityAlert("OTP request rate limit tripped", {
+        limit: "per-phone/email (10/day)",
+        // Masked -- enough to correlate repeated alerts for the same
+        // target without putting a full phone number/email in Slack.
+        target: `${phone.slice(0, 5)}***`,
+        ip: ipAddress,
+      });
       return json(
         { error: `Too many code requests for this ${channel === "sms" ? "number" : "address"} today. Please try again tomorrow.` },
         429,
       );
     }
     if (withinIpLimit === false) {
+      void sendSecurityAlert("OTP request rate limit tripped", {
+        limit: "per-IP (20/hr)",
+        ip: ipAddress,
+      });
       return json({ error: "Too many requests from this network. Please try again later." }, 429);
     }
 

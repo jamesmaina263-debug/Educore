@@ -4,6 +4,7 @@ import { headers } from "next/headers";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { safeStorageFilename } from "@/lib/storage-path";
 import { getRealClientIp } from "@/lib/get-real-client-ip";
+import { sendSecurityAlert } from "@/lib/security-alert";
 
 const KENYA_PHONE_RE = /^\+254\d{9}$/;
 const GUARDIAN_VERIFICATION_PURPOSE = "guardian_verification";
@@ -91,6 +92,10 @@ export async function submitApplication(
     p_window_seconds: 3_600,
   });
   if (withinLimit === false) {
+    void sendSecurityAlert("Admission-application rate limit tripped", {
+      limit: "per-IP (10/hr)",
+      ip: clientIp,
+    });
     return { error: "Too many applications submitted from this network. Please try again later." };
   }
 
