@@ -24,6 +24,9 @@ on:
 jobs:
   check-drift:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
     steps:
       - uses: actions/checkout@v4
 
@@ -49,6 +52,29 @@ jobs:
           } >> "$GITHUB_ENV"
 
       - name: Compare against supabase/migrations/
+        id: compare
         env:
           PROD_MIGRATIONS_JSON: ${{ env.json }}
-        run: python3 scripts/check_migration_drift.py
+        run: |
+          set +e
+          python3 scripts/check_migration_drift.py > /tmp/drift_output.txt 2>&1
+          code=$?
+          cat /tmp/drift_output.txt
+          exit $code
+
+      # The raw Actions log for a failed run isn't easy to get at outside the GitHub UI
+      # (no stable API for it). Posting the script's own stdout as a PR comment when it
+      # fails means the exact missing-version detail is visible right where the check
+      # ran, not just a pass/fail dot -- doesn't change what the check itself decides.
+      - name: Post drift summary as PR comment on failure
+        if: failure() && github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          {
+            echo "### Migration drift check failed"
+            echo '```'
+            cat /tmp/drift_output.txt
+            echo '```'
+          } > /tmp/drift_comment.md
+          gh pr comment "${{ github.event.pull_request.number }}" --body-file /tmp/drift_comment.md --repo "${{ github.repository }}"
