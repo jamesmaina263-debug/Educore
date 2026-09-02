@@ -69,6 +69,24 @@ jobs:
       # Looks up an open PR for the current ref rather than trusting github.event.pull_request
       # directly, so this also works when the run comes from workflow_dispatch or a push to a
       # branch with an open PR, not just a genuine pull_request-triggered run.
+      - name: TEMP DEBUG - fetch statements for the known-missing version
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          STATEMENTS=$(psql "${{ secrets.SUPABASE_DB_URL }}" -Atqc \
+            "select coalesce(array_to_string(statements, E'\n---STATEMENT---\n'), '(no statements recorded)') from supabase_migrations.schema_migrations where version = '20260902045542';")
+          {
+            echo "### TEMP DEBUG: statements for version 20260902045542"
+            echo '```sql'
+            echo "$STATEMENTS"
+            echo '```'
+          } > /tmp/debug_statements.md
+          PR_NUMBER=$(gh pr list --repo "${{ github.repository }}" --head "${{ github.ref_name }}" --state open --json number --jq '.[0].number // empty')
+          if [ -n "$PR_NUMBER" ]; then
+            gh pr comment "$PR_NUMBER" --body-file /tmp/debug_statements.md --repo "${{ github.repository }}"
+          fi
+
       - name: Post drift summary as PR comment on failure
         if: failure()
         env:
