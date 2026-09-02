@@ -1,5 +1,5 @@
 // deno-lint-ignore-file no-explicit-any
-import type { SupabaseClient } from "jsr:@supabase/supabase-js@2";
+import type { SupabaseClient } from "jsr:@supabase/supabase-js@2.112.4";
 
 // Deliberately channel-neutral: nothing in this file (or anywhere under _shared/chatbot/) knows
 // about Twilio, WhatsApp, or HTTP form-encoding. A future SMS or web-chat channel builds one of
