@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { safeStorageFilename } from "@/lib/storage-path";
 
 type ActionResult = { error: string } | { success: true };
 
@@ -367,4 +368,97 @@ export async function approveMarks(input: { exam_id: string; class_id: string; s
   if (error) return { error: error.message };
   revalidatePath("/exams", "layout");
   return { success: true };
+}
+
+// ---------------------------------------------------------------------------
+// Competency evidence/portfolio -- files attached as proof of a specific
+// sub-strand competency_marks rating (CBC/CBE investigation, Phase 2).
+// Upload-then-record shape mirrors uploadAssignmentAttachmentAction exactly:
+// filename sanitised before it becomes a storage key, row only recorded
+// after a successful upload, storage object cleaned up if the insert fails.
+// No new permission introduced -- RLS on both the table and the bucket
+// (20260902203459) reuses marks.write/marks.write_any, the same authority
+// that could write the underlying rating.
+// ---------------------------------------------------------------------------
+
+export async function uploadCompetencyEvidenceAction(
+  competencyMarkId: string,
+  formData: FormData,
+): Promise<ActionResult> {
+  const file = formData.get("file");
+  if (!(file instanceof File) || file.size === 0) return { error: "No file provided." };
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  const { data: schoolUser } = await supabase
+    .from("school_users")
+    .select("id, school_id")
+    .eq("auth_user_id", user?.id ?? "")
+    .maybeSingle();
+  if (!schoolUser) return { error: "Could not resolve your account." };
+
+  const path = `${schoolUser.school_id}/${competencyMarkId}/${Date.now()}-${safeStorageFilename(file.name)}`;
+
+  const { error: uploadError } = await supabase.storage.from("competency-evidence").upload(path, file);
+  if (uploadError) return { error: uploadError.message };
+
+  const { error: insertError } = await supabase.from("competency_evidence").insert({
+    school_id: schoolUser.school_id,
+    competency_mark_id: competencyMarkId,
+    storage_path: path,
+    file_name: file.name,
+    uploaded_by: schoolUser.id,
+  });
+  if (insertError) {
+    await supabase.storage.from("competency-evidence").remove([path]);
+    return { error: insertError.message };
+  }
+
+  revalidatePath("/exams/marks");
+  return { success: true };
+}
+
+export async function deleteCompetencyEvidenceAction(evidenceId: string): Promise<ActionResult> {
+  const supabase = await createClient();
+  const { data: row, error: fetchError } = await supabase
+    .from("competency_evidence")
+    .select("storage_path")
+    .eq("id", evidenceId)
+    .maybeSingle();
+  if (fetchError) return { error: fetchError.message };
+  if (!row) return { error: "Evidence not found." };
+
+  const { error } = await supabase.from("competency_evidence").delete().eq("id", evidenceId);
+  if (error) return { error: error.message };
+
+  await supabase.storage.from("competency-evidence").remove([row.storage_path]);
+  revalidatePath("/exams/marks");
+  return { success: true };
+}
+
+export async function listCompetencyEvidenceAction(
+  competencyMarkId: string,
+): Promise<{ items: { id: string; file_name: string; storage_path: string; created_at: string }[] } | { error: string }> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("competency_evidence")
+    .select("id, file_name, storage_path, created_at")
+    .eq("competency_mark_id", competencyMarkId)
+    .order("created_at", { ascending: false });
+  if (error) return { error: error.message };
+  return { items: data ?? [] };
+}
+
+/**
+ * Signed download link for a competency-evidence file -- bucket-level RLS
+ * (mirroring the competency_marks visibility rules) already gates each path
+ * independently, same convention as getAssignmentAttachmentUrlAction.
+ */
+export async function getCompetencyEvidenceUrlAction(storagePath: string): Promise<{ url: string } | { error: string }> {
+  const supabase = await createClient();
+  const { data, error } = await supabase.storage.from("competency-evidence").createSignedUrl(storagePath, 60 * 5);
+  if (error || !data) return { error: error?.message ?? "Could not create download link." };
+  return { url: data.signedUrl };
 }

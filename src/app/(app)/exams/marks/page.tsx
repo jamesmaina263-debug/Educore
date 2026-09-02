@@ -146,7 +146,7 @@ export default async function MarksPage({
       const { data: existingCompetency } = subStrandIds.length
         ? await supabase
             .from("competency_marks")
-            .select("student_id, sub_strand_id, band_id")
+            .select("id, student_id, sub_strand_id, band_id")
             .eq("exam_id", exam.id)
             .in("sub_strand_id", subStrandIds)
         : { data: [] };
