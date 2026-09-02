@@ -136,13 +136,26 @@ export function AdmissionDetailsStep({
       previous_class: form.previous_class ?? undefined,
       ...(isWalkIn ? { walk_in_screening_confirmed: form.walk_in_screening_confirmed } : {}),
     };
+    // OS-09: snapshot of the same fields as `initial` last loaded them (null, not undefined, to
+    // match what a fresh DB read returns -- see mergeOfflineFields in actions.ts for the
+    // comparison this feeds).
+    const base: Record<string, unknown> = {
+      admission_type: initial.admission_type,
+      academic_year_id: initial.academic_year_id,
+      term_id: initial.term_id,
+      boarding_preference: initial.boarding_preference,
+      transport_required: initial.transport_required,
+      previous_school: initial.previous_school,
+      previous_class: initial.previous_class,
+      ...(isWalkIn ? { walk_in_screening_confirmed: initial.walk_in_screening_confirmed } : {}),
+    };
     startTransition(async () => {
       if (!online) {
-        await queueMutation("admissions", "updateAdmissionDetails", { applicationId, input });
+        await queueMutation("admissions", "updateAdmissionDetails", { applicationId, input, base });
         setSaved(true);
         return;
       }
-      const result = await updateAdmissionDetails(applicationId, input);
+      const result = await updateAdmissionDetails(applicationId, input, base);
       if ("error" in result) { setError(result.error); return; }
       setSaved(true);
       router.refresh();
@@ -282,17 +295,26 @@ export function StudentStep({
       date_of_birth: identity.date_of_birth,
       gender: identity.gender as "male" | "female",
     };
+    // OS-09: base snapshot from applicantSummary as originally loaded (null, matching a fresh
+    // DB read, not the ""-fallback used for the controlled form inputs above).
+    const base: Record<string, unknown> = {
+      first_name: applicantSummary.first_name ?? null,
+      last_name: applicantSummary.last_name ?? null,
+      other_names: applicantSummary.other_names ?? null,
+      date_of_birth: applicantSummary.date_of_birth ?? null,
+      gender: applicantSummary.gender ?? null,
+    };
     startTransition(async () => {
       if (!online) {
         // Duplicate-checking and student creation (the next actions in this
         // step) both need a live connection regardless -- this just makes
         // sure typed-in identity details aren't lost if the connection was
         // already down before the officer got that far.
-        await queueMutation("admissions", "updateApplicantIdentity", { applicationId, input });
+        await queueMutation("admissions", "updateApplicantIdentity", { applicationId, input, base });
         setEditingIdentity(false);
         return;
       }
-      const result = await updateApplicantIdentity(applicationId, input);
+      const result = await updateApplicantIdentity(applicationId, input, base);
       if ("error" in result) { setError(result.error); return; }
       setEditingIdentity(false);
       router.refresh();
@@ -917,13 +939,23 @@ export function HealthStep({
       emergency_contact_phone: form.emergency_contact_phone ?? undefined,
       notes: form.notes ?? undefined,
     };
+    // OS-09: base snapshot from `initial` as loaded (null, matching medical_records' actual
+    // column values on a fresh read).
+    const base: Record<string, unknown> = {
+      blood_group: initial.blood_group,
+      allergies: initial.allergies,
+      conditions: initial.conditions,
+      emergency_contact_name: initial.emergency_contact_name,
+      emergency_contact_phone: initial.emergency_contact_phone,
+      notes: initial.notes,
+    };
     startTransition(async () => {
       if (!online) {
-        await queueMutation("admissions", "saveHealthProfileForApplication", { applicationId, input });
+        await queueMutation("admissions", "saveHealthProfileForApplication", { applicationId, input, base });
         setSaved(true);
         return;
       }
-      const result = await saveHealthProfileForApplication(applicationId, input);
+      const result = await saveHealthProfileForApplication(applicationId, input, base);
       if ("error" in result) { setError(result.error); return; }
       setSaved(true);
       router.refresh();
