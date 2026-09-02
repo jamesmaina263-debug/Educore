@@ -36,9 +36,27 @@ export async function createIncidentAction(formData: FormData): Promise<ActionRe
   const visibleToGuardian = formData.get("visible_to_guardian") === "on";
   const staffInvolvedRaw = String(formData.get("staff_involved") ?? "");
   const staffInvolved = staffInvolvedRaw.split(",").map((s) => s.trim()).filter(Boolean);
+  // Idempotency: injected once per submit by runAction() in discipline-welfare-section.tsx,
+  // same pattern as health's client_mutation_id -- a queued offline retry after a lost ack
+  // is recognized here and short-circuited before it can create a duplicate incident (and
+  // a duplicate set of discipline_incident_staff rows alongside it).
+  const clientMutationId = String(formData.get("client_mutation_id") ?? "") || null;
 
   if (!studentId || !category || !description) {
     return { error: "Student, category, and description are required." };
+  }
+
+  if (clientMutationId) {
+    const { data: existing } = await supabase
+      .from("discipline_records")
+      .select("id")
+      .eq("school_id", schoolUser.school_id)
+      .eq("client_mutation_id", clientMutationId)
+      .maybeSingle();
+    if (existing) {
+      revalidatePath("/discipline", "layout");
+      return { success: true };
+    }
   }
 
   const { data: incident, error } = await supabase
@@ -55,6 +73,7 @@ export async function createIncidentAction(formData: FormData): Promise<ActionRe
       visible_to_guardian: visibleToGuardian,
       recorded_by: schoolUser.id,
       reported_by: schoolUser.id,
+      client_mutation_id: clientMutationId,
     })
     .select("id")
     .single();
@@ -84,8 +103,23 @@ export async function createCaseAction(formData: FormData): Promise<ActionResult
   const studentId = String(formData.get("student_id") ?? "");
   const title = String(formData.get("title") ?? "").trim();
   const assignedOfficer = String(formData.get("assigned_officer") ?? "") || null;
+  // Idempotency: same client_mutation_id pattern as createIncidentAction above.
+  const clientMutationId = String(formData.get("client_mutation_id") ?? "") || null;
 
   if (!studentId || !title) return { error: "Student and a case title are required." };
+
+  if (clientMutationId) {
+    const { data: existing } = await supabase
+      .from("discipline_cases")
+      .select("id")
+      .eq("school_id", schoolUser.school_id)
+      .eq("client_mutation_id", clientMutationId)
+      .maybeSingle();
+    if (existing) {
+      revalidatePath("/discipline", "layout");
+      return { success: true };
+    }
+  }
 
   const { error } = await supabase.from("discipline_cases").insert({
     school_id: schoolUser.school_id,
@@ -93,6 +127,7 @@ export async function createCaseAction(formData: FormData): Promise<ActionResult
     title,
     assigned_officer: assignedOfficer,
     opened_by: schoolUser.id,
+    client_mutation_id: clientMutationId,
   });
   if (error) return { error: error.message };
 
@@ -143,8 +178,23 @@ export async function addDisciplinaryActionAction(formData: FormData): Promise<A
   const description = String(formData.get("description") ?? "").trim();
   const startDate = String(formData.get("start_date") ?? "") || null;
   const endDate = String(formData.get("end_date") ?? "") || null;
+  // Idempotency: same client_mutation_id pattern as createIncidentAction above.
+  const clientMutationId = String(formData.get("client_mutation_id") ?? "") || null;
 
   if (!studentId || !actionTypeId) return { error: "Student and action type are required." };
+
+  if (clientMutationId) {
+    const { data: existing } = await supabase
+      .from("disciplinary_actions")
+      .select("id")
+      .eq("school_id", schoolUser.school_id)
+      .eq("client_mutation_id", clientMutationId)
+      .maybeSingle();
+    if (existing) {
+      revalidatePath("/discipline", "layout");
+      return { success: true };
+    }
+  }
 
   const { error } = await supabase.from("disciplinary_actions").insert({
     school_id: schoolUser.school_id,
@@ -155,6 +205,7 @@ export async function addDisciplinaryActionAction(formData: FormData): Promise<A
     start_date: startDate,
     end_date: endDate,
     issued_by: schoolUser.id,
+    client_mutation_id: clientMutationId,
   });
   if (error) return { error: error.message };
 
@@ -174,9 +225,24 @@ export async function createWelfareConcernAction(formData: FormData): Promise<Ac
   const description = String(formData.get("description") ?? "").trim();
   const counsellingReferral = formData.get("counselling_referral") === "on";
   const referredTo = String(formData.get("referred_to") ?? "").trim();
+  // Idempotency: same client_mutation_id pattern as createIncidentAction above.
+  const clientMutationId = String(formData.get("client_mutation_id") ?? "") || null;
 
   if (!studentId || !concernType || !description) {
     return { error: "Student, concern type, and description are required." };
+  }
+
+  if (clientMutationId) {
+    const { data: existing } = await supabase
+      .from("welfare_concerns")
+      .select("id")
+      .eq("school_id", schoolUser.school_id)
+      .eq("client_mutation_id", clientMutationId)
+      .maybeSingle();
+    if (existing) {
+      revalidatePath("/discipline", "layout");
+      return { success: true };
+    }
   }
 
   const { error } = await supabase.from("welfare_concerns").insert({
@@ -187,6 +253,7 @@ export async function createWelfareConcernAction(formData: FormData): Promise<Ac
     counselling_referral: counsellingReferral,
     referred_to: referredTo || null,
     raised_by: schoolUser.id,
+    client_mutation_id: clientMutationId,
   });
   if (error) return { error: error.message };
 
@@ -231,9 +298,24 @@ export async function createSafeguardingReportAction(formData: FormData): Promis
   const studentId = String(formData.get("student_id") ?? "");
   const reportType = String(formData.get("report_type") ?? "");
   const description = String(formData.get("description") ?? "").trim();
+  // Idempotency: same client_mutation_id pattern as createIncidentAction above.
+  const clientMutationId = String(formData.get("client_mutation_id") ?? "") || null;
 
   if (!studentId || !reportType || !description) {
     return { error: "Student, report type, and description are required." };
+  }
+
+  if (clientMutationId) {
+    const { data: existing } = await supabase
+      .from("safeguarding_reports")
+      .select("id")
+      .eq("school_id", schoolUser.school_id)
+      .eq("client_mutation_id", clientMutationId)
+      .maybeSingle();
+    if (existing) {
+      revalidatePath("/discipline", "layout");
+      return { success: true };
+    }
   }
 
   const { error } = await supabase.from("safeguarding_reports").insert({
@@ -242,6 +324,7 @@ export async function createSafeguardingReportAction(formData: FormData): Promis
     report_type: reportType,
     description,
     reported_by: schoolUser.id,
+    client_mutation_id: clientMutationId,
   });
   if (error) return { error: error.message };
 

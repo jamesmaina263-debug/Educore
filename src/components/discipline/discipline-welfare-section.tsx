@@ -190,6 +190,15 @@ export function DisciplineWelfareSection({
     mutationType?: string,
   ) {
     setError(null);
+    // Idempotency: generated once per submit, before either branch, so a queued-then-
+    // replayed retry (lost ack after the original request actually landed) reuses the
+    // same key instead of creating a duplicate incident/case/action/concern/report --
+    // same pattern as health's client_mutation_id. Only the 5 create-and-queue actions
+    // pass mutationType; the 3 update actions don't need this (already idempotent by
+    // targeting an existing row's id).
+    if (mutationType) {
+      formData.set("client_mutation_id", crypto.randomUUID());
+    }
     startTransition(async () => {
       if (!online && mutationType) {
         await queueMutation("discipline", mutationType, formDataToObject(formData));
