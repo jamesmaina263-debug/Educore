@@ -66,6 +66,36 @@ jobs:
       # (no stable API for it). Posting the script's own stdout as a PR comment when it
       # fails means the exact missing-version detail is visible right where the check
       # ran, not just a pass/fail dot -- doesn't change what the check itself decides.
+      - name: Fetch recorded statements for any missing versions
+        if: failure() && steps.compare.outcome == 'failure'
+        run: |
+          # Matches check_migration_drift.py's exact `f"  {v}  ({name})"` line format for
+          # the "missing from repo" case. Won't match the collision-failure case's different
+          # format (`f"  {v}:"` + nested `- {name}` lines), so this only fires for the case
+          # where fetching statements actually makes sense.
+          VERSIONS=$(grep -oP '^  \K[0-9]{8,14}(?=  \()' /tmp/drift_output.txt | sort -u)
+          > /tmp/missing_statements.md
+          if [ -z "$VERSIONS" ]; then
+            echo "(No individually-missing versions parsed from the output -- likely a collision failure instead. See the drift output above for detail.)" > /tmp/missing_statements.md
+          else
+            echo "### Recorded statements for the missing version(s)" >> /tmp/missing_statements.md
+            echo "" >> /tmp/missing_statements.md
+            echo "Reconstruct any reconciliation migration from these verbatim -- not from live schema introspection (see the drift output above for why)." >> /tmp/missing_statements.md
+            for V in $VERSIONS; do
+              NAME=$(psql "${{ secrets.SUPABASE_DB_URL }}" -Atqc \
+                "select coalesce(name, '(no name recorded)') from supabase_migrations.schema_migrations where version = '$V';")
+              STMT=$(psql "${{ secrets.SUPABASE_DB_URL }}" -Atqc \
+                "select coalesce(array_to_string(statements, E'\n---STATEMENT---\n'), '(no statements recorded)') from supabase_migrations.schema_migrations where version = '$V';")
+              {
+                echo ""
+                echo "#### ${V} (${NAME})"
+                echo '```sql'
+                echo "$STMT"
+                echo '```'
+              } >> /tmp/missing_statements.md
+            done
+          fi
+
       # Looks up an open PR for the current ref rather than trusting github.event.pull_request
       # directly, so this also works when the run comes from workflow_dispatch or a push to a
       # branch with an open PR, not just a genuine pull_request-triggered run.
@@ -79,6 +109,8 @@ jobs:
             echo '```'
             cat /tmp/drift_output.txt
             echo '```'
+            echo ""
+            cat /tmp/missing_statements.md 2>/dev/null || true
           } > /tmp/drift_comment.md
           PR_NUMBER=$(gh pr list --repo "${{ github.repository }}" --head "${{ github.ref_name }}" --state open --json number --jq '.[0].number // empty')
           if [ -n "$PR_NUMBER" ]; then
