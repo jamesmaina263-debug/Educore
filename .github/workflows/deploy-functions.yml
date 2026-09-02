@@ -33,7 +33,12 @@ jobs:
 
       - uses: supabase/setup-cli@v1
         with:
-          version: latest
+          # Pinned per Supabase's own supply-chain guidance (avoid floating tags for CI
+          # tooling, same principle as pinning application dependencies) -- version: latest
+          # also has a documented history of breaking builds outright when the "latest
+          # release" lookup and the actual published assets fall out of sync
+          # (supabase/setup-cli#5257). Bump deliberately, as a reviewed diff, not silently.
+          version: "2.116.0"
 
       - name: Deploy functions
         env:

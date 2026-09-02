@@ -1,5 +1,5 @@
 // deno-lint-ignore-file no-explicit-any
-import type { SupabaseClient } from "jsr:@supabase/supabase-js@2";
+import type { SupabaseClient } from "jsr:@supabase/supabase-js@2.112.4";
 
 // The one gate every student-scoped tool call goes through, called by the dispatcher immediately
 // before invoking a tool -- not just once when the conversation starts. resolveChildContext

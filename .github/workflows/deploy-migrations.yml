@@ -48,7 +48,10 @@ jobs:
 
       - uses: supabase/setup-cli@v1
         with:
-          version: latest
+          # Pinned per Supabase's own supply-chain guidance -- see deploy-functions.yml for
+          # the full rationale (this workflow had the identical unpinned-CLI-version issue).
+          # Bump deliberately, as a reviewed diff, not silently.
+          version: "2.116.0"
 
       - name: Push migrations
         run: |

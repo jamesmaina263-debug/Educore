@@ -1,5 +1,5 @@
 // deno-lint-ignore-file no-explicit-any
-import type { SupabaseClient } from "jsr:@supabase/supabase-js@2";
+import type { SupabaseClient } from "jsr:@supabase/supabase-js@2.112.4";
 
 export interface GuardianChild {
   student_id: string;
