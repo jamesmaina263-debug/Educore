@@ -23,7 +23,7 @@ const FOOTER_GROUPS = [
       { href: "/about", label: "About" },
       { href: "/contact", label: "Contact" },
       { href: "/faq", label: "FAQ" },
-      { href: "/blog/best-school-management-system-kenya", label: "Blog" },
+      { href: "/blog", label: "Blog" },
     ],
   },
   {

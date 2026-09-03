@@ -242,11 +242,16 @@ export default async function PortalPage({ searchParams }: { searchParams: Promi
   }
 
   let todaysTimetable: { subject_name: string; start_time: string; end_time: string }[] = [];
-  if (roleName === "student") {
+  if (selected?.current_class_id) {
     // Postgres ISO day-of-week (1=Monday..7=Sunday) — no prior convention exists in the codebase,
     // since the Timetable UI itself was deferred in Phase 1 (schema only). Chosen as the standard
     // Mon-Fri school-week default; whichever convention actually populates timetable_slots data
     // later should match this.
+    //
+    // PR-03 fix (2026-09-03): this used to be gated to roleName === "student", which meant a
+    // guardian viewing their child's page never saw a timetable at all — only a student logging
+    // in directly did. Broadened to any viewer with a resolved `selected` student (parent or
+    // student), since the RLS policy on timetable_slots already scopes correctly for both.
     const { data: slots } = await supabase
       .from("timetable_slots")
       .select("start_time, end_time, subjects(name)")
@@ -346,10 +351,10 @@ export default async function PortalPage({ searchParams }: { searchParams: Promi
         <p className="mt-1 text-lg font-semibold">{attendanceRate !== null ? `${attendanceRate}%` : "No records yet"}</p>
       </div>
 
-      {roleName === "student" && (
+      {selected?.current_class_id && (
         <div className="panel p-4">
           <p className="label-eyebrow mb-2">
-            Today ({WEEKDAY_NAMES[new Date().getDay() === 0 ? 7 : new Date().getDay()]})
+            Timetable — Today ({WEEKDAY_NAMES[new Date().getDay() === 0 ? 7 : new Date().getDay()]})
           </p>
           {todaysTimetable.length === 0 ? (
             <p className="text-sm text-muted-foreground">No classes scheduled for today yet.</p>
