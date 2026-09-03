@@ -172,6 +172,7 @@ const campusesChildren: NavChild[] = [
 
 const integrationsChildren: NavChild[] = [
   { label: "NEMIS", href: "/integrations/nemis", icon: Landmark },
+  { label: "KNEC CBA", href: "/integrations/knec", icon: ClipboardCheck },
   { label: "M-Pesa", href: "/integrations/mpesa", icon: Smartphone },
 ];
 
