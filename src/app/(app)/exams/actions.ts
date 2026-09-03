@@ -235,6 +235,50 @@ export async function createCurriculumSubStrand(input: {
   return { success: true };
 }
 
+/**
+ * KICD curriculum content (CBC/CBE investigation, roadmap Item 1) -- learning
+ * outcomes / key inquiry questions / rubric text for a sub-strand. Deliberately
+ * a plain text-field save, same authority (academics.write, via
+ * curriculum_sub_strands_write RLS) as renaming a strand/sub-strand already
+ * required. This action never fetches or generates KICD content itself --
+ * it only saves whatever the caller typed/pasted. content_source defaults to
+ * 'draft' whenever real KICD-style content is entered, so it does not read as
+ * confirmed-licensed until someone deliberately reclassifies it -- 'school_authored'
+ * stays the row default until this is ever called.
+ */
+export async function updateCurriculumSubStrandContent(input: {
+  sub_strand_id: string;
+  learning_outcomes: string | null;
+  key_inquiry_questions: string | null;
+  rubric_text: string | null;
+  content_source: "school_authored" | "kicd_licensed" | "draft";
+}): Promise<ActionResult> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  const { data: schoolUser } = await supabase
+    .from("school_users")
+    .select("id")
+    .eq("auth_user_id", user?.id ?? "")
+    .maybeSingle();
+
+  const { error } = await supabase
+    .from("curriculum_sub_strands")
+    .update({
+      learning_outcomes: input.learning_outcomes,
+      key_inquiry_questions: input.key_inquiry_questions,
+      rubric_text: input.rubric_text,
+      content_source: input.content_source,
+      content_updated_by: schoolUser?.id ?? null,
+      content_updated_at: new Date().toISOString(),
+    })
+    .eq("id", input.sub_strand_id);
+  if (error) return { error: error.message };
+  revalidatePath("/exams/marks");
+  return { success: true };
+}
+
 export async function submitCompetencyMarks(input: {
   exam_id: string;
   class_id: string;

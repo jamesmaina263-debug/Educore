@@ -4,11 +4,13 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import {
   createCurriculumStrand,
   createCurriculumSubStrand,
+  updateCurriculumSubStrandContent,
   submitCompetencyMarks,
   editCompetencyMark,
   uploadCompetencyEvidenceAction,
@@ -23,7 +25,14 @@ import { ExamsOfflineBanner } from "./offline-banner";
 export interface StrandOption {
   id: string;
   name: string;
-  sub_strands: { id: string; name: string }[];
+  sub_strands: {
+    id: string;
+    name: string;
+    learning_outcomes: string | null;
+    key_inquiry_questions: string | null;
+    rubric_text: string | null;
+    content_source: "school_authored" | "kicd_licensed" | "draft";
+  }[];
 }
 
 export interface CompetencyRatingRow {
@@ -161,6 +170,99 @@ function EvidenceButton({ competencyMarkId, canEnter }: { competencyMarkId: stri
               <input type="file" className="hidden" disabled={pending} onChange={handleUpload} />
             </label>
           )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * KICD curriculum content editor (CBC/CBE investigation, roadmap Item 1) --
+ * a plain text-field save for a sub-strand's learning outcomes / key inquiry
+ * questions / rubric text. Never fetches or generates this content itself --
+ * the person managing curriculum types or pastes it in. content_source
+ * defaults to 'draft' the first time real content is saved here, so it never
+ * silently reads as confirmed-licensed KICD text -- 'kicd_licensed' has to
+ * be picked deliberately, once reuse is actually confirmed permitted.
+ */
+function SubStrandContentEditor({
+  subStrand,
+}: {
+  subStrand: {
+    id: string;
+    name: string;
+    learning_outcomes: string | null;
+    key_inquiry_questions: string | null;
+    rubric_text: string | null;
+    content_source: "school_authored" | "kicd_licensed" | "draft";
+  };
+}) {
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+  const [learningOutcomes, setLearningOutcomes] = useState(subStrand.learning_outcomes ?? "");
+  const [keyInquiryQuestions, setKeyInquiryQuestions] = useState(subStrand.key_inquiry_questions ?? "");
+  const [rubricText, setRubricText] = useState(subStrand.rubric_text ?? "");
+  const [contentSource, setContentSource] = useState(subStrand.content_source);
+
+  function handleSave() {
+    setError(null);
+    startTransition(async () => {
+      const result = await updateCurriculumSubStrandContent({
+        sub_strand_id: subStrand.id,
+        learning_outcomes: learningOutcomes.trim() || null,
+        key_inquiry_questions: keyInquiryQuestions.trim() || null,
+        rubric_text: rubricText.trim() || null,
+        content_source: contentSource,
+      });
+      if ("error" in result) return setError(result.error);
+      setOpen(false);
+      router.refresh();
+    });
+  }
+
+  return (
+    <div className="pl-8">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="text-xs text-muted-foreground underline decoration-dotted hover:text-foreground"
+      >
+        {subStrand.name} — {open ? "hide content" : "edit content"}
+        {subStrand.content_source !== "school_authored" && ` (${subStrand.content_source})`}
+      </button>
+      {open && (
+        <div className="mt-2 flex flex-col gap-2 rounded-md border border-border bg-background p-3">
+          {error && <p className="text-xs text-danger">{error}</p>}
+          <label className="text-xs font-medium text-muted-foreground">
+            Learning outcomes
+            <Textarea value={learningOutcomes} onChange={(e) => setLearningOutcomes(e.target.value)} rows={3} className="mt-1" />
+          </label>
+          <label className="text-xs font-medium text-muted-foreground">
+            Key inquiry questions
+            <Textarea value={keyInquiryQuestions} onChange={(e) => setKeyInquiryQuestions(e.target.value)} rows={2} className="mt-1" />
+          </label>
+          <label className="text-xs font-medium text-muted-foreground">
+            Rubric text (what each competency level looks like)
+            <Textarea value={rubricText} onChange={(e) => setRubricText(e.target.value)} rows={3} className="mt-1" />
+          </label>
+          <label className="text-xs font-medium text-muted-foreground">
+            Content source
+            <Select value={contentSource} onValueChange={(v) => setContentSource(v as typeof contentSource)}>
+              <SelectTrigger className="mt-1 w-64">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="school_authored">School-authored (written by us)</SelectItem>
+                <SelectItem value="draft">Draft (KICD-style, not yet confirmed licensed)</SelectItem>
+                <SelectItem value="kicd_licensed">KICD-licensed (reuse confirmed permitted)</SelectItem>
+              </SelectContent>
+            </Select>
+          </label>
+          <Button size="sm" disabled={pending} onClick={handleSave} className="w-fit">
+            {pending ? "Saving…" : "Save content"}
+          </Button>
         </div>
       )}
     </div>
@@ -311,17 +413,22 @@ export function CompetencyMarksSection({
             </Button>
           </div>
           {strands.map((s) => (
-            <div key={s.id} className="flex items-end gap-2 pl-4">
-              <span className="text-sm text-muted-foreground">{s.name} →</span>
-              <Input
-                placeholder="New sub-strand name"
-                value={newSubStrand[s.id] ?? ""}
-                onChange={(e) => setNewSubStrand((prev) => ({ ...prev, [s.id]: e.target.value }))}
-                className="max-w-xs"
-              />
-              <Button size="sm" variant="ghost" disabled={pending} onClick={() => handleAddSubStrand(s.id)}>
-                Add sub-strand
-              </Button>
+            <div key={s.id} className="flex flex-col gap-2 pl-4">
+              <div className="flex items-end gap-2">
+                <span className="text-sm text-muted-foreground">{s.name} →</span>
+                <Input
+                  placeholder="New sub-strand name"
+                  value={newSubStrand[s.id] ?? ""}
+                  onChange={(e) => setNewSubStrand((prev) => ({ ...prev, [s.id]: e.target.value }))}
+                  className="max-w-xs"
+                />
+                <Button size="sm" variant="ghost" disabled={pending} onClick={() => handleAddSubStrand(s.id)}>
+                  Add sub-strand
+                </Button>
+              </div>
+              {s.sub_strands.map((ss) => (
+                <SubStrandContentEditor key={ss.id} subStrand={ss} />
+              ))}
             </div>
           ))}
         </div>
