@@ -133,6 +133,24 @@ export async function resetKnecCbaExportItem(competencyMarkId: string, notes: st
   return { success: true as const };
 }
 
+export async function dismissKnecCbaWindowReminder(windowId: string): Promise<ActionResult> {
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("dismiss_knec_cba_window_reminder", { p_window_id: windowId });
+  if (error) return { error: error.message };
+
+  revalidatePath("/integrations/knec");
+  return { success: true as const };
+}
+
+export async function setKnecCbaRemindersEnabled(enabled: boolean): Promise<ActionResult> {
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("set_knec_cba_reminders_enabled", { p_enabled: enabled });
+  if (error) return { error: error.message };
+
+  revalidatePath("/integrations/knec");
+  return { success: true as const };
+}
+
 // client can generate the KNEC-ready .xlsx download -- kept server-side since RLS on
 // knec_cba_export_batch_items only allows select, and this joins in current student/subject
 // data the snapshot table doesn't carry (same rationale as getNemisBatchExportRows).
