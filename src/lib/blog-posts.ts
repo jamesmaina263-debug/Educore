@@ -30,4 +30,11 @@ export const BLOG_POSTS: BlogPostSummary[] = [
       "How CBC/CBE competency-based assessment works in Kenya, the roles KICD and KNEC actually play, and how EduCore turns strand-level assessment records into real performance insight for schools.",
     publishedOn: "2026-09-03",
   },
+  {
+    slug: "parent-communication-whatsapp-sms-kenya-schools",
+    title: "Parent Communication for Kenyan Schools: Beyond the WhatsApp Group",
+    description:
+      "Why the class WhatsApp group breaks down as a school grows, and how EduCore handles parent communication instead — structured teacher-to-parent items, a two-way WhatsApp assistant, targeted announcements, and fee alerts a human always approves first.",
+    publishedOn: "2026-09-03",
+  },
 ];

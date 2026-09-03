@@ -28,6 +28,7 @@ const ROUTES: { path: string; priority: number; changeFrequency: MetadataRoute.S
   { path: "/blog", priority: 0.6, changeFrequency: "weekly" },
   { path: "/blog/best-school-management-system-kenya", priority: 0.6, changeFrequency: "monthly" },
   { path: "/blog/cbc-cbe-assessment-learner-performance-kenya", priority: 0.6, changeFrequency: "monthly" },
+  { path: "/blog/parent-communication-whatsapp-sms-kenya-schools", priority: 0.6, changeFrequency: "monthly" },
   { path: "/privacy", priority: 0.3, changeFrequency: "yearly" },
   { path: "/terms", priority: 0.3, changeFrequency: "yearly" },
 ];
