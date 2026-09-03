@@ -130,16 +130,35 @@ export default async function MarksPage({
     if (gradingModel === "cbc") {
       const { data: strandRows } = await supabase
         .from("curriculum_strands")
-        .select("id, name, level_order, curriculum_sub_strands(id, name, level_order)")
+        .select(
+          "id, name, level_order, curriculum_sub_strands(id, name, level_order, learning_outcomes, key_inquiry_questions, rubric_text, content_source)",
+        )
         .eq("subject_id", selectedSubjectId)
         .order("level_order");
 
       strandsWithSubStrands = (strandRows ?? []).map((s) => ({
         id: s.id,
         name: s.name,
-        sub_strands: ((s.curriculum_sub_strands as unknown as { id: string; name: string; level_order: number }[]) ?? [])
+        sub_strands: (
+          (s.curriculum_sub_strands as unknown as {
+            id: string;
+            name: string;
+            level_order: number;
+            learning_outcomes: string | null;
+            key_inquiry_questions: string | null;
+            rubric_text: string | null;
+            content_source: "school_authored" | "kicd_licensed" | "draft";
+          }[]) ?? []
+        )
           .sort((a, b) => a.level_order - b.level_order)
-          .map((ss) => ({ id: ss.id, name: ss.name })),
+          .map((ss) => ({
+            id: ss.id,
+            name: ss.name,
+            learning_outcomes: ss.learning_outcomes,
+            key_inquiry_questions: ss.key_inquiry_questions,
+            rubric_text: ss.rubric_text,
+            content_source: ss.content_source,
+          })),
       }));
 
       const subStrandIds = strandsWithSubStrands.flatMap((s) => s.sub_strands.map((ss) => ss.id));

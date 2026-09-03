@@ -31,6 +31,21 @@ type BandDraft = { label: string; min_score: string; max_score: string; points: 
 
 const emptyBand: BandDraft = { label: "", min_score: "", max_score: "", points: "" };
 
+// KJSEA-aligned 8-level achievement scale, highest first. Same shape numeric grading_scales
+// already supports (label/min/max/points) -- this is a preset that fills the existing form,
+// not a new table. Percentage bands per the KJSEA-aligned scale; worth a final cross-check
+// against KNEC's own published scale before relying on it for a real national submission.
+const KJSEA_PRESET: BandDraft[] = [
+  { label: "EE1", min_score: "90", max_score: "100", points: "8" },
+  { label: "EE2", min_score: "75", max_score: "89", points: "7" },
+  { label: "ME1", min_score: "58", max_score: "74", points: "6" },
+  { label: "ME2", min_score: "41", max_score: "57", points: "5" },
+  { label: "AE1", min_score: "31", max_score: "40", points: "4" },
+  { label: "AE2", min_score: "21", max_score: "30", points: "3" },
+  { label: "BE1", min_score: "11", max_score: "20", points: "2" },
+  { label: "BE2", min_score: "1", max_score: "10", points: "1" },
+];
+
 export function GradingScalesSection({
   scales,
   classes,
@@ -168,6 +183,19 @@ export function GradingScalesSection({
                     <Button type="button" size="sm" variant="ghost" onClick={() => setBands((p) => [...p, { ...emptyBand }])}>
                       + Add {modelType === "numeric" ? "band" : "level"}
                     </Button>
+                    {modelType === "numeric" && (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => {
+                          setName((n) => (n.trim() === "" ? "KJSEA 8-Level Scale" : n));
+                          setBands(KJSEA_PRESET.map((b) => ({ ...b })));
+                        }}
+                      >
+                        Use KJSEA 8-level preset
+                      </Button>
+                    )}
                   </div>
 
                   {error && <p className="text-sm text-danger">{error}</p>}

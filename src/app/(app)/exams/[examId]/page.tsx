@@ -7,6 +7,7 @@ import { AppShell } from "@/components/app-shell/app-shell";
 import { StatusBadge } from "@/components/status-badge";
 import { ExamScheduleSection, type ExamScheduleRow, type SubjectClassOption } from "@/components/exams/exam-schedule-section";
 import { ApproveMarksButton } from "@/components/exams/approve-marks-button";
+import { ExamComponentPicker } from "@/components/exams/exam-component-picker";
 
 export default async function ExamProgressPage({ params }: { params: Promise<{ examId: string }> }) {
   const { examId } = await params;
@@ -26,11 +27,20 @@ export default async function ExamProgressPage({ params }: { params: Promise<{ e
 
   const { data: exam } = await supabase
     .from("exams")
-    .select("id, name, exam_type, status, term_id, terms(name)")
+    .select("id, name, exam_type, status, term_id, component_id, terms(name)")
     .eq("id", examId)
     .maybeSingle();
   if (!exam) notFound();
   const termName = (exam.terms as unknown as { name: string } | null)?.name ?? "";
+
+  const { data: componentOptionRows } = await supabase
+    .from("assessment_components")
+    .select("id, name, weight_percent, assessment_schemes(name)")
+    .order("display_order");
+  const componentOptions = (componentOptionRows ?? []).map((c) => ({
+    id: c.id,
+    label: `${(c.assessment_schemes as unknown as { name: string } | null)?.name ?? ""} — ${c.name} (${c.weight_percent}%)`,
+  }));
 
   const [{ data: examClasses }, { data: examSubjects }] = await Promise.all([
     supabase.from("exam_classes").select("class_id, classes(id, name)").eq("exam_id", examId),
@@ -173,6 +183,15 @@ export default async function ExamProgressPage({ params }: { params: Promise<{ e
             {exam.exam_type} {termName ? `· ${termName}` : ""} · {exam.status === "open" ? "Open" : "Closed"}
           </p>
         </div>
+
+        {(componentOptions.length > 0 || exam.component_id) && (
+          <ExamComponentPicker
+            examId={exam.id}
+            currentComponentId={exam.component_id}
+            options={componentOptions}
+            canWrite={canWriteExams === true}
+          />
+        )}
 
         <div className="panel">
           <header className="flex items-center justify-between border-b border-border px-4 py-2.5">

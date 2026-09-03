@@ -23,4 +23,18 @@ export const BLOG_POSTS: BlogPostSummary[] = [
       "What actually separates a school management system schools keep using from one that gets abandoned for spreadsheets — M-Pesa, CBC grading, offline resilience, and real data isolation, evaluated for Kenyan schools.",
     publishedOn: "2026-08-30",
   },
+  {
+    slug: "cbc-cbe-assessment-learner-performance-kenya",
+    title: "CBC, CBE and Learner Performance: A Practical Guide for Kenyan Schools",
+    description:
+      "How CBC/CBE competency-based assessment works in Kenya, the roles KICD and KNEC actually play, and how EduCore turns strand-level assessment records into real performance insight for schools.",
+    publishedOn: "2026-09-03",
+  },
+  {
+    slug: "parent-communication-whatsapp-sms-kenya-schools",
+    title: "Parent Communication for Kenyan Schools: Beyond the WhatsApp Group",
+    description:
+      "Why the class WhatsApp group breaks down as a school grows, and how EduCore handles parent communication instead — structured teacher-to-parent items, a two-way WhatsApp assistant, targeted announcements, and fee alerts a human always approves first.",
+    publishedOn: "2026-09-03",
+  },
 ];

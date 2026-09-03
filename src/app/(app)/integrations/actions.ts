@@ -78,6 +78,20 @@ export async function updateKnecSchoolCode(code: string): Promise<ActionResult> 
   return { success: true as const };
 }
 
+// Column layout for the provisional KNEC CBA export -- routed through a SECURITY DEFINER
+// function (not a direct .update on schools) because schools_update's RLS policy is gated on
+// settings.branding.write, not knec.manage; see the migration's comment for details.
+export async function updateKnecCbaExportColumns(
+  columns: { key: string; label: string; enabled: boolean }[],
+): Promise<ActionResult> {
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("update_knec_cba_export_columns", { p_columns: columns });
+  if (error) return { error: error.message };
+
+  revalidatePath("/integrations/knec");
+  return { success: true as const };
+}
+
 export async function generateKnecCbaExportBatch(
   examId: string,
   classId: string | null,

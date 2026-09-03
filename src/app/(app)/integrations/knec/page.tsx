@@ -19,6 +19,7 @@ export default async function IntegrationsKnecPage() {
       <KnecPanel
         schoolName={ctx.schoolName}
         knecSchoolCode={ctx.knecSchoolCode}
+        exportColumns={ctx.exportColumns}
         exams={ctx.exams}
         pendingEntries={ctx.pendingEntries}
         batches={ctx.batches}
