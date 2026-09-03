@@ -1,6 +1,7 @@
 import { loadExamsContext } from "../_data";
 import { ModulePageShell } from "@/components/app-shell/module-page-shell";
 import { GradingScalesSection } from "@/components/exams/grading-scales-section";
+import { AssessmentSchemesSection } from "@/components/exams/assessment-schemes-section";
 
 export default async function ExamsGradingPage() {
   const ctx = await loadExamsContext();
@@ -14,7 +15,12 @@ export default async function ExamsGradingPage() {
       section="Grading Scales"
       title="Grading Scales"
     >
-      <GradingScalesSection scales={ctx.scaleRows} classes={ctx.gradingClasses} canWrite={ctx.canWrite} />
+      <div className="flex flex-col gap-8">
+        <GradingScalesSection scales={ctx.scaleRows} classes={ctx.gradingClasses} canWrite={ctx.canWrite} />
+        <div className="border-t pt-6">
+          <AssessmentSchemesSection schemes={ctx.schemeRows} canWrite={ctx.canWrite} />
+        </div>
+      </div>
     </ModulePageShell>
   );
 }

@@ -76,6 +76,63 @@ export async function setClassGradingScale(classId: string, gradingScaleId: stri
 }
 
 // ---------------------------------------------------------------------------
+// Assessment schemes (configurable weighting, e.g. "CA 60% + Exam 40%") --
+// EduCore's own config, never assumed to be a national KNEC requirement.
+// ---------------------------------------------------------------------------
+
+export async function createAssessmentScheme(input: {
+  name: string;
+  is_default: boolean;
+  components: { name: string; weight_percent: number }[];
+}): Promise<ActionResult> {
+  const supabase = await createClient();
+  const validComponents = input.components.filter((c) => c.name.trim() !== "");
+  if (validComponents.length === 0) {
+    return { error: "Add at least one component before creating the scheme." };
+  }
+  const totalWeight = validComponents.reduce((sum, c) => sum + c.weight_percent, 0);
+  if (Math.round(totalWeight * 100) !== 10000) {
+    return { error: `Component weights must add up to 100% — currently ${totalWeight}%.` };
+  }
+  try {
+    const school_id = await schoolId(supabase);
+    const { data: scheme, error } = await supabase
+      .from("assessment_schemes")
+      .insert({ school_id, name: input.name, is_default: input.is_default })
+      .select("id")
+      .single();
+    if (error) return { error: error.message };
+
+    const { error: componentsError } = await supabase.from("assessment_components").insert(
+      validComponents.map((c, i) => ({
+        scheme_id: scheme.id,
+        name: c.name,
+        weight_percent: c.weight_percent,
+        display_order: i + 1,
+      })),
+    );
+    if (componentsError) {
+      // Same rationale as createGradingScale: don't leave a component-less, unusable
+      // scheme behind if the second insert fails.
+      await supabase.from("assessment_schemes").delete().eq("id", scheme.id);
+      return { error: componentsError.message };
+    }
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Could not create the assessment scheme." };
+  }
+  revalidatePath("/exams", "layout");
+  return { success: true };
+}
+
+export async function setExamComponent(examId: string, componentId: string | null): Promise<ActionResult> {
+  const supabase = await createClient();
+  const { error } = await supabase.from("exams").update({ component_id: componentId }).eq("id", examId);
+  if (error) return { error: error.message };
+  revalidatePath("/exams", "layout");
+  return { success: true };
+}
+
+// ---------------------------------------------------------------------------
 // Exam lifecycle
 // ---------------------------------------------------------------------------
 
