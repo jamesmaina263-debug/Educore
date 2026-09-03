@@ -37,57 +37,60 @@ import {
   confirmKnecCbaExportBatch,
   resetKnecCbaExportItem,
   updateKnecSchoolCode,
+  updateKnecCbaExportColumns,
   getKnecCbaExportRows,
 } from "@/app/(app)/integrations/actions";
 import { downloadXlsxFromObjectRows } from "@/lib/xlsx-export";
+import { downloadCsvFromObjectRows } from "@/lib/csv-export";
+import {
+  buildKnecCbaExportSheetRows,
+  withAllKnownColumns,
+  KNEC_CBA_EXPORT_DEFAULT_COLUMNS,
+  KNEC_CBA_EXPORT_COLUMN_DESCRIPTIONS,
+  type KnecCbaExportColumn,
+  type KnecCbaExportRowSource,
+} from "@/lib/knec-cba-export-columns";
 
 function sanitize(stub: string) {
   return stub.replace(/[^a-z0-9]+/gi, "-").toLowerCase();
 }
 
-// PROVISIONAL column layout -- no official KNEC CBA upload template was found publicly (see
-// the investigation report). This mirrors the shape a school would plausibly need
-// (learner identity + sub-strand + competency level) and is clearly labeled as provisional in
-// the UI and filename; adjust once KNEC publishes, or a school shares, the real template.
-async function downloadKnecExport(
-  rows: {
-    upi_number: string;
-    admission_number: string;
-    first_name: string;
-    last_name: string;
-    other_names: string;
-    class_name: string;
-    learning_area: string;
-    strand: string;
-    sub_strand: string;
-    competency_level: string;
-  }[],
+// Column set/labels/order are school-configurable (schools.knec_cba_export_columns) -- no
+// official cba.knec.ac.ke upload template is publicly documented, so this is provisional by
+// design and adjustable without a code change. CSV is the primary download (simplest, most
+// universally importable format for an unknown target); .xlsx stays available as a fallback in
+// case a school's KNEC contact says the portal wants a spreadsheet instead.
+async function downloadKnecExportCsv(
+  rows: KnecCbaExportRowSource[],
+  columns: KnecCbaExportColumn[],
+  knecSchoolCode: string | null,
   filenameStub: string,
 ) {
-  const sheetRows = rows.map((r) => ({
-    UPI: r.upi_number,
-    "Admission No": r.admission_number,
-    "First Name": r.first_name,
-    Surname: r.last_name,
-    "Other Names": r.other_names,
-    Class: r.class_name,
-    "Learning Area": r.learning_area,
-    Strand: r.strand,
-    "Sub-Strand": r.sub_strand,
-    "Competency Level": r.competency_level,
-  }));
+  const sheetRows = buildKnecCbaExportSheetRows(rows, columns, knecSchoolCode);
+  await downloadCsvFromObjectRows(sheetRows, `${sanitize(filenameStub)}-provisional.csv`);
+}
+
+async function downloadKnecExportXlsx(
+  rows: KnecCbaExportRowSource[],
+  columns: KnecCbaExportColumn[],
+  knecSchoolCode: string | null,
+  filenameStub: string,
+) {
+  const sheetRows = buildKnecCbaExportSheetRows(rows, columns, knecSchoolCode);
   await downloadXlsxFromObjectRows(sheetRows, "CBA Export (Provisional)", `${sanitize(filenameStub)}-provisional.xlsx`);
 }
 
 export function KnecPanel({
   schoolName,
   knecSchoolCode,
+  exportColumns,
   exams,
   pendingEntries,
   batches,
 }: {
   schoolName: string;
   knecSchoolCode: string | null;
+  exportColumns: KnecCbaExportColumn[];
   exams: KnecExamOption[];
   pendingEntries: KnecPendingEntryRow[];
   batches: KnecBatchRow[];
@@ -106,6 +109,10 @@ export function KnecPanel({
   const [resetTarget, setResetTarget] = useState<KnecPendingEntryRow | null>(null);
   const [resetNotes, setResetNotes] = useState("");
   const [resetPending, setResetPending] = useState(false);
+  const [columnsOpen, setColumnsOpen] = useState(false);
+  const [draftColumns, setDraftColumns] = useState<KnecCbaExportColumn[]>(() => withAllKnownColumns(exportColumns));
+  const [columnsPending, setColumnsPending] = useState(false);
+  const [columnsError, setColumnsError] = useState<string | null>(null);
 
   const entriesForExam = useMemo(
     () => pendingEntries.filter((e) => e.exam_id === examId),
@@ -147,12 +154,17 @@ export function KnecPanel({
     router.refresh();
   }
 
-  async function handleDownload(batchId: string) {
+  async function handleDownload(batchId: string, format: "csv" | "xlsx") {
     setDownloadingId(batchId);
     const result = await getKnecCbaExportRows(batchId);
     setDownloadingId(null);
     if ("error" in result) return setError(result.error);
-    await downloadKnecExport(result.rows, `${schoolName}-knec-cba-${batchId.slice(0, 8)}`);
+    const filenameStub = `${schoolName}-knec-cba-${batchId.slice(0, 8)}`;
+    if (format === "csv") {
+      await downloadKnecExportCsv(result.rows, exportColumns, knecSchoolCode, filenameStub);
+    } else {
+      await downloadKnecExportXlsx(result.rows, exportColumns, knecSchoolCode, filenameStub);
+    }
   }
 
   async function handleConfirm(batchId: string) {
@@ -167,6 +179,43 @@ export function KnecPanel({
     await updateKnecSchoolCode(code);
     setCodePending(false);
     setCodeOpen(false);
+    router.refresh();
+  }
+
+  function moveColumn(index: number, direction: -1 | 1) {
+    setDraftColumns((cols) => {
+      const target = index + direction;
+      if (target < 0 || target >= cols.length) return cols;
+      const next = [...cols];
+      [next[index], next[target]] = [next[target], next[index]];
+      return next;
+    });
+  }
+
+  function toggleColumn(index: number) {
+    setDraftColumns((cols) => cols.map((c, i) => (i === index ? { ...c, enabled: !c.enabled } : c)));
+  }
+
+  function relabelColumn(index: number, label: string) {
+    setDraftColumns((cols) => cols.map((c, i) => (i === index ? { ...c, label } : c)));
+  }
+
+  function resetColumnsToDefault() {
+    setDraftColumns(withAllKnownColumns(KNEC_CBA_EXPORT_DEFAULT_COLUMNS));
+    setColumnsError(null);
+  }
+
+  async function handleSaveColumns() {
+    if (!draftColumns.some((c) => c.enabled)) {
+      setColumnsError("At least one column must be enabled.");
+      return;
+    }
+    setColumnsPending(true);
+    setColumnsError(null);
+    const result = await updateKnecCbaExportColumns(draftColumns);
+    setColumnsPending(false);
+    if ("error" in result) return setColumnsError(result.error);
+    setColumnsOpen(false);
     router.refresh();
   }
 
@@ -205,6 +254,90 @@ export function KnecPanel({
             <DialogFooter>
               <Button onClick={handleSaveCode} disabled={codePending}>
                 {codePending ? "Saving…" : "Save"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </div>
+
+      <div className="panel flex items-center justify-between p-4">
+        <div>
+          <p className="label-eyebrow">Export column layout</p>
+          <p className="text-sm">
+            {draftColumns.filter((c) => c.enabled).length} of {draftColumns.length} fields enabled
+          </p>
+          <p className="text-xs text-muted-foreground">
+            Provisional — rename, reorder, or toggle columns to match whatever KNEC&apos;s real upload format turns
+            out to need, without waiting for a code change.
+          </p>
+        </div>
+        <Dialog
+          open={columnsOpen}
+          onOpenChange={(open) => {
+            setColumnsOpen(open);
+            if (open) setDraftColumns(withAllKnownColumns(exportColumns));
+          }}
+        >
+          <DialogTrigger asChild>
+            <Button variant="outline" size="sm">
+              Configure columns
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>Configure export columns</DialogTitle>
+            </DialogHeader>
+            <p className="text-xs text-muted-foreground">
+              Applies to every future CSV/Excel download from this school. Disabled fields are left out of the
+              download entirely.
+            </p>
+            <div className="flex flex-col gap-2">
+              {draftColumns.map((col, i) => (
+                <div key={col.key} className="flex items-center gap-2 rounded-md border border-border p-2">
+                  <Checkbox checked={col.enabled} onCheckedChange={() => toggleColumn(i)} />
+                  <div className="flex-1">
+                    <Input
+                      value={col.label}
+                      onChange={(e) => relabelColumn(i, e.target.value)}
+                      className="h-8"
+                      aria-label={`Header label for ${col.key}`}
+                    />
+                    <p className="mt-0.5 text-[0.7rem] text-muted-foreground">
+                      {KNEC_CBA_EXPORT_COLUMN_DESCRIPTIONS[col.key]}
+                    </p>
+                  </div>
+                  <div className="flex flex-col gap-0.5">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 px-2"
+                      disabled={i === 0}
+                      onClick={() => moveColumn(i, -1)}
+                    >
+                      ↑
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 px-2"
+                      disabled={i === draftColumns.length - 1}
+                      onClick={() => moveColumn(i, 1)}
+                    >
+                      ↓
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+            {columnsError && <p className="text-sm text-danger">{columnsError}</p>}
+            <DialogFooter className="justify-between sm:justify-between">
+              <Button type="button" variant="ghost" size="sm" onClick={resetColumnsToDefault}>
+                Reset to defaults
+              </Button>
+              <Button onClick={handleSaveColumns} disabled={columnsPending}>
+                {columnsPending ? "Saving…" : "Save layout"}
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -393,10 +526,18 @@ export function KnecPanel({
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => handleDownload(b.id)}
+                        onClick={() => handleDownload(b.id, "csv")}
                         disabled={downloadingId === b.id}
                       >
-                        {downloadingId === b.id ? "Preparing…" : "Download"}
+                        {downloadingId === b.id ? "Preparing…" : "Download CSV"}
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleDownload(b.id, "xlsx")}
+                        disabled={downloadingId === b.id}
+                      >
+                        Excel
                       </Button>
                       {b.status === "generated" && (
                         <Button size="sm" onClick={() => handleConfirm(b.id)} disabled={confirmingId === b.id}>
