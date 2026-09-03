@@ -115,6 +115,26 @@ Deno.serve(async (req) => {
     });
   }
 
+  // Per-key abuse/cost ceiling. This gateway has no other throttle -- a leaked or malicious
+  // key could otherwise hammer the DB with unlimited reads. 120/min is generous for any real
+  // integration polling on a schedule while still bounding worst-case load. Reuses the same
+  // increment_and_check_rate_limit() primitive already proven in login/OTP/M-Pesa flows rather
+  // than introducing new rate-limit infrastructure.
+  const { data: withinLimit, error: rateLimitError } = await supabase.rpc(
+    "increment_and_check_rate_limit",
+    { p_bucket: `api-v1-key:${keyRow.id}`, p_max_events: 120, p_window_seconds: 60 },
+  );
+  if (rateLimitError) {
+    // Fail open on the limiter itself malfunctioning -- a broken rate-limit check shouldn't take
+    // down a paying integration's read access. The underlying query is still read-only and
+    // RLS/scope-bounded regardless.
+    console.error("api-v1 rate limit check failed", rateLimitError);
+  } else if (!withinLimit) {
+    return logAndRespond(keyRow.id, 429, {
+      error: "Rate limit exceeded for this API key. Try again shortly.",
+    });
+  }
+
   // Resolve the set of school_ids this key can see: one school directly, or every school in
   // its group. Either way, this is the ONLY place caller-controlled input (none, here — it's
   // entirely derived from the verified key row) ever touches which rows get returned.
