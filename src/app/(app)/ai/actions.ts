@@ -54,7 +54,9 @@ type Intent =
   | "certificates_this_term"
   | "ungraded_submissions"
   | "exam_subject_breakdown"
-  | "staff_headcount_by_role";
+  | "staff_headcount_by_role"
+  | "competency_band_breakdown"
+  | "students_needing_competency_support";
 
 // A daily_summary answer is assembled from whichever of these sections the caller is permitted
 // to see — it has no single gating permission of its own.
@@ -167,6 +169,18 @@ const INTENTS: { key: Intent; description: string; permission: PermissionKey | n
     permission: "exams.read",
   },
   { key: "staff_headcount_by_role", description: "How many active staff members are in each role", permission: "staff.read" },
+  {
+    key: "competency_band_breakdown",
+    description:
+      "For the most recent closed CBC exam, how many sub-strand competency ratings fall into each competency level/band (e.g. how many are Below Expectation vs Meeting Expectation)",
+    permission: "exams.read",
+  },
+  {
+    key: "students_needing_competency_support",
+    description:
+      "Which students have the most sub-strand competency ratings of 'Below Expectation' for the most recent closed CBC exam, i.e. who may need intervention support",
+    permission: "exams.read",
+  },
 ];
 
 export interface AskAIResult {
@@ -978,6 +992,86 @@ async function runIntent(
         .map(([name, count]) => `${name}: ${count}`)
         .join(", ");
       return `${data.length} active staff member(s) — ${list}.`;
+    }
+
+    case "competency_band_breakdown": {
+      const { data: exam } = await supabase
+        .from("exams")
+        .select("id, name")
+        .eq("status", "closed")
+        .order("closed_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (!exam) return "No closed exam was found for the current term.";
+
+      const { data: ratings } = await supabase
+        .from("competency_marks")
+        .select("grading_scale_bands(label, level_order)")
+        .eq("exam_id", exam.id);
+      if (!ratings || ratings.length === 0) return `${exam.name}: no CBC competency ratings have been recorded yet.`;
+
+      const byBand = new Map<string, { label: string; level_order: number; count: number }>();
+      for (const r of ratings) {
+        const band = r.grading_scale_bands as unknown as { label: string; level_order: number } | null;
+        if (!band) continue;
+        const key = band.label;
+        const entry = byBand.get(key) ?? { label: band.label, level_order: band.level_order, count: 0 };
+        entry.count += 1;
+        byBand.set(key, entry);
+      }
+      const list = Array.from(byBand.values())
+        .sort((a, b) => a.level_order - b.level_order)
+        .map((b) => `${b.label}: ${b.count}`)
+        .join(", ");
+      return `${exam.name}: sub-strand competency rating breakdown — ${list}.`;
+    }
+
+    case "students_needing_competency_support": {
+      const { data: exam } = await supabase
+        .from("exams")
+        .select("id, name")
+        .eq("status", "closed")
+        .order("closed_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (!exam) return "No closed exam was found for the current term.";
+
+      const { data: ratings } = await supabase
+        .from("competency_marks")
+        .select("student_id, students(full_name), grading_scale_bands(label)")
+        .eq("exam_id", exam.id);
+      if (!ratings || ratings.length === 0) return `${exam.name}: no CBC competency ratings have been recorded yet.`;
+
+      // Deliberately NOT using level_order to find the "lowest" band: level_order is just
+      // whatever order a school typed its bands into the Grading Scales form (see
+      // grading-scales-section.tsx, level_order: i + 1) -- it carries no guaranteed
+      // best-to-worst direction, and guessing one would silently mislabel a school that
+      // entered theirs the other way round. Matching on the band label instead, against the
+      // real, official KICD/KNEC competency-level term ("Below Expectation" -- verified in the
+      // CBC/CBE investigation report) -- a school using that standard wording is correctly
+      // detected; a school with different custom wording safely yields no flagged students
+      // rather than a wrong one.
+      const isBelowExpectation = (label: string) => /below\s*expectation/i.test(label);
+
+      const lowCountByStudent = new Map<string, { name: string; count: number }>();
+      for (const r of ratings) {
+        const band = r.grading_scale_bands as unknown as { label: string } | null;
+        const student = r.students as unknown as { full_name: string } | null;
+        if (!band || !student || !isBelowExpectation(band.label)) continue;
+        const entry = lowCountByStudent.get(r.student_id) ?? { name: student.full_name, count: 0 };
+        entry.count += 1;
+        lowCountByStudent.set(r.student_id, entry);
+      }
+
+      const flagged = Array.from(lowCountByStudent.values())
+        .filter((s) => s.count >= 2)
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 10)
+        .map((s) => `${s.name} (${s.count})`);
+      if (flagged.length === 0) {
+        return `${exam.name}: no student has 2 or more sub-strand ratings of "Below Expectation" (or no band at this school is labelled that way).`;
+      }
+      return `${exam.name}: students with 2+ sub-strand ratings of "Below Expectation" — ${flagged.join(", ")}.`;
     }
 
     case "daily_summary": {
