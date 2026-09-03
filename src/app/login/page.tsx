@@ -2,6 +2,7 @@
 
 import { Suspense, useActionState } from "react";
 import { useSearchParams } from "next/navigation";
+import Link from "next/link";
 import { ShieldCheck } from "lucide-react";
 import { AuthLayout } from "@/components/shared/auth-layout";
 import { Button } from "@/components/ui/button";
@@ -23,9 +24,8 @@ function LoginForm() {
   const [state, formAction, pending] = useActionState(login, initialState);
   const searchParams = useSearchParams();
   const wasDeactivated = searchParams.get("deactivated") === "1";
-  const errorMessage =
-    state.error ??
-    (wasDeactivated
+  const linkError = searchParams.get("error");
+  const errorMessage = state.error ?? linkError ?? (wasDeactivated
       ? "Your account has been deactivated. Contact your school admin."
       : null);
 
@@ -56,7 +56,15 @@ function LoginForm() {
         </div>
 
         <div className="space-y-1.5">
-          <Label htmlFor="password">Password</Label>
+          <div className="flex items-center justify-between">
+            <Label htmlFor="password">Password</Label>
+            <Link
+              href="/forgot-password"
+              className="text-xs font-medium text-[var(--brand-gold-600)] hover:underline"
+            >
+              Forgot password?
+            </Link>
+          </div>
           <Input
             id="password"
             name="password"
@@ -89,8 +97,8 @@ function LoginForm() {
         </Button>
 
         <p className="border-t border-border pt-4 text-xs text-muted-foreground">
-          Having trouble signing in? Contact your school administrator to
-          reset your staff account.
+          Forgot your password? Use the link above to reset it. For any other
+          account issue, contact your school administrator.
         </p>
       </form>
 
