@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { resolveKnecCbaExportColumns, type KnecCbaExportColumn } from "@/lib/knec-cba-export-columns";
 
 export interface NemisPendingStudentRow {
   id: string;
@@ -73,6 +74,7 @@ export interface KnecContext {
   schoolName: string;
   canManageKnec: boolean;
   knecSchoolCode: string | null;
+  exportColumns: KnecCbaExportColumn[];
   exams: KnecExamOption[];
   pendingEntries: KnecPendingEntryRow[];
   batches: KnecBatchRow[];
@@ -88,14 +90,18 @@ export async function loadKnecContext(): Promise<KnecContext> {
   const [{ data: schoolUser }, { data: canManageKnec }] = await Promise.all([
     supabase
       .from("school_users")
-      .select("full_name, roles(display_name), schools(name, knec_school_code)")
+      .select("full_name, roles(display_name), schools(name, knec_school_code, knec_cba_export_columns)")
       .eq("auth_user_id", user.id)
       .maybeSingle(),
     supabase.rpc("auth_has_permission", { p_permission_key: "knec.manage" }),
   ]);
 
   const roleName = (schoolUser?.roles as unknown as { display_name: string } | null)?.display_name;
-  const school = schoolUser?.schools as unknown as { name: string; knec_school_code: string | null } | null;
+  const school = schoolUser?.schools as unknown as {
+    name: string;
+    knec_school_code: string | null;
+    knec_cba_export_columns: unknown;
+  } | null;
   const schoolName = school?.name ?? "EduCore";
 
   let pendingEntries: KnecPendingEntryRow[] = [];
@@ -180,6 +186,7 @@ export async function loadKnecContext(): Promise<KnecContext> {
     schoolName,
     canManageKnec: canManageKnec === true,
     knecSchoolCode: school?.knec_school_code ?? null,
+    exportColumns: resolveKnecCbaExportColumns(school?.knec_cba_export_columns),
     exams,
     pendingEntries,
     batches,
