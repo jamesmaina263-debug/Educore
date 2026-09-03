@@ -14,6 +14,8 @@ import { BiometricTab, type BiometricProfileRow, type BiometricCredentialRow, ty
 import { StudentStatusControl } from "@/components/students/student-status-control";
 import { StudentDeleteControl } from "@/components/students/student-delete-control";
 import { NemisIdentifiersCard } from "@/components/students/nemis-identifiers-card";
+import { PathwayFitCard } from "@/components/students/pathway-fit-card";
+import { computePathwayFit, type PathwayFitMarkInput } from "@/lib/academics/pathway-fit";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 
@@ -39,7 +41,7 @@ export default async function StudentProfilePage({
   const { data: student } = await supabase
     .from("students")
     .select(
-      "id, admission_number, upi_number, birth_certificate_number, nemis_sync_status, nemis_synced_at, nemis_notes, first_name, last_name, other_names, date_of_birth, gender, status, admission_date, streams(name, classes(name))",
+      "id, admission_number, upi_number, birth_certificate_number, nemis_sync_status, nemis_synced_at, nemis_notes, first_name, last_name, other_names, date_of_birth, gender, status, admission_date, streams(name, class_id, classes(name))",
     )
     .eq("id", id)
     .maybeSingle();
@@ -48,6 +50,58 @@ export default async function StudentProfilePage({
 
   // Traceability (Brief 4.16.13): the only link back is applications.resulting_student_id, set
   // once by Complete Enrollment (Phase 13) — never duplicated onto the student row itself.
+  const studentStream = student.streams as unknown as { name: string; class_id: string; classes: { name: string } | null } | null;
+  const studentClassName = studentStream?.classes?.name ?? null;
+
+  // Pathway guidance (Phase 6 of the CBC/CBE investigation) only makes sense at the pre-Senior-School
+  // decision point -- matched on classes.name the same way the pathway-guidance roster page's default
+  // does, since there's no canonical grade-number column. RLS on `marks` already scopes what comes back
+  // to what this viewer (staff or guardian) is allowed to see, so no extra permission check is needed here.
+  const showsPathwayFit = !!studentClassName && /grade\s*9\b/i.test(studentClassName);
+  const { data: pathwayMarkRows } = showsPathwayFit
+    ? await supabase
+        .from("marks")
+        .select(
+          "subject_id, exam_id, raw_score, band_id, subjects(name, is_core, subject_catalogue(pathway)), grading_scale_bands(label)",
+        )
+        .eq("student_id", id)
+        .eq("class_id", studentStream!.class_id)
+    : { data: null };
+
+  const { data: pathwayExamSubjectRows } = showsPathwayFit && studentStream
+    ? await supabase.from("exam_subjects").select("exam_id, subject_id, max_score").eq("class_id", studentStream.class_id)
+    : { data: null };
+
+  const pathwayMaxScoreByKey = new Map<string, number>();
+  for (const es of pathwayExamSubjectRows ?? []) {
+    pathwayMaxScoreByKey.set(`${es.exam_id}|${es.subject_id}`, es.max_score as number);
+  }
+
+  const pathwayFitSummary = showsPathwayFit
+    ? computePathwayFit(
+        (pathwayMarkRows ?? []).flatMap((m): PathwayFitMarkInput[] => {
+          const subject = m.subjects as unknown as {
+            name: string;
+            is_core: boolean;
+            subject_catalogue: { pathway: string } | null;
+          } | null;
+          const band = m.grading_scale_bands as unknown as { label: string } | null;
+          if (!subject) return [];
+          return [
+            {
+              subjectId: m.subject_id,
+              subjectName: subject.name,
+              pathway: subject.subject_catalogue?.pathway ?? null,
+              isCore: subject.is_core,
+              rawScore: m.raw_score,
+              maxScore: pathwayMaxScoreByKey.get(`${m.exam_id}|${m.subject_id}`) ?? null,
+              bandLabel: band?.label ?? null,
+            },
+          ];
+        }),
+      )
+    : null;
+
   const { data: originatingApplication } = await supabase
     .from("applications")
     .select("id, application_number")
@@ -201,7 +255,7 @@ export default async function StudentProfilePage({
   const roleName = (schoolUser?.roles as unknown as { display_name: string } | null)?.display_name;
   const schoolName = (schoolUser?.schools as unknown as { name: string } | null)?.name;
   const fullName = [student.first_name, student.other_names, student.last_name].filter(Boolean).join(" ");
-  const stream = student.streams as unknown as { name: string; classes: { name: string } | null } | null;
+  const stream = studentStream;
   const classLabel = stream ? `${stream.classes?.name ?? ""} ${stream.name}`.trim() : "Unassigned";
 
   return (
@@ -357,6 +411,8 @@ export default async function StudentProfilePage({
                 </p>
               )}
             </div>
+
+            {showsPathwayFit && pathwayFitSummary && <PathwayFitCard summary={pathwayFitSummary} />}
 
             {canManageStudents && originatingApplication && (
               <div className="panel p-4">
