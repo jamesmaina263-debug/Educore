@@ -270,6 +270,7 @@ export const PERMISSION_CATALOG: PermissionGroup[] = [
     label: "Integrations",
     permissions: [
       { key: "nemis.manage", label: "Generate / confirm NEMIS submission batches" },
+      { key: "knec.manage", label: "Generate / confirm KNEC CBA exports" },
       { key: "mpesa.manage", label: "Configure M-Pesa credentials & activation" },
     ],
   },

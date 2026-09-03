@@ -33,6 +33,159 @@ export interface IntegrationsContext {
   batches: NemisBatchRow[];
 }
 
+export interface KnecPendingEntryRow {
+  id: string; // competency_mark id
+  student_id: string;
+  student_name: string;
+  admission_number: string;
+  class_name: string;
+  exam_id: string;
+  exam_name: string;
+  learning_area: string;
+  strand: string;
+  sub_strand: string;
+  competency_level: string;
+  status: "not_submitted" | "included_in_batch";
+}
+
+export interface KnecExamOption {
+  id: string;
+  name: string;
+}
+
+export interface KnecBatchRow {
+  id: string;
+  exam_name: string;
+  class_name: string | null;
+  generated_at: string;
+  student_count: number;
+  entry_count: number;
+  status: "generated" | "confirmed";
+  confirmed_at: string | null;
+  generated_by_name: string | null;
+  confirmed_by_name: string | null;
+  notes: string | null;
+}
+
+export interface KnecContext {
+  userName: string;
+  userRole?: string;
+  schoolName: string;
+  canManageKnec: boolean;
+  knecSchoolCode: string | null;
+  exams: KnecExamOption[];
+  pendingEntries: KnecPendingEntryRow[];
+  batches: KnecBatchRow[];
+}
+
+export async function loadKnecContext(): Promise<KnecContext> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+
+  const [{ data: schoolUser }, { data: canManageKnec }] = await Promise.all([
+    supabase
+      .from("school_users")
+      .select("full_name, roles(display_name), schools(name, knec_school_code)")
+      .eq("auth_user_id", user.id)
+      .maybeSingle(),
+    supabase.rpc("auth_has_permission", { p_permission_key: "knec.manage" }),
+  ]);
+
+  const roleName = (schoolUser?.roles as unknown as { display_name: string } | null)?.display_name;
+  const school = schoolUser?.schools as unknown as { name: string; knec_school_code: string | null } | null;
+  const schoolName = school?.name ?? "EduCore";
+
+  let pendingEntries: KnecPendingEntryRow[] = [];
+  let batches: KnecBatchRow[] = [];
+  let exams: KnecExamOption[] = [];
+
+  if (canManageKnec === true) {
+    const [{ data: markRows }, { data: batchRows }] = await Promise.all([
+      supabase
+        .from("competency_marks")
+        .select(
+          "id, student_id, exam_id, knec_export_status, students(admission_number, first_name, last_name, streams(name, classes(name))), exams(name), curriculum_sub_strands(name, curriculum_strands(name, subjects(name))), grading_scale_bands(label)",
+        )
+        .in("knec_export_status", ["not_submitted", "included_in_batch"])
+        .order("created_at", { ascending: false })
+        .limit(1000),
+      supabase
+        .from("knec_cba_export_batches")
+        .select(
+          "id, student_count, entry_count, generated_at, status, confirmed_at, notes, exams(name), classes(name), generated_by:school_users!knec_cba_export_batches_generated_by_fkey(full_name), confirmed_by:school_users!knec_cba_export_batches_confirmed_by_fkey(full_name)",
+        )
+        .order("generated_at", { ascending: false })
+        .limit(50),
+    ]);
+
+    const examMap = new Map<string, string>();
+    pendingEntries = (markRows ?? [])
+      .map((m) => {
+        const student = m.students as unknown as {
+          admission_number: string;
+          first_name: string;
+          last_name: string;
+          streams: { name: string; classes: { name: string } | null } | null;
+        } | null;
+        const exam = m.exams as unknown as { name: string } | null;
+        const subStrand = m.curriculum_sub_strands as unknown as {
+          name: string;
+          curriculum_strands: { name: string; subjects: { name: string } | null } | null;
+        } | null;
+        const band = m.grading_scale_bands as unknown as { label: string } | null;
+        if (!student || !exam || !subStrand) return null;
+        if (exam) examMap.set(m.exam_id, exam.name);
+        return {
+          id: m.id,
+          student_id: m.student_id,
+          student_name: `${student.first_name} ${student.last_name}`,
+          admission_number: student.admission_number,
+          class_name: student.streams
+            ? `${student.streams.classes?.name ?? ""} ${student.streams.name}`.trim()
+            : "",
+          exam_id: m.exam_id,
+          exam_name: exam.name,
+          learning_area: subStrand.curriculum_strands?.subjects?.name ?? "",
+          strand: subStrand.curriculum_strands?.name ?? "",
+          sub_strand: subStrand.name,
+          competency_level: band?.label ?? "",
+          status: m.knec_export_status as "not_submitted" | "included_in_batch",
+        };
+      })
+      .filter((r): r is KnecPendingEntryRow => r !== null);
+
+    exams = Array.from(examMap.entries()).map(([id, name]) => ({ id, name }));
+
+    batches = (batchRows ?? []).map((b) => ({
+      id: b.id,
+      exam_name: (b.exams as unknown as { name: string } | null)?.name ?? "—",
+      class_name: (b.classes as unknown as { name: string } | null)?.name ?? null,
+      generated_at: b.generated_at,
+      student_count: b.student_count,
+      entry_count: b.entry_count,
+      status: b.status,
+      confirmed_at: b.confirmed_at,
+      notes: b.notes,
+      generated_by_name: (b.generated_by as unknown as { full_name: string } | null)?.full_name ?? null,
+      confirmed_by_name: (b.confirmed_by as unknown as { full_name: string } | null)?.full_name ?? null,
+    }));
+  }
+
+  return {
+    userName: schoolUser?.full_name ?? user.email ?? "Account",
+    userRole: roleName,
+    schoolName,
+    canManageKnec: canManageKnec === true,
+    knecSchoolCode: school?.knec_school_code ?? null,
+    exams,
+    pendingEntries,
+    batches,
+  };
+}
+
 export interface MpesaStudentOption {
   id: string;
   name: string;
