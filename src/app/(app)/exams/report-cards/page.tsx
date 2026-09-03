@@ -48,16 +48,24 @@ export default async function ReportCardsPage({
 
   let rows: ReportCardRow[] = [];
   if (selectedExamId && selectedClassId) {
-    const [{ data: streamRows }, { data: marksRows }, { data: reportCardRows }, { data: rankingRows }] = await Promise.all([
-      supabase.from("streams").select("id").eq("class_id", selectedClassId),
-      supabase
-        .from("marks")
-        .select("student_id, raw_score, subjects(name), grading_scale_bands(label)")
-        .eq("exam_id", selectedExamId)
-        .eq("class_id", selectedClassId),
-      supabase.from("report_cards").select("student_id, comment, comment_source").eq("exam_id", selectedExamId).eq("class_id", selectedClassId),
-      supabase.from("class_rankings").select("student_id, average_score, rank_in_stream").eq("exam_id", selectedExamId),
-    ]);
+    const [{ data: streamRows }, { data: marksRows }, { data: reportCardRows }, { data: rankingRows }, { data: competencyRows }] =
+      await Promise.all([
+        supabase.from("streams").select("id").eq("class_id", selectedClassId),
+        supabase
+          .from("marks")
+          .select("student_id, raw_score, subjects(name), grading_scale_bands(label)")
+          .eq("exam_id", selectedExamId)
+          .eq("class_id", selectedClassId),
+        supabase.from("report_cards").select("student_id, comment, comment_source").eq("exam_id", selectedExamId).eq("class_id", selectedClassId),
+        supabase.from("class_rankings").select("student_id, average_score, rank_in_stream").eq("exam_id", selectedExamId),
+        supabase
+          .from("competency_marks")
+          .select(
+            "student_id, grading_scale_bands(label), curriculum_sub_strands(name, curriculum_strands(name, subjects(name)))",
+          )
+          .eq("exam_id", selectedExamId)
+          .eq("class_id", selectedClassId),
+      ]);
 
     const streamIds = (streamRows ?? []).map((s) => s.id);
     const { data: students } = streamIds.length
@@ -78,6 +86,23 @@ export default async function ReportCardsPage({
     const reportCardByStudent = new Map((reportCardRows ?? []).map((rc) => [rc.student_id, rc]));
     const rankingByStudent = new Map((rankingRows ?? []).map((rk) => [rk.student_id, rk]));
 
+    const competencyByStudent = new Map<string, ReportCardRow["competency"]>();
+    for (const c of competencyRows ?? []) {
+      const subStrand = c.curriculum_sub_strands as unknown as {
+        name: string;
+        curriculum_strands: { name: string; subjects: { name: string } | null } | null;
+      } | null;
+      const strand = subStrand?.curriculum_strands ?? null;
+      const list = competencyByStudent.get(c.student_id) ?? [];
+      list.push({
+        subject_name: strand?.subjects?.name ?? "",
+        strand_name: strand?.name ?? "",
+        sub_strand_name: subStrand?.name ?? "",
+        band_label: (c.grading_scale_bands as unknown as { label: string } | null)?.label ?? "—",
+      });
+      competencyByStudent.set(c.student_id, list);
+    }
+
     rows = (students ?? []).map((s) => {
       const rc = reportCardByStudent.get(s.id);
       const rk = rankingByStudent.get(s.id);
@@ -85,6 +110,7 @@ export default async function ReportCardsPage({
         student_id: s.id,
         full_name: `${s.first_name} ${s.last_name}`,
         marks: marksByStudent.get(s.id) ?? [],
+        competency: competencyByStudent.get(s.id) ?? [],
         rank_in_stream: rk?.rank_in_stream ?? null,
         average_score: rk?.average_score ?? null,
         report_card: rc

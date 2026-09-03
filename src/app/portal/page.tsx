@@ -74,7 +74,7 @@ export default async function PortalPage({ searchParams }: { searchParams: Promi
     supabase.from("terms").select("id, start_date, end_date").eq("status", "active").maybeSingle(),
     supabase
       .from("report_cards")
-      .select("comment, generated_at, exams(name), class_rankings(average_score, rank_in_stream)")
+      .select("comment, generated_at, exam_id, exams(name), class_rankings(average_score, rank_in_stream)")
       .eq("student_id", selected.id)
       .in("comment_source", ["teacher_approved", "teacher_written"])
       .order("generated_at", { ascending: false })
@@ -263,10 +263,35 @@ export default async function PortalPage({ searchParams }: { searchParams: Promi
   const rc = latestReportCard as unknown as {
     comment: string | null;
     generated_at: string;
+    exam_id: string;
     exams: { name: string } | null;
     class_rankings: { average_score: number; rank_in_stream: number } | { average_score: number; rank_in_stream: number }[] | null;
   } | null;
   const ranking = rc?.class_rankings ? (Array.isArray(rc.class_rankings) ? rc.class_rankings[0] : rc.class_rankings) : null;
+
+  // Sub-strand CBC competency breakdown for that same released report card, if this class
+  // uses the CBC (band-based) grading model -- an empty array for a purely numeric class is
+  // expected and renders nothing extra, same as report-card-list.tsx's equivalent section.
+  const { data: competencyRows } = rc
+    ? await supabase
+        .from("competency_marks")
+        .select("grading_scale_bands(label), curriculum_sub_strands(name, curriculum_strands(name, subjects(name)))")
+        .eq("exam_id", rc.exam_id)
+        .eq("student_id", selected.id)
+    : { data: [] };
+  const competencyLines = (competencyRows ?? []).map((c) => {
+    const subStrand = c.curriculum_sub_strands as unknown as {
+      name: string;
+      curriculum_strands: { name: string; subjects: { name: string } | null } | null;
+    } | null;
+    const strand = subStrand?.curriculum_strands ?? null;
+    return {
+      subject_name: strand?.subjects?.name ?? "",
+      strand_name: strand?.name ?? "",
+      sub_strand_name: subStrand?.name ?? "",
+      band_label: (c.grading_scale_bands as unknown as { label: string } | null)?.label ?? "—",
+    };
+  });
 
   return (
     <PortalShell schoolName={schoolName} userName={schoolUser.full_name}>
@@ -349,6 +374,21 @@ export default async function PortalPage({ searchParams }: { searchParams: Promi
               {ranking && ` — Average ${ranking.average_score}, Rank ${ranking.rank_in_stream} in stream`}
             </p>
             {rc.comment && <p className="mt-1 text-sm text-muted-foreground">{rc.comment}</p>}
+            {competencyLines.length > 0 && (
+              <div className="mt-2 border-t border-border pt-2">
+                <p className="mb-1 text-xs font-medium text-muted-foreground">CBC competency ratings</p>
+                <ul className="flex flex-col gap-0.5 text-sm">
+                  {competencyLines.map((c, i) => (
+                    <li key={`${c.sub_strand_name}-${i}`} className="flex items-center justify-between gap-2">
+                      <span className="text-muted-foreground">
+                        {c.subject_name} — {c.strand_name} — {c.sub_strand_name}
+                      </span>
+                      <span className="font-medium">{c.band_label}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </div>
         ) : (
           <p className="text-sm text-muted-foreground">No results published yet.</p>

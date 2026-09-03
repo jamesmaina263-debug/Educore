@@ -14,10 +14,18 @@ export interface StudentMarkLine {
   band_label: string | null;
 }
 
+export interface CompetencyLine {
+  subject_name: string;
+  strand_name: string;
+  sub_strand_name: string;
+  band_label: string;
+}
+
 export interface ReportCardRow {
   student_id: string;
   full_name: string;
   marks: StudentMarkLine[];
+  competency: CompetencyLine[];
   rank_in_stream: number | null;
   average_score: number | null;
   report_card: {
@@ -132,6 +140,34 @@ export function ReportCardList({
                   </TableBody>
                 </Table>
               </div>
+
+              {r.competency.length > 0 && (
+                <div className="mt-3">
+                  <p className="mb-1 text-xs font-medium text-muted-foreground">CBC competency ratings (by sub-strand)</p>
+                  <div className="overflow-x-auto rounded-md border border-border">
+                    <Table className="table-dense">
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Subject</TableHead>
+                          <TableHead>Strand</TableHead>
+                          <TableHead>Sub-strand</TableHead>
+                          <TableHead>Level</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {r.competency.map((c, i) => (
+                          <TableRow key={`${c.sub_strand_name}-${i}`}>
+                            <TableCell>{c.subject_name}</TableCell>
+                            <TableCell>{c.strand_name}</TableCell>
+                            <TableCell>{c.sub_strand_name}</TableCell>
+                            <TableCell>{c.band_label}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </div>
+              )}
 
               {r.report_card && (
                 <div className="mt-3">
