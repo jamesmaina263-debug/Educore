@@ -1,6 +1,11 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { resolveKnecCbaExportColumns, type KnecCbaExportColumn } from "@/lib/knec-cba-export-columns";
+import {
+  buildKnecCbaWindowReminders,
+  type KnecCbaAssessmentWindow,
+  type KnecCbaWindowReminder,
+} from "@/lib/knec-cba-window-reminders";
 
 export interface NemisPendingStudentRow {
   id: string;
@@ -75,6 +80,8 @@ export interface KnecContext {
   canManageKnec: boolean;
   knecSchoolCode: string | null;
   exportColumns: KnecCbaExportColumn[];
+  remindersEnabled: boolean;
+  reminders: KnecCbaWindowReminder[];
   exams: KnecExamOption[];
   pendingEntries: KnecPendingEntryRow[];
   batches: KnecBatchRow[];
@@ -90,7 +97,9 @@ export async function loadKnecContext(): Promise<KnecContext> {
   const [{ data: schoolUser }, { data: canManageKnec }] = await Promise.all([
     supabase
       .from("school_users")
-      .select("full_name, roles(display_name), schools(name, knec_school_code, knec_cba_export_columns)")
+      .select(
+        "full_name, roles(display_name), schools(name, knec_school_code, knec_cba_export_columns, knec_cba_reminders_enabled)",
+      )
       .eq("auth_user_id", user.id)
       .maybeSingle(),
     supabase.rpc("auth_has_permission", { p_permission_key: "knec.manage" }),
@@ -101,31 +110,44 @@ export async function loadKnecContext(): Promise<KnecContext> {
     name: string;
     knec_school_code: string | null;
     knec_cba_export_columns: unknown;
+    knec_cba_reminders_enabled: boolean;
   } | null;
   const schoolName = school?.name ?? "EduCore";
 
   let pendingEntries: KnecPendingEntryRow[] = [];
   let batches: KnecBatchRow[] = [];
   let exams: KnecExamOption[] = [];
+  let reminders: KnecCbaWindowReminder[] = [];
 
   if (canManageKnec === true) {
-    const [{ data: markRows }, { data: batchRows }] = await Promise.all([
-      supabase
-        .from("competency_marks")
-        .select(
-          "id, student_id, exam_id, knec_export_status, students(admission_number, first_name, last_name, streams(name, classes(name))), exams(name), curriculum_sub_strands(name, curriculum_strands(name, subjects(name))), grading_scale_bands(label)",
-        )
-        .in("knec_export_status", ["not_submitted", "included_in_batch"])
-        .order("created_at", { ascending: false })
-        .limit(1000),
-      supabase
-        .from("knec_cba_export_batches")
-        .select(
-          "id, student_count, entry_count, generated_at, status, confirmed_at, notes, exams(name), classes(name), generated_by:school_users!knec_cba_export_batches_generated_by_fkey(full_name), confirmed_by:school_users!knec_cba_export_batches_confirmed_by_fkey(full_name)",
-        )
-        .order("generated_at", { ascending: false })
-        .limit(50),
-    ]);
+    const [{ data: markRows }, { data: batchRows }, { data: windowRows }, { data: dismissalRows }, { data: classRows }] =
+      await Promise.all([
+        supabase
+          .from("competency_marks")
+          .select(
+            "id, student_id, exam_id, knec_export_status, students(admission_number, first_name, last_name, streams(name, classes(name))), exams(name), curriculum_sub_strands(name, curriculum_strands(name, subjects(name))), grading_scale_bands(label)",
+          )
+          .in("knec_export_status", ["not_submitted", "included_in_batch"])
+          .order("created_at", { ascending: false })
+          .limit(1000),
+        supabase
+          .from("knec_cba_export_batches")
+          .select(
+            "id, student_count, entry_count, generated_at, status, confirmed_at, notes, exams(name), classes(name), generated_by:school_users!knec_cba_export_batches_generated_by_fkey(full_name), confirmed_by:school_users!knec_cba_export_batches_confirmed_by_fkey(full_name)",
+          )
+          .order("generated_at", { ascending: false })
+          .limit(50),
+        school?.knec_cba_reminders_enabled
+          ? supabase
+              .from("knec_cba_assessment_windows")
+              .select("id, title, grade_labels, opens_at, closes_at, notes, source_url")
+              .eq("is_active", true)
+          : Promise.resolve({ data: [] as never[] }),
+        school?.knec_cba_reminders_enabled
+          ? supabase.from("knec_cba_window_dismissals").select("window_id")
+          : Promise.resolve({ data: [] as never[] }),
+        school?.knec_cba_reminders_enabled ? supabase.from("classes").select("name") : Promise.resolve({ data: [] as never[] }),
+      ]);
 
     const examMap = new Map<string, string>();
     pendingEntries = (markRows ?? [])
@@ -178,6 +200,21 @@ export async function loadKnecContext(): Promise<KnecContext> {
       generated_by_name: (b.generated_by as unknown as { full_name: string } | null)?.full_name ?? null,
       confirmed_by_name: (b.confirmed_by as unknown as { full_name: string } | null)?.full_name ?? null,
     }));
+
+    if (school?.knec_cba_reminders_enabled) {
+      const windows: KnecCbaAssessmentWindow[] = (windowRows ?? []).map((w) => ({
+        id: w.id,
+        title: w.title,
+        gradeLabels: w.grade_labels,
+        opensAt: w.opens_at,
+        closesAt: w.closes_at,
+        notes: w.notes,
+        sourceUrl: w.source_url,
+      }));
+      const dismissedIds = new Set((dismissalRows ?? []).map((d) => d.window_id));
+      const classNames = (classRows ?? []).map((c) => c.name);
+      reminders = buildKnecCbaWindowReminders(windows, classNames, dismissedIds);
+    }
   }
 
   return {
@@ -187,6 +224,8 @@ export async function loadKnecContext(): Promise<KnecContext> {
     canManageKnec: canManageKnec === true,
     knecSchoolCode: school?.knec_school_code ?? null,
     exportColumns: resolveKnecCbaExportColumns(school?.knec_cba_export_columns),
+    remindersEnabled: school?.knec_cba_reminders_enabled ?? true,
+    reminders,
     exams,
     pendingEntries,
     batches,
