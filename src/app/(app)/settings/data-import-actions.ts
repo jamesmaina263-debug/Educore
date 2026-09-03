@@ -4,6 +4,16 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { generateTemporaryPassword, temporaryPasswordExpiry } from "@/lib/temporary-password";
+import {
+  IMPORT_SHEET_ORDER,
+  IMPORT_SHEET_HEADERS,
+  type ImportSheetName,
+  type RawImportRow,
+  type RawImportSheets,
+  type ImportOutcome,
+  type ImportRowResult,
+  type ImportSheetResult,
+} from "./data-import-shared";
 
 // SD-10 (GTM Readiness Protocol): school-level data import — the counterpart to
 // exportSchoolData() (data-export-actions.ts), for a school onboarding onto EduCore
@@ -23,52 +33,6 @@ import { generateTemporaryPassword, temporaryPasswordExpiry } from "@/lib/tempor
 // Each stage resolves its parent records by name within the school (see the SQL
 // functions), so a sheet that's missing or empty is simply skipped -- a school
 // with no historical Guardians data, say, can still import everything else.
-
-export type ImportRowResult = { rowNumber: number; status: "ok" | "error"; message: string };
-export type ImportSheetResult = { sheet: string; results: ImportRowResult[] };
-export type ImportOutcome = { error: string } | { success: true; sheets: ImportSheetResult[] };
-
-/** Raw parsed rows as the client hands them over: one object per row, keyed by the exact header text in row 1. */
-export type RawImportRow = Record<string, string>;
-export type RawImportSheets = Partial<Record<ImportSheetName, RawImportRow[]>>;
-
-export const IMPORT_SHEET_ORDER = [
-  "Academic Years",
-  "Terms",
-  "Classes",
-  "Streams",
-  "Subjects",
-  "Staff",
-  "Students",
-  "Guardians",
-] as const;
-export type ImportSheetName = (typeof IMPORT_SHEET_ORDER)[number];
-
-// Sheet -> [display headers, in the same order as the export]. Used for both
-// the template download and (loosely) for documenting expected columns; the
-// actual header match below is case/spacing-insensitive.
-export const IMPORT_SHEET_HEADERS: Record<ImportSheetName, string[]> = {
-  "Academic Years": ["Name", "Start Date", "End Date", "Status"],
-  Terms: ["Academic Year", "Name", "Term No.", "Start Date", "End Date", "Status"],
-  Classes: ["Name", "Level Order", "Academic Year"],
-  Streams: ["Academic Year", "Class", "Stream Name", "Capacity"],
-  Subjects: ["Name", "Active"],
-  Staff: ["Full Name", "Role", "Email", "Phone", "Position", "Department", "Staff No.", "Hire Date", "Status"],
-  Students: [
-    "Admission No.",
-    "UPI No.",
-    "First Name",
-    "Last Name",
-    "Other Names",
-    "DOB",
-    "Gender",
-    "Class",
-    "Stream",
-    "Status",
-    "Admission Date",
-  ],
-  Guardians: ["Student Adm. No.", "Guardian Name", "Relationship", "Primary Contact", "Phone", "Email"],
-};
 
 const EXAMPLE_ROWS: Record<ImportSheetName, (string | number)[]> = {
   "Academic Years": ["2027", "2027-01-01", "2027-11-30", "active"],
