@@ -5,14 +5,13 @@ import { useRouter } from "next/navigation";
 import { Upload, FileUp, CheckCircle2, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { downloadBlob, XLSX_MIME } from "@/lib/xlsx-export";
+import { importSchoolData, downloadImportTemplateAction } from "@/app/(app)/settings/data-import-actions";
 import {
-  importSchoolData,
-  downloadImportTemplateAction,
   IMPORT_SHEET_ORDER,
   type ImportSheetName,
   type RawImportSheets,
   type ImportSheetResult,
-} from "@/app/(app)/settings/data-import-actions";
+} from "@/app/(app)/settings/data-import-shared";
 
 const KNOWN_SHEETS = new Set<string>(IMPORT_SHEET_ORDER);
 
