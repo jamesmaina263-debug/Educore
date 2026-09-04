@@ -39,7 +39,10 @@ import {
   updateKnecSchoolCode,
   updateKnecCbaExportColumns,
   getKnecCbaExportRows,
+  dismissKnecCbaWindowReminder,
+  setKnecCbaRemindersEnabled,
 } from "@/app/(app)/integrations/actions";
+import type { KnecCbaWindowReminder, KnecCbaWindowUrgency } from "@/lib/knec-cba-window-reminders";
 import { downloadXlsxFromObjectRows } from "@/lib/xlsx-export";
 import { downloadCsvFromObjectRows } from "@/lib/csv-export";
 import {
@@ -53,6 +56,27 @@ import {
 
 function sanitize(stub: string) {
   return stub.replace(/[^a-z0-9]+/gi, "-").toLowerCase();
+}
+
+const URGENCY_TONE: Record<KnecCbaWindowUrgency, "danger" | "warning" | "info"> = {
+  overdue: "danger",
+  urgent: "danger",
+  soon: "warning",
+  upcoming: "info",
+};
+
+const URGENCY_LABEL: Record<KnecCbaWindowUrgency, string> = {
+  overdue: "Deadline passed",
+  urgent: "Due very soon",
+  soon: "Coming up",
+  upcoming: "Upcoming",
+};
+
+function formatDaysUntil(days: number): string {
+  if (days < 0) return `${Math.abs(days)} day${Math.abs(days) === 1 ? "" : "s"} overdue`;
+  if (days === 0) return "Due today";
+  if (days === 1) return "Due tomorrow";
+  return `Due in ${days} days`;
 }
 
 // Column set/labels/order are school-configurable (schools.knec_cba_export_columns) -- no
@@ -84,6 +108,8 @@ export function KnecPanel({
   schoolName,
   knecSchoolCode,
   exportColumns,
+  remindersEnabled,
+  reminders,
   exams,
   pendingEntries,
   batches,
@@ -91,6 +117,8 @@ export function KnecPanel({
   schoolName: string;
   knecSchoolCode: string | null;
   exportColumns: KnecCbaExportColumn[];
+  remindersEnabled: boolean;
+  reminders: KnecCbaWindowReminder[];
   exams: KnecExamOption[];
   pendingEntries: KnecPendingEntryRow[];
   batches: KnecBatchRow[];
@@ -113,6 +141,8 @@ export function KnecPanel({
   const [draftColumns, setDraftColumns] = useState<KnecCbaExportColumn[]>(() => withAllKnownColumns(exportColumns));
   const [columnsPending, setColumnsPending] = useState(false);
   const [columnsError, setColumnsError] = useState<string | null>(null);
+  const [dismissingWindowId, setDismissingWindowId] = useState<string | null>(null);
+  const [reminderTogglePending, setReminderTogglePending] = useState(false);
 
   const entriesForExam = useMemo(
     () => pendingEntries.filter((e) => e.exam_id === examId),
@@ -219,6 +249,20 @@ export function KnecPanel({
     router.refresh();
   }
 
+  async function handleDismissReminder(windowId: string) {
+    setDismissingWindowId(windowId);
+    await dismissKnecCbaWindowReminder(windowId);
+    setDismissingWindowId(null);
+    router.refresh();
+  }
+
+  async function handleToggleReminders() {
+    setReminderTogglePending(true);
+    await setKnecCbaRemindersEnabled(!remindersEnabled);
+    setReminderTogglePending(false);
+    router.refresh();
+  }
+
   async function handleReset() {
     if (!resetTarget) return;
     setResetPending(true);
@@ -231,6 +275,63 @@ export function KnecPanel({
 
   return (
     <div className="flex flex-col gap-6">
+      <div className="panel flex flex-col gap-3 p-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="label-eyebrow">Assessment window reminders</p>
+            <p className="text-xs text-muted-foreground">
+              KNEC-published CBA/SBA deadlines relevant to your grades — EduCore-authored operational data, not
+              official KNEC content.
+            </p>
+          </div>
+          <Button variant={remindersEnabled ? "outline" : "default"} size="sm" onClick={handleToggleReminders} disabled={reminderTogglePending}>
+            {reminderTogglePending ? "Updating…" : remindersEnabled ? "Turn off" : "Turn on"}
+          </Button>
+        </div>
+
+        {!remindersEnabled ? (
+          <p className="text-sm text-muted-foreground">Reminders are off for this school.</p>
+        ) : reminders.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No upcoming KNEC CBA deadlines for your grades right now.</p>
+        ) : (
+          <div className="flex flex-col gap-2">
+            {reminders.map((r) => (
+              <div key={r.window.id} className="flex items-center justify-between gap-3 rounded-md border border-border p-2.5">
+                <div className="flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="text-sm font-medium">{r.window.title}</p>
+                    <StatusBadge tone={URGENCY_TONE[r.urgency]} label={URGENCY_LABEL[r.urgency]} />
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {formatDaysUntil(r.daysUntilClose)} — closes {new Date(r.window.closesAt).toLocaleDateString()}
+                    {r.window.gradeLabels && r.window.gradeLabels.length > 0 ? ` · ${r.window.gradeLabels.join(", ")}` : ""}
+                  </p>
+                  {r.window.notes && <p className="mt-0.5 text-xs text-muted-foreground">{r.window.notes}</p>}
+                  {r.window.sourceUrl && (
+                    <a
+                      href={r.window.sourceUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-xs text-primary underline underline-offset-2"
+                    >
+                      Source
+                    </a>
+                  )}
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => handleDismissReminder(r.window.id)}
+                  disabled={dismissingWindowId === r.window.id}
+                >
+                  {dismissingWindowId === r.window.id ? "Dismissing…" : "Dismiss"}
+                </Button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
       <div className="panel flex items-center justify-between p-4">
         <div>
           <p className="label-eyebrow">KNEC School Code</p>
