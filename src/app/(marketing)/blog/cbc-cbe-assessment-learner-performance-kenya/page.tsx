@@ -7,6 +7,7 @@ import {
   Users,
   FileText,
   Sparkles,
+  Rows3,
   ArrowRight,
 } from "lucide-react";
 
@@ -51,6 +52,12 @@ export const metadata: Metadata = {
 //     cba.knec.ac.ke portal, not a live/official integration (KNEC publishes
 //     no public API):
 //     supabase/migrations/20260903021210_knec_cba_export.sql
+//   - Bulk class rating grid for KNEC CBA holistic indicators (core
+//     competencies, values, PCI areas -- distinct from the subject
+//     strand/sub-strand marks above), select-all + bulk-apply a band then
+//     adjust individuals, locked once the term closes:
+//     src/components/academics/competency-appraisal-grid.tsx,
+//     supabase/migrations/20260904015517_competency_indicator_ratings.sql
 // KICD/KNEC/CBC-CBE facts were researched separately from official KNEC
 // publications (knec.ac.ke) and Ministry of Education announcements.
 
@@ -70,6 +77,10 @@ const FAQS = [
   {
     q: "How does EduCore help a school identify learners who need support?",
     a: "Ask EduCore AI can summarise how a class's sub-strand ratings are distributed across competency levels for the most recent closed exam, and flag which students have multiple \"Below Expectation\" ratings. For numeric-graded classes, a separate rule-based view also flags students combining low attendance, low exam performance, and overdue fees.",
+  },
+  {
+    q: "Does a teacher have to rate every learner one at a time?",
+    a: "No. For a given competency indicator, a teacher can select the whole class, apply a rating band in bulk, and then adjust individual students and add observation notes where needed — rather than opening each learner separately.",
   },
   {
     q: "Do parents actually see their child's competency ratings?",
@@ -110,6 +121,7 @@ export default function CbcCbeAssessmentLearnerPerformancePost() {
         description={DESCRIPTION}
         path="/blog/cbc-cbe-assessment-learner-performance-kenya"
         datePublished="2026-09-03"
+        dateModified="2026-09-04"
       />
       <script
         type="application/ld+json"
@@ -276,13 +288,24 @@ export default function CbcCbeAssessmentLearnerPerformancePost() {
             </p>
           </Reveal>
           <Reveal>
-            <Users className="h-5 w-5 text-marketing-gold-400" strokeWidth={1.75} />
-            <p className="mt-3 text-sm font-semibold text-white">Teacher-scoped assessment workflows</p>
+            <Rows3 className="h-5 w-5 text-marketing-gold-400" strokeWidth={1.75} />
+            <p className="mt-3 text-sm font-semibold text-white">A whole class, one indicator, one screen</p>
             <p className="mt-2 text-sm leading-relaxed text-white/70">
-              A teacher can only enter competency ratings for classes and
-              subjects they actually teach. Once an exam is closed, editing a
-              rating requires a stated reason — assessment records stay
-              accountable, not silently editable.
+              Rating 40 learners one at a time is where most CBC/CBE
+              assessment effort gets lost. A teacher can select the whole
+              class against a single competency indicator, apply a rating in
+              bulk, then adjust individuals and attach an observation note
+              where one is warranted.
+            </p>
+          </Reveal>
+          <Reveal>
+            <Users className="h-5 w-5 text-marketing-gold-400" strokeWidth={1.75} />
+            <p className="mt-3 text-sm font-semibold text-white">Teacher-scoped, term-locked</p>
+            <p className="mt-2 text-sm leading-relaxed text-white/70">
+              A teacher can only enter ratings for classes and subjects they
+              actually teach, and once a term is closed, the grid locks —
+              editing a rating past that point requires a stated reason
+              rather than a silent overwrite.
             </p>
           </Reveal>
           <Reveal>

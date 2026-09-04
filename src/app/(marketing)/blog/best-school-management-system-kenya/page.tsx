@@ -21,6 +21,13 @@ export const metadata: Metadata = {
   twitter: { card: "summary_large_image", title: TITLE, description: DESCRIPTION },
 };
 
+// Verified against the codebase before adding the AI bullet (Sep 2026
+// revision): Ask EduCore AI natural-language panel with the sample
+// questions quoted (src/components/ai/ask-ai-panel.tsx), and AI-drafted
+// report card comments that are never visible to a parent until a teacher
+// approves them, rate-limited and gated behind report_cards.approve
+// (src/lib/ai/report-card-comment.ts, src/app/(app)/exams/report-cards/actions.ts).
+
 const CRITERIA = [
   {
     icon: MapPin,
@@ -71,6 +78,7 @@ export default function BestSchoolManagementSystemKenyaPost() {
         description={DESCRIPTION}
         path="/blog/best-school-management-system-kenya"
         datePublished="2026-08-30"
+        dateModified="2026-09-04"
       />
       {/* 1 — Hero */}
       <Section tone="navy" className="pb-14 pt-20 sm:pb-16 sm:pt-28">
@@ -79,12 +87,12 @@ export default function BestSchoolManagementSystemKenyaPost() {
           Best School Management System in Kenya: A 2026 Guide
         </h1>
         <p className="mt-5 max-w-2xl text-lg leading-relaxed text-white/70">
-          Choosing a school management system touches admissions, fees,
-          attendance, academics, and how well parents stay in the loop. Get
-          it right and the back office finally runs as smoothly as the
-          classroom. Here&apos;s what actually separates the systems schools
-          keep using from the ones that quietly get abandoned for
-          spreadsheets and WhatsApp within a term.
+          Most Kenyan schools have tried some version of this before — a
+          system gets bought, a term of enthusiasm follows, and by mid-year
+          the bursar is back on a spreadsheet and the class teacher is back
+          on a paper register. It&apos;s rarely the school&apos;s fault.
+          It&apos;s usually that the system didn&apos;t actually fit how the
+          school runs. Here&apos;s what to check before you commit to one.
         </p>
       </Section>
 
@@ -93,7 +101,7 @@ export default function BestSchoolManagementSystemKenyaPost() {
         <Reveal>
           <Eyebrow>What to Actually Look For</Eyebrow>
           <h2 className="mt-3 max-w-2xl text-2xl font-semibold tracking-tight text-marketing-navy-950 sm:text-3xl">
-            Five things that separate real adoption from another abandoned system.
+            What actually separates the systems that stick from the ones that don&apos;t.
           </h2>
         </Reveal>
         <div className="mt-10 grid gap-8 sm:grid-cols-2">
@@ -121,8 +129,9 @@ export default function BestSchoolManagementSystemKenyaPost() {
           <ul className="mt-6 flex flex-col gap-3 text-base leading-relaxed text-white/75">
             <li>
               <span className="font-semibold text-white">M-Pesa built in</span> —
-              fee payments reconcile automatically against invoices instead of
-              being matched by hand against a paper ledger.
+              payments confirm automatically via STK push, and a Paybill
+              statement can be matched against recorded payments by receipt
+              number instead of searched one code at a time.
             </li>
             <li>
               <span className="font-semibold text-white">Both grading models, natively</span> —
@@ -147,6 +156,14 @@ export default function BestSchoolManagementSystemKenyaPost() {
             <li>
               <span className="font-semibold text-white">Parents reached where they already are</span> —
               fee reminders and updates go out over WhatsApp and SMS.
+            </li>
+            <li>
+              <span className="font-semibold text-white">AI that stays on a leash</span> —
+              a natural-language assistant can answer questions like
+              &quot;which classes are performing below average&quot; or
+              &quot;which inventory items are low in stock,&quot; and can
+              draft a report card comment for a teacher to review — but
+              nothing reaches a parent until a teacher approves it.
             </li>
           </ul>
         </Reveal>
