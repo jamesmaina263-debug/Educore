@@ -291,8 +291,12 @@ export async function submitApplication(
   // Confirmation notification (test checklist: "Submit an online application -> confirmation
   // notification received"). No authenticated session here, so queue_communication (which checks
   // auth_has_permission against the caller) can't be used — insert directly, same as any other
-  // system-initiated notification, then best-effort trigger dispatch immediately rather than
-  // waiting for a staff member to next open Communication.
+  // system-initiated notification, then trigger dispatch immediately rather than waiting for a
+  // staff member to next open Communication. admin.functions.invoke() sends the service role key
+  // as the bearer token, which send-communication now recognizes as a trusted system caller (see
+  // its own comment) — previously that silently 403'd and this depended entirely on the
+  // dispatch-communications cron sweep or a staff member's next visit; kept as best-effort below
+  // regardless, since the cron sweep is still the real backstop if this call ever fails.
   const confirmationBody = `Hi ${guardianName}, we've received ${firstName} ${lastName}'s application to ${school.name} (Ref: ${application.application_number}). We'll be in touch.${school.admission_response_note ? ` ${school.admission_response_note}.` : ""} Track status: `;
   await admin.from("notification_logs").insert({
     school_id: school.id,

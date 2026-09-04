@@ -64,10 +64,12 @@ shouldn't try to extract.
   checking with you first).
 - No restore drill has been performed. **A DR plan that has never been
   tested by actually restoring from a backup is not a verified DR plan** —
-  this is true here. Recommend scheduling a real restore drill (restore the
-  latest dump into a throwaway Supabase branch or local Postgres, verify
-  row counts and a few spot-checked records match) before trusting this for
-  anything real.
+  this is true here. A step-by-step procedure for running one now lives at
+  `docs/RESTORE_DRILL_RUNBOOK.md` (restore the latest dump into a throwaway
+  Supabase project or local Postgres, verify row counts and a few
+  spot-checked records match) — written this session but not yet executed,
+  since it needs someone with `SUPABASE_DB_URL`/dashboard access to actually
+  run it.
 
 ## 4. Recommended real fix
 
