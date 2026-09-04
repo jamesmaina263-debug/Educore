@@ -1,7 +1,10 @@
-import type { EmailProvider, EmailAttachment } from "./types.ts";
-
 const ZOHO_ACCOUNTS_BASE = "https://accounts.zoho.com";
 const ZOHO_MAIL_BASE = "https://mail.zoho.com/api";
+
+export type EmailAttachment = {
+  filename: string;
+  contentBase64: string;
+};
 
 type UploadedAttachment = {
   storeName: string;
@@ -9,12 +12,16 @@ type UploadedAttachment = {
   attachmentPath: string;
 };
 
-// Zoho Mail's free plan has no SMTP/IMAP access for programmatic sending —
-// this goes through the Zoho Mail REST API instead, authenticated with a
-// long-lived OAuth refresh token (self-client). See docs/... for the
-// one-time setup that produces ZOHO_CLIENT_ID / ZOHO_CLIENT_SECRET /
-// ZOHO_REFRESH_TOKEN / ZOHO_ACCOUNT_ID / ZOHO_FROM_ADDRESS.
-export class ZohoProvider implements EmailProvider {
+// Standalone OAuth client for the Zoho Mail REST API (self-client / refresh-token
+// flow). This is intentionally NOT part of the school-communication send path
+// (_shared/email/*, which uses Resend) -- it exists solely to back the Admin
+// Console's read-only company-email monitoring feature (james.maina@educoreafrica.com
+// and colleague mailboxes on the same domain). send() below is kept for potential
+// future use (e.g. a digest/alert email FROM the monitoring feature itself), but
+// nothing in the school-facing send flow should ever construct or call this class.
+// See ZOHO_CLIENT_ID / ZOHO_CLIENT_SECRET / ZOHO_REFRESH_TOKEN / ZOHO_ACCOUNT_ID /
+// ZOHO_FROM_ADDRESS in Supabase secrets for the credentials this needs.
+export class ZohoMailClient {
   private accessToken: string | null = null;
   private accessTokenExpiresAt = 0; // epoch ms
 
