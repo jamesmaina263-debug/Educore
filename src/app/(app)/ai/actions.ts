@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 // Phase 4, Item 1: Natural-language analytics ("Ask Educore AI").
 //
@@ -278,6 +279,27 @@ export async function askEducoreAI(question: string): Promise<AskAIResult> {
 
   const { data: canAskAI } = await supabase.rpc("auth_has_permission", { p_permission_key: "ai.read" });
   if (!canAskAI) return { error: "You don't have access to Educore AI." };
+
+  // SECURITY: ai.read gates *access* to this endpoint but did nothing to cap
+  // *volume* -- any user with the permission could send unlimited questions,
+  // each one a real, billed Gemini call via classifyIntent() below. Same
+  // primitive as login/signup/contact/communication/report-card-comment
+  // drafting; found and fixed alongside draftCommentWithAI in the same
+  // audit pass (see PR #228).
+  try {
+    const adminClient = createAdminClient();
+    const { data: withinLimit } = await adminClient.rpc("increment_and_check_rate_limit", {
+      p_bucket: `ai-assistant:${user.id}`,
+      p_max_events: 60,
+      p_window_seconds: 3600,
+    });
+    if (withinLimit === false) {
+      return { error: "Too many Educore AI questions. Please wait a while and try again." };
+    }
+  } catch {
+    // Don't let a missing/misconfigured admin client block a legitimate,
+    // permission-checked question over a missing rate-limit layer.
+  }
 
   const { data: schoolUser } = await supabase
     .from("school_users")
