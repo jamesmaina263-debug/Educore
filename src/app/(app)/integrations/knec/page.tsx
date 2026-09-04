@@ -20,6 +20,8 @@ export default async function IntegrationsKnecPage() {
         schoolName={ctx.schoolName}
         knecSchoolCode={ctx.knecSchoolCode}
         exportColumns={ctx.exportColumns}
+        remindersEnabled={ctx.remindersEnabled}
+        reminders={ctx.reminders}
         exams={ctx.exams}
         pendingEntries={ctx.pendingEntries}
         batches={ctx.batches}

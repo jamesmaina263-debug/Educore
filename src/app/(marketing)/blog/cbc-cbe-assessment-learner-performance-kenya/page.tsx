@@ -15,6 +15,7 @@ import { Eyebrow } from "@/components/marketing/eyebrow";
 import { Section } from "@/components/marketing/section";
 import { Reveal } from "@/components/marketing/reveal";
 import { BreadcrumbJsonLd, HOME_CRUMB } from "@/components/marketing/breadcrumb-json-ld";
+import { ArticleJsonLd } from "@/components/marketing/article-json-ld";
 
 const TITLE = "CBC/CBE Assessment & Learner Performance in Kenya — EduCore";
 const DESCRIPTION =
@@ -103,6 +104,12 @@ export default function CbcCbeAssessmentLearnerPerformancePost() {
           { name: "Blog", path: "/blog" },
           { name: "CBC, CBE and Learner Performance", path: "/blog/cbc-cbe-assessment-learner-performance-kenya" },
         ]}
+      />
+      <ArticleJsonLd
+        headline={TITLE}
+        description={DESCRIPTION}
+        path="/blog/cbc-cbe-assessment-learner-performance-kenya"
+        datePublished="2026-09-03"
       />
       <script
         type="application/ld+json"

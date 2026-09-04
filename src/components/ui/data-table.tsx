@@ -37,6 +37,25 @@ interface DataTableProps<TData, TValue> {
    *  or more rows are selected — e.g. "Deactivate (3)" / "Export (3)". */
   renderBulkActions?: (selectedRows: TData[]) => React.ReactNode;
   pageSize?: number;
+  /**
+   * Server-driven pagination. When set, `data` is expected to be just the
+   * current page's rows (not the full dataset) — the caller already ran a
+   * `.range()` query. Pass a `manual` object instead of relying on
+   * client-side pageSize/getPaginationRowModel, which needs every row in
+   * memory to work at all and is what silently turns "list a school's
+   * students" into "fetch every student in the school" as data grows.
+   * Search/filtering must also become server-side alongside this (see
+   * `manual.search`) — a client-side global filter can otherwise only ever
+   * search within whatever page happens to already be loaded.
+   */
+  manual?: {
+    pageIndex: number; // 0-based, matching TanStack's convention
+    pageCount: number;
+    onPageChange: (pageIndex: number) => void;
+    totalCount: number;
+    search: string;
+    onSearchChange: (value: string) => void;
+  };
 }
 
 export function DataTable<TData, TValue>({
@@ -47,44 +66,62 @@ export function DataTable<TData, TValue>({
   enableRowSelection = false,
   renderBulkActions,
   pageSize = 20,
+  manual,
 }: DataTableProps<TData, TValue>) {
   const [sorting, setSorting] = React.useState<SortingState>([]);
-  const [globalFilter, setGlobalFilter] = React.useState("");
+  const [clientGlobalFilter, setClientGlobalFilter] = React.useState("");
   const [rowSelection, setRowSelection] = React.useState<RowSelectionState>({});
 
   const table = useReactTable({
     data,
     columns,
-    state: { sorting, globalFilter, rowSelection },
+    state: {
+      sorting,
+      globalFilter: manual ? manual.search : clientGlobalFilter,
+      rowSelection,
+      ...(manual ? { pagination: { pageIndex: manual.pageIndex, pageSize: data.length || pageSize } } : {}),
+    },
     onSortingChange: setSorting,
-    onGlobalFilterChange: setGlobalFilter,
+    onGlobalFilterChange: manual ? undefined : setClientGlobalFilter,
     onRowSelectionChange: setRowSelection,
+    onPaginationChange: manual
+      ? (updater) => {
+          const next = typeof updater === "function" ? updater({ pageIndex: manual.pageIndex, pageSize }) : updater;
+          manual.onPageChange(next.pageIndex);
+        }
+      : undefined,
     enableRowSelection,
+    manualPagination: !!manual,
+    manualFiltering: !!manual,
+    pageCount: manual?.pageCount,
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
-    getFilteredRowModel: getFilteredRowModel(),
-    getPaginationRowModel: getPaginationRowModel(),
+    getFilteredRowModel: manual ? undefined : getFilteredRowModel(),
+    getPaginationRowModel: manual ? undefined : getPaginationRowModel(),
     initialState: { pagination: { pageSize } },
-    globalFilterFn: (row, columnId, value) => {
-      if (searchColumnId) {
-        return String(row.getValue(searchColumnId) ?? "")
-          .toLowerCase()
-          .includes(String(value).toLowerCase());
-      }
-      return String(row.getValue(columnId) ?? "")
-        .toLowerCase()
-        .includes(String(value).toLowerCase());
-    },
+    globalFilterFn: manual
+      ? undefined
+      : (row, columnId, value) => {
+          if (searchColumnId) {
+            return String(row.getValue(searchColumnId) ?? "")
+              .toLowerCase()
+              .includes(String(value).toLowerCase());
+          }
+          return String(row.getValue(columnId) ?? "")
+            .toLowerCase()
+            .includes(String(value).toLowerCase());
+        },
   });
 
   const selectedRows = table.getSelectedRowModel().rows.map((r) => r.original);
+  const resultCount = manual ? manual.totalCount : table.getFilteredRowModel().rows.length;
 
   return (
     <div className="panel">
       <div className="flex flex-wrap items-center gap-2 border-b border-border px-3 py-2">
         <Input
-          value={globalFilter}
-          onChange={(e) => setGlobalFilter(e.target.value)}
+          value={manual ? manual.search : clientGlobalFilter}
+          onChange={(e) => (manual ? manual.onSearchChange(e.target.value) : setClientGlobalFilter(e.target.value))}
           placeholder={searchPlaceholder}
           className="h-8 max-w-xs bg-background text-[0.8125rem]"
         />
@@ -94,8 +131,8 @@ export function DataTable<TData, TValue>({
           </div>
         )}
         <span className="ml-auto text-[0.75rem] text-muted-foreground">
-          {table.getFilteredRowModel().rows.length} result
-          {table.getFilteredRowModel().rows.length === 1 ? "" : "s"}
+          {resultCount} result
+          {resultCount === 1 ? "" : "s"}
         </span>
       </div>
 
@@ -156,15 +193,15 @@ export function DataTable<TData, TValue>({
 
       <div className="flex items-center justify-between border-t border-border px-3 py-2 text-[0.75rem] text-muted-foreground">
         <span>
-          Page {table.getState().pagination.pageIndex + 1} of{" "}
-          {Math.max(table.getPageCount(), 1)}
+          Page {(manual ? manual.pageIndex : table.getState().pagination.pageIndex) + 1} of{" "}
+          {Math.max(manual ? manual.pageCount : table.getPageCount(), 1)}
         </span>
         <div className="flex items-center gap-1">
           <Button
             variant="outline"
             size="sm"
-            onClick={() => table.previousPage()}
-            disabled={!table.getCanPreviousPage()}
+            onClick={() => (manual ? manual.onPageChange(manual.pageIndex - 1) : table.previousPage())}
+            disabled={manual ? manual.pageIndex <= 0 : !table.getCanPreviousPage()}
           >
             <ChevronLeft className="size-4" />
             Previous
@@ -172,8 +209,8 @@ export function DataTable<TData, TValue>({
           <Button
             variant="outline"
             size="sm"
-            onClick={() => table.nextPage()}
-            disabled={!table.getCanNextPage()}
+            onClick={() => (manual ? manual.onPageChange(manual.pageIndex + 1) : table.nextPage())}
+            disabled={manual ? manual.pageIndex >= manual.pageCount - 1 : !table.getCanNextPage()}
           >
             Next
             <ChevronRight className="size-4" />

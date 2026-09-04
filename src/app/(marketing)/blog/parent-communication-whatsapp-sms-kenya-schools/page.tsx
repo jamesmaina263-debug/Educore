@@ -15,6 +15,7 @@ import { Eyebrow } from "@/components/marketing/eyebrow";
 import { Section } from "@/components/marketing/section";
 import { Reveal } from "@/components/marketing/reveal";
 import { BreadcrumbJsonLd, HOME_CRUMB } from "@/components/marketing/breadcrumb-json-ld";
+import { ArticleJsonLd } from "@/components/marketing/article-json-ld";
 
 const TITLE = "Parent Communication: WhatsApp & SMS for Kenyan Schools — EduCore";
 const DESCRIPTION =
@@ -104,6 +105,12 @@ export default function ParentCommunicationWhatsappSmsKenyaPost() {
           { name: "Blog", path: "/blog" },
           { name: "Parent Communication", path: "/blog/parent-communication-whatsapp-sms-kenya-schools" },
         ]}
+      />
+      <ArticleJsonLd
+        headline={TITLE}
+        description={DESCRIPTION}
+        path="/blog/parent-communication-whatsapp-sms-kenya-schools"
+        datePublished="2026-09-03"
       />
       <script
         type="application/ld+json"
