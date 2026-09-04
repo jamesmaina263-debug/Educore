@@ -21,6 +21,8 @@ import {
 import { useOfflineSync } from "@/hooks/use-offline-sync";
 import { queueMutation } from "@/lib/offline/queue";
 import { ExamsOfflineBanner } from "./offline-banner";
+import { RubricEditor, RubricScoreButton } from "./rubric-panel";
+import type { RubricDetail } from "@/app/(app)/exams/rubric-actions";
 
 export interface StrandOption {
   id: string;
@@ -65,6 +67,8 @@ interface Props {
   examStatus: "open" | "closed";
   canEnter: boolean;
   canManageCurriculum: boolean;
+  /** Structured rubrics keyed by sub_strand_id, for whichever sub-strands have one set up. */
+  rubricsBySubStrand: Record<string, RubricDetail>;
 }
 
 /**
@@ -280,6 +284,7 @@ export function CompetencyMarksSection({
   canEnter,
   canManageCurriculum,
   subjectId,
+  rubricsBySubStrand,
 }: Props) {
   const router = useRouter();
   const { online, pendingCount, failed, syncing, sync, discard } = useOfflineSync("exams");
@@ -427,7 +432,10 @@ export function CompetencyMarksSection({
                 </Button>
               </div>
               {s.sub_strands.map((ss) => (
-                <SubStrandContentEditor key={ss.id} subStrand={ss} />
+                <div key={ss.id}>
+                  <SubStrandContentEditor subStrand={ss} />
+                  <RubricEditor subStrandId={ss.id} rubric={rubricsBySubStrand[ss.id] ?? null} bandOptions={bandOptions} />
+                </div>
               ))}
             </div>
           ))}
@@ -480,6 +488,15 @@ export function CompetencyMarksSection({
                           </Select>
                           {isQueued && <p className="mt-1 text-[0.625rem] text-muted-foreground">Saved offline</p>}
                           {savedId && <EvidenceButton competencyMarkId={savedId} canEnter={canEnter} />}
+                          {savedId && rubricsBySubStrand[ss.id] && (
+                            <RubricScoreButton
+                              competencyMarkId={savedId}
+                              rubric={rubricsBySubStrand[ss.id]}
+                              bandOptions={bandOptions}
+                              canEnter={canEnter}
+                              examStatus={examStatus}
+                            />
+                          )}
                         </TableCell>
                       );
                     })}
