@@ -6,7 +6,17 @@ import { AppShell } from "@/components/app-shell/app-shell";
 import { Button } from "@/components/ui/button";
 import { StaffTable, type StaffRow } from "@/components/staff/staff-table";
 
-export default async function StaffDirectoryPage() {
+const PAGE_SIZE = 20;
+
+export default async function StaffDirectoryPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ page?: string; q?: string }>;
+}) {
+  const { page: pageParam, q } = await searchParams;
+  const page = Math.max(1, Number(pageParam) || 1);
+  const search = (q ?? "").trim();
+
   const supabase = await createClient();
 
   const {
@@ -22,11 +32,23 @@ export default async function StaffDirectoryPage() {
 
   const { data: canManage } = await supabase.rpc("auth_has_permission", { p_permission_key: "staff.manage" });
 
-  const { data: staffRows } = await supabase
+  // Paginated + searched server-side (2026-09-03 audit, finding A2). Staff rosters are
+  // typically much smaller than student rosters, but a large multi-campus school group could
+  // still have several hundred staff, and the same "fetch everything, paginate in the
+  // browser" pattern applied here too.
+  let query = supabase
     .from("school_users")
-    .select("id, full_name, department, position, status, gender, roles!inner(name, display_name)")
-    .not("roles.name", "in", "(parent,student,super_admin)")
-    .order("full_name");
+    .select("id, full_name, department, position, status, gender, roles!inner(name, display_name)", {
+      count: "exact",
+    })
+    .not("roles.name", "in", "(parent,student,super_admin)");
+
+  if (search) {
+    query = query.ilike("full_name", `%${search}%`);
+  }
+
+  const from = (page - 1) * PAGE_SIZE;
+  const { data: staffRows, count } = await query.order("full_name").range(from, from + PAGE_SIZE - 1);
 
   const rows: StaffRow[] = (staffRows ?? []).map((s) => ({
     id: s.id,
@@ -40,6 +62,7 @@ export default async function StaffDirectoryPage() {
 
   const roleName = (schoolUser?.roles as unknown as { display_name: string } | null)?.display_name;
   const schoolName = (schoolUser?.schools as unknown as { name: string } | null)?.name;
+  const totalCount = count ?? 0;
 
   return (
     <AppShell
@@ -52,7 +75,7 @@ export default async function StaffDirectoryPage() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-lg font-semibold">Staff directory</h1>
-            <p className="text-sm text-muted-foreground">{rows.length} staff members</p>
+            <p className="text-sm text-muted-foreground">{totalCount} staff members</p>
           </div>
           <div className="flex items-center gap-2">
             <Button variant="outline" asChild>
@@ -66,12 +89,12 @@ export default async function StaffDirectoryPage() {
           </div>
         </div>
 
-        {rows.length === 0 ? (
+        {totalCount === 0 && !search ? (
           <div className="panel border-dashed p-10 text-center text-sm text-muted-foreground">
             No staff records yet.
           </div>
         ) : (
-          <StaffTable rows={rows} canManage={canManage === true} />
+          <StaffTable rows={rows} canManage={canManage === true} totalCount={totalCount} pageSize={PAGE_SIZE} />
         )}
       </div>
     </AppShell>

@@ -1,12 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import Link from "next/link";
 import { type ColumnDef } from "@tanstack/react-table";
 import { StatusBadge } from "@/components/status-badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
+import { useServerTableParams } from "@/hooks/use-server-table-params";
 import {
   Select,
   SelectTrigger,
@@ -118,13 +119,39 @@ const buildColumns = (canManage: boolean): ColumnDef<StaffRow>[] => [
   },
 ];
 
-export function StaffTable({ rows, canManage }: { rows: StaffRow[]; canManage: boolean }) {
+function StaffTableInner({
+  rows,
+  canManage,
+  totalCount,
+  pageSize,
+}: {
+  rows: StaffRow[];
+  canManage: boolean;
+  totalCount: number;
+  pageSize: number;
+}) {
+  const manual = useServerTableParams({ totalCount, pageSize });
   return (
     <DataTable
       columns={buildColumns(canManage)}
       data={rows}
       searchColumnId="full_name"
       searchPlaceholder="Search staff by name…"
+      pageSize={pageSize}
+      manual={manual}
     />
+  );
+}
+
+/**
+ * `rows` is one page's worth -- see staff/page.tsx, which now runs the
+ * search/pagination server-side instead of fetching the whole staff roster
+ * on every load (2026-09-03 audit, finding A2).
+ */
+export function StaffTable(props: { rows: StaffRow[]; canManage: boolean; totalCount: number; pageSize: number }) {
+  return (
+    <Suspense fallback={null}>
+      <StaffTableInner {...props} />
+    </Suspense>
   );
 }
