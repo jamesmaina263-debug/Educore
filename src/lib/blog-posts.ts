@@ -37,4 +37,11 @@ export const BLOG_POSTS: BlogPostSummary[] = [
       "Why the class WhatsApp group breaks down as a school grows, and how EduCore handles parent communication instead — structured teacher-to-parent items, a two-way WhatsApp assistant, targeted announcements, and fee alerts a human always approves first.",
     publishedOn: "2026-09-03",
   },
+  {
+    slug: "mpesa-fee-collection-automation-kenya-schools",
+    title: "M-Pesa Fee Collection Automation for Kenyan Schools",
+    description:
+      "Why manual M-Pesa reconciliation is where Kenyan school bursars lose the most time, and how EduCore automates it — STK push, statement matching, and auto-allocation to invoices.",
+    publishedOn: "2026-09-04",
+  },
 ];

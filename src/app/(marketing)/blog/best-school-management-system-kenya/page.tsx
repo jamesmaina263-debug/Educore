@@ -7,6 +7,7 @@ import { Eyebrow } from "@/components/marketing/eyebrow";
 import { Section } from "@/components/marketing/section";
 import { Reveal } from "@/components/marketing/reveal";
 import { BreadcrumbJsonLd, HOME_CRUMB } from "@/components/marketing/breadcrumb-json-ld";
+import { ArticleJsonLd } from "@/components/marketing/article-json-ld";
 
 const TITLE = "Best School Management System in Kenya (2026 Guide) — EduCore";
 const DESCRIPTION =
@@ -65,6 +66,12 @@ export default function BestSchoolManagementSystemKenyaPost() {
   return (
     <>
       <BreadcrumbJsonLd items={[HOME_CRUMB, { name: "Best School Management System in Kenya", path: "/blog/best-school-management-system-kenya" }]} />
+      <ArticleJsonLd
+        headline={TITLE}
+        description={DESCRIPTION}
+        path="/blog/best-school-management-system-kenya"
+        datePublished="2026-08-30"
+      />
       {/* 1 — Hero */}
       <Section tone="navy" className="pb-14 pt-20 sm:pb-16 sm:pt-28">
         <Eyebrow tone="dark">Guide</Eyebrow>
