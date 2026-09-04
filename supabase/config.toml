@@ -55,3 +55,10 @@ verify_jwt = false
 
 [functions.whatsapp-webhook]
 verify_jwt = false
+
+# Called from the Admin Console with a real super-admin session, same pattern as
+# send-communication above: verify_jwt is false here too, with auth done internally via
+# auth_is_super_admin() checked against the caller's own JWT (see the function body) rather
+# than relying on Supabase's platform-level JWT gate.
+[functions.zoho-mail-monitor]
+verify_jwt = false

@@ -131,4 +131,96 @@ export class ZohoMailClient {
       throw new Error(`Zoho email send failed (${res.status}): ${text}`);
     }
   }
+
+  // --- Monitoring reads below (ZohoMail.accounts.READ / folders.READ / messages.READ) ---
+
+  private async authedGet(path: string): Promise<unknown> {
+    const token = await this.getAccessToken();
+    const res = await fetch(`${ZOHO_MAIL_BASE}${path}`, {
+      headers: { Authorization: `Zoho-oauthtoken ${token}` },
+    });
+    const body = await res.json();
+    if (!res.ok || body?.status?.code !== 200) {
+      throw new Error(`Zoho API GET ${path} failed (${res.status}): ${JSON.stringify(body)}`);
+    }
+    return body.data;
+  }
+
+  async listFolders(): Promise<ZohoFolder[]> {
+    const data = (await this.authedGet(`/accounts/${this.accountId}/folders`)) as RawZohoFolder[];
+    return (data ?? []).map((f) => ({
+      folderId: f.folderId,
+      folderName: f.folderName,
+      path: f.path,
+      unreadCount: Number(f.unreadCount ?? 0),
+    }));
+  }
+
+  // folderId omitted -> Zoho's default view (typically Inbox) for that account.
+  async listMessages(opts: { folderId?: string; start?: number; limit?: number } = {}): Promise<ZohoMessageSummary[]> {
+    const params = new URLSearchParams();
+    if (opts.folderId) params.set("folderId", opts.folderId);
+    params.set("start", String(opts.start ?? 1));
+    params.set("limit", String(opts.limit ?? 50));
+    params.set("includeto", "true");
+
+    const data = (await this.authedGet(
+      `/accounts/${this.accountId}/messages/view?${params}`,
+    )) as RawZohoMessage[];
+
+    return (data ?? []).map((m) => ({
+      messageId: m.messageId,
+      folderId: m.folderId,
+      subject: m.subject,
+      summary: m.summary,
+      fromAddress: m.fromAddress,
+      toAddress: m.toAddress,
+      sentDateInGMT: m.sentDateInGMT,
+      receivedTime: m.receivedTime,
+      hasAttachment: m.hasAttachment === "1",
+      isUnread: m.status === "0", // Zoho: status "0" = unread, "1" = read
+    }));
+  }
+
+  async getMessageContent(folderId: string, messageId: string): Promise<string> {
+    const data = (await this.authedGet(
+      `/accounts/${this.accountId}/folders/${folderId}/messages/${messageId}/content`,
+    )) as { content: string };
+    return data.content;
+  }
 }
+
+export type ZohoFolder = {
+  folderId: string;
+  folderName: string;
+  path: string;
+  unreadCount: number;
+};
+
+export type ZohoMessageSummary = {
+  messageId: string;
+  folderId: string;
+  subject: string;
+  summary: string;
+  fromAddress: string;
+  toAddress: string;
+  sentDateInGMT: string;
+  receivedTime: string;
+  hasAttachment: boolean;
+  isUnread: boolean;
+};
+
+type RawZohoFolder = { folderId: string; folderName: string; path: string; unreadCount?: string | number };
+
+type RawZohoMessage = {
+  messageId: string;
+  folderId: string;
+  subject: string;
+  summary: string;
+  fromAddress: string;
+  toAddress: string;
+  sentDateInGMT: string;
+  receivedTime: string;
+  hasAttachment: string;
+  status: string;
+};
