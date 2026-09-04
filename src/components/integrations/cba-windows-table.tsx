@@ -15,7 +15,7 @@ import {
   DialogFooter,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { createCbaWindow, updateCbaWindow, setCbaWindowActive, type CbaWindowInput } from "@/app/(admin)/admin/cba-windows/actions";
+import { createCbaWindow, updateCbaWindow, setCbaWindowActive, type CbaWindowInput } from "@/app/(app)/integrations/actions";
 
 export interface CbaWindowRow {
   id: string;
@@ -49,7 +49,7 @@ function fromGradeLabelsInput(value: string): string[] {
     .filter(Boolean);
 }
 
-export function AdminCbaWindowsTable({ rows }: { rows: CbaWindowRow[] }) {
+export function CbaWindowsTable({ rows }: { rows: CbaWindowRow[] }) {
   const router = useRouter();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);

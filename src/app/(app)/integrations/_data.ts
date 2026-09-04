@@ -73,6 +73,18 @@ export interface KnecBatchRow {
   notes: string | null;
 }
 
+export interface KnecCbaWindowRow {
+  id: string;
+  title: string;
+  grade_labels: string[] | null;
+  opens_at: string | null;
+  closes_at: string;
+  notes: string | null;
+  source_url: string | null;
+  is_active: boolean;
+  created_at: string;
+}
+
 export interface KnecContext {
   userName: string;
   userRole?: string;
@@ -82,6 +94,7 @@ export interface KnecContext {
   exportColumns: KnecCbaExportColumn[];
   remindersEnabled: boolean;
   reminders: KnecCbaWindowReminder[];
+  allWindows: KnecCbaWindowRow[];
   exams: KnecExamOption[];
   pendingEntries: KnecPendingEntryRow[];
   batches: KnecBatchRow[];
@@ -118,36 +131,45 @@ export async function loadKnecContext(): Promise<KnecContext> {
   let batches: KnecBatchRow[] = [];
   let exams: KnecExamOption[] = [];
   let reminders: KnecCbaWindowReminder[] = [];
+  let allWindows: KnecCbaWindowRow[] = [];
 
   if (canManageKnec === true) {
-    const [{ data: markRows }, { data: batchRows }, { data: windowRows }, { data: dismissalRows }, { data: classRows }] =
-      await Promise.all([
-        supabase
-          .from("competency_marks")
-          .select(
-            "id, student_id, exam_id, knec_export_status, students(admission_number, first_name, last_name, streams(name, classes(name))), exams(name), curriculum_sub_strands(name, curriculum_strands(name, subjects(name))), grading_scale_bands(label)",
-          )
-          .in("knec_export_status", ["not_submitted", "included_in_batch"])
-          .order("created_at", { ascending: false })
-          .limit(1000),
-        supabase
-          .from("knec_cba_export_batches")
-          .select(
-            "id, student_count, entry_count, generated_at, status, confirmed_at, notes, exams(name), classes(name), generated_by:school_users!knec_cba_export_batches_generated_by_fkey(full_name), confirmed_by:school_users!knec_cba_export_batches_confirmed_by_fkey(full_name)",
-          )
-          .order("generated_at", { ascending: false })
-          .limit(50),
-        school?.knec_cba_reminders_enabled
-          ? supabase
-              .from("knec_cba_assessment_windows")
-              .select("id, title, grade_labels, opens_at, closes_at, notes, source_url")
-              .eq("is_active", true)
-          : Promise.resolve({ data: [] as never[] }),
-        school?.knec_cba_reminders_enabled
-          ? supabase.from("knec_cba_window_dismissals").select("window_id")
-          : Promise.resolve({ data: [] as never[] }),
-        school?.knec_cba_reminders_enabled ? supabase.from("classes").select("name") : Promise.resolve({ data: [] as never[] }),
-      ]);
+    const [
+      { data: markRows },
+      { data: batchRows },
+      { data: allWindowRows },
+      { data: dismissalRows },
+      { data: classRows },
+    ] = await Promise.all([
+      supabase
+        .from("competency_marks")
+        .select(
+          "id, student_id, exam_id, knec_export_status, students(admission_number, first_name, last_name, streams(name, classes(name))), exams(name), curriculum_sub_strands(name, curriculum_strands(name, subjects(name))), grading_scale_bands(label)",
+        )
+        .in("knec_export_status", ["not_submitted", "included_in_batch"])
+        .order("created_at", { ascending: false })
+        .limit(1000),
+      supabase
+        .from("knec_cba_export_batches")
+        .select(
+          "id, student_count, entry_count, generated_at, status, confirmed_at, notes, exams(name), classes(name), generated_by:school_users!knec_cba_export_batches_generated_by_fkey(full_name), confirmed_by:school_users!knec_cba_export_batches_confirmed_by_fkey(full_name)",
+        )
+        .order("generated_at", { ascending: false })
+        .limit(50),
+      // This school's own CBA windows, own-authored -- fetched regardless of the reminders
+      // toggle, since a school still needs to manage/edit its list even with reminders off.
+      supabase
+        .from("knec_cba_assessment_windows")
+        .select("id, title, grade_labels, opens_at, closes_at, notes, source_url, is_active, created_at")
+        .order("closes_at", { ascending: false })
+        .limit(200),
+      school?.knec_cba_reminders_enabled
+        ? supabase.from("knec_cba_window_dismissals").select("window_id")
+        : Promise.resolve({ data: [] as never[] }),
+      school?.knec_cba_reminders_enabled ? supabase.from("classes").select("name") : Promise.resolve({ data: [] as never[] }),
+    ]);
+
+    allWindows = (allWindowRows ?? []) as KnecCbaWindowRow[];
 
     const examMap = new Map<string, string>();
     pendingEntries = (markRows ?? [])
@@ -202,15 +224,17 @@ export async function loadKnecContext(): Promise<KnecContext> {
     }));
 
     if (school?.knec_cba_reminders_enabled) {
-      const windows: KnecCbaAssessmentWindow[] = (windowRows ?? []).map((w) => ({
-        id: w.id,
-        title: w.title,
-        gradeLabels: w.grade_labels,
-        opensAt: w.opens_at,
-        closesAt: w.closes_at,
-        notes: w.notes,
-        sourceUrl: w.source_url,
-      }));
+      const windows: KnecCbaAssessmentWindow[] = allWindows
+        .filter((w) => w.is_active)
+        .map((w) => ({
+          id: w.id,
+          title: w.title,
+          gradeLabels: w.grade_labels,
+          opensAt: w.opens_at,
+          closesAt: w.closes_at,
+          notes: w.notes,
+          sourceUrl: w.source_url,
+        }));
       const dismissedIds = new Set((dismissalRows ?? []).map((d) => d.window_id));
       const classNames = (classRows ?? []).map((c) => c.name);
       reminders = buildKnecCbaWindowReminders(windows, classNames, dismissedIds);
@@ -226,6 +250,7 @@ export async function loadKnecContext(): Promise<KnecContext> {
     exportColumns: resolveKnecCbaExportColumns(school?.knec_cba_export_columns),
     remindersEnabled: school?.knec_cba_reminders_enabled ?? true,
     reminders,
+    allWindows,
     exams,
     pendingEntries,
     batches,

@@ -151,6 +151,80 @@ export async function setKnecCbaRemindersEnabled(enabled: boolean): Promise<Acti
   return { success: true as const };
 }
 
+// CBA assessment windows are per-school data authored by that school's own management
+// (knec.manage: school_owner/principal/deputy_principal/academic_officer) -- plain table writes,
+// not RPCs, same shape as updateKnecSchoolCode above. RLS (school_id = auth_school_id() and
+// knec.manage) is the real authorization; auth_school_id() here is just to populate the column.
+export interface CbaWindowInput {
+  title: string;
+  gradeLabels: string[]; // empty = applies to every grade
+  opensAt: string | null; // ISO date or null
+  closesAt: string; // ISO date
+  notes: string | null;
+  sourceUrl: string | null;
+}
+
+export async function createCbaWindow(input: CbaWindowInput): Promise<ActionResult> {
+  const supabase = await createClient();
+  const { data: schoolId, error: schoolIdError } = await supabase.rpc("auth_school_id");
+  if (schoolIdError || !schoolId) return { error: "Could not resolve your school." };
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "Not signed in." };
+
+  const { data: actor } = await supabase
+    .from("school_users")
+    .select("id")
+    .eq("auth_user_id", user.id)
+    .maybeSingle();
+  if (!actor) return { error: "Could not resolve your staff account." };
+
+  const { error } = await supabase.from("knec_cba_assessment_windows").insert({
+    school_id: schoolId,
+    title: input.title.trim(),
+    grade_labels: input.gradeLabels.length > 0 ? input.gradeLabels : null,
+    opens_at: input.opensAt,
+    closes_at: input.closesAt,
+    notes: input.notes?.trim() || null,
+    source_url: input.sourceUrl?.trim() || null,
+    created_by: actor.id,
+  });
+  if (error) return { error: error.message };
+
+  revalidatePath("/integrations/knec");
+  return { success: true as const };
+}
+
+export async function updateCbaWindow(id: string, input: CbaWindowInput): Promise<ActionResult> {
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("knec_cba_assessment_windows")
+    .update({
+      title: input.title.trim(),
+      grade_labels: input.gradeLabels.length > 0 ? input.gradeLabels : null,
+      opens_at: input.opensAt,
+      closes_at: input.closesAt,
+      notes: input.notes?.trim() || null,
+      source_url: input.sourceUrl?.trim() || null,
+    })
+    .eq("id", id);
+  if (error) return { error: error.message };
+
+  revalidatePath("/integrations/knec");
+  return { success: true as const };
+}
+
+export async function setCbaWindowActive(id: string, isActive: boolean): Promise<ActionResult> {
+  const supabase = await createClient();
+  const { error } = await supabase.from("knec_cba_assessment_windows").update({ is_active: isActive }).eq("id", id);
+  if (error) return { error: error.message };
+
+  revalidatePath("/integrations/knec");
+  return { success: true as const };
+}
+
 // client can generate the KNEC-ready .xlsx download -- kept server-side since RLS on
 // knec_cba_export_batch_items only allows select, and this joins in current student/subject
 // data the snapshot table doesn't carry (same rationale as getNemisBatchExportRows).
