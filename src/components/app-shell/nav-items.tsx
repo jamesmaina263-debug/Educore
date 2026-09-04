@@ -105,6 +105,7 @@ const academicsChildren: NavChild[] = [
   { label: "Teacher Allocation", href: "/academics/teacher-allocation", icon: UserCog },
   { label: "Subjects", href: "/academics/subjects", icon: BookMarked },
   { label: "Pathway Guidance", href: "/academics/pathway-guidance", icon: Compass },
+  { label: "Competency Appraisal", href: "/academics/competency-appraisal", icon: ClipboardCheck },
   { label: "Timetable", href: "/academics/timetable", icon: CalendarClock },
   { label: "Newsletters", href: "/academics/newsletters", icon: Mail },
   { label: "Rollover", href: "/academics/rollover", icon: RotateCcw },
