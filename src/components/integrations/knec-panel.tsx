@@ -31,7 +31,8 @@ import {
   DialogFooter,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import type { KnecPendingEntryRow, KnecBatchRow, KnecExamOption } from "@/app/(app)/integrations/_data";
+import type { KnecPendingEntryRow, KnecBatchRow, KnecExamOption, KnecCbaWindowRow } from "@/app/(app)/integrations/_data";
+import { CbaWindowsTable } from "@/components/integrations/cba-windows-table";
 import {
   generateKnecCbaExportBatch,
   confirmKnecCbaExportBatch,
@@ -110,6 +111,7 @@ export function KnecPanel({
   exportColumns,
   remindersEnabled,
   reminders,
+  allWindows,
   exams,
   pendingEntries,
   batches,
@@ -119,6 +121,7 @@ export function KnecPanel({
   exportColumns: KnecCbaExportColumn[];
   remindersEnabled: boolean;
   reminders: KnecCbaWindowReminder[];
+  allWindows: KnecCbaWindowRow[];
   exams: KnecExamOption[];
   pendingEntries: KnecPendingEntryRow[];
   batches: KnecBatchRow[];
@@ -330,6 +333,17 @@ export function KnecPanel({
             ))}
           </div>
         )}
+      </div>
+
+      <div className="flex flex-col gap-2">
+        <div>
+          <p className="label-eyebrow">Manage assessment windows</p>
+          <p className="text-xs text-muted-foreground">
+            Add the CBA/SBA deadlines your school needs to track, as KNEC publishes them via its own
+            circulars/portal notices. Link a source where you can, so anyone can verify it directly.
+          </p>
+        </div>
+        <CbaWindowsTable rows={allWindows} />
       </div>
 
       <div className="panel flex items-center justify-between p-4">

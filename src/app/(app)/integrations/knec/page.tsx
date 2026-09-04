@@ -22,6 +22,7 @@ export default async function IntegrationsKnecPage() {
         exportColumns={ctx.exportColumns}
         remindersEnabled={ctx.remindersEnabled}
         reminders={ctx.reminders}
+        allWindows={ctx.allWindows}
         exams={ctx.exams}
         pendingEntries={ctx.pendingEntries}
         batches={ctx.batches}
