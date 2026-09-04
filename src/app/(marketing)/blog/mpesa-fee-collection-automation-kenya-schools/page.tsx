@@ -14,6 +14,7 @@ import { Eyebrow } from "@/components/marketing/eyebrow";
 import { Section } from "@/components/marketing/section";
 import { Reveal } from "@/components/marketing/reveal";
 import { BreadcrumbJsonLd, HOME_CRUMB } from "@/components/marketing/breadcrumb-json-ld";
+import { ArticleJsonLd } from "@/components/marketing/article-json-ld";
 
 const TITLE = "M-Pesa Fee Collection Automation for Kenyan Schools — EduCore";
 const DESCRIPTION =
@@ -101,6 +102,12 @@ export default function MpesaFeeCollectionAutomationKenyaPost() {
           { name: "Blog", path: "/blog" },
           { name: "M-Pesa Fee Collection Automation", path: "/blog/mpesa-fee-collection-automation-kenya-schools" },
         ]}
+      />
+      <ArticleJsonLd
+        headline={TITLE}
+        description={DESCRIPTION}
+        path="/blog/mpesa-fee-collection-automation-kenya-schools"
+        datePublished="2026-09-04"
       />
       <script
         type="application/ld+json"
