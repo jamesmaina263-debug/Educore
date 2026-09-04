@@ -9,6 +9,7 @@ import {
   type StrandOption,
   type CompetencyRatingRow,
 } from "@/components/exams/competency-marks-section";
+import { listRubricsForSubStrands, type RubricDetail } from "@/app/(app)/exams/rubric-actions";
 
 export default async function MarksPage({
   searchParams,
@@ -87,6 +88,7 @@ export default async function MarksPage({
   let roster: MarksRosterRow[] = [];
   let strandsWithSubStrands: StrandOption[] = [];
   let competencyRatings: CompetencyRatingRow[] = [];
+  let rubricsBySubStrand: Record<string, RubricDetail> = {};
 
   if (exam && selectedClass && selectedSubjectId) {
     // Resolve the class's effective grading scale: its own override, else the school default.
@@ -162,14 +164,18 @@ export default async function MarksPage({
       }));
 
       const subStrandIds = strandsWithSubStrands.flatMap((s) => s.sub_strands.map((ss) => ss.id));
-      const { data: existingCompetency } = subStrandIds.length
-        ? await supabase
-            .from("competency_marks")
-            .select("id, student_id, sub_strand_id, band_id")
-            .eq("exam_id", exam.id)
-            .in("sub_strand_id", subStrandIds)
-        : { data: [] };
+      const [{ data: existingCompetency }, rubrics] = await Promise.all([
+        subStrandIds.length
+          ? supabase
+              .from("competency_marks")
+              .select("id, student_id, sub_strand_id, band_id")
+              .eq("exam_id", exam.id)
+              .in("sub_strand_id", subStrandIds)
+          : Promise.resolve({ data: [] }),
+        listRubricsForSubStrands(subStrandIds),
+      ]);
       competencyRatings = existingCompetency ?? [];
+      rubricsBySubStrand = Object.fromEntries(rubrics.map((r) => [r.sub_strand_id, r]));
     }
   }
 
@@ -234,6 +240,7 @@ export default async function MarksPage({
             examStatus={exam.status as "open" | "closed"}
             canEnter={canWriteAny === true || canWrite === true}
             canManageCurriculum={canManageCurriculum === true}
+            rubricsBySubStrand={rubricsBySubStrand}
           />
         )}
       </div>
