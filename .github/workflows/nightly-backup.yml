@@ -50,6 +50,45 @@ jobs:
             --no-owner --no-privileges --format=custom \
             --file=educore-backup-$(date +%Y-%m-%d).dump
 
+      - name: Verify dump integrity
+        run: |
+          # A pg_dump that silently produces a truncated or empty file still exits 0 and
+          # still uploads successfully -- the failure mode this is meant to catch is "we
+          # uploaded 90 days of unusable dumps and only found out during a real incident."
+          # pg_restore --list parses the dump's table of contents without needing a live
+          # database, so this runs safely in CI: it fails loudly (not silently) if the file
+          # doesn't parse as a valid custom-format dump, and again if a representative set of
+          # core tables -- spanning student data, finance, and auth/RLS-adjacent config, so a
+          # partial dump missing a whole subsystem gets caught too -- isn't present in it.
+          DUMP_FILE=$(ls educore-backup-*.dump)
+          FILE_SIZE=$(stat -c%s "$DUMP_FILE")
+          echo "Dump file: $DUMP_FILE ($FILE_SIZE bytes)"
+
+          if [ "$FILE_SIZE" -lt 10240 ]; then
+            echo "Dump is suspiciously small (<10KB) for a school-management database with real data. Treating as a failed backup."
+            exit 1
+          fi
+
+          TOC=$(/usr/lib/postgresql/17/bin/pg_restore --list "$DUMP_FILE")
+          if [ -z "$TOC" ]; then
+            echo "pg_restore could not parse a table of contents from the dump -- file is corrupt or incomplete."
+            exit 1
+          fi
+
+          MISSING=""
+          for TABLE in students invoices payments school_users academic_years; do
+            if ! echo "$TOC" | grep -q "TABLE DATA public $TABLE "; then
+              MISSING="$MISSING $TABLE"
+            fi
+          done
+
+          if [ -n "$MISSING" ]; then
+            echo "Dump is missing expected core tables:$MISSING -- this is not a complete backup."
+            exit 1
+          fi
+
+          echo "Dump verified: parses correctly and contains data for all expected core tables."
+
       - name: Upload backup artifact
         uses: actions/upload-artifact@v4
         with:
