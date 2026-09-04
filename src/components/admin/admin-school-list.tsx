@@ -1,12 +1,24 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { ArrowRight } from "lucide-react";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import { StatusBadge } from "@/components/status-badge";
 import { cn } from "@/lib/utils";
+import { suspendSchool, reactivateSchool } from "@/app/(admin)/admin/actions";
 
 export interface SchoolListRow {
   id: string;
@@ -74,8 +86,15 @@ function formatLastActive(lastActiveAt: string | null): { label: string; stale: 
 type FilterKey = "all" | "active" | "suspended";
 
 export function AdminSchoolList({ schools }: { schools: SchoolListRow[] }) {
+  const router = useRouter();
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<FilterKey>("all");
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+  // Which school's suspend-reason dialog is open, if any -- one dialog instance reused
+  // across rows rather than one per row, same reasoning as Billing's single expanded-row state.
+  const [suspendTarget, setSuspendTarget] = useState<SchoolListRow | null>(null);
+  const [reason, setReason] = useState("");
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -87,8 +106,39 @@ export function AdminSchoolList({ schools }: { schools: SchoolListRow[] }) {
     });
   }, [schools, query, filter]);
 
+  function run(fn: () => Promise<{ error: string } | { success: true }>) {
+    setError(null);
+    startTransition(async () => {
+      const res = await fn();
+      if ("error" in res) setError(res.error);
+      else router.refresh();
+    });
+  }
+
+  function openSuspend(school: SchoolListRow) {
+    setError(null);
+    setReason("");
+    setSuspendTarget(school);
+  }
+
+  function confirmSuspend() {
+    if (!suspendTarget) return;
+    const target = suspendTarget;
+    run(async () => {
+      const res = await suspendSchool(target.id, reason.trim());
+      if (!("error" in res)) setSuspendTarget(null);
+      return res;
+    });
+  }
+
   return (
     <div className="flex flex-col gap-3">
+      {error && (
+        <p role="alert" className="text-sm text-danger">
+          {error}
+        </p>
+      )}
+
       <Input
         placeholder="Search schools..."
         value={query}
@@ -155,17 +205,62 @@ export function AdminSchoolList({ schools }: { schools: SchoolListRow[] }) {
                   </span>
                 )}
                 <span className="text-xs text-muted-foreground">{school.plan_name ?? "No plan"}</span>
-                <Link
-                  href="/admin/billing"
-                  className="flex items-center gap-0.5 text-xs text-primary hover:underline"
-                >
-                  Manage <ArrowRight className="size-3" />
-                </Link>
+                <div className="mt-1 flex items-center gap-1.5">
+                  {school.status === "suspended" || school.status === "cancelled" ? (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={pending}
+                      onClick={() => run(() => reactivateSchool(school.id))}
+                    >
+                      Reactivate
+                    </Button>
+                  ) : (
+                    <Button size="sm" variant="destructive" disabled={pending} onClick={() => openSuspend(school)}>
+                      Suspend
+                    </Button>
+                  )}
+                  <Link
+                    href="/admin/billing"
+                    className="flex items-center gap-0.5 text-xs text-primary hover:underline"
+                  >
+                    Manage <ArrowRight className="size-3" />
+                  </Link>
+                </div>
               </div>
             </div>
           ))
         )}
       </div>
+
+      <Dialog open={suspendTarget !== null} onOpenChange={(open) => !open && setSuspendTarget(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Suspend {suspendTarget?.name}</DialogTitle>
+            <DialogDescription>
+              This immediately blocks the school&apos;s own staff from signing in and stops it accepting new
+              applications. Reverse it any time with Reactivate.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-1">
+            <p className="text-xs text-muted-foreground">Reason (visible on the subscription record)</p>
+            <Textarea
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              placeholder="e.g. Non-payment, Term 2 invoice overdue 21 days"
+              rows={3}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSuspendTarget(null)} disabled={pending}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={confirmSuspend} disabled={pending}>
+              Suspend school
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
