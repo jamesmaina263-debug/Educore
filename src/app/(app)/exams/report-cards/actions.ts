@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { buildReportCardCommentPrompt, geminiGenerateContentUrl, parseGeminiCommentResponse } from "@/lib/ai/report-card-comment";
 
 type ActionResult = { error: string } | { success: true };
@@ -79,6 +80,48 @@ export async function draftCommentWithAI(input: {
   }
 
   const supabase = await createClient();
+
+  // SECURITY: unlike the other actions in this file, this one makes a real,
+  // cost-incurring outbound call (Gemini) before ever touching a
+  // report_cards row -- the RLS policy on the eventual .update() below
+  // (report_cards.approve) does NOT stop an authenticated user who lacks
+  // that permission from *reaching* this point, since Supabase's RLS-scoped
+  // update simply silently affects 0 rows rather than throwing. That left
+  // any authenticated user (any role, any school -- parent/student portal
+  // accounts included) able to call this Server Action directly with
+  // arbitrary arguments and burn Gemini API quota/cost with no server-side
+  // authorization or throttling at all. Fixed with the same two-layer
+  // pattern already used for login/signup/communication: an explicit
+  // permission check up front, plus a per-user rate limit via
+  // increment_and_check_rate_limit(), before any network call is made.
+  const { data: canApprove } = await supabase.rpc("auth_has_permission", { p_permission_key: "report_cards.approve" });
+  if (!canApprove) {
+    return { error: "You don't have permission to draft report card comments." };
+  }
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return { error: "You must be signed in." };
+  }
+
+  try {
+    const adminClient = createAdminClient();
+    const { data: withinLimit } = await adminClient.rpc("increment_and_check_rate_limit", {
+      p_bucket: `ai-report-comment:${user.id}`,
+      p_max_events: 60,
+      p_window_seconds: 3600,
+    });
+    if (withinLimit === false) {
+      return { error: "Too many AI drafting requests. Please wait a while and try again." };
+    }
+  } catch {
+    // If the admin client isn't configured in this environment, fall through
+    // rather than blocking a legitimate, permission-checked request over a
+    // missing rate-limit layer.
+  }
+
   const { data: marks } = await supabase
     .from("marks")
     .select("raw_score, subjects(name), grading_scale_bands(label)")
