@@ -2,8 +2,13 @@ import type { EmailProvider } from "./types.ts";
 import { ResendProvider } from "./resendProvider.ts";
 import { ConsoleEmailProvider } from "./consoleProvider.ts";
 
-// Same factory pattern as _shared/sms/index.ts — swapping email providers later
-// means adding a new class here and changing this one function.
+// Resend is the sending provider for all school-facing email (send-communication,
+// notify-platform-admin, request-otp). Deliberately NOT wired to Zoho here — Zoho is
+// a separate, read-only company-mailbox monitoring integration surfaced in the Admin
+// Console (see src/lib/zoho-mail-monitor.ts / /admin/company-email), not a swap-in
+// replacement for this send path. Do not add Zoho back into this factory without
+// explicit sign-off — an earlier attempt to do so risked silently rerouting real
+// school communications through Zoho's free-tier send limits.
 export function getEmailProvider(): EmailProvider {
   const apiKey = Deno.env.get("RESEND_API_KEY");
   const fromAddress = Deno.env.get("RESEND_FROM_ADDRESS");

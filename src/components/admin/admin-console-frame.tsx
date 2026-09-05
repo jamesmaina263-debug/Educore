@@ -3,7 +3,7 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, CreditCard, BarChart3, Inbox, Palette, RotateCcw } from "lucide-react";
+import { LayoutDashboard, CreditCard, BarChart3, Inbox, Palette, RotateCcw, Radio, Mail } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { clearOfflineCaches } from "@/lib/offline/clear-on-logout";
@@ -13,6 +13,8 @@ const NAV_ITEMS = [
   { href: "/admin", label: "Overview", icon: LayoutDashboard },
   { href: "/admin/billing", label: "Plans & Billing", icon: CreditCard },
   { href: "/admin/analytics", label: "Analytics", icon: BarChart3 },
+  { href: "/admin/communication", label: "Delivery", icon: Radio },
+  { href: "/admin/company-email", label: "Company Email", icon: Mail },
   { href: "/admin/demo-requests", label: "Requests", icon: Inbox },
   { href: "/admin/whitelabel", label: "White-label", icon: Palette },
   { href: "/admin/demo-reset", label: "Demo Reset", icon: RotateCcw },

@@ -149,7 +149,7 @@ export default function MpesaFeeCollectionAutomationKenyaPost() {
               their balance at the end of term.
             </p>
             <p>
-              None of this is a M-Pesa problem -- Safaricom&apos;s side
+              None of this is an M-Pesa problem -- Safaricom&apos;s side
               works exactly as designed. It&apos;s a reconciliation problem:
               turning a flat list of transactions into a confirmed,
               per-student balance, without a person cross-checking every
