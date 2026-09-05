@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import type { Recipient } from "@/app/(app)/communication/actions";
 import { escapePostgrestOrValue } from "@/lib/postgrest-filter";
+import { safeStorageFilename } from "@/lib/storage-path";
 
 type ActionResult = { error: string } | { success: true };
 
@@ -466,7 +467,16 @@ export async function uploadDocumentAsStaff(applicationId: string, category: str
   if (!application) return { error: "Application not found." };
 
   const staff = await currentStaff(supabase);
-  const path = `${application.school_id}/${applicationId}/${category}-${Date.now()}-${file.name}`;
+  // SECURITY: file.name is untrusted -- this is the staff-side counterpart to
+  // apply/[slug]/actions.ts's applicant-facing upload for the same bucket,
+  // which already sanitizes via safeStorageFilename (see that helper's own
+  // comment on why: an unsanitized name could inject extra "/" path
+  // segments or control characters into the storage key). This call site
+  // was the one inconsistent one -- not a tenant-isolation bypass (the
+  // school_id/applicationId prefix is always server-derived, so RLS's
+  // tenant check on the first path segment holds regardless), but worth
+  // matching the same safe handling as its sibling path.
+  const path = `${application.school_id}/${applicationId}/${category}-${Date.now()}-${safeStorageFilename(file.name)}`;
   const { error: uploadError } = await supabase.storage.from("application-documents").upload(path, file);
   if (uploadError) return { error: uploadError.message };
 
