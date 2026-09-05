@@ -201,24 +201,48 @@ export default async function DashboardPage() {
   let pendingDiscounts = 0;
   let pendingExpenses = 0;
   if (canSeeFinance) {
-    const [{ data: balanceRows }, { data: invoiceRows }, { data: paymentRows }, { data: discountRows }, { data: expenseRows }] =
+    // Two real scalability bugs fixed here (production readiness audit, Dashboard & frontend
+    // performance / Database scalability sections): invoices and payments were each fetched with
+    // NO limit and NO date/term filter -- every invoice and every payment the school has ever
+    // recorded, on every single dashboard load, for every staff member with finance access. The
+    // "latest 6 invoices" widget was fetching the school's *entire* invoice history just to
+    // `.slice(0, 6)` it in JS, and invoicedThisTerm/collected/collectionTrend were summing over
+    // that same full history in JS instead of letting Postgres filter by term_id/date range. At a
+    // school with a few years of history this is exactly the "millions of finance records" growth
+    // case the audit calls out -- unbounded today, and it gets slower every term forever. Fixed by
+    // pushing the term/date filter into the query (same result, bounded by term instead of by
+    // school lifetime) and giving the "latest invoices" widget its own properly limited query.
+    const [{ data: balanceRows }, { data: latestInvoiceRows }, { data: discountRows }, { data: expenseRows }] =
       await Promise.all([
         supabase.from("v_student_balances").select("balance"),
         supabase
           .from("invoices")
           .select("id, total_amount, status, created_at, term_id, students(first_name, last_name)")
-          .order("created_at", { ascending: false }),
-        supabase.from("payments").select("amount, recorded_at"),
+          .order("created_at", { ascending: false })
+          .limit(6),
         supabase.from("discounts").select("id").eq("status", "pending"),
         supabase.from("expenses").select("id").eq("status", "pending"),
       ]);
+
+    // Only needed for the term-scoped aggregation below, and only when there is an active term --
+    // scoped by term_id / date range in SQL rather than fetched in full and filtered in JS.
+    const [{ data: termInvoiceRows }, { data: termPaymentRows }] = activeTerm
+      ? await Promise.all([
+          supabase.from("invoices").select("total_amount, created_at").eq("term_id", activeTerm.id),
+          supabase
+            .from("payments")
+            .select("amount, recorded_at")
+            .gte("recorded_at", activeTerm.start_date)
+            .lte("recorded_at", activeTerm.end_date),
+        ])
+      : [{ data: null }, { data: null }];
 
     totalOutstanding = (balanceRows ?? []).reduce((sum, b) => sum + Math.max(0, Number(b.balance)), 0);
     studentsWithBalance = (balanceRows ?? []).filter((b) => Number(b.balance) > 0).length;
     pendingDiscounts = (discountRows ?? []).length;
     pendingExpenses = (expenseRows ?? []).length;
 
-    latestInvoices = (invoiceRows ?? []).slice(0, 6).map((inv) => {
+    latestInvoices = (latestInvoiceRows ?? []).map((inv) => {
       const s = inv.students as unknown as { first_name: string; last_name: string } | null;
       return {
         id: inv.id,
@@ -229,21 +253,15 @@ export default async function DashboardPage() {
     });
 
     if (activeTerm) {
-      invoicedThisTerm = (invoiceRows ?? [])
-        .filter((inv) => inv.term_id === activeTerm.id)
-        .reduce((sum, inv) => sum + Number(inv.total_amount), 0);
-      collected = (paymentRows ?? [])
-        .filter((p) => p.recorded_at >= activeTerm.start_date && p.recorded_at <= activeTerm.end_date)
-        .reduce((sum, p) => sum + Number(p.amount), 0);
+      invoicedThisTerm = (termInvoiceRows ?? []).reduce((sum, inv) => sum + Number(inv.total_amount), 0);
+      collected = (termPaymentRows ?? []).reduce((sum, p) => sum + Number(p.amount), 0);
 
       const buckets = weekBuckets(activeTerm.start_date, activeTerm.end_date);
       collectionTrend = buckets.map((b) => {
-        const bucketInvoiced = (invoiceRows ?? [])
-          .filter(
-            (inv) => inv.term_id === activeTerm.id && new Date(inv.created_at) >= b.start && new Date(inv.created_at) < b.end,
-          )
+        const bucketInvoiced = (termInvoiceRows ?? [])
+          .filter((inv) => new Date(inv.created_at) >= b.start && new Date(inv.created_at) < b.end)
           .reduce((sum, inv) => sum + Number(inv.total_amount), 0);
-        const bucketCollected = (paymentRows ?? [])
+        const bucketCollected = (termPaymentRows ?? [])
           .filter((p) => new Date(p.recorded_at) >= b.start && new Date(p.recorded_at) < b.end)
           .reduce((sum, p) => sum + Number(p.amount), 0);
         return {
