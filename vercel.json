@@ -23,7 +23,7 @@
     },
     {
       "path": "/api/cron/dispatch-communications",
-      "schedule": "*/5 * * * *"
+      "schedule": "0 7 * * *"
     }
   ]
 }

@@ -12,10 +12,17 @@ export const maxDuration = 60;
 // (apply/[slug]/actions.ts's admin.functions.invoke call), neither of which has a page for a
 // staff member to open.
 //
+// Runs once daily (Vercel Cron on the Hobby plan rejects any schedule that fires more than once
+// a day — confirmed the hard way: the first version of this used */5 * * * * and Vercel's own
+// deployment check rejected it outright, failing the whole deploy, not just this route). Once a
+// paid plan is in place a tighter schedule (e.g. every 5-15 minutes) closes the gap much further;
+// until then, daily is still strictly better than "whenever a staff member next opens
+// Communication", which for a same-day admissions confirmation could be indefinite.
+//
 // send-communication pages 100 rows per invocation by design (see its own comment on why), so
-// this loops it — bounded to 10 pages (1,000 messages) per cron run so one very large backlog
-// can't turn into a run that overlaps the next scheduled tick. A backlog bigger than that just
-// finishes over successive runs; nothing is lost, status stays 'queued' until actually sent.
+// this loops it — bounded to 10 pages (1,000 messages) per run so one very large backlog can't
+// turn into a run that overlaps the next scheduled tick. A backlog bigger than that just finishes
+// over successive daily runs; nothing is lost, status stays 'queued' until actually sent.
 const MAX_PAGES_PER_RUN = 10;
 
 export async function GET(request: Request) {
