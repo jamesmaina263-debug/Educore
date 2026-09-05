@@ -85,3 +85,16 @@ overlap; this PR is migrations-only).
 ## Status
 Ready for Review. No device-level test needed for this item (unlike PR-14/OS-01/OS-02/
 OS-03) — fully verified via simulated-JWT sessions against the real, live schema.
+
+## Post-fix advisor check
+Security advisors flagged all 4 new helper functions as callable by the anonymous
+`anon` role — `revoke ... from public` doesn't remove Supabase's separate direct
+grant to `anon`. Functionally low-risk (`auth.uid()` is null with no JWT, so every
+branch evaluates to `false` — nothing to probe), but fixed properly: explicit
+`revoke ... from public, anon` + `grant ... to authenticated` on all four. Re-ran
+advisors afterward — that finding is gone. The one remaining WARN
+("authenticated can execute this SECURITY DEFINER function directly") is the same
+accepted baseline already present on the pre-existing helpers
+(`auth_user_id_is_guardian_of`, `auth_school_id`, `auth_has_permission`) — a
+necessary trade-off for RLS policies to call these functions at all, not a new
+issue.
