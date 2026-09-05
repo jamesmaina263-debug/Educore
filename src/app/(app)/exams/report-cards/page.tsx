@@ -5,6 +5,7 @@ import { AppShell } from "@/components/app-shell/app-shell";
 import { ReportCardPicker } from "@/components/exams/report-card-picker";
 import { ReportCardList, type ReportCardRow } from "@/components/exams/report-card-list";
 import { TableExportMenu } from "@/components/shared/table-export-menu";
+import { buildReportCardInsights } from "@/lib/academics/report-card-insights";
 
 export default async function ReportCardsPage({
   searchParams,
@@ -48,12 +49,14 @@ export default async function ReportCardsPage({
 
   let rows: ReportCardRow[] = [];
   if (selectedExamId && selectedClassId) {
+    const { data: examTermRow } = await supabase.from("exams").select("term_id").eq("id", selectedExamId).maybeSingle();
+
     const [{ data: streamRows }, { data: marksRows }, { data: reportCardRows }, { data: rankingRows }, { data: competencyRows }] =
       await Promise.all([
         supabase.from("streams").select("id").eq("class_id", selectedClassId),
         supabase
           .from("marks")
-          .select("student_id, raw_score, subjects(name), grading_scale_bands(label)")
+          .select("student_id, raw_score, subjects(name), grading_scale_bands(label, level_order, grading_scale_id)")
           .eq("exam_id", selectedExamId)
           .eq("class_id", selectedClassId),
         supabase.from("report_cards").select("student_id, comment, comment_source").eq("exam_id", selectedExamId).eq("class_id", selectedClassId),
@@ -61,7 +64,7 @@ export default async function ReportCardsPage({
         supabase
           .from("competency_marks")
           .select(
-            "student_id, grading_scale_bands(label), curriculum_sub_strands(name, curriculum_strands(name, subjects(name)))",
+            "student_id, grading_scale_bands(label, level_order, grading_scale_id), curriculum_sub_strands(name, curriculum_strands(name, subjects(name)))",
           )
           .eq("exam_id", selectedExamId)
           .eq("class_id", selectedClassId),
@@ -71,6 +74,38 @@ export default async function ReportCardsPage({
     const { data: students } = streamIds.length
       ? await supabase.from("students").select("id, first_name, last_name").in("current_class_id", streamIds).eq("status", "active").order("last_name")
       : { data: [] };
+
+    // Core-competency/value/PCI ratings (Step 5/6) are term-scoped, not exam-scoped -- fetched
+    // once for the whole roster + this exam's term, same shape as the portal page's own fetch.
+    const studentIds = (students ?? []).map((s) => s.id);
+    const { data: indicatorRows } = examTermRow?.term_id && studentIds.length
+      ? await supabase
+          .from("competency_indicator_ratings")
+          .select("student_id, competency_indicators(name), grading_scale_bands(label, level_order, grading_scale_id)")
+          .eq("term_id", examTermRow.term_id)
+          .in("student_id", studentIds)
+      : { data: [] };
+
+    const scaleIds = new Set<string>();
+    for (const m of marksRows ?? []) {
+      const band = m.grading_scale_bands as unknown as { grading_scale_id: string } | null;
+      if (band) scaleIds.add(band.grading_scale_id);
+    }
+    for (const c of competencyRows ?? []) {
+      const band = c.grading_scale_bands as unknown as { grading_scale_id: string } | null;
+      if (band) scaleIds.add(band.grading_scale_id);
+    }
+    for (const r of indicatorRows ?? []) {
+      const band = r.grading_scale_bands as unknown as { grading_scale_id: string } | null;
+      if (band) scaleIds.add(band.grading_scale_id);
+    }
+    const { data: allBandsForScales } = scaleIds.size
+      ? await supabase.from("grading_scale_bands").select("grading_scale_id, level_order").in("grading_scale_id", [...scaleIds])
+      : { data: [] };
+    const maxLevelOrderByScale = new Map<string, number>();
+    for (const b of allBandsForScales ?? []) {
+      maxLevelOrderByScale.set(b.grading_scale_id, Math.max(maxLevelOrderByScale.get(b.grading_scale_id) ?? 0, b.level_order));
+    }
 
     const marksByStudent = new Map<string, ReportCardRow["marks"]>();
     for (const m of marksRows ?? []) {
@@ -103,6 +138,62 @@ export default async function ReportCardsPage({
       competencyByStudent.set(c.student_id, list);
     }
 
+    // Achievement distribution + Strengths/Areas for Support (Phase 14 / Step 10) -- reuses
+    // marks + competency_marks bands already fetched above, plus this exam's term-scoped
+    // indicator ratings. Deliberately excludes growth-trend signals here (unlike the parent
+    // portal's single-student view): computing getStudentGrowth() per row would mean 3 extra
+    // queries multiplied by class size, a real N+1 for a large roster -- flagged as a known gap
+    // rather than silently accepted, not solved in this pass.
+    const insightsByStudent = new Map<string, ReturnType<typeof buildReportCardInsights>>();
+    for (const s of students ?? []) {
+      const rawMarkBands = (marksRows ?? []).filter((m) => m.student_id === s.id);
+      const rawCompetencyBands = (competencyRows ?? []).filter((c) => c.student_id === s.id);
+      const achievementBands = [
+        ...rawMarkBands.flatMap((m) => {
+          const band = m.grading_scale_bands as unknown as { label: string; level_order: number } | null;
+          return band ? [{ label: band.label, levelOrder: band.level_order }] : [];
+        }),
+        ...rawCompetencyBands.flatMap((c) => {
+          const band = c.grading_scale_bands as unknown as { label: string; level_order: number } | null;
+          return band ? [{ label: band.label, levelOrder: band.level_order }] : [];
+        }),
+      ];
+      const competencyRatings = [
+        ...rawCompetencyBands.flatMap((c) => {
+          const subStrand = c.curriculum_sub_strands as unknown as { name: string } | null;
+          const band = c.grading_scale_bands as unknown as { label: string; level_order: number; grading_scale_id: string } | null;
+          if (!subStrand || !band) return [];
+          return [
+            {
+              name: subStrand.name,
+              label: band.label,
+              levelOrder: band.level_order,
+              maxLevelOrder: maxLevelOrderByScale.get(band.grading_scale_id) ?? band.level_order,
+            },
+          ];
+        }),
+        ...(indicatorRows ?? [])
+          .filter((r) => r.student_id === s.id)
+          .flatMap((r) => {
+            const indicator = r.competency_indicators as unknown as { name: string } | null;
+            const band = r.grading_scale_bands as unknown as { label: string; level_order: number; grading_scale_id: string } | null;
+            if (!indicator || !band) return [];
+            return [
+              {
+                name: indicator.name,
+                label: band.label,
+                levelOrder: band.level_order,
+                maxLevelOrder: maxLevelOrderByScale.get(band.grading_scale_id) ?? band.level_order,
+              },
+            ];
+          }),
+      ];
+      insightsByStudent.set(
+        s.id,
+        buildReportCardInsights({ achievementBands, competencyRatings, improvingSubjects: [], decliningSubjects: [] }),
+      );
+    }
+
     rows = (students ?? []).map((s) => {
       const rc = reportCardByStudent.get(s.id);
       const rk = rankingByStudent.get(s.id);
@@ -113,6 +204,7 @@ export default async function ReportCardsPage({
         competency: competencyByStudent.get(s.id) ?? [],
         rank_in_stream: rk?.rank_in_stream ?? null,
         average_score: rk?.average_score ?? null,
+        insights: insightsByStudent.get(s.id) ?? { achievementDistribution: [], strengths: [], areasForSupport: [] },
         report_card: rc
           ? { comment: rc.comment, comment_source: rc.comment_source as "none" | "ai" | "teacher_approved" | "teacher_written" }
           : null,
