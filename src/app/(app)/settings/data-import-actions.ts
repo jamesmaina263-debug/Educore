@@ -121,6 +121,43 @@ async function importStaffSheet(
     return [{ rowNumber: 0, status: "error", message: e instanceof Error ? e.message : "Admin client is not configured." }];
   }
 
+  // Every other sheet's RPC is one set-based (or in-process PL/pgSQL-looped) DB call, done in
+  // well under a second even at its own row cap -- fast because there's no network round trip
+  // per row. This sheet is different: a brand-new staff member needs a real
+  // adminClient.auth.admin.createUser() call, an actual network request to Supabase Auth, per
+  // row. On Vercel's Hobby plan a serverless function is hard-capped at 10 seconds -- not
+  // configurable higher, confirmed the hard way elsewhere in this codebase (the
+  // dispatch-communications cron hitting the same plan's cron-frequency limit) -- so a file
+  // that needs to create more than a handful of new accounts risks the function being killed
+  // mid-loop: some staff get created, the rest silently don't, and the client never gets a
+  // response telling it which. Batch-checking who's *actually new* up front (one query instead
+  // of the per-row existence check this loop used to do) lets this fail fast with a clear
+  // message instead of partway through with no way to tell which rows made it.
+  const emails = rows.map((row) => pick(row, "Email")).filter(Boolean);
+  const { data: existingRows } = await supabase
+    .from("school_users")
+    .select("id, email")
+    .eq("school_id", schoolId)
+    .in("email", emails.length > 0 ? emails : ["__none__"]);
+  const existingByEmail = new Map((existingRows ?? []).map((r) => [r.email as string, r.id as string]));
+
+  const NEW_ACCOUNT_CAP = 20;
+  const newAccountCount = emails.filter((e) => !existingByEmail.has(e)).length;
+  if (newAccountCount > NEW_ACCOUNT_CAP) {
+    return [
+      {
+        rowNumber: 0,
+        status: "error",
+        message:
+          `This file would create ${newAccountCount} new staff accounts, which is above the ${NEW_ACCOUNT_CAP}-per-upload ` +
+          "limit (each new account needs a real network call to create, unlike the other sheets, so a larger batch risks " +
+          "the request timing out partway through with no way to tell which rows succeeded). Split new staff into files " +
+          `of ${NEW_ACCOUNT_CAP} or fewer and upload separately -- rows for staff who already have an account (updates, ` +
+          "not new accounts) don't count against this limit and can stay in one file.",
+      },
+    ];
+  }
+
   const results: ImportRowResult[] = [];
   for (let i = 0; i < rows.length; i++) {
     const rowNumber = i + 1;
@@ -146,18 +183,13 @@ async function importStaffSheet(
 
     // Idempotent re-upload: an existing school_users row for this email is updated
     // in place rather than creating a second auth account for the same person.
-    const { data: existing } = await supabase
-      .from("school_users")
-      .select("id")
-      .eq("school_id", schoolId)
-      .eq("email", email)
-      .maybeSingle();
+    const existingId = existingByEmail.get(email);
 
-    if (existing) {
+    if (existingId) {
       const { error: updateError } = await supabase
         .from("school_users")
         .update({ full_name, phone, position, department, staff_number, hire_date, role_id, status })
-        .eq("id", existing.id);
+        .eq("id", existingId);
       results.push(
         updateError
           ? { rowNumber, status: "error", message: updateError.message }
