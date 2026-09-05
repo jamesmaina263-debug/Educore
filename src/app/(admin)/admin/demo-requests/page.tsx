@@ -26,7 +26,8 @@ export default async function AdminDemoRequestsPage() {
       <div>
         <h1 className="text-lg font-semibold">Marketing demo requests</h1>
         <p className="text-sm text-muted-foreground">
-          Submissions from the public /contact form — visible to platform staff only. Read-only.
+          Submissions from the public /contact form — visible to platform staff only. Update the
+          status as you follow up.
         </p>
       </div>
       <AdminDemoRequestsTable rows={(requests ?? []) as DemoRequestRow[]} />
