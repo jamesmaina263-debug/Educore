@@ -7,6 +7,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { StatusBadge } from "@/components/status-badge";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { generateReportCards, approveComment, writeComment, draftCommentWithAI } from "@/app/(app)/exams/report-cards/actions";
+import { ReportCardInsightsPanel } from "@/components/exams/report-card-insights-panel";
+import type { ReportCardInsights } from "@/lib/academics/report-card-insights";
 
 export interface StudentMarkLine {
   subject_name: string;
@@ -28,6 +30,7 @@ export interface ReportCardRow {
   competency: CompetencyLine[];
   rank_in_stream: number | null;
   average_score: number | null;
+  insights: ReportCardInsights;
   report_card: {
     comment: string | null;
     comment_source: "none" | "ai" | "teacher_approved" | "teacher_written";
@@ -139,6 +142,10 @@ export function ReportCardList({
                     ))}
                   </TableBody>
                 </Table>
+              </div>
+
+              <div className="mt-3">
+                <ReportCardInsightsPanel insights={r.insights} />
               </div>
 
               {r.competency.length > 0 && (
