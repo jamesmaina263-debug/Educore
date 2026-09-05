@@ -119,21 +119,38 @@ export default async function DashboardPage() {
   let enrolledCount = 0;
   let admittedThisTerm = 0;
   let enrollmentTrend: { term: string; students: number }[] = [];
-  let students: { id: string; status: string; current_class_id: string | null; admission_date: string | null }[] = [];
   if (canSeeStudents) {
-    const { data } = await supabase.from("students").select("id, status, current_class_id, admission_date");
-    students = data ?? [];
-    enrolledCount = students.filter((s) => s.status === "active").length;
-    if (activeTerm) {
-      admittedThisTerm = students.filter(
-        (s) => s.admission_date && s.admission_date >= activeTerm.start_date && s.admission_date <= activeTerm.end_date,
-      ).length;
-    }
-    enrollmentTrend = last5Terms.map((t) => ({
-      term: t.name,
-      students: students.filter((s) => s.admission_date && s.admission_date >= t.start_date && s.admission_date <= t.end_date)
-        .length,
-    }));
+    // Previously fetched every student row the school has ever had (id, status, class, admission
+    // date) just to .filter().length three different ways in JS -- the same "grows forever" shape
+    // as the finance dashboard's unbounded invoice/payment fetch, but for enrollment history.
+    // Each of these three numbers is a plain count with a date/status predicate, so Postgres can
+    // compute it directly (head: true -> no rows returned, just the count) instead of shipping
+    // every row this school has ever enrolled over the wire to be counted in JavaScript. Same
+    // filters as before -- admission_date range is checked against ALL statuses, matching the
+    // original exactly: a student who later withdrew still counts toward the term they were
+    // originally admitted in, nothing here changes what gets displayed, only how it's computed.
+    const [{ count: enrolledCountRaw }, admittedResult, trendResults] = await Promise.all([
+      supabase.from("students").select("id", { count: "exact", head: true }).eq("status", "active"),
+      activeTerm
+        ? supabase
+            .from("students")
+            .select("id", { count: "exact", head: true })
+            .gte("admission_date", activeTerm.start_date)
+            .lte("admission_date", activeTerm.end_date)
+        : Promise.resolve({ count: 0 }),
+      Promise.all(
+        last5Terms.map((t) =>
+          supabase
+            .from("students")
+            .select("id", { count: "exact", head: true })
+            .gte("admission_date", t.start_date)
+            .lte("admission_date", t.end_date),
+        ),
+      ),
+    ]);
+    enrolledCount = enrolledCountRaw ?? 0;
+    admittedThisTerm = admittedResult.count ?? 0;
+    enrollmentTrend = last5Terms.map((t, i) => ({ term: t.name, students: trendResults[i].count ?? 0 }));
   }
 
   // --- Attendance (today's rate + per-stream breakdown) ---
@@ -144,29 +161,30 @@ export default async function DashboardPage() {
   let totalStreamCount = 0;
   let attendanceByClass: { classroom: string; rate: number }[] = [];
   if (canSeeAttendance) {
-    const { data: streams } = await supabase.from("streams").select("id, name, classes(name)");
-    const { data: todaysAttendance } = await supabase
-      .from("student_attendance")
-      .select("student_id, stream_id, status")
-      .eq("attendance_date", today)
-      .eq("session", "class");
-
-    const rosterSource = canSeeStudents
-      ? students
-      : ((await supabase.from("students").select("current_class_id, status")).data ?? []).map((s) => ({
-          id: "",
-          status: s.status,
-          current_class_id: s.current_class_id,
-          admission_date: null,
-        }));
+    const [{ data: streams }, { data: todaysAttendance }, { data: activeRoster }] = await Promise.all([
+      supabase.from("streams").select("id, name, classes(name)"),
+      supabase
+        .from("student_attendance")
+        .select("student_id, stream_id, status")
+        .eq("attendance_date", today)
+        .eq("session", "class"),
+      // Only the currently-active roster is needed for this count -- the loop below discarded
+      // every other status anyway, so filtering server-side (status='active') instead of fetching
+      // every student the school has ever had, including years of withdrawn/graduated/transferred
+      // history, and throwing most of it away in JS. Deliberately independent of canSeeStudents: a
+      // class teacher who can mark attendance but doesn't have the broader students.read permission
+      // still needs her own roster count -- previously that case had its *own* separate unbounded
+      // fallback fetch (also fixed here, same underlying bug, same fix).
+      supabase.from("students").select("current_class_id").eq("status", "active"),
+    ]);
 
     totalStreamCount = (streams ?? []).length;
     const markedStreamIds = new Set((todaysAttendance ?? []).map((a) => a.stream_id));
     unmarkedStreamCount = totalStreamCount - markedStreamIds.size;
 
     const rosterByStream = new Map<string, number>();
-    for (const s of rosterSource) {
-      if (s.status !== "active" || !s.current_class_id) continue;
+    for (const s of activeRoster ?? []) {
+      if (!s.current_class_id) continue;
       rosterByStream.set(s.current_class_id, (rosterByStream.get(s.current_class_id) ?? 0) + 1);
     }
     rosterToday = Array.from(rosterByStream.values()).reduce((a, b) => a + b, 0);
