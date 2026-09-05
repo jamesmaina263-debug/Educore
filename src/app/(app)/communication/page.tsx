@@ -8,6 +8,7 @@ import { TemplatesSection, type TemplateRow } from "@/components/communication/t
 import { HistorySection, type LogRow } from "@/components/communication/history-section";
 import { SupplierComposeSection, type SupplierOption, type SupplierPoOption } from "@/components/communication/supplier-compose-section";
 import { WhatsAppInboxSection, type ConversationRow } from "@/components/communication/whatsapp-inbox-section";
+import { DeliveryHealthSection, type ChannelStat, type QueuedItem, type FailedItem } from "@/components/communication/delivery-health-section";
 
 export default async function CommunicationPage() {
   const supabase = await createClient();
@@ -138,6 +139,43 @@ export default async function CommunicationPage() {
         .limit(50),
     ]);
 
+  const sevenDaysAgoIso = new Date(new Date().getTime() - 7 * 86_400_000).toISOString();
+  const [{ data: queuedRows }, { data: outcomeRows }, { data: failureRows }] = await Promise.all([
+    supabase
+      .from("notification_logs")
+      .select("id, channel, created_at")
+      .eq("status", "queued")
+      .order("created_at", { ascending: true }),
+    supabase
+      .from("notification_logs")
+      .select("channel, status")
+      .in("status", ["sent", "delivered", "failed"])
+      .gte("created_at", sevenDaysAgoIso),
+    supabase
+      .from("notification_logs")
+      .select("id, channel, recipient_type, provider_response, updated_at")
+      .eq("status", "failed")
+      .order("updated_at", { ascending: false })
+      .limit(30),
+  ]);
+
+  const queuedItems: QueuedItem[] = (queuedRows ?? []).map((r) => ({ id: r.id, channel: r.channel, created_at: r.created_at }));
+  const CHANNELS = ["sms", "email", "whatsapp"] as const;
+  const channelStats: ChannelStat[] = CHANNELS.map((channel) => {
+    const rows = (outcomeRows ?? []).filter((r) => r.channel === channel);
+    const sent = rows.filter((r) => r.status === "sent" || r.status === "delivered").length;
+    const failed = rows.filter((r) => r.status === "failed").length;
+    const total = sent + failed;
+    return { channel, sent, failed, successRate: total === 0 ? null : (sent / total) * 100 };
+  });
+  const failedItems: FailedItem[] = (failureRows ?? []).map((f) => ({
+    id: f.id,
+    channel: f.channel,
+    recipient_type: f.recipient_type,
+    reason: f.provider_response,
+    updated_at: f.updated_at,
+  }));
+
   const roster: RosterEntry[] = (students ?? []).map((s) => {
     const stream = s.streams as unknown as { class_id: string; classes: { name: string } | null } | null;
     const guardians = (s.student_guardians ?? []) as unknown as { primary_contact: boolean; school_users: { id: string; phone: string | null; email: string | null } | null }[];
@@ -214,6 +252,7 @@ export default async function CommunicationPage() {
             <TabsTrigger value="suppliers">Suppliers</TabsTrigger>
             <TabsTrigger value="templates">Templates</TabsTrigger>
             <TabsTrigger value="history">History</TabsTrigger>
+            <TabsTrigger value="delivery-health">Delivery health</TabsTrigger>
           </TabsList>
 
           <TabsContent value="compose">
@@ -234,6 +273,10 @@ export default async function CommunicationPage() {
 
           <TabsContent value="history">
             <HistorySection logs={logRows} canDelete={canDelete ?? false} />
+          </TabsContent>
+
+          <TabsContent value="delivery-health">
+            <DeliveryHealthSection queued={queuedItems} channelStats={channelStats} failures={failedItems} />
           </TabsContent>
         </Tabs>
       </div>
