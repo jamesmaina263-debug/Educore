@@ -16,6 +16,8 @@ import { StudentDeleteControl } from "@/components/students/student-delete-contr
 import { NemisIdentifiersCard } from "@/components/students/nemis-identifiers-card";
 import { PathwayFitCard } from "@/components/students/pathway-fit-card";
 import { computePathwayFit, type PathwayFitMarkInput } from "@/lib/academics/pathway-fit";
+import { getStudentGrowth } from "./growth-actions";
+import { GrowthTab } from "./growth-tab";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 
@@ -107,6 +109,8 @@ export default async function StudentProfilePage({
     .select("id, application_number")
     .eq("resulting_student_id", id)
     .maybeSingle();
+
+  const growthSummary = await getStudentGrowth(id);
 
   const { data: guardianLinks } = await supabase
     .from("student_guardians")
@@ -312,6 +316,7 @@ export default async function StudentProfilePage({
             <TabsTrigger value="documents">Documents</TabsTrigger>
             <TabsTrigger value="medical">Medical</TabsTrigger>
             <TabsTrigger value="certificates">Certificates</TabsTrigger>
+            <TabsTrigger value="growth">Growth</TabsTrigger>
             <TabsTrigger value="discipline">Discipline</TabsTrigger>
             {canSeeBiometricTab && <TabsTrigger value="biometric">Biometric</TabsTrigger>}
           </TabsList>
@@ -457,6 +462,10 @@ export default async function StudentProfilePage({
 
           <TabsContent value="certificates">
             <CertificatesTab studentId={id} certificates={certificates} canIssue={canIssueCertificates} />
+          </TabsContent>
+
+          <TabsContent value="growth">
+            <GrowthTab summary={growthSummary} />
           </TabsContent>
 
           <TabsContent value="discipline">
