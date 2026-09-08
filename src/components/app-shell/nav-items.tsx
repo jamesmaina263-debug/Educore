@@ -136,6 +136,7 @@ const examsChildren: NavChild[] = [
   { label: "Overview", href: "/exams/overview", icon: Gauge },
   { label: "Marks", href: "/exams/marks", icon: ClipboardCheck },
   { label: "Report Cards", href: "/exams/report-cards", icon: BookOpenCheck },
+  { label: "Performance Dashboard", href: "/exams/performance-dashboard", icon: BarChart3 },
   { label: "Grading Scales", href: "/exams/grading", icon: Scale },
 ];
 
