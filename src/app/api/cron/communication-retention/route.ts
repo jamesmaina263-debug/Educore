@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isValidCronRequest } from "@/lib/cron-auth";
+import { sendSecurityAlert } from "@/lib/security-alert";
 
 export const dynamic = "force-dynamic";
 
@@ -40,11 +41,13 @@ export async function GET(request: Request) {
   // suspend_schools_with_overdue_invoices() in the billing cron.
   const archived = await adminClient.rpc("archive_old_communications");
   if (archived.error) {
+    void sendSecurityAlert("Communication-retention cron (archive step) failed", { error: archived.error.message });
     return NextResponse.json({ error: archived.error.message }, { status: 500 });
   }
 
   const purged = await adminClient.rpc("purge_expired_communications");
   if (purged.error) {
+    void sendSecurityAlert("Communication-retention cron (purge step) failed", { error: purged.error.message });
     return NextResponse.json({ error: purged.error.message }, { status: 500 });
   }
 

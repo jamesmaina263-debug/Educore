@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isValidCronRequest } from "@/lib/cron-auth";
+import { sendSecurityAlert } from "@/lib/security-alert";
 
 export const dynamic = "force-dynamic";
 
@@ -47,6 +48,7 @@ export async function GET(request: Request) {
 
   const { data, error } = await adminClient.rpc("publish_due_scheduled_announcements");
   if (error) {
+    void sendSecurityAlert("Announcements cron (/api/cron/announcements) failed", { error: error.message });
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isValidCronRequest } from "@/lib/cron-auth";
+import { sendSecurityAlert } from "@/lib/security-alert";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -53,6 +54,12 @@ export async function GET(request: Request) {
     if (error) {
       // Report what was swept before the failure rather than discarding it — a partial sweep is
       // still real progress, and the next scheduled run picks up wherever this one left off.
+      void sendSecurityAlert("Dispatch-communications cron failed mid-sweep", {
+        error: error.message,
+        pages_completed: String(pages),
+        sent: String(totalSent),
+        failed: String(totalFailed),
+      });
       return NextResponse.json(
         {
           error: error.message,
