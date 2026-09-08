@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { extractEdgeFunctionError } from "@/lib/edge-function-error";
 
 type ActionResult = { error: string } | { success: true };
 
@@ -56,6 +57,29 @@ export async function recordSchoolPayment(invoiceId: string, reference: string):
     p_reference: reference || null,
   });
   if (error) return { error: error.message };
+  revalidatePath("/admin/billing");
+  return { success: true };
+}
+
+// Dunning follow-up: emails the school's owner about a specific overdue invoice, via the
+// send-billing-reminder edge function (same session-JWT auth pattern as company-email's
+// invokeMonitor -- see that file's comment). Distinct from the daily mark_invoices_overdue/
+// suspend_schools_with_overdue_invoices cron, which is silent policy enforcement; this is the
+// human-facing nudge in between.
+export async function sendBillingReminder(invoiceId: string): Promise<ActionResult> {
+  const supabase = await createClient();
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  if (!session) return { error: "Not signed in." };
+
+  const { data, error } = await supabase.functions.invoke("send-billing-reminder", {
+    body: { invoice_id: invoiceId },
+    headers: { Authorization: `Bearer ${session.access_token}` },
+  });
+  if (error) return { error: await extractEdgeFunctionError(error, "Failed to send the reminder.") };
+  if (data?.error) return { error: data.error as string };
+
   revalidatePath("/admin/billing");
   return { success: true };
 }

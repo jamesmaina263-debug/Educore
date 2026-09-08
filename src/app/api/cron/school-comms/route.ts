@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isValidCronRequest } from "@/lib/cron-auth";
+import { sendSecurityAlert } from "@/lib/security-alert";
 
 export const dynamic = "force-dynamic";
 
@@ -44,6 +45,9 @@ export async function GET(request: Request) {
 
   const errors = [newsletterSweep.error, thresholdCheck.error].filter(Boolean);
   if (errors.length > 0) {
+    void sendSecurityAlert("School-comms cron (/api/cron/school-comms) failed", {
+      error: errors.map((e) => e?.message).join("; "),
+    });
     return NextResponse.json({ error: errors.map((e) => e?.message).join("; ") }, { status: 500 });
   }
 

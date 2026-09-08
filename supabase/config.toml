@@ -47,6 +47,12 @@ verify_jwt = false
 [functions.send-communication]
 verify_jwt = false
 
+# Called from the Admin Console with a real super-admin session, same pattern as
+# send-communication/zoho-mail-monitor: verify_jwt is false here too, with auth done
+# internally via auth_is_super_admin() checked against the caller's own JWT.
+[functions.send-billing-reminder]
+verify_jwt = false
+
 [functions.verify-otp]
 verify_jwt = false
 
