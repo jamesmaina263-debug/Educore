@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isValidCronRequest } from "@/lib/cron-auth";
+import { sendSecurityAlert } from "@/lib/security-alert";
 
 export const dynamic = "force-dynamic";
 
@@ -33,6 +34,7 @@ export async function GET(request: Request) {
   });
 
   if (error) {
+    void sendSecurityAlert("Risk-scoring cron (/api/cron/risk-scoring) failed", { error: error.message });
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
