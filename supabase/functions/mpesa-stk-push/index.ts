@@ -1,5 +1,6 @@
 import { createClient } from "jsr:@supabase/supabase-js@2.112.4";
 import { buildCorsHeaders } from "../_shared/cors.ts";
+import { sendSecurityAlert } from "../_shared/securityAlert.ts";
 import {
   getDarajaOAuthToken,
   initiateDarajaStkPush,
@@ -145,6 +146,11 @@ Deno.serve(async (req) => {
       });
       if (dispatchError) {
         console.error("mpesa_stk_request_dispatched failed after a real Daraja push went out", dispatchError);
+        void sendSecurityAlert("M-Pesa: dispatch confirm write failed after a real Daraja push went out", {
+          request_id: request.id,
+          checkout_request_id: result.checkoutRequestId,
+          error: dispatchError.message ?? "unknown",
+        });
         return json({ error: "Push sent but failed to record locally -- contact support." }, 500);
       }
 

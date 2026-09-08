@@ -107,11 +107,23 @@ Deno.serve(async (req) => {
 
     if (error) {
       console.error("mpesa_stk_callback_confirm failed", error, stkCallback.CheckoutRequestID);
+      // Safaricom always gets 200 below regardless of this outcome (see the top-of-file note),
+      // so an RPC failure here has zero visibility otherwise -- Safaricom won't retry it (it
+      // already got its 200 on a prior or this attempt) and nothing else surfaces the money
+      // that came in but never got reconciled against an invoice.
+      void sendSecurityAlert("M-Pesa callback confirm failed -- payment received but not recorded", {
+        checkout_request_id: stkCallback.CheckoutRequestID,
+        school_id: schoolId,
+        error: error.message ?? "unknown",
+      });
     }
 
     return alwaysOk();
   } catch (err) {
     console.error("mpesa-stk-callback: unexpected error", err);
+    void sendSecurityAlert("M-Pesa callback: unexpected error", {
+      error: err instanceof Error ? err.message : String(err),
+    });
     return alwaysOk();
   }
 });
