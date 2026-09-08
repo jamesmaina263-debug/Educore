@@ -87,7 +87,7 @@ counts, or via SQL if you have direct access):
 select 'students' as t, count(*) from students
 union all select 'invoices', count(*) from invoices
 union all select 'payments', count(*) from payments
-union all select 'attendance_records', count(*) from attendance_records
+union all select 'student_attendance', count(*) from student_attendance
 union all select 'marks', count(*) from marks
 union all select 'school_users', count(*) from school_users;
 ```

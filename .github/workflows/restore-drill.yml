@@ -1,0 +1,136 @@
+name: Restore drill
+
+# On-demand only, deliberately -- a restore drill spins up a real Postgres 17 instance and
+# restores real student/finance data into it inside the CI runner. That's a fine thing to do
+# occasionally and on purpose, not something that should run unattended on a schedule without
+# someone watching the result. See docs/RESTORE_DRILL_RUNBOOK.md for the manual version of this
+# same procedure and why it exists -- this workflow is that runbook automated so it doesn't need
+# a spare 30-45 minutes and a local machine with the right Postgres client version installed.
+on:
+  workflow_dispatch: {}
+
+jobs:
+  restore-drill:
+    runs-on: ubuntu-latest
+    # A real Postgres 17 server to restore into, right in the runner -- no Supabase project
+    # created and torn down, no local Docker needed on anyone's machine. Matches the Supabase
+    # project's actual server version (confirmed via Supabase:get_project: postgres_engine "17"),
+    # same reasoning as nightly-backup.yml's client version pin below.
+    services:
+      target-db:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: drill
+          POSTGRES_DB: postgres
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check SUPABASE_DB_URL is set
+        run: |
+          if [ -z "${{ secrets.SUPABASE_DB_URL }}" ]; then
+            echo "SUPABASE_DB_URL repo secret is not set -- same secret nightly-backup.yml uses. Failing loudly instead of skipping silently."
+            exit 1
+          fi
+
+      # Same version-pinning reasoning as nightly-backup.yml: the dump was made with pg_dump 17,
+      # and pg_restore refuses to even read a dump's table of contents from a newer major version
+      # than itself (confirmed directly while building this workflow: Ubuntu's default v16 client
+      # fails immediately with "unsupported version (1.16) in file header" on this exact dump).
+      - name: Install postgresql-client-17
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y wget gnupg lsb-release ca-certificates
+          wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo gpg --dearmor -o /usr/share/keyrings/postgresql.gpg
+          echo "deb [signed-by=/usr/share/keyrings/postgresql.gpg] https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" | sudo tee /etc/apt/sources.list.d/pgdg.list
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client-17
+
+      # Pulls whichever nightly-backup.yml run most recently succeeded, rather than requiring
+      # someone to know a specific run ID -- this is meant to answer "is our current backup
+      # process actually restorable", not "was this one specific dump restorable".
+      - name: Download latest successful nightly backup
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          RUN_ID=$(gh run list --repo "${{ github.repository }}" --workflow "nightly-backup.yml" \
+            --status success --limit 1 --json databaseId --jq '.[0].databaseId')
+          if [ -z "$RUN_ID" ]; then
+            echo "No successful 'Nightly database backup' run found -- nothing to restore."
+            exit 1
+          fi
+          echo "Using backup from nightly-backup.yml run $RUN_ID"
+          mkdir -p backup
+          gh run download "$RUN_ID" --repo "${{ github.repository }}" --dir backup
+
+      - name: Restore into the throwaway target
+        run: |
+          DUMP_FILE=$(find backup -name 'educore-backup-*.dump' | head -1)
+          if [ -z "$DUMP_FILE" ]; then
+            echo "Could not find a .dump file in the downloaded artifact."
+            find backup -type f
+            exit 1
+          fi
+          echo "Restoring $DUMP_FILE ($(stat -c%s "$DUMP_FILE") bytes)"
+
+          # --no-owner --no-privileges (matches how it was dumped) means role/ownership warnings
+          # are expected on a bare postgres:17 image that has none of Supabase's own roles --
+          # that's a known-safe warning, not a drill failure (see docs/RESTORE_DRILL_RUNBOOK.md).
+          # A real failure is pg_restore hitting something fatal enough to abort outright, which
+          # this checks for explicitly below rather than trusting the exit code alone.
+          set +e
+          /usr/lib/postgresql/17/bin/pg_restore --no-owner --no-privileges --clean --if-exists \
+            -d "postgresql://postgres:drill@localhost:5433/postgres" \
+            "$DUMP_FILE" > /tmp/restore_output.txt 2>&1
+          RESTORE_EXIT=$?
+          set -e
+          cat /tmp/restore_output.txt
+
+          if grep -qiE "FATAL|could not connect|no such file|out of memory" /tmp/restore_output.txt; then
+            echo ""
+            echo "Restore hit a fatal-looking error above, not just an expected role/ownership warning. Treating as a drill failure."
+            exit 1
+          fi
+          echo ""
+          echo "pg_restore exit code: $RESTORE_EXIT (a nonzero exit here is common and expected -- see comment above; the grep check is what actually gates this step)"
+
+      # The check CI can't do on its own: pg_restore --list (used in nightly-backup.yml's own
+      # verify step) only proves the dump *parses*. This proves it actually restores into a real
+      # server and that the row counts in the restored copy are in the right ballpark versus
+      # production as of right now -- not an exact match (production keeps changing after the
+      # nightly dump's timestamp), but nowhere near zero and no table silently missing.
+      - name: Compare row counts against production
+        run: |
+          QUERY="select 'students' as t, count(*) from students
+            union all select 'invoices', count(*) from invoices
+            union all select 'payments', count(*) from payments
+            union all select 'student_attendance', count(*) from student_attendance
+            union all select 'marks', count(*) from marks
+            union all select 'school_users', count(*) from school_users
+            order by 1;"
+
+          echo "=== Production (live) ==="
+          psql "${{ secrets.SUPABASE_DB_URL }}" -Atqc "$QUERY" | tee /tmp/prod_counts.txt
+
+          echo ""
+          echo "=== Restored copy (from last night's dump) ==="
+          PGPASSWORD=drill /usr/lib/postgresql/17/bin/psql -h localhost -p 5433 -U postgres -d postgres \
+            -Atqc "$QUERY" | tee /tmp/restored_counts.txt
+
+          echo ""
+          echo "=== Summary ==="
+          {
+            echo "| Table | Production | Restored copy |"
+            echo "|---|---|---|"
+            paste -d'|' <(cut -d'|' -f1,2 /tmp/prod_counts.txt) <(cut -d'|' -f2 /tmp/restored_counts.txt) \
+              | awk -F'|' '{print "| " $1 " | " $2 " | " $3 " |"}'
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+
+          echo ""
+          echo "Reminder: these won't match exactly -- production has kept changing since last night's 02:00 UTC dump. Look for 'in the right ballpark, no table at or near zero' rather than an exact match. A restored count of 0 on a table that's clearly non-zero in production is the actual failure signal here."
