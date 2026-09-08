@@ -1,17 +1,14 @@
 # EduCore — Restore Drill Runbook
 
-**Status:** Written this session; **not yet executed**. `RPO_RTO_POLICY.md`
-section 3 says it plainly: *"A DR plan that has never been tested by actually
-restoring from a backup is not a verified DR plan."* This document is the
-missing test — a step-by-step procedure someone with Supabase/GitHub access
-can run in ~30–45 minutes to actually prove the nightly `pg_dump` backup
-(`.github/workflows/nightly-backup.yml`) is restorable, not just present.
-
-I (Claude) cannot execute this myself: it requires a `SUPABASE_DB_URL` /
-Supabase dashboard access I'm not given standing credentials for, and
-deliberately shouldn't be — see `SECRETS_ROTATION_POLICY.md`. What I *can* do
-is make sure the drill is a checklist anyone on the team can follow without
-re-deriving the steps under incident pressure.
+**Status: executed and passed, 2026-09-08** — see the drill log at the bottom.
+Automated as `.github/workflows/restore-drill.yml` (`workflow_dispatch`),
+which runs this same procedure inside a GitHub Actions runner rather than
+needing a local machine with the right Postgres client version installed.
+`RPO_RTO_POLICY.md` section 3 used to say plainly: *"A DR plan that has
+never been tested by actually restoring from a backup is not a verified DR
+plan."* That's no longer true here — the manual procedure below is kept as
+the fallback if the automated workflow itself is ever unavailable, and as
+the reference for what the workflow is actually doing and why.
 
 ## Why this matters specifically for EduCore
 
@@ -131,4 +128,4 @@ extra, less-monitored project.
 
 | Date | Run by | Result | Notes |
 |------|--------|--------|-------|
-| _(none yet)_ | | | First execution still pending — see status note at top of file. |
+| 2026-09-08 | Claude (via `.github/workflows/restore-drill.yml`, `workflow_dispatch`) | **Pass** | Restored `educore-backup-2026-09-04.dump` into a throwaway `postgres:17` service container in CI. 51 errors from `pg_restore`, all in the known-safe category (`pg_net`/`supabase_vault` extensions and the `authenticated`/`anon`/`service_role` roles don't exist on a bare Postgres image — see workflow comments for the full allow-list). Row counts matched production exactly: invoices 10/10, marks 10/10, payments 8/8, school_users 33/33, student_attendance 32/32, students 18/18. Took 3 attempts to get a readable result — see run history on the workflow for what each fixed (log-visibility gap, then a token-permissions gap, then a gating-logic bug that misclassified an expected warning as fatal). |
