@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { logAdminAction } from "@/lib/log-admin-action";
 
 type ActionResult = { error: string } | { success: true };
 
@@ -17,6 +18,7 @@ export async function suspendSchool(schoolId: string, reason: string): Promise<A
     p_reason: reason || null,
   });
   if (error) return { error: error.message };
+  void logAdminAction(supabase, "suspend_school", { school_id: schoolId, reason });
   revalidatePath("/admin");
   revalidatePath("/admin/billing");
   return { success: true };
@@ -26,6 +28,7 @@ export async function reactivateSchool(schoolId: string): Promise<ActionResult> 
   const supabase = await createClient();
   const { error } = await supabase.rpc("reactivate_school", { p_school_id: schoolId });
   if (error) return { error: error.message };
+  void logAdminAction(supabase, "reactivate_school", { school_id: schoolId });
   revalidatePath("/admin");
   revalidatePath("/admin/billing");
   return { success: true };

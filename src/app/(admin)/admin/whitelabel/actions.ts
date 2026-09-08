@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { logAdminAction } from "@/lib/log-admin-action";
 
 type ActionResult = { error: string } | { success: true };
 
@@ -16,6 +17,7 @@ export async function setWhitelabelEnabled(groupId: string, enabled: boolean): P
     .update({ whitelabel_enabled: enabled })
     .eq("id", groupId);
   if (error) return { error: error.message };
+  void logAdminAction(supabase, "set_whitelabel_enabled", { group_id: groupId, enabled });
   revalidatePath("/admin/whitelabel");
   return { success: true };
 }
@@ -27,6 +29,7 @@ export async function setDomainVerified(groupId: string): Promise<ActionResult> 
     .update({ custom_domain_status: "verified" })
     .eq("id", groupId);
   if (error) return { error: error.message };
+  void logAdminAction(supabase, "set_domain_verified", { group_id: groupId });
   revalidatePath("/admin/whitelabel");
   return { success: true };
 }
@@ -38,6 +41,7 @@ export async function setDomainPending(groupId: string): Promise<ActionResult> {
     .update({ custom_domain_status: "pending" })
     .eq("id", groupId);
   if (error) return { error: error.message };
+  void logAdminAction(supabase, "set_domain_pending", { group_id: groupId });
   revalidatePath("/admin/whitelabel");
   return { success: true };
 }

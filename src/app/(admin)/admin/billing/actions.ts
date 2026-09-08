@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { extractEdgeFunctionError } from "@/lib/edge-function-error";
+import { logAdminAction } from "@/lib/log-admin-action";
 
 type ActionResult = { error: string } | { success: true };
 
@@ -18,6 +19,7 @@ export async function activateSchoolSubscription(
     p_period_end: periodEnd,
   });
   if (error) return { error: error.message };
+  void logAdminAction(supabase, "activate_subscription", { school_id: schoolId, plan_id: planId, period_end: periodEnd });
   revalidatePath("/admin/billing");
   return { success: true };
 }
@@ -29,6 +31,7 @@ export async function suspendSchoolSubscription(schoolId: string, reason: string
     p_reason: reason || null,
   });
   if (error) return { error: error.message };
+  void logAdminAction(supabase, "suspend_subscription", { school_id: schoolId, reason });
   revalidatePath("/admin/billing");
   return { success: true };
 }
@@ -46,6 +49,7 @@ export async function generateSchoolInvoice(
     p_due_days: 14,
   });
   if (error) return { error: error.message };
+  void logAdminAction(supabase, "generate_platform_invoice", { school_id: schoolId, period_start: periodStart, period_end: periodEnd });
   revalidatePath("/admin/billing");
   return { success: true };
 }
@@ -57,6 +61,7 @@ export async function recordSchoolPayment(invoiceId: string, reference: string):
     p_reference: reference || null,
   });
   if (error) return { error: error.message };
+  void logAdminAction(supabase, "record_platform_payment", { invoice_id: invoiceId, reference });
   revalidatePath("/admin/billing");
   return { success: true };
 }
@@ -80,6 +85,7 @@ export async function sendBillingReminder(invoiceId: string): Promise<ActionResu
   if (error) return { error: await extractEdgeFunctionError(error, "Failed to send the reminder.") };
   if (data?.error) return { error: data.error as string };
 
+  void logAdminAction(supabase, "send_billing_reminder", { invoice_id: invoiceId });
   revalidatePath("/admin/billing");
   return { success: true };
 }
