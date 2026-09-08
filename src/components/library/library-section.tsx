@@ -106,7 +106,7 @@ export function LibrarySection({
   canWrite: boolean;
 }) {
   const router = useRouter();
-  const { online, pendingCount, failed, syncing, sync, discard } = useOfflineSync("library");
+  const { online, pendingCount, failed, syncing, sync, discard, lastSyncedAt } = useOfflineSync("library");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -245,7 +245,7 @@ export function LibrarySection({
 
   return (
     <div className="flex flex-col gap-4">
-      <LibraryOfflineBanner online={online} pendingCount={pendingCount} failed={failed} syncing={syncing} sync={sync} discard={discard} />
+      <LibraryOfflineBanner online={online} pendingCount={pendingCount} failed={failed} syncing={syncing} sync={sync} discard={discard} lastSyncedAt={lastSyncedAt} />
       {error && <p className="text-sm text-danger">{error}</p>}
 
       {section === "catalogue" && (

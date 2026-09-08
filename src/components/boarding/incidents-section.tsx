@@ -40,7 +40,7 @@ export function IncidentsSection({
   canWrite: boolean;
 }) {
   const router = useRouter();
-  const { online, pendingCount, failed, syncing, sync, discard } = useOfflineSync("boarding");
+  const { online, pendingCount, failed, syncing, sync, discard, lastSyncedAt } = useOfflineSync("boarding");
   const [open, setOpen] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -92,7 +92,7 @@ export function IncidentsSection({
 
   return (
     <div className="flex flex-col gap-4">
-      <BoardingOfflineBanner online={online} pendingCount={pendingCount} failed={failed} syncing={syncing} sync={sync} discard={discard} />
+      <BoardingOfflineBanner online={online} pendingCount={pendingCount} failed={failed} syncing={syncing} sync={sync} discard={discard} lastSyncedAt={lastSyncedAt} />
       {canWrite && (
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild>

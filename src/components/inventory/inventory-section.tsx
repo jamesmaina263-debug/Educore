@@ -65,7 +65,7 @@ export function InventorySection({
   canWrite: boolean;
 }) {
   const router = useRouter();
-  const { online, pendingCount, failed, syncing, sync, discard } = useOfflineSync("inventory");
+  const { online, pendingCount, failed, syncing, sync, discard, lastSyncedAt } = useOfflineSync("inventory");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -193,7 +193,7 @@ export function InventorySection({
 
   return (
     <div className="flex flex-col gap-6">
-      <InventoryOfflineBanner online={online} pendingCount={pendingCount} failed={failed} syncing={syncing} sync={sync} discard={discard} />
+      <InventoryOfflineBanner online={online} pendingCount={pendingCount} failed={failed} syncing={syncing} sync={sync} discard={discard} lastSyncedAt={lastSyncedAt} />
       {error && <p className="text-sm text-danger">{error}</p>}
 
       {canWrite && (

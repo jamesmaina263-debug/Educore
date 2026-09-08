@@ -287,7 +287,7 @@ export function CompetencyMarksSection({
   rubricsBySubStrand,
 }: Props) {
   const router = useRouter();
-  const { online, pendingCount, failed, syncing, sync, discard } = useOfflineSync("exams");
+  const { online, pendingCount, failed, syncing, sync, discard, lastSyncedAt } = useOfflineSync("exams");
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [ratings, setRatings] = useState<Map<string, string>>(
@@ -401,7 +401,7 @@ export function CompetencyMarksSection({
           sample) can be attached to it below the rating.
         </p>
       </div>
-      <ExamsOfflineBanner online={online} pendingCount={pendingCount} failed={failed} syncing={syncing} sync={sync} discard={discard} />
+      <ExamsOfflineBanner online={online} pendingCount={pendingCount} failed={failed} syncing={syncing} sync={sync} discard={discard} lastSyncedAt={lastSyncedAt} />
       {error && <p className="text-sm text-danger">{error}</p>}
 
       {canManageCurriculum && (

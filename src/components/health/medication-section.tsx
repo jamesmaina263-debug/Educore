@@ -57,7 +57,7 @@ export function MedicationSection({
   canWrite: boolean;
 }) {
   const router = useRouter();
-  const { online, pendingCount, failed, syncing, sync, discard } = useOfflineSync("health");
+  const { online, pendingCount, failed, syncing, sync, discard, lastSyncedAt } = useOfflineSync("health");
   const [open, setOpen] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -125,7 +125,7 @@ export function MedicationSection({
 
   return (
     <div className="flex flex-col gap-4">
-      <HealthOfflineBanner online={online} pendingCount={pendingCount} failed={failed} syncing={syncing} sync={sync} discard={discard} />
+      <HealthOfflineBanner online={online} pendingCount={pendingCount} failed={failed} syncing={syncing} sync={sync} discard={discard} lastSyncedAt={lastSyncedAt} />
       {canWrite && (
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild>

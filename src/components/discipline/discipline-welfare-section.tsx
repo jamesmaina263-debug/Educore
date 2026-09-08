@@ -163,7 +163,7 @@ export function DisciplineWelfareSection({
   safeguarding: SafeguardingRow[];
 }) {
   const [isPending, startTransition] = useTransition();
-  const { online, pendingCount, failed, syncing, sync, discard } = useOfflineSync("discipline");
+  const { online, pendingCount, failed, syncing, sync, discard, lastSyncedAt } = useOfflineSync("discipline");
   const [error, setError] = useState<string | null>(null);
   const [incidentOpen, setIncidentOpen] = useState(false);
   const [caseOpen, setCaseOpen] = useState(false);
@@ -216,7 +216,7 @@ export function DisciplineWelfareSection({
 
   return (
     <div className="flex flex-col gap-4">
-      <DisciplineOfflineBanner online={online} pendingCount={pendingCount} failed={failed} syncing={syncing} sync={sync} discard={discard} />
+      <DisciplineOfflineBanner online={online} pendingCount={pendingCount} failed={failed} syncing={syncing} sync={sync} discard={discard} lastSyncedAt={lastSyncedAt} />
       {error && (
         <div className="rounded-md border border-destructive/25 bg-destructive-subtle px-3 py-2 text-sm text-destructive">
           {error}

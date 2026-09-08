@@ -44,7 +44,7 @@ describe("biometric-kiosk offline queue", () => {
 
     const result = await queueMod.syncPendingMutations("biometric-kiosk");
 
-    expect(result).toEqual({ synced: 1, failed: 0 });
+    expect(result).toEqual({ synced: 1, failed: 0, reachedServer: true });
     expect(submitScan).toHaveBeenCalledWith(samplePayload);
     expect(await queueMod.getPendingMutations("biometric-kiosk")).toHaveLength(0);
   });
@@ -58,7 +58,7 @@ describe("biometric-kiosk offline queue", () => {
 
     const result = await queueMod.syncPendingMutations("biometric-kiosk");
 
-    expect(result).toEqual({ synced: 0, failed: 1 });
+    expect(result).toEqual({ synced: 0, failed: 1, reachedServer: true });
     const pending = await queueMod.getPendingMutations("biometric-kiosk");
     expect(pending).toHaveLength(1);
     expect(pending[0].status).toBe("failed");
@@ -76,6 +76,7 @@ describe("biometric-kiosk offline queue", () => {
     const result = await queueMod.syncPendingMutations("biometric-kiosk");
 
     expect(result.synced).toBe(0);
+    expect(result.reachedServer).toBe(false); // OS-04: a real network drop must not advance "last synced"
     const pending = await queueMod.getPendingMutations("biometric-kiosk");
     expect(pending).toHaveLength(2);
     expect(pending.every((m) => m.status === "pending")).toBe(true);
@@ -114,7 +115,7 @@ describe("biometric-kiosk offline queue", () => {
 
     const kioskResult = await queueMod.syncPendingMutations("biometric-kiosk");
 
-    expect(kioskResult).toEqual({ synced: 1, failed: 0 });
+    expect(kioskResult).toEqual({ synced: 1, failed: 0, reachedServer: true });
     expect(await queueMod.getPendingMutations("attendance")).toHaveLength(1); // untouched by the scoped sync
   });
 });

@@ -12,6 +12,8 @@ export interface OfflineBannerProps {
   syncing: boolean;
   sync: () => void;
   discard: (id: string) => void;
+  /** OS-04: epoch ms of this module's last confirmed sync, or undefined if never synced on this device -- see useOfflineSync(). */
+  lastSyncedAt: number | undefined;
   /** Maps a queued mutation's `type` to a human-readable label. */
   mutationLabels: Record<string, string>;
   /** Message shown while offline. Defaults to a generic "what you submit is saved" notice. */
@@ -33,9 +35,23 @@ const DEFAULT_OFFLINE_MESSAGE = (
 
 const DEFAULT_UNIT_NOUN = { singular: "entry", plural: "entries" };
 
+/** OS-04: "Synced just now" / "Synced 5 minutes ago" / "Not yet synced on this device". Plain relative time -- no library needed for granularity this coarse. Exported for the one non-OfflineBanner UI (biometric kiosk) that needs the same phrasing in its own custom layout. */
+export function formatLastSynced(ts: number | undefined): string {
+  if (!ts) return "Not yet synced on this device";
+  const diffMin = Math.round((Date.now() - ts) / 60000);
+  if (diffMin < 1) return "Synced just now";
+  if (diffMin < 60) return `Synced ${diffMin} minute${diffMin === 1 ? "" : "s"} ago`;
+  const diffHr = Math.round(diffMin / 60);
+  if (diffHr < 24) return `Synced ${diffHr} hour${diffHr === 1 ? "" : "s"} ago`;
+  const diffDay = Math.round(diffHr / 24);
+  return `Synced ${diffDay} day${diffDay === 1 ? "" : "s"} ago`;
+}
+
 /**
  * Shared offline-queue status banner: an "offline" notice, a "pending sync"
- * notice with a manual retry, and a "failed" list with per-item discard.
+ * notice with a manual retry, a "failed" list with per-item discard, and
+ * (OS-04) an always-visible last-synced-time line so every screen using this
+ * component shows it, not just the ones currently mid-sync or offline.
  *
  * Each module (library, discipline, staff, exams, inventory, boarding,
  * health, admissions) wraps this with its own mutation labels and copy —
@@ -48,6 +64,7 @@ export function OfflineBanner({
   syncing,
   sync,
   discard,
+  lastSyncedAt,
   mutationLabels,
   offlineMessage = DEFAULT_OFFLINE_MESSAGE,
   syncingLabel = "Syncing offline entries…",
@@ -94,6 +111,7 @@ export function OfflineBanner({
           ))}
         </div>
       )}
+      <p className="px-1 text-xs text-muted-foreground">{formatLastSynced(lastSyncedAt)}</p>
     </>
   );
 }

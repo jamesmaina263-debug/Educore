@@ -44,7 +44,7 @@ export function StaffRegisterForm({
   canMark: boolean;
 }) {
   const router = useRouter();
-  const { online, pendingCount, failed, syncing, sync, discard } = useOfflineSync("staff-attendance");
+  const { online, pendingCount, failed, syncing, sync, discard, lastSyncedAt } = useOfflineSync("staff-attendance");
   const [draft, setDraft] = useState<Record<string, Mark>>(
     Object.fromEntries(roster.filter((r) => !r.existing).map((r) => [r.staff_id, "present" as Mark])),
   );
@@ -127,7 +127,7 @@ export function StaffRegisterForm({
 
   return (
     <div className="flex flex-col gap-4">
-      <StaffOfflineBanner online={online} pendingCount={pendingCount} failed={failed} syncing={syncing} sync={sync} discard={discard} />
+      <StaffOfflineBanner online={online} pendingCount={pendingCount} failed={failed} syncing={syncing} sync={sync} discard={discard} lastSyncedAt={lastSyncedAt} />
       {error && <p className="text-sm text-danger">{error}</p>}
 
       {unmarked.length > 0 && (

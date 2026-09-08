@@ -42,7 +42,7 @@ export function SickBaySection({
   canWrite: boolean;
 }) {
   const router = useRouter();
-  const { online, pendingCount, failed, syncing, sync, discard } = useOfflineSync("health");
+  const { online, pendingCount, failed, syncing, sync, discard, lastSyncedAt } = useOfflineSync("health");
   const [checkInOpen, setCheckInOpen] = useState(false);
   const [checkOutFor, setCheckOutFor] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
@@ -167,7 +167,7 @@ export function SickBaySection({
 
   return (
     <div className="flex flex-col gap-4">
-      <HealthOfflineBanner online={online} pendingCount={pendingCount} failed={failed} syncing={syncing} sync={sync} discard={discard} />
+      <HealthOfflineBanner online={online} pendingCount={pendingCount} failed={failed} syncing={syncing} sync={sync} discard={discard} lastSyncedAt={lastSyncedAt} />
       <div className="flex items-center justify-between">
         {canWrite && (
           <Dialog open={checkInOpen} onOpenChange={setCheckInOpen}>

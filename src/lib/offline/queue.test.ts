@@ -48,7 +48,7 @@ describe("offline mutation queue", () => {
 
     const result = await queueMod.syncPendingMutations("attendance");
 
-    expect(result).toEqual({ synced: 1, failed: 0 });
+    expect(result).toEqual({ synced: 1, failed: 0, reachedServer: true });
     expect(await queueMod.getPendingMutations("attendance")).toHaveLength(0);
   });
 
@@ -61,7 +61,7 @@ describe("offline mutation queue", () => {
 
     const result = await queueMod.syncPendingMutations("attendance");
 
-    expect(result).toEqual({ synced: 0, failed: 1 });
+    expect(result).toEqual({ synced: 0, failed: 1, reachedServer: true });
     const pending = await queueMod.getPendingMutations("attendance");
     expect(pending).toHaveLength(1);
     expect(pending[0].status).toBe("failed");
@@ -79,6 +79,7 @@ describe("offline mutation queue", () => {
     const result = await queueMod.syncPendingMutations("attendance");
 
     expect(result.synced).toBe(0);
+    expect(result.reachedServer).toBe(false); // OS-04: a real network drop must not advance "last synced"
     const pending = await queueMod.getPendingMutations("attendance");
     expect(pending).toHaveLength(2);
     expect(pending.every((m) => m.status === "pending")).toBe(true);
@@ -109,7 +110,7 @@ describe("offline mutation queue", () => {
 
     const result = await queueMod.syncPendingMutations("health");
 
-    expect(result).toEqual({ synced: 1, failed: 0 });
+    expect(result).toEqual({ synced: 1, failed: 0, reachedServer: true });
     expect(checkOutStudent).toHaveBeenCalledWith("visit-1", "sent_home", "Fever, parent collecting");
   });
 
@@ -125,7 +126,7 @@ describe("offline mutation queue", () => {
 
     const result = await queueMod.syncPendingMutations("boarding");
 
-    expect(result).toEqual({ synced: 1, failed: 0 });
+    expect(result).toEqual({ synced: 1, failed: 0, reachedServer: true });
     expect(submitRollCall).toHaveBeenCalledWith("2026-02-01", "boarding_pm", entries);
   });
 
@@ -154,7 +155,7 @@ describe("offline mutation queue", () => {
 
     const result = await queueMod.syncPendingMutations("admissions");
 
-    expect(result).toEqual({ synced: 3, failed: 0 });
+    expect(result).toEqual({ synced: 3, failed: 0, reachedServer: true });
     expect(updateAdmissionDetails).toHaveBeenCalledWith("app-1", admissionInput, admissionBase);
     expect(updateApplicantIdentity).toHaveBeenCalledWith("app-1", identityInput, identityBase);
     expect(saveHealthProfileForApplication).toHaveBeenCalledWith("app-1", healthInput, healthBase);
@@ -176,7 +177,7 @@ describe("offline mutation queue", () => {
 
     const result = await queueMod.syncPendingMutations("admissions");
 
-    expect(result).toEqual({ synced: 1, failed: 0 });
+    expect(result).toEqual({ synced: 1, failed: 0, reachedServer: true });
     expect(updateAdmissionDetails).toHaveBeenCalledWith("app-1", admissionInput, undefined);
   });
 
@@ -193,7 +194,7 @@ describe("offline mutation queue", () => {
 
     const result = await queueMod.syncPendingMutations("library");
 
-    expect(result).toEqual({ synced: 1, failed: 0 });
+    expect(result).toEqual({ synced: 1, failed: 0, reachedServer: true });
     expect(returnLoanAction).toHaveBeenCalledWith("loan-1");
   });
 
@@ -206,7 +207,7 @@ describe("offline mutation queue", () => {
 
     const result = await queueMod.syncPendingMutations("inventory");
 
-    expect(result).toEqual({ synced: 1, failed: 0 });
+    expect(result).toEqual({ synced: 1, failed: 0, reachedServer: true });
     expect(recordStockMovementAction).toHaveBeenCalledWith(input);
   });
 
@@ -232,7 +233,7 @@ describe("offline mutation queue", () => {
 
     const result = await queueMod.syncPendingMutations("discipline");
 
-    expect(result).toEqual({ synced: 1, failed: 0 });
+    expect(result).toEqual({ synced: 1, failed: 0, reachedServer: true });
     const receivedFormData = createIncidentAction.mock.calls[0][0] as FormData;
     expect(receivedFormData).toBeInstanceOf(FormData);
     expect(receivedFormData.get("student_id")).toBe("stu-1");
@@ -256,7 +257,7 @@ describe("offline mutation queue", () => {
 
     const result = await queueMod.syncPendingMutations("staff-attendance");
 
-    expect(result).toEqual({ synced: 1, failed: 0 });
+    expect(result).toEqual({ synced: 1, failed: 0, reachedServer: true });
     expect(submitStaffAttendance).toHaveBeenCalledWith(input);
     expect(await queueMod.getPendingMutations("attendance")).toHaveLength(1);
   });
@@ -267,7 +268,7 @@ describe("offline mutation queue", () => {
 
     const result = await queueMod.syncPendingMutations("some-future-module");
 
-    expect(result).toEqual({ synced: 0, failed: 0 });
+    expect(result).toEqual({ synced: 0, failed: 0, reachedServer: true });
     expect(await queueMod.getPendingMutations("some-future-module")).toHaveLength(1);
   });
 });
@@ -329,5 +330,56 @@ describe("v1 -> v2 schema migration", () => {
     expect(dbCheck.objectStoreNames.contains("pending_attendance")).toBe(false);
     expect(dbCheck.objectStoreNames.contains("pending_mutations")).toBe(true);
     dbCheck.close();
+  });
+});
+
+describe("OS-04 last-synced tracking", () => {
+  it("is undefined before any sync has ever happened on this device", async () => {
+    const { queueMod } = await freshModules();
+    expect(await queueMod.getLastSyncedAt("attendance")).toBeUndefined();
+  });
+
+  it("advances after a sync pass that reaches the server, even with nothing queued", async () => {
+    const { queueMod } = await freshModules();
+    const before = Date.now();
+
+    const result = await queueMod.syncPendingMutations("attendance");
+
+    expect(result).toEqual({ synced: 0, failed: 0, reachedServer: true });
+    const ts = await queueMod.getLastSyncedAt("attendance");
+    expect(ts).toBeGreaterThanOrEqual(before);
+  });
+
+  it("does NOT advance when the sync pass never reaches the server (a real network drop)", async () => {
+    vi.doMock("@/app/(app)/attendance/actions", () => ({
+      submitAttendance: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
+    }));
+    const { queueMod } = await freshModules();
+    await queueMod.queueMutation("attendance", "submitAttendance", { stream_id: "s1", attendance_date: "2026-01-01", marks: [] });
+
+    const result = await queueMod.syncPendingMutations("attendance");
+
+    expect(result.reachedServer).toBe(false);
+    expect(await queueMod.getLastSyncedAt("attendance")).toBeUndefined();
+  });
+
+  it("advances even when every queued item fails for a real (non-network) reason -- a round trip still happened", async () => {
+    vi.doMock("@/app/(app)/attendance/actions", () => ({
+      submitAttendance: vi.fn().mockResolvedValue({ error: "Could not resolve your school." }),
+    }));
+    const { queueMod } = await freshModules();
+    await queueMod.queueMutation("attendance", "submitAttendance", { stream_id: "s1", attendance_date: "2026-01-01", marks: [] });
+
+    const result = await queueMod.syncPendingMutations("attendance");
+
+    expect(result).toEqual({ synced: 0, failed: 1, reachedServer: true });
+    expect(await queueMod.getLastSyncedAt("attendance")).toBeDefined();
+  });
+
+  it("tracks each module's last-synced time independently", async () => {
+    const { queueMod } = await freshModules();
+    await queueMod.syncPendingMutations("attendance");
+    expect(await queueMod.getLastSyncedAt("attendance")).toBeDefined();
+    expect(await queueMod.getLastSyncedAt("library")).toBeUndefined();
   });
 });
