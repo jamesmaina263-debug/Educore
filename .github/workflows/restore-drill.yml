@@ -92,6 +92,13 @@ jobs:
           set -e
           cat /tmp/restore_output.txt
 
+          {
+            echo "**pg_restore exit code:** $RESTORE_EXIT"
+            echo '```'
+            cat /tmp/restore_output.txt
+            echo '```'
+          } >> /tmp/drill_report.md
+
           if grep -qiE "FATAL|could not connect|no such file|out of memory" /tmp/restore_output.txt; then
             echo ""
             echo "Restore hit a fatal-looking error above, not just an expected role/ownership warning. Treating as a drill failure."
@@ -134,3 +141,30 @@ jobs:
 
           echo ""
           echo "Reminder: these won't match exactly -- production has kept changing since last night's 02:00 UTC dump. Look for 'in the right ballpark, no table at or near zero' rather than an exact match. A restored count of 0 on a table that's clearly non-zero in production is the actual failure signal here."
+
+          {
+            echo ""
+            echo "**Row count comparison:**"
+            echo '```'
+            echo "-- production --"; cat /tmp/prod_counts.txt
+            echo "-- restored copy --"; cat /tmp/restored_counts.txt
+            echo '```'
+          } >> /tmp/drill_report.md
+
+      # GitHub's raw job logs live on blob storage that isn't reachable from every environment
+      # (confirmed while building this workflow), so a failure captured only in step output isn't
+      # actually retrievable everywhere the drill result might need to be read from. Posting the
+      # restore output and row-count comparison as a commit comment instead means it's reachable
+      # through the plain REST API (repos/.../commits/.../comments) from anywhere, pass or fail.
+      - name: Post drill result as a commit comment
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          {
+            echo "### Restore drill result: ${{ job.status }}"
+            echo ""
+            if [ -f /tmp/drill_report.md ]; then cat /tmp/drill_report.md; else echo "(no report captured -- failed before the restore step ran; check which earlier step failed)"; fi
+          } > /tmp/comment_body.md
+          gh api "repos/${{ github.repository }}/commits/${{ github.sha }}/comments" \
+            -f body="$(cat /tmp/comment_body.md)"
