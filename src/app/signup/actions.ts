@@ -51,6 +51,12 @@ async function getCheapestActivePlan(
 export type SignupState = {
   error: string | null;
   success?: boolean;
+  // Set only by the honeypot branch below. success is true (so bots see a
+  // convincing fake success screen and don't retry) but no account was
+  // actually created -- callers that treat success as a conversion signal
+  // (e.g. the sign_up GTM event in signup-form.tsx) must check this and
+  // skip firing when it's true.
+  honeypot?: boolean;
   schoolName?: string;
   email?: string;
   temporaryPassword?: string;
@@ -81,7 +87,7 @@ export async function signUpSchool(
   // Honeypot: a real applicant never fills this hidden field in.
   const honeypot = trimmed(formData, "company_website");
   if (honeypot) {
-    return { error: null, success: true, schoolName: "—", email: "—", temporaryPassword: "—" };
+    return { error: null, success: true, honeypot: true, schoolName: "—", email: "—", temporaryPassword: "—" };
   }
 
   // Minimum-fill-time check, same convention as apply/[slug]/actions.ts.
