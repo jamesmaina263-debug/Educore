@@ -63,6 +63,10 @@ export const metadata: Metadata = {
 
 const FAQS = [
   {
+    q: "What is the CBC grading scale?",
+    a: "Four descriptive competency levels: Exceeding Expectation (EE), Meeting Expectation (ME), Approaching Expectation (AE), and Below Expectation (BE) — used instead of a single percentage or letter grade. For KJSEA specifically, KNEC further splits each level into two sub-levels on an 8-point scale (EE1 down to BE2). Day-to-day classroom assessment uses the four-level scale directly.",
+  },
+  {
     q: "Does EduCore support CBC (or CBE) competency-based assessment?",
     a: "Yes. Teachers record ratings at the sub-strand level — the actual unit of CBC/CBE assessment — using Kenya's four competency levels, alongside standard numeric grading. Both models run side by side and can be set per school, grade, or class.",
   },
@@ -175,6 +179,70 @@ export default function CbcCbeAssessmentLearnerPerformancePost() {
               building a much more granular picture of where they stand.
             </p>
           </div>
+        </Reveal>
+
+        <Reveal className="mx-auto mt-16 max-w-3xl">
+          <Eyebrow>Quick Answer</Eyebrow>
+          <h2 className="mt-3 text-2xl font-semibold tracking-tight text-marketing-navy-950 sm:text-3xl">
+            What is the CBC grading scale?
+          </h2>
+          <p className="mt-4 text-base leading-relaxed text-marketing-navy-900/75">
+            CBC/CBE assessment uses four descriptive competency levels instead
+            of a single percentage or letter grade. KICD defines them, and
+            KNEC uses the same four levels — split further into an 8-point
+            scale — for national assessments like KJSEA. Here&apos;s what each
+            level means:
+          </p>
+          <div className="mt-8 grid gap-6 sm:grid-cols-2">
+            <div className="rounded-2xl border border-marketing-navy-900/10 p-5">
+              <p className="text-sm font-semibold text-marketing-navy-950">
+                Exceeding Expectation (EE)
+              </p>
+              <p className="mt-2 text-sm leading-relaxed text-marketing-navy-900/70">
+                The learner goes beyond what&apos;s required — applying the
+                competency independently in new situations, not just the
+                ones practised in class.
+              </p>
+            </div>
+            <div className="rounded-2xl border border-marketing-navy-900/10 p-5">
+              <p className="text-sm font-semibold text-marketing-navy-950">
+                Meeting Expectation (ME)
+              </p>
+              <p className="mt-2 text-sm leading-relaxed text-marketing-navy-900/70">
+                The learner has achieved the competency expected for their
+                grade level — this is the target outcome, not a middling
+                result.
+              </p>
+            </div>
+            <div className="rounded-2xl border border-marketing-navy-900/10 p-5">
+              <p className="text-sm font-semibold text-marketing-navy-950">
+                Approaching Expectation (AE)
+              </p>
+              <p className="mt-2 text-sm leading-relaxed text-marketing-navy-900/70">
+                The learner shows partial understanding and is developing the
+                competency, but needs more practice and support to fully
+                master it.
+              </p>
+            </div>
+            <div className="rounded-2xl border border-marketing-navy-900/10 p-5">
+              <p className="text-sm font-semibold text-marketing-navy-950">
+                Below Expectation (BE)
+              </p>
+              <p className="mt-2 text-sm leading-relaxed text-marketing-navy-900/70">
+                The learner has not yet demonstrated the competency and needs
+                targeted, significant support to catch up.
+              </p>
+            </div>
+          </div>
+          <p className="mt-6 text-sm leading-relaxed text-marketing-navy-900/60">
+            For KJSEA specifically, KNEC splits each of these four levels
+            into two sub-levels (EE1/EE2 through BE1/BE2) on an 8-point
+            scale, with EE1 the highest and BE2 the lowest — used to
+            distinguish exceptional performance from good performance within
+            the same broad level. Day-to-day classroom assessment, the kind
+            EduCore records at the sub-strand level, uses the four-level
+            scale above directly.
+          </p>
         </Reveal>
       </Section>
 
