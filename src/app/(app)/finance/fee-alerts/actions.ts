@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { dispatchPending } from "@/app/(app)/communication/actions";
 
 type ActionResult = { error: string } | { success: true };
 
@@ -61,13 +62,27 @@ export async function approveAndSendAction(alertId: string): Promise<ActionResul
   const supabase = await createClient();
   const { data, error } = await supabase.rpc("send_fee_threshold_alert", { p_alert_id: alertId });
   if (error) return { error: error.message };
-  revalidatePath("/finance/fee-alerts");
   // false = the guardian had neither a phone nor an email on file, so nothing
   // was actually queued -- the alert is marked dismissed (not sent) server-side,
   // but the person who clicked the button still needs to know why.
   if (data === false) {
+    revalidatePath("/finance/fee-alerts");
     return { error: "Couldn't send — this guardian has no phone or email on file. The alert has been marked as needing attention instead of sent." };
   }
+  // send_fee_threshold_alert() only inserts a status='queued' notification_logs row --
+  // it doesn't dispatch. Without this, a Finance user clicking "Approve and Send" gets
+  // a button that lies: the alert would just sit queued until the once-daily
+  // dispatch-communications cron runs (Vercel Hobby plan caps cron frequency at once a
+  // day -- see that cron's own comment) or until someone happens to open the
+  // Communication page. dispatchPending() is the same session-scoped sweep already used
+  // for manual sends there; best-effort here since the row is already durably queued
+  // either way -- if this fails, the cron still picks it up, just later.
+  try {
+    await dispatchPending();
+  } catch {
+    // Swallow: the alert is queued regardless, and the daily cron sweep is the fallback.
+  }
+  revalidatePath("/finance/fee-alerts");
   return { success: true };
 }
 
