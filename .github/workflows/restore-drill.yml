@@ -9,6 +9,14 @@ name: Restore drill
 on:
   workflow_dispatch: {}
 
+# The first live run (workflow run 34190696555) failed with no readable error, and the fix for
+# that -- posting the result as a commit comment -- itself failed on the very next run with no
+# GITHUB_TOKEN permission granted for it. Declaring this explicitly rather than relying on
+# whatever the repo/org default happens to be, same reasoning migration-drift-check.yml already
+# uses for its own PR-comment step.
+permissions:
+  contents: write
+
 jobs:
   restore-drill:
     runs-on: ubuntu-latest
