@@ -19,10 +19,23 @@ function baseUrl(environment: "sandbox" | "production") {
 
 export async function getDarajaOAuthToken(creds: DarajaCredentials): Promise<string> {
   const auth = btoa(`${creds.consumerKey}:${creds.consumerSecret}`);
-  const res = await fetch(
-    `${baseUrl(creds.environment)}/oauth/v1/generate?grant_type=client_credentials`,
-    { headers: { Authorization: `Basic ${auth}` } },
-  );
+  // Plain fetch() has no default timeout in Deno any more than in a browser -- a Daraja outage
+  // that just hangs (rather than returning an error) would otherwise tie up this edge function
+  // invocation indefinitely, well past what "temporarily unavailable" should cost a caller. 15s
+  // is generous for an OAuth token endpoint; a genuinely slow-but-alive Daraja would still be
+  // well under that in practice.
+  let res: Response;
+  try {
+    res = await fetch(`${baseUrl(creds.environment)}/oauth/v1/generate?grant_type=client_credentials`, {
+      headers: { Authorization: `Basic ${auth}` },
+      signal: AbortSignal.timeout(15000),
+    });
+  } catch (e) {
+    if (e instanceof DOMException && e.name === "TimeoutError") {
+      throw new Error("Daraja OAuth request timed out after 15s -- Safaricom's API may be down or unreachable.");
+    }
+    throw e;
+  }
   if (!res.ok) {
     throw new Error(`Daraja OAuth failed: ${res.status} ${await res.text()}`);
   }
@@ -64,26 +77,40 @@ export async function initiateDarajaStkPush(params: {
   const timestamp = darajaTimestamp();
   const password = btoa(`${creds.shortcode}${creds.passkey}${timestamp}`);
 
-  const res = await fetch(`${baseUrl(creds.environment)}/mpesa/stkpush/v1/processrequest`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      BusinessShortCode: creds.shortcode,
-      Password: password,
-      Timestamp: timestamp,
-      TransactionType: params.transactionType,
-      Amount: Math.round(params.amount),
-      PartyA: params.phoneNumber,
-      PartyB: creds.shortcode,
-      PhoneNumber: params.phoneNumber,
-      CallBackURL: params.callbackUrl,
-      AccountReference: params.accountReference.slice(0, 12),
-      TransactionDesc: params.transactionDesc.slice(0, 13),
-    }),
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${baseUrl(creds.environment)}/mpesa/stkpush/v1/processrequest`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+      // Same reasoning as the OAuth call above -- this is the request that actually pushes a
+      // payment prompt to a parent's phone, so a hang here is worse than most: the caller (a
+      // parent tapping "pay now") is watching a spinner the whole time. A real STK push initiation
+      // normally completes in a couple of seconds; 15s is room for a slow-but-working Daraja, not
+      // an invitation to wait longer than that's worth to the person on the other end.
+      signal: AbortSignal.timeout(15000),
+      body: JSON.stringify({
+        BusinessShortCode: creds.shortcode,
+        Password: password,
+        Timestamp: timestamp,
+        TransactionType: params.transactionType,
+        Amount: Math.round(params.amount),
+        PartyA: params.phoneNumber,
+        PartyB: creds.shortcode,
+        PhoneNumber: params.phoneNumber,
+        CallBackURL: params.callbackUrl,
+        AccountReference: params.accountReference.slice(0, 12),
+        TransactionDesc: params.transactionDesc.slice(0, 13),
+      }),
+    });
+  } catch (e) {
+    if (e instanceof DOMException && e.name === "TimeoutError") {
+      throw new Error("Daraja STK push request timed out after 15s -- Safaricom's API may be down or unreachable.");
+    }
+    throw e;
+  }
 
   const data = await res.json();
 
