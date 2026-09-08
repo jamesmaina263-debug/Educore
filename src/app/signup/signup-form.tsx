@@ -102,11 +102,16 @@ export function SignupForm() {
   // in the SEO brief (Search -> Landing -> Feature -> Demo CTA -> Demo
   // Request -> Lead) stops at the lead; this closes the gap for the
   // self-serve "Start a school" path that skips the demo entirely.
+  //
+  // state.honeypot guards against counting bots: the honeypot branch in
+  // signUpSchool also returns success: true (so bots see a convincing fake
+  // success screen and don't retry), but no account was actually created --
+  // that traffic must not inflate the sign_up conversion count.
   useEffect(() => {
-    if (state.success) {
+    if (state.success && !state.honeypot) {
       sendGTMEvent({ event: "sign_up" });
     }
-  }, [state.success]);
+  }, [state.success, state.honeypot]);
 
   const set = (field: SelectField) => (v: string) => setValues((prev) => ({ ...prev, [field]: v }));
 
