@@ -8,6 +8,7 @@ import { StatusBadge } from "@/components/status-badge";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { generateReportCards, approveComment, writeComment, draftCommentWithAI } from "@/app/(app)/exams/report-cards/actions";
 import { ReportCardInsightsPanel } from "@/components/exams/report-card-insights-panel";
+import { RemarkBankPicker } from "@/components/exams/remark-bank-picker";
 import type { ReportCardInsights } from "@/lib/academics/report-card-insights";
 
 export interface StudentMarkLine {
@@ -205,6 +206,11 @@ export function ReportCardList({
                         rows={2}
                         value={drafts[r.student_id] ?? ""}
                         onChange={(e) => setDrafts((p) => ({ ...p, [r.student_id]: e.target.value }))}
+                      />
+                      <RemarkBankPicker
+                        onInsert={(text) =>
+                          setDrafts((p) => ({ ...p, [r.student_id]: p[r.student_id] ? `${p[r.student_id]} ${text}` : text }))
+                        }
                       />
                       <div className="flex gap-2">
                         <Button
