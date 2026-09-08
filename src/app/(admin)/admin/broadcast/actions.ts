@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { logAdminAction } from "@/lib/log-admin-action";
 
 export interface BroadcastHistoryRow {
   subject: string;
@@ -21,6 +22,7 @@ export async function sendBroadcastAnnouncement(subject: string, body: string): 
     p_body: body,
   });
   if (error) return { error: error.message };
+  void logAdminAction(supabase, "broadcast_announcement", { subject, recipient_count: data });
   revalidatePath("/admin/broadcast");
   return { success: true, recipientCount: (data as number) ?? 0 };
 }
