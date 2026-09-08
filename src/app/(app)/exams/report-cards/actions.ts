@@ -138,6 +138,11 @@ export async function draftCommentWithAI(input: {
   );
 
   try {
+    // Same Vercel Hobby 10s hard cap applies here as classifyIntent above. This one generates a
+    // longer comment (maxOutputTokens: 200 vs. 40), so it gets more of the budget, but still
+    // needs to leave room for the DB update after it -- 8s here would leave nothing. The existing
+    // catch block below already turns any thrown error (including AbortSignal's TimeoutError)
+    // into a clean returned message, so no other change is needed for this one.
     const res = await fetch(geminiGenerateContentUrl(apiKey), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -145,6 +150,7 @@ export async function draftCommentWithAI(input: {
         contents: [{ parts: [{ text: prompt }] }],
         generationConfig: { maxOutputTokens: 200 },
       }),
+      signal: AbortSignal.timeout(7000),
     });
     if (!res.ok) {
       const body = await res.text();

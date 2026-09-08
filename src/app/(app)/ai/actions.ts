@@ -219,17 +219,30 @@ Question: "${question.replace(/"/g, "'")}"
 
 Respond with ONLY the JSON object, nothing else.`;
 
-  const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent?key=${apiKey}`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { maxOutputTokens: 40 },
-      }),
-    },
-  );
+  // Vercel's Hobby plan hard-caps this whole server action at 10s (confirmed directly earlier in
+  // this codebase's history -- see dispatch-communications' cron-frequency rejection). This is a
+  // short classification prompt (maxOutputTokens: 40), so it should never come close to this in
+  // practice; the timeout exists so a genuinely hung Gemini call fails with a caught, recoverable
+  // null (same as the !res.ok branch below already does) instead of the whole action just running
+  // out the platform's clock with no chance to fall back.
+  let res: Response;
+  try {
+    res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent?key=${apiKey}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: { maxOutputTokens: 40 },
+        }),
+        signal: AbortSignal.timeout(8000),
+      },
+    );
+  } catch (e) {
+    console.error("Educore AI classifyIntent: request failed or timed out", e);
+    return null;
+  }
   if (!res.ok) {
     console.error("Educore AI classifyIntent: Gemini API returned", res.status, await res.text().catch(() => ""));
     return null;

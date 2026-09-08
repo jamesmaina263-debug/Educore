@@ -20,15 +20,26 @@ export class AfricasTalkingProvider implements SmsProvider {
     // invalid") if sent to the live host, and vice versa. username=sandbox
     // is the one reliable signal we have for which environment we're in.
     const host = this.username === "sandbox" ? "api.sandbox.africastalking.com" : "api.africastalking.com";
-    const res = await fetch(`https://${host}/version1/messaging`, {
-      method: "POST",
-      headers: {
-        apiKey: this.apiKey,
-        "Content-Type": "application/x-www-form-urlencoded",
-        Accept: "application/json",
-      },
-      body,
-    });
+    // Same reasoning as the other providers here: send-communication processes a batch
+    // sequentially, so one hung request blocks every message behind it.
+    let res: Response;
+    try {
+      res = await fetch(`https://${host}/version1/messaging`, {
+        method: "POST",
+        headers: {
+          apiKey: this.apiKey,
+          "Content-Type": "application/x-www-form-urlencoded",
+          Accept: "application/json",
+        },
+        body,
+        signal: AbortSignal.timeout(10000),
+      });
+    } catch (e) {
+      if (e instanceof DOMException && e.name === "TimeoutError") {
+        throw new Error("Africa's Talking SMS send timed out after 10s -- their API may be slow or unreachable.");
+      }
+      throw e;
+    }
 
     if (!res.ok) {
       const text = await res.text();
