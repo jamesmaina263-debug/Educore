@@ -40,7 +40,7 @@ export function RollCallSection({
   canWrite: boolean;
 }) {
   const router = useRouter();
-  const { online, pendingCount, failed, syncing, sync, discard } = useOfflineSync("boarding");
+  const { online, pendingCount, failed, syncing, sync, discard, lastSyncedAt } = useOfflineSync("boarding");
   const [statuses, setStatuses] = useState<Record<string, RollCallStatus>>(
     Object.fromEntries(students.map((s) => [s.student_id, s.existing_status ?? "present"])),
   );
@@ -84,7 +84,7 @@ export function RollCallSection({
 
   return (
     <div className="flex flex-col gap-4">
-      <BoardingOfflineBanner online={online} pendingCount={pendingCount} failed={failed} syncing={syncing} sync={sync} discard={discard} />
+      <BoardingOfflineBanner online={online} pendingCount={pendingCount} failed={failed} syncing={syncing} sync={sync} discard={discard} lastSyncedAt={lastSyncedAt} />
       <div className="flex flex-wrap items-center gap-3">
         <Input type="date" value={date} onChange={(e) => changeDate(e.target.value)} className="w-40" />
         <Select value={session} onValueChange={changeSession}>

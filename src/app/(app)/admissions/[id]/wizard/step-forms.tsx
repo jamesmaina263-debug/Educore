@@ -101,7 +101,7 @@ export function AdmissionDetailsStep({
   };
 }) {
   const router = useRouter();
-  const { online, pendingCount, failed, syncing, sync, discard } = useOfflineSync("admissions");
+  const { online, pendingCount, failed, syncing, sync, discard, lastSyncedAt } = useOfflineSync("admissions");
   const [form, setForm] = useState(initial);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -164,7 +164,7 @@ export function AdmissionDetailsStep({
 
   return (
     <StepPanel title="Admission Details" hint="Admission type, academic year, term, and day/boarding + transport preference — these drive which later steps apply.">
-      <AdmissionsOfflineBanner online={online} pendingCount={pendingCount} failed={failed} syncing={syncing} sync={sync} discard={discard} />
+      <AdmissionsOfflineBanner online={online} pendingCount={pendingCount} failed={failed} syncing={syncing} sync={sync} discard={discard} lastSyncedAt={lastSyncedAt} />
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div className="space-y-1.5">
           <Label>Admission type</Label>
@@ -260,7 +260,7 @@ export function StudentStep({
   resultingStudentId: string | null;
 }) {
   const router = useRouter();
-  const { online, pendingCount, failed, syncing, sync, discard } = useOfflineSync("admissions");
+  const { online, pendingCount, failed, syncing, sync, discard, lastSyncedAt } = useOfflineSync("admissions");
   const [admissionNumber, setAdmissionNumber] = useState<string | null>(null);
 
   useEffect(() => {
@@ -373,7 +373,7 @@ export function StudentStep({
   if (editingIdentity) {
     return (
       <StepPanel title="Student" hint="Enter the applicant's name, date of birth, and gender — these identify the student and are used to check for an existing record.">
-        <AdmissionsOfflineBanner online={online} pendingCount={pendingCount} failed={failed} syncing={syncing} sync={sync} discard={discard} />
+        <AdmissionsOfflineBanner online={online} pendingCount={pendingCount} failed={failed} syncing={syncing} sync={sync} discard={discard} lastSyncedAt={lastSyncedAt} />
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div className="space-y-1.5">
             <Label htmlFor="first_name">First name</Label>
@@ -422,7 +422,7 @@ export function StudentStep({
 
   return (
     <StepPanel title="Student" hint="Verify the applicant's details, check for a possible existing student, then create the master Student record.">
-      <AdmissionsOfflineBanner online={online} pendingCount={pendingCount} failed={failed} syncing={syncing} sync={sync} discard={discard} />
+      <AdmissionsOfflineBanner online={online} pendingCount={pendingCount} failed={failed} syncing={syncing} sync={sync} discard={discard} lastSyncedAt={lastSyncedAt} />
       <dl className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
         <div><dt className="text-muted-foreground">Name</dt><dd>{applicantSummary.first_name} {applicantSummary.last_name}</dd></div>
         <div><dt className="text-muted-foreground">Date of birth</dt><dd>{applicantSummary.date_of_birth}</dd></div>
@@ -922,7 +922,7 @@ export function HealthStep({
   canWrite: boolean;
 }) {
   const router = useRouter();
-  const { online, pendingCount, failed, syncing, sync, discard } = useOfflineSync("admissions");
+  const { online, pendingCount, failed, syncing, sync, discard, lastSyncedAt } = useOfflineSync("admissions");
   const [form, setForm] = useState(initial);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -974,7 +974,7 @@ export function HealthStep({
 
   return (
     <StepPanel title="Health" hint="Initial profile only — full medical detail is managed by the Health module, not here.">
-      <AdmissionsOfflineBanner online={online} pendingCount={pendingCount} failed={failed} syncing={syncing} sync={sync} discard={discard} />
+      <AdmissionsOfflineBanner online={online} pendingCount={pendingCount} failed={failed} syncing={syncing} sync={sync} discard={discard} lastSyncedAt={lastSyncedAt} />
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div className="space-y-1.5">
           <Label htmlFor="blood_group">Blood group</Label>

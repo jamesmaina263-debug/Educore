@@ -25,6 +25,7 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { useOnlineStatus } from "@/hooks/use-online-status";
 import { useOfflineSync } from "@/hooks/use-offline-sync";
+import { formatLastSynced } from "@/components/shared/offline-banner";
 import { queueMutation } from "@/lib/offline/queue";
 import { fetchDeviceRoster, buildScanPayload, submitScan, type RosterEntry } from "@/lib/biometric/kiosk-client";
 import { cacheRoster, getCachedRoster } from "@/lib/biometric/kiosk-cache";
@@ -113,7 +114,7 @@ function PairingScreen({ onPaired }: { onPaired: (key: string) => void }) {
 
 function PairedKiosk({ deviceKey, onUnpair }: { deviceKey: string; onUnpair: () => void }) {
   const online = useOnlineStatus();
-  const { pendingCount, failed, syncing, sync, discard } = useOfflineSync(KIOSK_MODULE);
+  const { pendingCount, failed, syncing, sync, discard, lastSyncedAt } = useOfflineSync(KIOSK_MODULE);
 
   const [deviceName, setDeviceName] = useState<string>("Biometric device");
   const [roster, setRoster] = useState<RosterEntry[]>([]);
@@ -210,6 +211,7 @@ function PairedKiosk({ deviceKey, onUnpair }: { deviceKey: string; onUnpair: () 
             ? `${pendingCount} scan${pendingCount === 1 ? "" : "s"} waiting to sync${syncing ? " — syncing now…" : ""}.`
             : "All scans synced."}
         </p>
+        <p className="text-xs text-muted-foreground">{formatLastSynced(lastSyncedAt)}</p>
       </div>
 
       {rosterStale && (

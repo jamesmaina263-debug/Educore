@@ -1,4 +1,4 @@
-import { idbDelete, STORES } from "./db";
+import { idbDelete, idbGet, idbPut, STORES } from "./db";
 import { getAllByIndexEncrypted, getAllEncrypted, putEncrypted } from "./crypto";
 import { mutationHandlers } from "./handlers";
 
@@ -71,11 +71,20 @@ export async function discardMutation(id: string): Promise<void> {
  *   back offline) -> left "pending", and the whole pass stops rather than
  *   burning through the rest of the queue against a connection that isn't
  *   really there.
+ *
+ * OS-04: `reachedServer` distinguishes "we genuinely confirmed sync status
+ * with the server" (queue was empty, or every item was actually attempted --
+ * even ones that failed for a real business reason, e.g. a validation error,
+ * still involved a real round trip) from "we never actually got there"
+ * (aborted early on a raw network TypeError). Callers use this, not
+ * `synced`/`failed` counts alone, to decide whether "last synced" genuinely
+ * advances -- an all-network-failure pass shouldn't claim a fresh sync time.
  */
-export async function syncPendingMutations(module?: string): Promise<{ synced: number; failed: number }> {
+export async function syncPendingMutations(module?: string): Promise<{ synced: number; failed: number; reachedServer: boolean }> {
   const pending = await getPendingMutations(module);
   let synced = 0;
   let failed = 0;
+  let reachedServer = true;
 
   for (const mutation of pending) {
     const handler = mutationHandlers[`${mutation.module}:${mutation.type}`];
@@ -98,9 +107,28 @@ export async function syncPendingMutations(module?: string): Promise<{ synced: n
     } catch (e) {
       await putEncrypted(STORES.pendingMutations, { ...mutation, status: "pending" } as unknown as Record<string, unknown>, "payload");
       failed += 1;
-      if (e instanceof TypeError) break;
+      if (e instanceof TypeError) {
+        reachedServer = false;
+        break;
+      }
     }
   }
 
-  return { synced, failed };
+  if (reachedServer) await setLastSyncedAt(module);
+  return { synced, failed, reachedServer };
+}
+
+function lastSyncedKey(module?: string): string {
+  return `last_synced:${module ?? "_global"}`;
+}
+
+/** OS-04: record "now" as this module's last confirmed sync time. Not sensitive -- plain (unencrypted) storage in the generic cached_reads store. */
+async function setLastSyncedAt(module?: string): Promise<void> {
+  await idbPut(STORES.cachedReads, { key: lastSyncedKey(module), value: Date.now() });
+}
+
+/** OS-04: epoch ms of this module's last confirmed sync, or undefined if it's never synced on this device. */
+export async function getLastSyncedAt(module?: string): Promise<number | undefined> {
+  const record = await idbGet<{ key: string; value: number }>(STORES.cachedReads, lastSyncedKey(module));
+  return record?.value;
 }

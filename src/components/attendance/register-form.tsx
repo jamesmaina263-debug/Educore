@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Check, Minus, Save, X, WifiOff, RefreshCw } from "lucide-react";
+import { formatLastSynced } from "@/components/shared/offline-banner";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { StatusBadge } from "@/components/status-badge";
@@ -39,7 +40,7 @@ export function RegisterForm({
   canMark: boolean;
 }) {
   const router = useRouter();
-  const { online, pendingCount, failed, syncing, sync, discard } = useAttendanceSync();
+  const { online, pendingCount, failed, syncing, sync, discard, lastSyncedAt } = useAttendanceSync();
   const [draft, setDraft] = useState<Record<string, Mark>>(
     Object.fromEntries(roster.filter((r) => !r.existing).map((r) => [r.student_id, "present" as Mark])),
   );
@@ -183,6 +184,8 @@ export function RegisterForm({
           ))}
         </div>
       )}
+
+      <p className="px-1 text-xs text-muted-foreground">{formatLastSynced(lastSyncedAt)}</p>
 
       {error && <p className="text-sm text-danger">{error}</p>}
 

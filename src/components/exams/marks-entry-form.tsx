@@ -48,7 +48,7 @@ export function MarksEntryForm({
   canEnter: boolean;
 }) {
   const router = useRouter();
-  const { online, pendingCount, failed, syncing, sync, discard } = useOfflineSync("exams");
+  const { online, pendingCount, failed, syncing, sync, discard, lastSyncedAt } = useOfflineSync("exams");
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [draft, setDraft] = useState<Record<string, string>>(
@@ -154,7 +154,7 @@ export function MarksEntryForm({
 
   return (
     <div className="flex flex-col gap-4">
-      <ExamsOfflineBanner online={online} pendingCount={pendingCount} failed={failed} syncing={syncing} sync={sync} discard={discard} />
+      <ExamsOfflineBanner online={online} pendingCount={pendingCount} failed={failed} syncing={syncing} sync={sync} discard={discard} lastSyncedAt={lastSyncedAt} />
       {error && <p className="text-sm text-danger">{error}</p>}
 
       {unmarkedAll.length > 0 && (
