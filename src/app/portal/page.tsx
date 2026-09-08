@@ -8,6 +8,9 @@ import { PortalHomeworkSection, type PortalAssignmentRow } from "@/components/po
 import { PortalPtMeetingsSection, type PortalSlotRow } from "@/components/portal/portal-pt-meetings";
 import { PortalConnectSection, type PortalConnectItemRow } from "@/components/portal/portal-connect";
 import { PortalAnnouncementsSection, type PortalAnnouncementRow } from "@/components/portal/portal-announcements";
+import { ReportCardInsightsPanel } from "@/components/exams/report-card-insights-panel";
+import { buildReportCardInsights } from "@/lib/academics/report-card-insights";
+import { getStudentGrowth } from "@/app/(app)/students/[id]/growth-actions";
 
 const WEEKDAY_NAMES = ["", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 
@@ -74,7 +77,7 @@ export default async function PortalPage({ searchParams }: { searchParams: Promi
     supabase.from("terms").select("id, start_date, end_date").eq("status", "active").maybeSingle(),
     supabase
       .from("report_cards")
-      .select("comment, generated_at, exam_id, exams(name), class_rankings(average_score, rank_in_stream)")
+      .select("comment, generated_at, exam_id, exams(name, term_id), class_rankings(average_score, rank_in_stream)")
       .eq("student_id", selected.id)
       .in("comment_source", ["teacher_approved", "teacher_written"])
       .order("generated_at", { ascending: false })
@@ -269,7 +272,7 @@ export default async function PortalPage({ searchParams }: { searchParams: Promi
     comment: string | null;
     generated_at: string;
     exam_id: string;
-    exams: { name: string } | null;
+    exams: { name: string; term_id: string } | null;
     class_rankings: { average_score: number; rank_in_stream: number } | { average_score: number; rank_in_stream: number }[] | null;
   } | null;
   const ranking = rc?.class_rankings ? (Array.isArray(rc.class_rankings) ? rc.class_rankings[0] : rc.class_rankings) : null;
@@ -280,7 +283,9 @@ export default async function PortalPage({ searchParams }: { searchParams: Promi
   const { data: competencyRows } = rc
     ? await supabase
         .from("competency_marks")
-        .select("grading_scale_bands(label), curriculum_sub_strands(name, curriculum_strands(name, subjects(name)))")
+        .select(
+          "grading_scale_bands(label, level_order, grading_scale_id), curriculum_sub_strands(name, curriculum_strands(name, subjects(name)))",
+        )
         .eq("exam_id", rc.exam_id)
         .eq("student_id", selected.id)
     : { data: [] };
@@ -290,13 +295,80 @@ export default async function PortalPage({ searchParams }: { searchParams: Promi
       curriculum_strands: { name: string; subjects: { name: string } | null } | null;
     } | null;
     const strand = subStrand?.curriculum_strands ?? null;
+    const band = c.grading_scale_bands as unknown as { label: string; level_order: number; grading_scale_id: string } | null;
     return {
       subject_name: strand?.subjects?.name ?? "",
       strand_name: strand?.name ?? "",
       sub_strand_name: subStrand?.name ?? "",
-      band_label: (c.grading_scale_bands as unknown as { label: string } | null)?.label ?? "—",
+      band_label: band?.label ?? "—",
+      level_order: band?.level_order ?? null,
+      grading_scale_id: band?.grading_scale_id ?? null,
     };
   });
+
+  // ---- Report-card redesign (Phase 14 / Step 10): achievement distribution + Strengths/Areas
+  // for Support, built once via buildReportCardInsights() and shown by ReportCardInsightsPanel
+  // both here and on the staff-facing report-card-list.tsx. See report-card-insights.ts for the
+  // (unit-tested) derivation rules -- every line here is a plain threshold, never an AI guess.
+  let reportCardInsights: ReturnType<typeof buildReportCardInsights> | null = null;
+  if (rc?.exams?.term_id) {
+    const [{ data: indicatorRows }, growthSummary] = await Promise.all([
+      supabase
+        .from("competency_indicator_ratings")
+        .select("competency_indicators(name), grading_scale_bands(label, level_order, grading_scale_id)")
+        .eq("student_id", selected.id)
+        .eq("term_id", rc.exams.term_id),
+      getStudentGrowth(selected.id),
+    ]);
+
+    const scaleIds = new Set<string>();
+    for (const c of competencyLines) if (c.grading_scale_id) scaleIds.add(c.grading_scale_id);
+    for (const r of indicatorRows ?? []) {
+      const band = r.grading_scale_bands as unknown as { grading_scale_id: string } | null;
+      if (band) scaleIds.add(band.grading_scale_id);
+    }
+    const { data: allBandsForScales } = scaleIds.size
+      ? await supabase.from("grading_scale_bands").select("grading_scale_id, level_order").in("grading_scale_id", [...scaleIds])
+      : { data: [] };
+    const maxLevelOrderByScale = new Map<string, number>();
+    for (const b of allBandsForScales ?? []) {
+      maxLevelOrderByScale.set(b.grading_scale_id, Math.max(maxLevelOrderByScale.get(b.grading_scale_id) ?? 0, b.level_order));
+    }
+
+    const competencyRatings = [
+      ...competencyLines
+        .filter((c) => c.level_order !== null && c.grading_scale_id)
+        .map((c) => ({
+          name: `${c.subject_name} — ${c.sub_strand_name}`,
+          label: c.band_label,
+          levelOrder: c.level_order as number,
+          maxLevelOrder: maxLevelOrderByScale.get(c.grading_scale_id as string) ?? (c.level_order as number),
+        })),
+      ...(indicatorRows ?? []).flatMap((r) => {
+        const indicator = r.competency_indicators as unknown as { name: string } | null;
+        const band = r.grading_scale_bands as unknown as { label: string; level_order: number; grading_scale_id: string } | null;
+        if (!indicator || !band) return [];
+        return [
+          {
+            name: indicator.name,
+            label: band.label,
+            levelOrder: band.level_order,
+            maxLevelOrder: maxLevelOrderByScale.get(band.grading_scale_id) ?? band.level_order,
+          },
+        ];
+      }),
+    ];
+
+    const growthSubjects = "subjects" in growthSummary ? growthSummary.subjects : [];
+    reportCardInsights = buildReportCardInsights({
+      achievementBands: competencyLines
+        .filter((c) => c.level_order !== null)
+        .map((c) => ({ label: c.band_label, levelOrder: c.level_order as number })),
+      competencyRatings,
+      improvingSubjects: growthSubjects.filter((s) => s.trend.direction === "improving").map((s) => s.subjectName),
+      decliningSubjects: growthSubjects.filter((s) => s.trend.direction === "declining").map((s) => s.subjectName),
+    });
+  }
 
   return (
     <PortalShell schoolName={schoolName} userName={schoolUser.full_name}>
@@ -379,6 +451,11 @@ export default async function PortalPage({ searchParams }: { searchParams: Promi
               {ranking && ` — Average ${ranking.average_score}, Rank ${ranking.rank_in_stream} in stream`}
             </p>
             {rc.comment && <p className="mt-1 text-sm text-muted-foreground">{rc.comment}</p>}
+            {reportCardInsights && (
+              <div className="mt-2 border-t border-border pt-2">
+                <ReportCardInsightsPanel insights={reportCardInsights} />
+              </div>
+            )}
             {competencyLines.length > 0 && (
               <div className="mt-2 border-t border-border pt-2">
                 <p className="mb-1 text-xs font-medium text-muted-foreground">CBC competency ratings</p>

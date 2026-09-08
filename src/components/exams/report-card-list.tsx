@@ -7,6 +7,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { StatusBadge } from "@/components/status-badge";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { generateReportCards, approveComment, writeComment, draftCommentWithAI } from "@/app/(app)/exams/report-cards/actions";
+import { ReportCardInsightsPanel } from "@/components/exams/report-card-insights-panel";
+import { RemarkBankPicker } from "@/components/exams/remark-bank-picker";
+import type { ReportCardInsights } from "@/lib/academics/report-card-insights";
 
 export interface StudentMarkLine {
   subject_name: string;
@@ -28,6 +31,7 @@ export interface ReportCardRow {
   competency: CompetencyLine[];
   rank_in_stream: number | null;
   average_score: number | null;
+  insights: ReportCardInsights;
   report_card: {
     comment: string | null;
     comment_source: "none" | "ai" | "teacher_approved" | "teacher_written";
@@ -141,6 +145,10 @@ export function ReportCardList({
                 </Table>
               </div>
 
+              <div className="mt-3">
+                <ReportCardInsightsPanel insights={r.insights} />
+              </div>
+
               {r.competency.length > 0 && (
                 <div className="mt-3">
                   <p className="mb-1 text-xs font-medium text-muted-foreground">CBC competency ratings (by sub-strand)</p>
@@ -198,6 +206,11 @@ export function ReportCardList({
                         rows={2}
                         value={drafts[r.student_id] ?? ""}
                         onChange={(e) => setDrafts((p) => ({ ...p, [r.student_id]: e.target.value }))}
+                      />
+                      <RemarkBankPicker
+                        onInsert={(text) =>
+                          setDrafts((p) => ({ ...p, [r.student_id]: p[r.student_id] ? `${p[r.student_id]} ${text}` : text }))
+                        }
                       />
                       <div className="flex gap-2">
                         <Button

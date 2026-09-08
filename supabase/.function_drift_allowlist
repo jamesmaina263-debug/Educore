@@ -1,0 +1,18 @@
+# Function slugs live in Supabase that are known, pre-existing exceptions to the
+# function-drift check -- not something this check should fail CI over.
+#
+# Adding a slug here is a documented decision, not a shortcut: only add one after
+# confirming *why* it's outside git (and ideally with a plan/ticket to reconcile it),
+# the same discipline as supabase/.migration_drift_allowlist.
+#
+# biometric-gate-webhook: live in Supabase (created 2026-08-28, currently version 22)
+# but has no directory in supabase/functions/ and was never deployed via
+# deploy-functions.yml -- its entrypoint_path (/tmp/user_fn_.../source/index.ts)
+# shows it was pushed some other way (dashboard or a direct management-API call),
+# not from a git-tracked source. Flagged in config.toml's own header comment since
+# the file was created, but never actually reconciled. Allowlisted here (2026-09-05)
+# so this new check doesn't immediately fail on a pre-existing gap it didn't cause --
+# reconciling it (pull its real source, commit it, decide verify_jwt, wire it into
+# config.toml) is real follow-up work, not a one-line fix, so it's being surfaced
+# rather than rushed.
+biometric-gate-webhook

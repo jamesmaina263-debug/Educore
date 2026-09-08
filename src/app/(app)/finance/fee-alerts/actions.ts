@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 type ActionResult = { error: string } | { success: true };
 
@@ -86,6 +87,11 @@ export async function polishDraftWithAIAction(alertId: string): Promise<ActionRe
   }
 
   const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "You must be signed in." };
+
   const { data: alert, error: fetchError } = await supabase
     .from("fee_threshold_alerts")
     .select("draft_body, status")
@@ -94,6 +100,28 @@ export async function polishDraftWithAIAction(alertId: string): Promise<ActionRe
   if (fetchError || !alert) return { error: fetchError?.message ?? "Alert not found." };
   if (alert.status !== "draft" && alert.status !== "approved") {
     return { error: "This alert has already been sent or dismissed." };
+  }
+
+  // SECURITY: the select above already requires finance.write via RLS, so
+  // this isn't reachable by an unauthorized user -- but same as
+  // askEducoreAI/draftCommentWithAI (PR #228), a permission check alone
+  // caps *access*, not *volume*. Without a rate limit, a legitimate (or
+  // compromised) finance.write account could loop this for unbounded
+  // Gemini cost. Same primitive, same per-user bucket, before the network
+  // call is made.
+  try {
+    const adminClient = createAdminClient();
+    const { data: withinLimit } = await adminClient.rpc("increment_and_check_rate_limit", {
+      p_bucket: `ai-fee-alert-polish:${user.id}`,
+      p_max_events: 60,
+      p_window_seconds: 3600,
+    });
+    if (withinLimit === false) {
+      return { error: "Too many AI drafting requests. Please wait a while and try again." };
+    }
+  } catch {
+    // Don't let a missing/misconfigured admin client block a legitimate,
+    // permission-checked request over a missing rate-limit layer.
   }
 
   const prompt = `You are helping a Kenyan school's Finance office soften the tone of a fee-arrears reminder before it is reviewed and sent to a parent.
