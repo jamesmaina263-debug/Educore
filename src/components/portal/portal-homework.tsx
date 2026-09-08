@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,6 +12,7 @@ import {
   deleteSubmissionAttachmentAction,
   getAssignmentAttachmentUrlAction,
 } from "@/app/portal/actions";
+import { saveFileForOffline, openOfflineFile, listOfflineFiles } from "@/lib/offline/downloads";
 
 export interface PortalAttachmentRow {
   id: string;
@@ -37,13 +38,89 @@ export interface PortalAssignmentRow {
   } | null;
 }
 
+/**
+ * OS-03: reopen a previously-downloaded file straight from IndexedDB
+ * (works with no network at all) -- otherwise fall back to the existing
+ * live signed-URL flow, same as before this change.
+ */
 async function openDownload(storagePath: string, setError: (e: string | null) => void) {
+  const offlineUrl = await openOfflineFile(storagePath);
+  if (offlineUrl) {
+    window.open(offlineUrl, "_blank", "noopener,noreferrer");
+    return;
+  }
   const res = await getAssignmentAttachmentUrlAction(storagePath);
   if ("error" in res) {
     setError(res.error);
     return;
   }
   window.open(res.url, "_blank", "noopener,noreferrer");
+}
+
+/** OS-03: fetch the file once now (while online) and store it for offline reopening later. */
+async function saveOffline(
+  storagePath: string,
+  fileName: string,
+  setError: (e: string | null) => void,
+  setSavedPaths: (updater: (prev: Set<string>) => Set<string>) => void,
+) {
+  const res = await getAssignmentAttachmentUrlAction(storagePath);
+  if ("error" in res) {
+    setError(res.error);
+    return;
+  }
+  const saveRes = await saveFileForOffline(storagePath, fileName, null, res.url);
+  if ("error" in saveRes) {
+    setError(saveRes.error);
+    return;
+  }
+  setSavedPaths((prev) => new Set(prev).add(storagePath));
+}
+
+function AttachmentRow({
+  att,
+  savedPaths,
+  saving,
+  setError,
+  onSave,
+  trailing,
+}: {
+  att: PortalAttachmentRow;
+  savedPaths: Set<string>;
+  saving: string | null;
+  setError: (e: string | null) => void;
+  onSave: (storagePath: string, fileName: string) => void;
+  trailing?: ReactNode;
+}) {
+  const isSaved = savedPaths.has(att.storage_path);
+  return (
+    <li className="flex items-center justify-between gap-2 text-sm">
+      <button
+        type="button"
+        className="truncate text-left text-primary underline"
+        onClick={() => openDownload(att.storage_path, setError)}
+      >
+        {att.file_name}
+      </button>
+      <span className="flex shrink-0 items-center gap-1">
+        {isSaved ? (
+          <span className="text-xs text-muted-foreground">Saved offline</span>
+        ) : (
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            className="h-6 px-2 text-xs"
+            disabled={saving === att.storage_path}
+            onClick={() => onSave(att.storage_path, att.file_name)}
+          >
+            {saving === att.storage_path ? "Saving…" : "Save offline"}
+          </Button>
+        )}
+        {trailing}
+      </span>
+    </li>
+  );
 }
 
 export function PortalHomeworkSection({ studentId, assignments }: { studentId: string; assignments: PortalAssignmentRow[] }) {
@@ -53,7 +130,22 @@ export function PortalHomeworkSection({ studentId, assignments }: { studentId: s
   const [saving, setSaving] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [uploadingFor, setUploadingFor] = useState<string | null>(null);
+  const [savingOffline, setSavingOffline] = useState<string | null>(null);
+  const [savedPaths, setSavedPaths] = useState<Set<string>>(new Set());
   const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
+
+  useEffect(() => {
+    listOfflineFiles()
+      .then((files) => setSavedPaths(new Set(files.map((f) => f.storage_path))))
+      .catch(() => undefined);
+  }, []);
+
+  async function handleSaveOffline(storagePath: string, fileName: string) {
+    setSavingOffline(storagePath);
+    setError(null);
+    await saveOffline(storagePath, fileName, setError, setSavedPaths);
+    setSavingOffline(null);
+  }
 
   async function submit(a: PortalAssignmentRow) {
     const text = drafts[a.id] ?? a.submission?.submission_text ?? "";
@@ -125,15 +217,14 @@ export function PortalHomeworkSection({ studentId, assignments }: { studentId: s
               <p className="mb-1 text-xs font-medium text-muted-foreground">Assignment files</p>
               <ul className="flex flex-col gap-1">
                 {a.attachments.map((att) => (
-                  <li key={att.id}>
-                    <button
-                      type="button"
-                      className="text-left text-sm text-primary underline"
-                      onClick={() => openDownload(att.storage_path, setError)}
-                    >
-                      {att.file_name}
-                    </button>
-                  </li>
+                  <AttachmentRow
+                    key={att.id}
+                    att={att}
+                    savedPaths={savedPaths}
+                    saving={savingOffline}
+                    setError={setError}
+                    onSave={handleSaveOffline}
+                  />
                 ))}
               </ul>
             </div>
@@ -154,21 +245,26 @@ export function PortalHomeworkSection({ studentId, assignments }: { studentId: s
                   <p className="mb-1 text-xs font-medium text-muted-foreground">Your submitted files</p>
                   <ul className="flex flex-col gap-1">
                     {a.submission.attachments.map((att) => (
-                      <li key={att.id} className="flex items-center justify-between gap-2 text-sm">
-                        <button type="button" className="truncate text-left text-primary underline" onClick={() => openDownload(att.storage_path, setError)}>
-                          {att.file_name}
-                        </button>
-                        {a.submission!.status === "submitted" && (
-                          <button
-                            type="button"
-                            onClick={() => removeFile(att.id)}
-                            className="px-1 text-xs text-muted-foreground hover:text-danger"
-                            aria-label="Remove file"
-                          >
-                            ×
-                          </button>
-                        )}
-                      </li>
+                      <AttachmentRow
+                        key={att.id}
+                        att={att}
+                        savedPaths={savedPaths}
+                        saving={savingOffline}
+                        setError={setError}
+                        onSave={handleSaveOffline}
+                        trailing={
+                          a.submission!.status === "submitted" ? (
+                            <button
+                              type="button"
+                              onClick={() => removeFile(att.id)}
+                              className="px-1 text-xs text-muted-foreground hover:text-danger"
+                              aria-label="Remove file"
+                            >
+                              ×
+                            </button>
+                          ) : undefined
+                        }
+                      />
                     ))}
                   </ul>
                 </div>

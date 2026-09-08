@@ -24,6 +24,10 @@ import { idbClear, STORES } from "./db";
  * - `cached_reads` in IndexedDB -- scaffolded for future per-module read
  *   caching (see db.ts); cleared preemptively for the same reason, even
  *   though nothing writes to it yet.
+ * - `offline_files` in IndexedDB (OS-03) -- attachment files someone chose
+ *   to download for offline access. Same reasoning as `cached_reads`: it's
+ *   a read cache belonging to this session, not a not-yet-synced write, so
+ *   it doesn't get `pending_mutations`' special preservation treatment.
  *
  * Best-effort: if the service worker isn't controlling this page yet (e.g.
  * first load before it's activated) or IndexedDB is unavailable, this
@@ -38,6 +42,7 @@ export async function clearOfflineCaches(): Promise<void> {
   }
 
   tasks.push(idbClear(STORES.cachedReads).catch(() => undefined));
+  tasks.push(idbClear(STORES.offlineFiles).catch(() => undefined));
 
   await Promise.all(tasks);
 }
