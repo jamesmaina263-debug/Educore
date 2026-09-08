@@ -87,11 +87,6 @@ jobs:
           fi
           echo "Restoring $DUMP_FILE ($(stat -c%s "$DUMP_FILE") bytes)"
 
-          # --no-owner --no-privileges (matches how it was dumped) means role/ownership warnings
-          # are expected on a bare postgres:17 image that has none of Supabase's own roles --
-          # that's a known-safe warning, not a drill failure (see docs/RESTORE_DRILL_RUNBOOK.md).
-          # A real failure is pg_restore hitting something fatal enough to abort outright, which
-          # this checks for explicitly below rather than trusting the exit code alone.
           set +e
           /usr/lib/postgresql/17/bin/pg_restore --no-owner --no-privileges --clean --if-exists \
             -d "postgresql://postgres:drill@localhost:5433/postgres" \
@@ -107,13 +102,36 @@ jobs:
             echo '```'
           } >> /tmp/drill_report.md
 
-          if grep -qiE "FATAL|could not connect|no such file|out of memory" /tmp/restore_output.txt; then
+          # A nonzero exit here does NOT by itself mean the drill failed -- pg_restore exits 1
+          # whenever it ignores *any* error and keeps going, which it does by default (no
+          # --exit-on-error). What actually matters is *which* errors: this dump was made
+          # --no-owner --no-privileges from a real Supabase project, and a bare postgres:17 image
+          # has none of Supabase's roles (authenticated/anon/service_role) or extensions
+          # (pg_net, supabase_vault) -- so every RLS policy statement referencing `authenticated`
+          # and every pg_net/vault-related statement is *expected* to fail here specifically
+          # because this is a throwaway target, not because the dump is broken.
+          #
+          # First real run's blocklist approach (grep for "FATAL|...|no such file|...") got this
+          # backwards: the extension-control-file message contains the literal text "No such file
+          # or directory" and got misclassified as fatal even though it's exactly the expected
+          # warning this comment describes. Allow-listing the specific known-safe error shapes
+          # instead of blocklisting fatal-sounding text is more robust -- anything that doesn't
+          # match one of these is what actually gets treated as a real failure.
+          UNEXPECTED=$(grep "pg_restore: error:" /tmp/restore_output.txt \
+            | grep -viE 'extension "(pg_net|supabase_vault)"|extension pg_net|extension supabase_vault|relation "vault\.secrets"|role "(authenticated|anon|service_role)" does not exist' \
+            || true)
+
+          if [ -n "$UNEXPECTED" ]; then
             echo ""
-            echo "Restore hit a fatal-looking error above, not just an expected role/ownership warning. Treating as a drill failure."
+            echo "Found error(s) that do NOT match the known-safe pg_net/supabase_vault/authenticated-role pattern:"
+            echo "$UNEXPECTED"
+            echo ""
+            echo "Treating as a real drill failure -- see docs/RESTORE_DRILL_RUNBOOK.md for how to tell these apart."
             exit 1
           fi
+
           echo ""
-          echo "pg_restore exit code: $RESTORE_EXIT (a nonzero exit here is common and expected -- see comment above; the grep check is what actually gates this step)"
+          echo "All errors in this restore match the known-safe pg_net/supabase_vault/authenticated-role pattern (expected on a bare, non-Supabase target). Nothing unexpected found -- proceeding to compare actual data row counts, which is the part that matters."
 
       # The check CI can't do on its own: pg_restore --list (used in nightly-backup.yml's own
       # verify step) only proves the dump *parses*. This proves it actually restores into a real

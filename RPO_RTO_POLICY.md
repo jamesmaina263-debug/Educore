@@ -58,18 +58,18 @@ shouldn't try to extract.
   recovery sense (a compromised/deleted GitHub repo takes the backups with
   it). Good enough as a stopgap, not a real DR solution.
 - It's a logical dump (`pg_dump`), so restoring means replaying it into a
-  fresh Postgres instance — untested end-to-end in this session (would
-  require actually standing up a second database to restore into, which
-  risks nothing existing but costs real time/money I didn't spend without
-  checking with you first).
-- No restore drill has been performed. **A DR plan that has never been
-  tested by actually restoring from a backup is not a verified DR plan** —
-  this is true here. A step-by-step procedure for running one now lives at
-  `docs/RESTORE_DRILL_RUNBOOK.md` (restore the latest dump into a throwaway
-  Supabase project or local Postgres, verify row counts and a few
-  spot-checked records match) — written this session but not yet executed,
-  since it needs someone with `SUPABASE_DB_URL`/dashboard access to actually
-  run it.
+  fresh Postgres instance — verified end-to-end via `.github/workflows/restore-drill.yml`,
+  which does exactly this inside a GitHub Actions runner.
+- A restore drill has been performed and passed (2026-09-08, automated,
+  re-runnable via `workflow_dispatch` any time). Row counts for
+  invoices/marks/payments/school_users/student_attendance/students matched
+  production exactly. See `docs/RESTORE_DRILL_RUNBOOK.md`'s drill log for
+  the full result and what the 51 pg_restore errors it hit were (all
+  expected — Supabase-specific roles/extensions that don't exist on a bare
+  Postgres image, not a real problem with the dump). **A DR plan that has
+  never been tested by actually restoring from a backup is not a verified
+  DR plan** — that's no longer true here, though re-running this
+  periodically (not just once) is still worth doing as the schema evolves.
 
 ## 4. Recommended real fix
 
