@@ -1,0 +1,145 @@
+name: Load test (production)
+
+# On-demand only -- this generates real concurrent traffic against production and, in the
+# mpesa_stk_push scenario, calls a real third-party sandbox. Not something to run unattended.
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  load-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check required secrets are set
+        run: |
+          for v in SUPABASE_DB_URL SUPABASE_ACCESS_TOKEN LOADTEST_GUARDIAN_EMAIL LOADTEST_GUARDIAN_PASSWORD LOADTEST_STAFF_EMAIL LOADTEST_STAFF_PASSWORD; do
+            if [ -z "${!v}" ]; then
+              echo "$v is not set."
+              exit 1
+            fi
+          done
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          LOADTEST_GUARDIAN_EMAIL: ${{ secrets.LOADTEST_GUARDIAN_EMAIL }}
+          LOADTEST_GUARDIAN_PASSWORD: ${{ secrets.LOADTEST_GUARDIAN_PASSWORD }}
+          LOADTEST_STAFF_EMAIL: ${{ secrets.LOADTEST_STAFF_EMAIL }}
+          LOADTEST_STAFF_PASSWORD: ${{ secrets.LOADTEST_STAFF_PASSWORD }}
+
+      - name: Install postgresql-client-17
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y wget gnupg lsb-release ca-certificates
+          wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo gpg --dearmor -o /usr/share/keyrings/postgresql.gpg
+          echo "deb [signed-by=/usr/share/keyrings/postgresql.gpg] https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" | sudo tee /etc/apt/sources.list.d/pgdg.list
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client-17
+
+      # HARD SAFETY GATE, checked directly against the database rather than trusted from memory
+      # or a prior conversation -- the mpesa_stk_push scenario below sends real requests to
+      # Safaricom. If Gititu's M-Pesa settings are anything other than 'sandbox', this aborts the
+      # entire job before any load-generating step runs, not just the M-Pesa scenario, because a
+      # workflow that's already wrong about this one thing shouldn't be trusted to run anything
+      # else either. This is exactly the check a secondhand "yes it's sandbox, trust me" can't
+      # substitute for.
+      - name: SAFETY CHECK -- confirm Gititu M-Pesa settings are sandbox, not production
+        id: safety
+        run: |
+          RESULT=$(psql "${{ secrets.SUPABASE_DB_URL }}" -Atqc "select environment from mpesa_settings where school_id = '1dea95ea-c9b6-46da-9c07-aba712c84d61' and is_active = true;")
+          echo "Gititu mpesa_settings.environment = '$RESULT'"
+          if [ "$RESULT" != "sandbox" ]; then
+            echo "ABORTING: Gititu's active M-Pesa settings are NOT sandbox (got '$RESULT', empty means no active row was found). Refusing to run any part of this load test -- see the safety-check comment above this step for why this gates the whole job, not just the mpesa_stk_push scenario."
+            exit 1
+          fi
+          echo "Confirmed sandbox. Proceeding."
+
+          STUDENT_ID=$(psql "${{ secrets.SUPABASE_DB_URL }}" -Atqc "select id from students where school_id = '1dea95ea-c9b6-46da-9c07-aba712c84d61' and admission_number = 'GITITU-CONNECT-TEST-001';")
+          if [ -z "$STUDENT_ID" ]; then
+            echo "ABORTING: could not find the GITITU-CONNECT-TEST-001 test student -- the mpesa_stk_push scenario has nothing to target."
+            exit 1
+          fi
+          echo "student_id=$STUDENT_ID" >> "$GITHUB_OUTPUT"
+
+      - name: Fetch Supabase project URL and anon key
+        id: supabase-config
+        run: |
+          RESP=$(curl -s -H "Authorization: Bearer ${{ secrets.SUPABASE_ACCESS_TOKEN }}" \
+            "https://api.supabase.com/v1/projects/oifyxuujtmiqhokfcatv/api-keys?reveal=true")
+          ANON_KEY=$(echo "$RESP" | python3 -c "import json,sys; d=json.load(sys.stdin); print(next(k['api_key'] for k in d if k['name']=='anon'))")
+          if [ -z "$ANON_KEY" ]; then
+            echo "Could not fetch the anon key from the Supabase Management API."
+            exit 1
+          fi
+          echo "::add-mask::$ANON_KEY"
+          echo "anon_key=$ANON_KEY" >> "$GITHUB_OUTPUT"
+          echo "supabase_url=https://oifyxuujtmiqhokfcatv.supabase.co" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Log in for real and capture session cookies
+        working-directory: loadtest
+        env:
+          LOADTEST_SITE_URL: https://www.educoreafrica.com
+          LOADTEST_GUARDIAN_EMAIL: ${{ secrets.LOADTEST_GUARDIAN_EMAIL }}
+          LOADTEST_GUARDIAN_PASSWORD: ${{ secrets.LOADTEST_GUARDIAN_PASSWORD }}
+          LOADTEST_STAFF_EMAIL: ${{ secrets.LOADTEST_STAFF_EMAIL }}
+          LOADTEST_STAFF_PASSWORD: ${{ secrets.LOADTEST_STAFF_PASSWORD }}
+        run: |
+          npm init -y > /dev/null
+          npm install playwright@latest > /dev/null
+          npx playwright install --with-deps chromium
+          node login-and-extract-cookies.mjs
+
+      - name: Install k6
+        run: |
+          sudo gpg -k
+          sudo gpg --no-default-keyring --keyring /usr/share/keyrings/k6-archive-keyring.gpg --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys C5AD17C747E3415A3642D57D77C6C491D6AC1D69
+          echo "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] https://dl.k6.io/deb stable main" | sudo tee /etc/apt/sources.list.d/k6.list
+          sudo apt-get update
+          sudo apt-get install -y k6
+
+      - name: Run k6 load test
+        id: k6
+        working-directory: loadtest
+        env:
+          LOADTEST_SITE_URL: https://www.educoreafrica.com
+          SUPABASE_URL: ${{ steps.supabase-config.outputs.supabase_url }}
+          SUPABASE_ANON_KEY: ${{ steps.supabase-config.outputs.anon_key }}
+          LOADTEST_GUARDIAN_EMAIL: ${{ secrets.LOADTEST_GUARDIAN_EMAIL }}
+          LOADTEST_GUARDIAN_PASSWORD: ${{ secrets.LOADTEST_GUARDIAN_PASSWORD }}
+          LOADTEST_STAFF_EMAIL: ${{ secrets.LOADTEST_STAFF_EMAIL }}
+          LOADTEST_STAFF_PASSWORD: ${{ secrets.LOADTEST_STAFF_PASSWORD }}
+          GITITU_TEST_STUDENT_ID: ${{ steps.safety.outputs.student_id }}
+        run: |
+          set +e
+          k6 run k6-script.js > /tmp/k6_output.txt 2>&1
+          echo "k6 exit code: $?"
+          set -e
+          cat /tmp/k6_output.txt
+
+      - name: Post results as a commit comment
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          {
+            echo "### Load test result: ${{ job.status }}"
+            echo ""
+            echo "**Safety check:** Gititu mpesa_settings.environment confirmed sandbox before any traffic was sent."
+            echo ""
+            if [ -f /tmp/k6_output.txt ]; then
+              echo '```'
+              tail -c 60000 /tmp/k6_output.txt
+              echo '```'
+            else
+              echo "(k6 did not run -- an earlier step failed; see which step above)"
+            fi
+          } > /tmp/comment_body.md
+          gh api "repos/${{ github.repository }}/commits/${{ github.sha }}/comments" \
+            -f body="$(cat /tmp/comment_body.md)"
