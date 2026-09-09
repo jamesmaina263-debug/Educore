@@ -5,6 +5,7 @@ import { NotConnectedCard } from "@/components/admin/analytics/not-connected-car
 import { DateRangeTabs } from "@/components/admin/analytics/date-range-tabs";
 import { CustomRangePicker } from "@/components/admin/analytics/custom-range-picker";
 import { BreakdownList } from "@/components/admin/analytics/breakdown-list";
+import { EngagedOnlyToggle } from "@/components/admin/analytics/engaged-only-toggle";
 import { TrafficTrendChart } from "@/components/admin/analytics/traffic-trend-chart";
 import { ConversionFunnel, type FunnelStage } from "@/components/admin/analytics/conversion-funnel";
 import { GranularityTabs } from "@/components/admin/analytics/granularity-tabs";
@@ -49,7 +50,7 @@ const VALID_PERIODS: PeriodKey[] = ["today", "yesterday", "7d", "30d", "90d", "c
 export default async function AdminAnalyticsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ period?: string; from?: string; to?: string; granularity?: string }>;
+  searchParams: Promise<{ period?: string; from?: string; to?: string; granularity?: string; engagedOnly?: string }>;
 }) {
   const supabase = await createClient();
 
@@ -61,7 +62,8 @@ export default async function AdminAnalyticsPage({
   const { data: isSuperAdmin } = await supabase.rpc("auth_is_super_admin");
   if (isSuperAdmin !== true) redirect("/dashboard");
 
-  const { period: rawPeriod, from, to, granularity: rawGranularity } = await searchParams;
+  const { period: rawPeriod, from, to, granularity: rawGranularity, engagedOnly: rawEngagedOnly } = await searchParams;
+  const engagedOnly = rawEngagedOnly === "1";
   let period: PeriodKey = VALID_PERIODS.includes(rawPeriod as PeriodKey) ? (rawPeriod as PeriodKey) : "7d";
   // A custom range needs both dates, in order, and well-formed -- fall back
   // to the 7-day default rather than letting resolveDateRange see a
@@ -126,17 +128,17 @@ export default async function AdminAnalyticsPage({
         getOverviewStats([prior.startIso, prior.endIso]),
         getEngagedVisitors(gaRange),
         getTimeseries(gaRange, granularity),
-        getTopPages(gaRange),
-        getLandingPages(gaRange),
+        getTopPages(gaRange, 10, engagedOnly),
+        getLandingPages(gaRange, 10, engagedOnly),
         getExitPages(gaRange),
-        getTrafficSources(gaRange),
-        getUtmCampaigns(gaRange),
+        getTrafficSources(gaRange, 10, engagedOnly),
+        getUtmCampaigns(gaRange, 15, engagedOnly),
         getGoalBreakdown(gaRange),
-        getDeviceBreakdown(gaRange),
-        getBrowserBreakdown(gaRange),
-        getOsBreakdown(gaRange),
-        getCountryBreakdown(gaRange),
-        getRegionBreakdown(gaRange),
+        getDeviceBreakdown(gaRange, engagedOnly),
+        getBrowserBreakdown(gaRange, 8, engagedOnly),
+        getOsBreakdown(gaRange, 8, engagedOnly),
+        getCountryBreakdown(gaRange, 10, engagedOnly),
+        getRegionBreakdown(gaRange, 10, engagedOnly),
         getRealtimeVisitorCount(),
       ])
     : [null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null];
@@ -248,7 +250,18 @@ export default async function AdminAnalyticsPage({
       {/* Website Analytics -- explicitly its own labeled block, distinct from
           Search Console below, per the spec. */}
       <div>
-        <h2 className="mb-3 text-sm font-semibold text-muted-foreground">Website Analytics</h2>
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-sm font-semibold text-muted-foreground">Website Analytics</h2>
+          {gaConfigured && (
+            <EngagedOnlyToggle
+              active={engagedOnly}
+              period={period}
+              from={customRange?.from}
+              to={customRange?.to}
+              granularity={granularity}
+            />
+          )}
+        </div>
         {!gaConfigured ? (
           <NotConnectedCard
             title="Google Analytics isn't connected"
@@ -268,10 +281,22 @@ export default async function AdminAnalyticsPage({
               </div>
               <TrafficTrendChart data={timeseries ?? []} granularity={granularity} />
             </div>
-            <BreakdownList title="Top pages" rows={(topPages ?? []).map((r) => ({ label: r.label, value: r.visitors }))} />
-            <BreakdownList title="Landing pages" rows={(landingPages ?? []).map((r) => ({ label: r.label, value: r.visitors }))} />
+            <BreakdownList
+              title="Top pages"
+              rows={(topPages ?? []).map((r) => ({ label: r.label, value: r.visitors }))}
+              valueLabel={engagedOnly ? "Engaged sessions" : "Visitors"}
+            />
+            <BreakdownList
+              title="Landing pages"
+              rows={(landingPages ?? []).map((r) => ({ label: r.label, value: r.visitors }))}
+              valueLabel={engagedOnly ? "Engaged sessions" : "Visitors"}
+            />
             <BreakdownList title="Exit pages" rows={(exitPages ?? []).map((r) => ({ label: r.label, value: r.visitors }))} />
-            <BreakdownList title="Traffic sources" rows={(sources ?? []).map((r) => ({ label: r.label, value: r.visitors }))} />
+            <BreakdownList
+              title="Traffic sources"
+              rows={(sources ?? []).map((r) => ({ label: r.label, value: r.visitors }))}
+              valueLabel={engagedOnly ? "Engaged sessions" : "Visitors"}
+            />
             <BreakdownList
               title="Campaigns (UTM)"
               rows={(utmCampaigns ?? []).map((r) => ({
@@ -280,6 +305,7 @@ export default async function AdminAnalyticsPage({
                 }`,
                 value: r.visitors,
               }))}
+              valueLabel={engagedOnly ? "Engaged sessions" : "Visitors"}
             />
             <BreakdownList
               // GA4's actual top event names, not filtered Plausible Goals --
@@ -289,11 +315,31 @@ export default async function AdminAnalyticsPage({
               rows={(goals ?? []).map((r) => ({ label: r.goal, value: r.events }))}
               valueLabel="Events"
             />
-            <BreakdownList title="Country" rows={(countries ?? []).map((r) => ({ label: r.label, value: r.visitors }))} />
-            <BreakdownList title="Region" rows={(regions ?? []).map((r) => ({ label: r.label, value: r.visitors }))} />
-            <BreakdownList title="Device" rows={(devices ?? []).map((r) => ({ label: r.label, value: r.visitors }))} />
-            <BreakdownList title="Browser" rows={(browsers ?? []).map((r) => ({ label: r.label, value: r.visitors }))} />
-            <BreakdownList title="Operating system" rows={(oses ?? []).map((r) => ({ label: r.label, value: r.visitors }))} />
+            <BreakdownList
+              title="Country"
+              rows={(countries ?? []).map((r) => ({ label: r.label, value: r.visitors }))}
+              valueLabel={engagedOnly ? "Engaged sessions" : "Visitors"}
+            />
+            <BreakdownList
+              title="Region"
+              rows={(regions ?? []).map((r) => ({ label: r.label, value: r.visitors }))}
+              valueLabel={engagedOnly ? "Engaged sessions" : "Visitors"}
+            />
+            <BreakdownList
+              title="Device"
+              rows={(devices ?? []).map((r) => ({ label: r.label, value: r.visitors }))}
+              valueLabel={engagedOnly ? "Engaged sessions" : "Visitors"}
+            />
+            <BreakdownList
+              title="Browser"
+              rows={(browsers ?? []).map((r) => ({ label: r.label, value: r.visitors }))}
+              valueLabel={engagedOnly ? "Engaged sessions" : "Visitors"}
+            />
+            <BreakdownList
+              title="Operating system"
+              rows={(oses ?? []).map((r) => ({ label: r.label, value: r.visitors }))}
+              valueLabel={engagedOnly ? "Engaged sessions" : "Visitors"}
+            />
           </div>
         )}
       </div>
