@@ -193,8 +193,34 @@ jobs:
           PROD_MIGRATIONS_JSON: ${{ env.json }}
         run: |
           set +e
-          python3 scripts/reconcile_migration_drift.py
+          python3 scripts/reconcile_migration_drift.py > /tmp/reconcile_output.txt 2>&1
           echo "exit_code=$?" >> "$GITHUB_OUTPUT"
+          cat /tmp/reconcile_output.txt
+
+      # reconcile_migration_drift.py failing is itself worth seeing, not just silently leaving no
+      # PR opened -- found the hard way: a scheduled run failed here with no visible detail (raw
+      # Actions logs aren't reachable from every environment -- confirmed directly elsewhere in
+      # this repo's history) and separately, check-drift's own "post PR comment on failure" step
+      # turned out to silently no-op on pull_request-triggered runs (github.ref_name resolves to
+      # something like "278/merge" for a PR event, not the actual branch name, so `gh pr list
+      # --head` matches nothing -- a real bug, not fixed here since it's a separate step, but
+      # worth knowing about). Posting this script's own output as a commit comment sidesteps both
+      # problems: reachable via the plain REST API from anywhere, and doesn't depend on
+      # ref_name resolving usefully.
+      - name: Post reconcile-script output as a commit comment on failure
+        if: steps.reconcile.outputs.exit_code != '0'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          {
+            echo "### scripts/reconcile_migration_drift.py failed (exit ${{ steps.reconcile.outputs.exit_code }})"
+            echo ""
+            echo '```'
+            cat /tmp/reconcile_output.txt
+            echo '```'
+          } > /tmp/reconcile_comment.md
+          gh api "repos/${{ github.repository }}/commits/${{ github.sha }}/comments" \
+            -f body="$(cat /tmp/reconcile_comment.md)"
 
       - name: Check whether anything was written
         id: changes
