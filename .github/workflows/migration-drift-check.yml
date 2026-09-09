@@ -194,8 +194,21 @@ jobs:
         run: |
           set +e
           python3 scripts/reconcile_migration_drift.py > /tmp/reconcile_output.txt 2>&1
-          echo "exit_code=$?" >> "$GITHUB_OUTPUT"
+          CODE=$?
+          echo "exit_code=$CODE" >> "$GITHUB_OUTPUT"
           cat /tmp/reconcile_output.txt
+          # This step is deliberately made to always report success at the shell level (real
+          # failure is carried via the exit_code output instead, checked explicitly by the next
+          # two real steps below via steps.reconcile.outputs.exit_code). Found the hard way, twice:
+          # a step this workflow's own `if:` conditions depend on being marked "failure" causes
+          # GitHub Actions' implicit default (skip subsequent steps unless they use always()/
+          # failure()) to apply even to steps that DO use always() -- the first fix
+          # (adding always() to the diagnostic step) still resulted in "skipped", which shouldn't
+          # be possible per Actions' own documented behavior, and this environment has no way to
+          # pull the raw step log to see why. Not fighting a mechanism that's misbehaving in a way
+          # that isn't reproducible in isolation -- sidestepping it by never letting this step
+          # register as failed in the first place is the more robust fix.
+          exit 0
 
       # reconcile_migration_drift.py failing is itself worth seeing, not just silently leaving no
       # PR opened -- found the hard way: a scheduled run failed here with no visible detail (raw
