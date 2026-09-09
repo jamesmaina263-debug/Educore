@@ -230,9 +230,15 @@ export default async function DashboardPage() {
     // case the audit calls out -- unbounded today, and it gets slower every term forever. Fixed by
     // pushing the term/date filter into the query (same result, bounded by term instead of by
     // school lifetime) and giving the "latest invoices" widget its own properly limited query.
-    const [{ data: balanceRows }, { data: latestInvoiceRows }, { data: discountRows }, { data: expenseRows }] =
+    const [{ data: balanceSummaryRows }, { data: latestInvoiceRows }, { data: discountRows }, { data: expenseRows }] =
       await Promise.all([
-        supabase.from("v_student_balances").select("balance"),
+        // Was `.from("v_student_balances").select("balance")` -- one row per student (each
+        // computed via 4 LATERAL aggregate subqueries in the view) just to sum/filter two
+        // numbers in JS below. get_student_balance_summary() does that same sum/count inside
+        // Postgres and ships back a single row. It's a plain (non-SECURITY DEFINER) function
+        // specifically so it still runs under this caller's RLS -- same access boundary as
+        // before, not widened.
+        supabase.rpc("get_student_balance_summary"),
         supabase
           .from("invoices")
           .select("id, total_amount, status, created_at, term_id, students(first_name, last_name)")
@@ -255,8 +261,9 @@ export default async function DashboardPage() {
         ])
       : [{ data: null }, { data: null }];
 
-    totalOutstanding = (balanceRows ?? []).reduce((sum, b) => sum + Math.max(0, Number(b.balance)), 0);
-    studentsWithBalance = (balanceRows ?? []).filter((b) => Number(b.balance) > 0).length;
+    const balanceSummary = balanceSummaryRows?.[0];
+    totalOutstanding = Number(balanceSummary?.total_outstanding ?? 0);
+    studentsWithBalance = Number(balanceSummary?.students_with_balance ?? 0);
     pendingDiscounts = (discountRows ?? []).length;
     pendingExpenses = (expenseRows ?? []).length;
 
