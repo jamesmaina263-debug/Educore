@@ -226,16 +226,28 @@ export async function getTimeseries(
 
 export type BreakdownRow = { label: string; visitors: number };
 
+// `engagedOnly` swaps the metric from `totalUsers` (every hit that fires the
+// GA4 script, including single-pageview automated traffic that isn't on the
+// declared-bots list GA4 filters by default) to `engagedSessions` (GA4's own
+// engagement definition: 10s+ engaged, 2+ pageviews, or a conversion event --
+// see getEngagedVisitors above). This doesn't require any new GA4/GTM
+// configuration; engagedSessions is a standard Data API metric compatible
+// with every dimension used here. It's an approximation, not a real bot
+// filter -- a fast, disengaged real visitor and a sophisticated bot that
+// fakes engagement both slip through either way -- but at current traffic
+// volumes it's a cheap, honest signal for "was this likely a real visit."
 async function getBreakdown(
   dateRange: GaDateRangeInput,
   dimension: string,
   limit = 10,
+  engagedOnly = false,
 ): Promise<BreakdownRow[] | null> {
+  const metricName = engagedOnly ? "engagedSessions" : "totalUsers";
   const result = await runReport({
     dateRanges: toDateRange(dateRange),
     dimensions: [{ name: dimension }],
-    metrics: [{ name: "totalUsers" }],
-    orderBys: [{ metric: { metricName: "totalUsers" }, desc: true }],
+    metrics: [{ name: metricName }],
+    orderBys: [{ metric: { metricName }, desc: true }],
     limit,
   });
   if (!result?.rows) return null;
@@ -245,12 +257,12 @@ async function getBreakdown(
   }));
 }
 
-export function getTopPages(dateRange: GaDateRangeInput, limit = 10) {
-  return getBreakdown(dateRange, "pagePath", limit);
+export function getTopPages(dateRange: GaDateRangeInput, limit = 10, engagedOnly = false) {
+  return getBreakdown(dateRange, "pagePath", limit, engagedOnly);
 }
 
-export function getLandingPages(dateRange: GaDateRangeInput, limit = 10) {
-  return getBreakdown(dateRange, "landingPage", limit);
+export function getLandingPages(dateRange: GaDateRangeInput, limit = 10, engagedOnly = false) {
+  return getBreakdown(dateRange, "landingPage", limit, engagedOnly);
 }
 
 // No GA4 equivalent -- see the module-level note. Kept as a function (rather
@@ -260,32 +272,32 @@ export async function getExitPages(_dateRange: GaDateRangeInput, _limit = 10): P
   return null;
 }
 
-export function getTrafficSources(dateRange: GaDateRangeInput, limit = 10) {
-  return getBreakdown(dateRange, "sessionSource", limit);
+export function getTrafficSources(dateRange: GaDateRangeInput, limit = 10, engagedOnly = false) {
+  return getBreakdown(dateRange, "sessionSource", limit, engagedOnly);
 }
 
-export function getChannels(dateRange: GaDateRangeInput, limit = 10) {
-  return getBreakdown(dateRange, "sessionDefaultChannelGroup", limit);
+export function getChannels(dateRange: GaDateRangeInput, limit = 10, engagedOnly = false) {
+  return getBreakdown(dateRange, "sessionDefaultChannelGroup", limit, engagedOnly);
 }
 
-export function getDeviceBreakdown(dateRange: GaDateRangeInput) {
-  return getBreakdown(dateRange, "deviceCategory", 10);
+export function getDeviceBreakdown(dateRange: GaDateRangeInput, engagedOnly = false) {
+  return getBreakdown(dateRange, "deviceCategory", 10, engagedOnly);
 }
 
-export function getBrowserBreakdown(dateRange: GaDateRangeInput, limit = 8) {
-  return getBreakdown(dateRange, "browser", limit);
+export function getBrowserBreakdown(dateRange: GaDateRangeInput, limit = 8, engagedOnly = false) {
+  return getBreakdown(dateRange, "browser", limit, engagedOnly);
 }
 
-export function getOsBreakdown(dateRange: GaDateRangeInput, limit = 8) {
-  return getBreakdown(dateRange, "operatingSystem", limit);
+export function getOsBreakdown(dateRange: GaDateRangeInput, limit = 8, engagedOnly = false) {
+  return getBreakdown(dateRange, "operatingSystem", limit, engagedOnly);
 }
 
-export function getCountryBreakdown(dateRange: GaDateRangeInput, limit = 10) {
-  return getBreakdown(dateRange, "country", limit);
+export function getCountryBreakdown(dateRange: GaDateRangeInput, limit = 10, engagedOnly = false) {
+  return getBreakdown(dateRange, "country", limit, engagedOnly);
 }
 
-export function getRegionBreakdown(dateRange: GaDateRangeInput, limit = 10) {
-  return getBreakdown(dateRange, "region", limit);
+export function getRegionBreakdown(dateRange: GaDateRangeInput, limit = 10, engagedOnly = false) {
+  return getBreakdown(dateRange, "region", limit, engagedOnly);
 }
 
 export type UtmCampaignRow = {
@@ -298,12 +310,17 @@ export type UtmCampaignRow = {
 
 // "content" is always "(none)" here -- see module-level note on why the ad-
 // variant dimension was deliberately left out rather than guessed.
-export async function getUtmCampaigns(dateRange: GaDateRangeInput, limit = 15): Promise<UtmCampaignRow[] | null> {
+export async function getUtmCampaigns(
+  dateRange: GaDateRangeInput,
+  limit = 15,
+  engagedOnly = false,
+): Promise<UtmCampaignRow[] | null> {
+  const metricName = engagedOnly ? "engagedSessions" : "totalUsers";
   const result = await runReport({
     dateRanges: toDateRange(dateRange),
     dimensions: [{ name: "sessionSource" }, { name: "sessionMedium" }, { name: "sessionCampaignName" }],
-    metrics: [{ name: "totalUsers" }],
-    orderBys: [{ metric: { metricName: "totalUsers" }, desc: true }],
+    metrics: [{ name: metricName }],
+    orderBys: [{ metric: { metricName }, desc: true }],
     limit,
   });
   if (!result?.rows) return null;
