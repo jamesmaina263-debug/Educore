@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { escapePostgrestOrValue } from "@/lib/postgrest-filter";
+import { reportServerError } from "@/lib/report-server-error";
 
 type ActionResult = { error: string } | { success: true };
 
@@ -41,13 +42,20 @@ export async function createFeeStructure(input: {
       })
       .select("id")
       .single();
-    if (error) return { error: error.message };
+    if (error) {
+      reportServerError(error, { action: "finance.createFeeStructure", schoolId: school_id });
+      return { error: error.message };
+    }
 
     const { error: itemsError } = await supabase
       .from("fee_items")
       .insert(input.items.map((i) => ({ fee_structure_id: structure.id, name: i.name, amount: i.amount })));
-    if (itemsError) return { error: itemsError.message };
+    if (itemsError) {
+      reportServerError(itemsError, { action: "finance.createFeeStructure.items", schoolId: school_id, extra: { fee_structure_id: structure.id } });
+      return { error: itemsError.message };
+    }
   } catch (e) {
+    reportServerError(e, { action: "finance.createFeeStructure" });
     return { error: e instanceof Error ? e.message : "Could not create the fee structure." };
   }
   revalidatePath("/finance", "layout");
@@ -62,7 +70,10 @@ export async function createFeeStructure(input: {
 export async function setFeeStructureActiveAction(structureId: string, isActive: boolean): Promise<ActionResult> {
   const supabase = await createClient();
   const { error } = await supabase.from("fee_structures").update({ is_active: isActive, updated_at: new Date().toISOString() }).eq("id", structureId);
-  if (error) return { error: error.message };
+  if (error) {
+    reportServerError(error, { action: "finance.setFeeStructureActive", extra: { structure_id: structureId } });
+    return { error: error.message };
+  }
   revalidatePath("/finance", "layout");
   return { success: true };
 }
@@ -75,12 +86,18 @@ export async function updateFeeStructureItemsAction(
 ): Promise<ActionResult> {
   const supabase = await createClient();
   const { error: deleteError } = await supabase.from("fee_items").delete().eq("fee_structure_id", structureId);
-  if (deleteError) return { error: deleteError.message };
+  if (deleteError) {
+    reportServerError(deleteError, { action: "finance.updateFeeStructureItems.delete", extra: { structure_id: structureId } });
+    return { error: deleteError.message };
+  }
   if (items.length > 0) {
     const { error: insertError } = await supabase
       .from("fee_items")
       .insert(items.map((i) => ({ fee_structure_id: structureId, name: i.name, amount: i.amount })));
-    if (insertError) return { error: insertError.message };
+    if (insertError) {
+      reportServerError(insertError, { action: "finance.updateFeeStructureItems.insert", extra: { structure_id: structureId } });
+      return { error: insertError.message };
+    }
   }
   revalidatePath("/finance", "layout");
   return { success: true };
@@ -89,7 +106,10 @@ export async function updateFeeStructureItemsAction(
 export async function generateInvoicesAction(termId: string, classId: string | null): Promise<{ error: string } | { success: true; count: number }> {
   const supabase = await createClient();
   const { data, error } = await supabase.rpc("generate_invoices", { p_term_id: termId, p_class_id: classId });
-  if (error) return { error: error.message };
+  if (error) {
+    reportServerError(error, { action: "finance.generateInvoices", extra: { term_id: termId, class_id: classId } });
+    return { error: error.message };
+  }
   revalidatePath("/finance", "layout");
   return { success: true, count: data as number };
 }
@@ -100,7 +120,10 @@ export async function generateInvoicesAction(termId: string, classId: string | n
 export async function createInvoiceForStudentAction(studentId: string, termId: string): Promise<ActionResult> {
   const supabase = await createClient();
   const { error } = await supabase.rpc("create_or_get_invoice_for_student", { p_student_id: studentId, p_term_id: termId });
-  if (error) return { error: error.message };
+  if (error) {
+    reportServerError(error, { action: "finance.createInvoiceForStudent", extra: { student_id: studentId, term_id: termId } });
+    return { error: error.message };
+  }
   revalidatePath("/finance", "layout");
   return { success: true };
 }
@@ -132,7 +155,10 @@ export async function recordPaymentAction(input: {
     p_purpose: input.purpose ?? null,
     p_notes: input.notes ?? null,
   });
-  if (error) return { error: error.message };
+  if (error) {
+    reportServerError(error, { action: "finance.recordPayment", extra: { student_id: input.student_id, method: input.method, amount: input.amount } });
+    return { error: error.message };
+  }
   revalidatePath("/finance", "layout");
   return { success: true };
 }
@@ -156,7 +182,10 @@ export async function recordUnallocatedPaymentAction(input: {
     p_purpose: input.purpose ?? null,
     p_notes: input.notes ?? null,
   });
-  if (error) return { error: error.message };
+  if (error) {
+    reportServerError(error, { action: "finance.recordUnallocatedPayment", extra: { method: input.method, amount: input.amount } });
+    return { error: error.message };
+  }
   revalidatePath("/finance", "layout");
   return { success: true };
 }
@@ -172,7 +201,10 @@ export async function allocateUnallocatedPaymentAction(input: {
     p_student_id: input.student_id,
     p_allocations: input.allocations ?? null,
   });
-  if (error) return { error: error.message };
+  if (error) {
+    reportServerError(error, { action: "finance.allocateUnallocatedPayment", extra: { payment_id: input.payment_id, student_id: input.student_id } });
+    return { error: error.message };
+  }
   revalidatePath("/finance", "layout");
   return { success: true };
 }
@@ -207,7 +239,10 @@ export async function importMpesaStatementAction(input: {
       p_source_label: input.source_label ?? null,
     })
     .single();
-  if (error) return { error: error.message };
+  if (error) {
+    reportServerError(error, { action: "finance.importMpesaStatement", extra: { line_count: input.lines.length, source_label: input.source_label } });
+    return { error: error.message };
+  }
   revalidatePath("/finance", "layout");
   return { success: true, summary: data as MpesaStatementImportSummary };
 }
@@ -231,7 +266,10 @@ export async function getMpesaStatementBatchLinesAction(
     .select("id, receipt_no, transaction_time, details, amount, match_status, matched_payment_id")
     .eq("batch_id", batchId)
     .order("created_at", { ascending: true });
-  if (error) return { error: error.message };
+  if (error) {
+    reportServerError(error, { action: "finance.getMpesaStatementBatchLines", extra: { batch_id: batchId } });
+    return { error: error.message };
+  }
   return { success: true, lines: (data ?? []) as MpesaStatementLineRow[] };
 }
 
@@ -246,7 +284,10 @@ export async function reversePaymentAction(input: {
     p_amount: input.amount,
     p_reason: input.reason,
   });
-  if (error) return { error: error.message };
+  if (error) {
+    reportServerError(error, { action: "finance.reversePayment", extra: { payment_id: input.payment_id, amount: input.amount } });
+    return { error: error.message };
+  }
   revalidatePath("/finance", "layout");
   return { success: true };
 }
@@ -277,8 +318,14 @@ export async function searchStudentAccountsAction(query: string): Promise<
         { referencedTable: "students" },
       ),
   ]);
-  if (byReference.error) return { error: byReference.error.message };
-  if (byStudent.error) return { error: byStudent.error.message };
+  if (byReference.error) {
+    reportServerError(byReference.error, { action: "finance.searchStudentAccounts.byReference", extra: { query: q } });
+    return { error: byReference.error.message };
+  }
+  if (byStudent.error) {
+    reportServerError(byStudent.error, { action: "finance.searchStudentAccounts.byStudent", extra: { query: q } });
+    return { error: byStudent.error.message };
+  }
 
   const seen = new Map<string, { student_id: string; full_name: string; admission_number: string; payment_reference: string }>();
   for (const r of [...(byReference.data ?? []), ...(byStudent.data ?? [])]) {
@@ -310,7 +357,10 @@ export async function requestDiscountAction(input: {
     p_amount: input.amount,
     p_reason: input.reason,
   });
-  if (error) return { error: error.message };
+  if (error) {
+    reportServerError(error, { action: "finance.requestDiscount", extra: { student_id: input.student_id, invoice_id: input.invoice_id, amount: input.amount } });
+    return { error: error.message };
+  }
   revalidatePath("/finance", "layout");
 
   // Best-effort: let everyone who can approve discounts know one is waiting. Never block on this.
@@ -344,7 +394,10 @@ async function notifyDiscountOutcome(supabase: Awaited<ReturnType<typeof createC
 export async function approveDiscountAction(discountId: string): Promise<ActionResult> {
   const supabase = await createClient();
   const { error } = await supabase.rpc("approve_discount", { p_discount_id: discountId });
-  if (error) return { error: error.message };
+  if (error) {
+    reportServerError(error, { action: "finance.approveDiscount", extra: { discount_id: discountId } });
+    return { error: error.message };
+  }
   revalidatePath("/finance", "layout");
   await notifyDiscountOutcome(supabase, discountId, "approved");
   return { success: true };
@@ -353,7 +406,10 @@ export async function approveDiscountAction(discountId: string): Promise<ActionR
 export async function rejectDiscountAction(discountId: string): Promise<ActionResult> {
   const supabase = await createClient();
   const { error } = await supabase.rpc("reject_discount", { p_discount_id: discountId });
-  if (error) return { error: error.message };
+  if (error) {
+    reportServerError(error, { action: "finance.rejectDiscount", extra: { discount_id: discountId } });
+    return { error: error.message };
+  }
   revalidatePath("/finance", "layout");
   await notifyDiscountOutcome(supabase, discountId, "rejected");
   return { success: true };
@@ -384,7 +440,10 @@ export async function createFeeWaiverAction(input: {
     p_ends_term_id: input.ends_term_id ?? null,
     p_notes: input.notes ?? null,
   });
-  if (error) return { error: error.message };
+  if (error) {
+    reportServerError(error, { action: "finance.createFeeWaiver", extra: { student_id: input.student_id, waiver_type: input.waiver_type } });
+    return { error: error.message };
+  }
   revalidatePath("/finance", "layout");
   return { success: true };
 }
@@ -392,7 +451,10 @@ export async function createFeeWaiverAction(input: {
 export async function revokeFeeWaiverAction(waiverId: string): Promise<ActionResult> {
   const supabase = await createClient();
   const { error } = await supabase.rpc("revoke_fee_waiver", { p_waiver_id: waiverId });
-  if (error) return { error: error.message };
+  if (error) {
+    reportServerError(error, { action: "finance.revokeFeeWaiver", extra: { waiver_id: waiverId } });
+    return { error: error.message };
+  }
   revalidatePath("/finance", "layout");
   return { success: true };
 }
@@ -416,7 +478,10 @@ export async function raiseExpenseAction(input: {
     p_description: input.description ?? null,
     p_receipt_url: input.receipt_url ?? null,
   });
-  if (error) return { error: error.message };
+  if (error) {
+    reportServerError(error, { action: "finance.raiseExpense", extra: { category: input.category, vendor: input.vendor, amount: input.amount } });
+    return { error: error.message };
+  }
   revalidatePath("/finance", "layout");
 
   // Best-effort: let everyone who can approve expenses know one is waiting. Never block on this.
@@ -449,7 +514,10 @@ async function notifyExpenseOutcome(supabase: Awaited<ReturnType<typeof createCl
 export async function approveExpenseAction(expenseId: string): Promise<ActionResult> {
   const supabase = await createClient();
   const { error } = await supabase.rpc("approve_expense", { p_expense_id: expenseId });
-  if (error) return { error: error.message };
+  if (error) {
+    reportServerError(error, { action: "finance.approveExpense", extra: { expense_id: expenseId } });
+    return { error: error.message };
+  }
   revalidatePath("/finance", "layout");
   await notifyExpenseOutcome(supabase, expenseId, "approved");
   return { success: true };
@@ -458,7 +526,10 @@ export async function approveExpenseAction(expenseId: string): Promise<ActionRes
 export async function rejectExpenseAction(expenseId: string): Promise<ActionResult> {
   const supabase = await createClient();
   const { error } = await supabase.rpc("reject_expense", { p_expense_id: expenseId });
-  if (error) return { error: error.message };
+  if (error) {
+    reportServerError(error, { action: "finance.rejectExpense", extra: { expense_id: expenseId } });
+    return { error: error.message };
+  }
   revalidatePath("/finance", "layout");
   await notifyExpenseOutcome(supabase, expenseId, "rejected");
   return { success: true };
@@ -471,7 +542,10 @@ export async function rejectExpenseAction(expenseId: string): Promise<ActionResu
 export async function setFeeAlertThresholdAction(threshold: number | null): Promise<ActionResult> {
   const supabase = await createClient();
   const { error } = await supabase.rpc("set_fee_alert_threshold", { p_threshold: threshold });
-  if (error) return { error: error.message };
+  if (error) {
+    reportServerError(error, { action: "finance.setFeeAlertThreshold", extra: { threshold } });
+    return { error: error.message };
+  }
   revalidatePath("/finance", "layout");
   return { success: true };
 }
