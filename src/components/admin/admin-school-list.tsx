@@ -221,6 +221,12 @@ export function AdminSchoolList({ schools }: { schools: SchoolListRow[] }) {
                     </Button>
                   )}
                   <Link
+                    href={`/admin/view-as/${school.id}`}
+                    className="text-xs text-primary hover:underline"
+                  >
+                    View
+                  </Link>
+                  <Link
                     href="/admin/billing"
                     className="flex items-center gap-0.5 text-xs text-primary hover:underline"
                   >
