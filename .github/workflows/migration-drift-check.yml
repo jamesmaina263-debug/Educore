@@ -208,7 +208,7 @@ jobs:
       # problems: reachable via the plain REST API from anywhere, and doesn't depend on
       # ref_name resolving usefully.
       - name: Post reconcile-script output as a commit comment on failure
-        if: steps.reconcile.outputs.exit_code != '0'
+        if: always() && steps.reconcile.outputs.exit_code != '0'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
