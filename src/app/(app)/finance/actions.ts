@@ -1,8 +1,9 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidatePath, updateTag } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { escapePostgrestOrValue } from "@/lib/postgrest-filter";
+import { SCHOOL_SETTINGS_CACHE_TAG } from "@/lib/school-settings-cache";
 
 type ActionResult = { error: string } | { success: true };
 
@@ -472,6 +473,10 @@ export async function setFeeAlertThresholdAction(threshold: number | null): Prom
   const supabase = await createClient();
   const { error } = await supabase.rpc("set_fee_alert_threshold", { p_threshold: threshold });
   if (error) return { error: error.message };
+  // fee_alert_threshold is part of the cached school-settings row (school-settings-cache.ts).
+  // updateTag, not revalidateTag: this is a Server Action, and Next's docs recommend updateTag
+  // here for read-your-own-writes semantics.
+  updateTag(SCHOOL_SETTINGS_CACHE_TAG);
   revalidatePath("/finance", "layout");
   return { success: true };
 }

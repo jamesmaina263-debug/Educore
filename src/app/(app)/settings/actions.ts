@@ -1,9 +1,10 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidatePath, updateTag } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { generateTemporaryPassword, temporaryPasswordExpiry } from "@/lib/temporary-password";
+import { SCHOOL_SETTINGS_CACHE_TAG } from "@/lib/school-settings-cache";
 
 type ActionResult = { error: string } | { success: true };
 type InviteResult = { error: string } | { success: true; temporaryPassword: string };
@@ -41,6 +42,11 @@ export async function updateBranding(input: {
   const { error } = await supabase.from("schools").update(update).eq("id", schoolId);
   if (error) return { error: error.message };
 
+  // This row is cached (school-settings-cache.ts) -- `name` is part of that cache, so without
+  // this the new name wouldn't show up anywhere it's read from until the 1-hour TTL expires.
+  // updateTag (not revalidateTag) deliberately: this is a Server Action, and Next's own docs
+  // recommend updateTag here specifically for read-your-own-writes semantics.
+  updateTag(SCHOOL_SETTINGS_CACHE_TAG);
   revalidatePath("/settings", "layout");
   return { success: true };
 }
