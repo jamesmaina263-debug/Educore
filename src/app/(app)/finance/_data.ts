@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getCachedSchoolSettings } from "@/lib/school-settings-cache";
 import type { FeeStructureRow } from "@/components/finance/fee-structures-section";
 import type { InvoiceListRow } from "@/components/finance/invoices-section";
 import type { BalanceRow } from "@/components/finance/balances-section";
@@ -57,7 +58,7 @@ export async function loadFinanceContext(): Promise<FinanceContext> {
     await Promise.all([
       supabase
         .from("school_users")
-        .select("full_name, roles(display_name), schools(name, expense_approval_threshold, fee_alert_threshold)")
+        .select("full_name, school_id, roles(display_name)")
         .eq("auth_user_id", user.id)
         .maybeSingle(),
       supabase.rpc("auth_has_permission", { p_permission_key: "finance.read" }),
@@ -68,7 +69,11 @@ export async function loadFinanceContext(): Promise<FinanceContext> {
     ]);
 
   const roleName = (schoolUser?.roles as unknown as { display_name: string } | null)?.display_name;
-  const school = schoolUser?.schools as unknown as { name: string; expense_approval_threshold: number | null; fee_alert_threshold: number | null } | null;
+  // Cached (see school-settings-cache.ts): name/expense_approval_threshold/fee_alert_threshold
+  // change only when someone edits Settings or Fee Alert config, but this loader runs on every
+  // Finance page navigation for every user -- was re-fetched via the school_users join above on
+  // every single one of those.
+  const school = schoolUser?.school_id ? await getCachedSchoolSettings(schoolUser.school_id) : null;
 
   const base = {
     userName: schoolUser?.full_name ?? user.email ?? "Account",

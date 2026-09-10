@@ -11,6 +11,7 @@ import {
   CollectionTrendChart,
   EnrollmentTrendChart,
 } from "@/components/dashboard/dashboard-charts";
+import { getCachedSchoolSettings } from "@/lib/school-settings-cache";
 
 function todayISO() {
   return new Date().toISOString().slice(0, 10);
@@ -82,7 +83,7 @@ export default async function DashboardPage() {
   ] = await Promise.all([
     supabase
       .from("school_users")
-      .select("id, full_name, status, roles(display_name), schools(name)")
+      .select("id, full_name, status, school_id, roles(display_name)")
       .eq("auth_user_id", user.id)
       .maybeSingle(),
     supabase.rpc("auth_has_permission", { p_permission_key: "students.read" }),
@@ -100,7 +101,9 @@ export default async function DashboardPage() {
   void canMarkAny;
 
   const roleName = (schoolUser?.roles as unknown as { display_name: string } | null)?.display_name;
-  const schoolName = (schoolUser?.schools as unknown as { name: string } | null)?.name;
+  // Cached (see school-settings-cache.ts) -- was a fresh schools(name) join on every dashboard
+  // load for every user; the school's name changes only when someone edits Settings.
+  const schoolName = schoolUser?.school_id ? (await getCachedSchoolSettings(schoolUser.school_id)).name : undefined;
   const today = todayISO();
 
   const { data: activeTerm } = await supabase
