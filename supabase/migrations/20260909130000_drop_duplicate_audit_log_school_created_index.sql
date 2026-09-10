@@ -1,0 +1,19 @@
+-- audit_log currently carries two indexes covering the exact same leading
+-- columns:
+--   audit_log_school_created_idx   on audit_log(school_id, created_at)
+--   idx_audit_log_school_created   on public.audit_log (school_id, created_at desc)
+--
+-- A plain btree index on (school_id, created_at) can already be scanned
+-- backwards by the planner to satisfy `ORDER BY created_at DESC` for a given
+-- school_id just as efficiently -- the DESC variant adds no query benefit
+-- here, only extra write-amplification (every audit_log insert/update now
+-- maintains two near-identical index entries) and extra storage, on a table
+-- that is append-only and grows without bound as the platform scales (every
+-- create/update/delete across the app writes here). This is exactly the kind
+-- of duplicate index Section 1 of the audit asked to check for.
+--
+-- This mirrors the fix already applied for invoices in
+-- 20260903111920_drop_duplicate_invoices_school_status_index.sql -- keeping
+-- the plain (non-desc) index, since the finance one kept the plain form too
+-- and there's no reason to prefer DESC here.
+DROP INDEX IF EXISTS public.idx_audit_log_school_created;
