@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { isPasswordPwned } from "@/lib/password-breach-check";
 
 export type ChangePasswordState = { error: string | null };
 
@@ -18,6 +19,15 @@ export async function changePassword(
   }
   if (newPassword !== confirmPassword) {
     return { error: "Passwords don't match." };
+  }
+  // Free-tier substitute for Supabase's paid leaked-password-protection
+  // toggle — see password-breach-check.ts for why this fails open rather
+  // than closed.
+  if (await isPasswordPwned(newPassword)) {
+    return {
+      error:
+        "This password has appeared in a known data breach and isn't safe to use. Please choose a different password.",
+    };
   }
 
   const supabase = await createClient();
