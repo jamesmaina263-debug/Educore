@@ -8,6 +8,7 @@ import { Section } from "@/components/marketing/section";
 import { Reveal } from "@/components/marketing/reveal";
 import { BreadcrumbJsonLd, HOME_CRUMB } from "@/components/marketing/breadcrumb-json-ld";
 import { ArticleJsonLd } from "@/components/marketing/article-json-ld";
+import { BlogByline } from "@/components/marketing/blog-byline";
 
 const TITLE = "Best School Management System in Kenya (2026 Guide) — EduCore";
 const DESCRIPTION =
@@ -86,6 +87,7 @@ export default function BestSchoolManagementSystemKenyaPost() {
         <h1 className="mt-4 max-w-3xl text-4xl font-semibold tracking-tight text-white sm:text-5xl">
           Best School Management System in Kenya: A 2026 Guide
         </h1>
+        <BlogByline publishedOn="2026-08-30" />
         <p className="mt-5 max-w-2xl text-lg leading-relaxed text-white/70">
           Most Kenyan schools have tried some version of this before — a
           system gets bought, a term of enthusiasm follows, and by mid-year

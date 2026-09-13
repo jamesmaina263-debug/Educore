@@ -15,6 +15,7 @@ import { Section } from "@/components/marketing/section";
 import { Reveal } from "@/components/marketing/reveal";
 import { BreadcrumbJsonLd, HOME_CRUMB } from "@/components/marketing/breadcrumb-json-ld";
 import { ArticleJsonLd } from "@/components/marketing/article-json-ld";
+import { BlogByline } from "@/components/marketing/blog-byline";
 
 const TITLE = "M-Pesa Fee Collection Automation for Kenyan Schools — EduCore";
 const DESCRIPTION =
@@ -120,6 +121,7 @@ export default function MpesaFeeCollectionAutomationKenyaPost() {
         <h1 className="mt-4 max-w-3xl text-4xl font-semibold tracking-tight text-white sm:text-5xl">
           M-Pesa Fee Collection Automation for Kenyan Schools
         </h1>
+        <BlogByline publishedOn="2026-09-04" />
         <p className="mt-5 max-w-2xl text-lg leading-relaxed text-white/70">
           Almost every Kenyan school already collects fees by M-Pesa. The
           part that eats a bursar&apos;s week isn&apos;t the payment itself

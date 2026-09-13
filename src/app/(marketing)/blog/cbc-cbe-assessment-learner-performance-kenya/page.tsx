@@ -17,6 +17,7 @@ import { Section } from "@/components/marketing/section";
 import { Reveal } from "@/components/marketing/reveal";
 import { BreadcrumbJsonLd, HOME_CRUMB } from "@/components/marketing/breadcrumb-json-ld";
 import { ArticleJsonLd } from "@/components/marketing/article-json-ld";
+import { BlogByline } from "@/components/marketing/blog-byline";
 
 const TITLE = "CBC/CBE Assessment & Learner Performance in Kenya — EduCore";
 const DESCRIPTION =
@@ -138,6 +139,7 @@ export default function CbcCbeAssessmentLearnerPerformancePost() {
         <h1 className="mt-4 max-w-3xl text-4xl font-semibold tracking-tight text-white sm:text-5xl">
           CBC, CBE and Learner Performance: A Practical Guide for Kenyan Schools
         </h1>
+        <BlogByline publishedOn="2026-09-03" />
         <p className="mt-5 max-w-2xl text-lg leading-relaxed text-white/70">
           Kenyan education has moved decisively toward competencies, continuous
           assessment, and evidence of what a learner can actually do — not
