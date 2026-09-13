@@ -16,6 +16,7 @@ import { Section } from "@/components/marketing/section";
 import { Reveal } from "@/components/marketing/reveal";
 import { BreadcrumbJsonLd, HOME_CRUMB } from "@/components/marketing/breadcrumb-json-ld";
 import { ArticleJsonLd } from "@/components/marketing/article-json-ld";
+import { BlogByline } from "@/components/marketing/blog-byline";
 
 const TITLE = "Parent Communication: WhatsApp & SMS for Kenyan Schools — EduCore";
 const DESCRIPTION =
@@ -123,6 +124,7 @@ export default function ParentCommunicationWhatsappSmsKenyaPost() {
         <h1 className="mt-4 max-w-3xl text-4xl font-semibold tracking-tight text-white sm:text-5xl">
           Parent Communication for Kenyan Schools: Beyond the WhatsApp Group
         </h1>
+        <BlogByline publishedOn="2026-09-03" />
         <p className="mt-5 max-w-2xl text-lg leading-relaxed text-white/70">
           Almost every Kenyan school already knows WhatsApp is where parents
           are. The hard part isn&apos;t choosing the channel — it&apos;s what
