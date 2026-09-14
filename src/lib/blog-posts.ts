@@ -17,6 +17,13 @@ export type BlogPostSummary = {
 
 export const BLOG_POSTS: BlogPostSummary[] = [
   {
+    slug: "student-performance-appraisal-kenya-schools",
+    title: "Student Performance Appraisal & Merit Lists for Kenyan Schools",
+    description:
+      "Why end-of-term merit lists usually mean a teacher rebuilding a spreadsheet from scratch, and how EduCore computes rankings, growth trends, and a class performance dashboard automatically from the marks already entered.",
+    publishedOn: "2026-09-14",
+  },
+  {
     slug: "best-school-management-system-kenya",
     title: "Best School Management System in Kenya (2026 Guide)",
     description:

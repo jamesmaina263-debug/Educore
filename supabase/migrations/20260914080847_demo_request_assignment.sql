@@ -1,3 +1,5 @@
+-- Auto-reconciled by scripts/reconcile_migration_drift.py: this version was applied directly to production without a matching git commit at the time. Content below is byte-for-byte what's recorded in supabase_migrations.schema_migrations for version 20260914080847 -- reconstructed, not rewritten.
+
 -- Requested directly by the project owner: assign a demo request to a named colleague,
 -- which should (a) set status to 'assigned', and (b) email that colleague the full lead
 -- details, sent from the owner's own address (james.maina@educoreafrica.com, already
