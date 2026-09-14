@@ -1,0 +1,121 @@
+name: Anon-execute drift check
+
+# Follow-up to H6 (PR #291) and its follow-up (PR #292). H6 found 7 SECURITY DEFINER/
+# trigger functions in public that were anon-executable via this project's default
+# privileges rather than any explicit grant. PR #292 tried to close the root cause with
+# ALTER DEFAULT PRIVILEGES -- it applied cleanly and the stored pg_default_acl entry
+# verified correct, but a live smoke test afterward showed new functions in public still
+# come out anon-executable regardless. The actual mechanism was never identified (see
+# that PR's migration file comment for the full trail), so a source-level fix couldn't be
+# verified to work.
+#
+# This checks the one thing that can't lie: production's actual live grants, on the same
+# 15-minute cadence as migration-drift-check.yml and function-drift-check.yml, for the
+# same reason -- bounding the exposure window instead of discovering it weeks later.
+#
+# Scoped to SECURITY DEFINER only -- see scripts/check_anon_execute_drift.py's module
+# comment for why that's the right scope and not "every anon-executable function."
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "supabase/.anon_execute_definer_allowlist"
+      - "scripts/check_anon_execute_drift.py"
+  pull_request:
+    branches: [main]
+    paths:
+      - "supabase/.anon_execute_definer_allowlist"
+      - "scripts/check_anon_execute_drift.py"
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch: {}
+
+jobs:
+  check-drift:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check SUPABASE_DB_URL is set
+        run: |
+          if [ -z "${{ secrets.SUPABASE_DB_URL }}" ]; then
+            echo "SUPABASE_DB_URL repo secret is not set -- same secret migration-drift-check.yml uses. Failing loudly instead of skipping silently."
+            exit 1
+          fi
+
+      - name: Install postgresql-client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+
+      - name: Fetch production's anon-executable SECURITY DEFINER functions in public
+        id: prod
+        run: |
+          RESULT=$(psql "${{ secrets.SUPABASE_DB_URL }}" -Atqc \
+            "select coalesce(json_agg(json_build_object('signature', p.proname || '(' || pg_get_function_identity_arguments(p.oid) || ')')), '[]') from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'public' and p.prosecdef and has_function_privilege('anon', p.oid, 'EXECUTE');")
+          {
+            echo "json<<DEFINER_EOF"
+            echo "$RESULT"
+            echo "DEFINER_EOF"
+          } >> "$GITHUB_ENV"
+
+      - name: Compare against supabase/.anon_execute_definer_allowlist
+        id: compare
+        env:
+          PROD_ANON_DEFINER_JSON: ${{ env.json }}
+        run: |
+          set +e
+          python3 scripts/check_anon_execute_drift.py > /tmp/drift_output.txt 2>&1
+          code=$?
+          cat /tmp/drift_output.txt
+          exit $code
+
+      # Same no-op-by-default posture as migration-drift-check.yml and
+      # function-drift-check.yml's identical step.
+      - name: Notify Slack on failure
+        if: failure()
+        env:
+          WEBHOOK_URL: ${{ secrets.SECURITY_ALERT_WEBHOOK_URL }}
+          RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          if [ -z "$WEBHOOK_URL" ]; then
+            echo "SECURITY_ALERT_WEBHOOK_URL not set -- skipping Slack notification."
+            exit 0
+          fi
+          python3 -c "import json, os; text = ':rotating_light: *Anon-execute drift check failed* -- a SECURITY DEFINER function in public is anon-executable and not allowlisted\n\u2022 *ref*: ' + os.environ['REF_NAME'] + '\n\u2022 *run*: ' + os.environ['RUN_URL']; json.dump({'text': text}, open('/tmp/slack_payload.json', 'w'))"
+          curl -s -X POST -H "Content-Type: application/json" -d @/tmp/slack_payload.json "$WEBHOOK_URL" > /dev/null || true
+
+      # Same "find the open PR for this ref" approach as the other two drift checks.
+      - name: Post drift summary as PR comment on failure
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          {
+            echo "### Anon-execute drift check failed"
+            echo "A SECURITY DEFINER function in \`public\` is anon-executable and not in \`supabase/.anon_execute_definer_allowlist\`. This is the exact pattern H6 (PR #291) fixed -- see that PR and its follow-up (#292) for context."
+            echo '```'
+            cat /tmp/drift_output.txt
+            echo '```'
+          } > /tmp/drift_comment.md
+          PR_NUMBER=$(gh pr list --repo "${{ github.repository }}" --head "${{ github.ref_name }}" --state open --json number --jq '.[0].number // empty')
+          if [ -n "$PR_NUMBER" ]; then
+            gh pr comment "$PR_NUMBER" --body-file /tmp/drift_comment.md --repo "${{ github.repository }}"
+          else
+            echo "No open PR found for ref ${{ github.ref_name }} -- skipping comment post (output is above in the job log)."
+          fi
+
+  # NOTE, deliberately not built: an auto-reconcile job that opens a `revoke execute ...
+  # from anon` PR automatically. Unlike migration-drift-check.yml's auto-reconcile (which
+  # only ever writes back a statement production already ran), the fix here is a REVOKE --
+  # strictly safe to apply (can only remove access, never grant it) and genuinely
+  # automatable in principle. Not doing it in this pass because a newly-anon-executable
+  # SECURITY DEFINER function is exactly the kind of finding that should get a human's eyes
+  # on *why* it happened before the access is silently pulled back -- same posture as
+  # function-drift-check.yml's reasoning for not auto-reconciling edge functions, applied
+  # here for a different reason (worth investigating, not worth risking a silent-fix
+  # habit for a security-relevant surface). Detect and alert loudly; a human or an agent
+  # writes and reviews the actual revoke.
