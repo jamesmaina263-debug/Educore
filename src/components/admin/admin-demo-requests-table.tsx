@@ -17,6 +17,7 @@ import {
   updateDemoRequestStatus,
   setDemoRequestArchived,
   deleteDemoRequest,
+  assignDemoRequest,
 } from "@/app/(admin)/admin/demo-requests/actions";
 
 export type DemoRequestRow = {
@@ -34,21 +35,38 @@ export type DemoRequestRow = {
   utm_medium: string | null;
   utm_campaign: string | null;
   archived_at: string | null;
+  assigned_to: string | null;
+  assigned_at: string | null;
 };
 
-const STATUS_TONE: Record<string, "neutral" | "success" | "warning" | "danger"> = {
+export type TeamMember = {
+  id: string;
+  name: string;
+  email: string;
+};
+
+const STATUS_TONE: Record<string, "neutral" | "success" | "warning" | "danger" | "info"> = {
   new: "warning",
   contacted: "neutral",
+  assigned: "info",
   closed: "success",
 };
 
-const STATUS_OPTIONS = ["new", "contacted", "closed"] as const;
+const STATUS_OPTIONS = ["new", "contacted", "assigned", "closed"] as const;
+
+const UNASSIGNED = "__unassigned__";
 
 function toneFor(status: string) {
   return STATUS_TONE[status] ?? "neutral";
 }
 
-export function AdminDemoRequestsTable({ rows }: { rows: DemoRequestRow[] }) {
+export function AdminDemoRequestsTable({
+  rows,
+  teamMembers,
+}: {
+  rows: DemoRequestRow[];
+  teamMembers: TeamMember[];
+}) {
   const router = useRouter();
   const [expanded, setExpanded] = useState<string | null>(null);
   const [showArchived, setShowArchived] = useState(false);
@@ -56,6 +74,7 @@ export function AdminDemoRequestsTable({ rows }: { rows: DemoRequestRow[] }) {
   const [error, setError] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<DemoRequestRow | null>(null);
 
+  const membersById = useMemo(() => new Map(teamMembers.map((m) => [m.id, m])), [teamMembers]);
   const archivedCount = useMemo(() => rows.filter((r) => r.archived_at).length, [rows]);
   const visibleRows = useMemo(
     () => rows.filter((r) => (showArchived ? true : !r.archived_at)),
@@ -66,6 +85,16 @@ export function AdminDemoRequestsTable({ rows }: { rows: DemoRequestRow[] }) {
     setError(null);
     startTransition(async () => {
       const res = await updateDemoRequestStatus(id, status);
+      if ("error" in res) setError(res.error);
+      else router.refresh();
+    });
+  }
+
+  function handleAssignChange(id: string, value: string) {
+    setError(null);
+    const teamMemberId = value === UNASSIGNED ? null : value;
+    startTransition(async () => {
+      const res = await assignDemoRequest(id, teamMemberId);
       if ("error" in res) setError(res.error);
       else router.refresh();
     });
@@ -129,6 +158,7 @@ export function AdminDemoRequestsTable({ rows }: { rows: DemoRequestRow[] }) {
                 <th>School</th>
                 <th>Role</th>
                 <th>Status</th>
+                <th>Assigned to</th>
                 <th>Source</th>
                 <th className="text-right">Actions</th>
               </tr>
@@ -136,7 +166,7 @@ export function AdminDemoRequestsTable({ rows }: { rows: DemoRequestRow[] }) {
             <tbody>
               {visibleRows.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="text-center text-muted-foreground">
+                  <td colSpan={8} className="text-center text-muted-foreground">
                     {rows.length === 0 ? "No demo requests yet." : "No requests to show."}
                   </td>
                 </tr>
@@ -165,6 +195,27 @@ export function AdminDemoRequestsTable({ rows }: { rows: DemoRequestRow[] }) {
                           {STATUS_OPTIONS.map((option) => (
                             <SelectItem key={option} value={option}>
                               {option}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </td>
+                    <td>
+                      <Select
+                        value={row.assigned_to ?? UNASSIGNED}
+                        disabled={pending}
+                        onValueChange={(value) => handleAssignChange(row.id, value)}
+                      >
+                        <SelectTrigger className="h-7 w-[10rem] text-[0.75rem]">
+                          <SelectValue>
+                            {row.assigned_to ? (membersById.get(row.assigned_to)?.name ?? "Unknown") : "Unassigned"}
+                          </SelectValue>
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value={UNASSIGNED}>Unassigned</SelectItem>
+                          {teamMembers.map((member) => (
+                            <SelectItem key={member.id} value={member.id}>
+                              {member.name}
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -204,7 +255,7 @@ export function AdminDemoRequestsTable({ rows }: { rows: DemoRequestRow[] }) {
                   </tr>
                   {expanded === row.id && (
                     <tr key={`${row.id}-expanded`}>
-                      <td colSpan={7} className="bg-muted/30">
+                      <td colSpan={8} className="bg-muted/30">
                         <div className="grid gap-2 p-4 text-sm sm:grid-cols-2">
                           <p>
                             <span className="text-muted-foreground">Email:</span> {row.email}

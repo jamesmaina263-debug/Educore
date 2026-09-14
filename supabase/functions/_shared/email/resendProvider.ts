@@ -6,7 +6,7 @@ export class ResendProvider implements EmailProvider {
     private fromAddress: string,
   ) {}
 
-  async send(to: string, subject: string, message: string, attachments?: EmailAttachment[]): Promise<void> {
+  async send(to: string, subject: string, message: string, attachments?: EmailAttachment[], from?: string): Promise<void> {
     // Same reasoning as the WhatsApp/M-Pesa providers: send-communication processes a whole
     // batch sequentially, so one hung request here blocks every message behind it.
     let res: Response;
@@ -18,7 +18,7 @@ export class ResendProvider implements EmailProvider {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          from: this.fromAddress,
+          from: from ?? this.fromAddress,
           to: [to],
           subject,
           text: message,

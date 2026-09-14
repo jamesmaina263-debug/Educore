@@ -16,10 +16,16 @@ export default async function AdminDemoRequestsPage() {
   const { data: requests } = await supabase
     .from("marketing_demo_requests")
     .select(
-      "id, created_at, name, school_name, role, email, phone, student_count, message, status, utm_source, utm_medium, utm_campaign, archived_at",
+      "id, created_at, name, school_name, role, email, phone, student_count, message, status, utm_source, utm_medium, utm_campaign, archived_at, assigned_to, assigned_at",
     )
     .order("created_at", { ascending: false })
     .limit(200);
+
+  const { data: teamMembers } = await supabase
+    .from("platform_team_members")
+    .select("id, name, email")
+    .eq("active", true)
+    .order("name");
 
   return (
     <div className="flex flex-col gap-4">
@@ -30,7 +36,10 @@ export default async function AdminDemoRequestsPage() {
           status as you follow up.
         </p>
       </div>
-      <AdminDemoRequestsTable rows={(requests ?? []) as DemoRequestRow[]} />
+      <AdminDemoRequestsTable
+        rows={(requests ?? []) as DemoRequestRow[]}
+        teamMembers={teamMembers ?? []}
+      />
     </div>
   );
 }
