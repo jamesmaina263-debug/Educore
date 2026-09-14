@@ -79,8 +79,13 @@ const ACADEMICS_MODULES: Mod[] = [
     title: "Exams & Grading",
     audience: "Teachers & Academic Heads",
     description:
-      "CATs, exams, and marks entry, graded against numeric or CBC competency-based scales set per school, grade, or class — not forced into one model.",
-    capabilities: ["CAT and exam scheduling", "Marks entry per exam", "Configurable grading scales (numeric or CBC)"],
+      "CATs, exams, and marks entry, graded against numeric or CBC competency-based scales set per school, grade, or class — plus the merit lists, growth tracking, and appraisal insight built from that same data, not run separately.",
+    capabilities: [
+      "CAT and exam scheduling",
+      "Marks entry — numeric or CBC competency scales",
+      "Structured CBC rubrics scored per learner",
+      "Merit lists, growth trends & a class performance dashboard",
+    ],
   },
   {
     icon: NotebookPen,
@@ -96,7 +101,11 @@ const ACADEMICS_MODULES: Mod[] = [
     audience: "Principals",
     description:
       "A dedicated record of teacher performance, kept alongside the academic data it's actually based on, not in a separate offline process.",
-    capabilities: ["Structured performance tracking per teacher"],
+    capabilities: [
+      "Termly and annual reviews",
+      "1–5 competency scoring with an automatically computed overall rating",
+      "Visible only to the reviewer tier and the reviewed teacher — never broadly shared",
+    ],
   },
 ];
 
