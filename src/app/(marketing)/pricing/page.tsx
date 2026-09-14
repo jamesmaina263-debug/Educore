@@ -11,7 +11,7 @@ import { BreadcrumbJsonLd, HOME_CRUMB } from "@/components/marketing/breadcrumb-
 
 const TITLE = "School Management System Pricing Kenya — EduCore";
 const DESCRIPTION =
-  "EduCore's three plans — Starter, Growth, and Enterprise — scale by student count and module coverage. Termly, per-student billing. Talk to us for a school management software quote sized to your school.";
+  "EduCore pricing starts at KES 100 per student, per term, the same flat rate across all three plans — Starter, Growth, and Enterprise — which scale by module coverage, not price.";
 
 export const metadata: Metadata = {
   title: TITLE,
@@ -23,16 +23,22 @@ export const metadata: Metadata = {
 
 // Tier names, student caps, module coverage, and billing cadence below are
 // pulled from the real, active subscription_plans table (already used for
-// live school billing) -- not invented. Exact per-student KES rates are
-// deliberately left off this public page per owner decision; the "Talk to
-// us" price slot in PricingCard is where a real number could go later
-// without a redesign.
+// live school billing) -- not invented. Real pricing (Sep 2026): a flat
+// KES 100 per student, per term, across all three tiers -- tiers differ by
+// module coverage and support, not price. Published with a "starting at"
+// qualifier rather than an absolute figure so the page stays accurate if
+// the rate is revisited later.
+const PRICE_LINE = "From KES 100";
+const PRICE_NOTE = "/ student / term";
+
 export const PLANS = [
   {
     name: "Starter",
     tagline: "For small schools getting started with EduCore.",
     studentCap: "Up to 200 students",
     billingNote: "Termly",
+    priceLine: PRICE_LINE,
+    priceNote: PRICE_NOTE,
     features: [
       "Core student & staff records",
       "Academics",
@@ -45,6 +51,8 @@ export const PLANS = [
     tagline: "For established schools needing the full feature set.",
     studentCap: "Up to 800 students",
     billingNote: "Termly",
+    priceLine: PRICE_LINE,
+    priceNote: PRICE_NOTE,
     features: [
       "Everything in Starter",
       "Payroll",
@@ -61,6 +69,8 @@ export const PLANS = [
     tagline: "For large schools and school groups, including AI features.",
     studentCap: "No student cap",
     billingNote: "Termly",
+    priceLine: PRICE_LINE,
+    priceNote: PRICE_NOTE,
     features: [
       "Everything in Growth",
       "Full platform module set",
@@ -81,9 +91,9 @@ export default function PricingPage() {
           Three plans. Scaled to how many students you actually have.
         </h1>
         <p className="mt-5 max-w-2xl text-lg leading-relaxed text-white/70">
-          EduCore is priced per enrolled student and billed each school term
-          — not a flat platform fee you pay whether you use it or not. A
-          quote sized to your school takes one conversation.
+          Simple pricing, starting at KES 100 per student, per term. Every
+          plan — Starter, Growth, and Enterprise — starts at that same flat
+          rate; they scale by module coverage and support, not price.
         </p>
       </Section>
 
@@ -98,6 +108,8 @@ export default function PricingPage() {
                 tagline={plan.tagline}
                 studentCap={plan.studentCap}
                 billingNote={plan.billingNote}
+                priceLine={plan.priceLine}
+                priceNote={plan.priceNote}
                 features={plan.features}
                 ctaLabel={plan.ctaLabel}
                 ctaHref="/contact"
@@ -105,6 +117,10 @@ export default function PricingPage() {
               />
             ))}
           </div>
+          <p className="mt-6 text-center text-sm text-marketing-navy-900/60">
+            Example: a 150-student school pays from about KES 15,000 per
+            term, regardless of plan.
+          </p>
         </Reveal>
       </Section>
 
@@ -139,11 +155,12 @@ export default function PricingPage() {
             <div>
               <MessageCircleQuestion className="h-5 w-5 text-marketing-gold-400" strokeWidth={1.75} />
               <p className="mt-3 text-sm font-semibold text-white">
-                Your exact quote comes from a conversation
+                We confirm the exact figure together
               </p>
               <p className="mt-2 text-sm leading-relaxed text-white/60">
-                Student count and the modules your school needs both shape
-                the number — we&apos;ll work that out with you directly.
+                The base rate is fixed at KES 100 per student, per term —
+                we&apos;ll confirm your final number and any add-ons in one
+                conversation.
               </p>
             </div>
           </div>
