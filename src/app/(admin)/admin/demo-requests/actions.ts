@@ -34,3 +34,14 @@ export async function deleteDemoRequest(id: string): Promise<ActionResult> {
   revalidatePath("/admin/demo-requests");
   return { success: true };
 }
+
+export async function assignDemoRequest(id: string, teamMemberId: string | null): Promise<ActionResult> {
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("admin_assign_demo_request", {
+    p_id: id,
+    p_team_member_id: teamMemberId,
+  });
+  if (error) return { error: error.message };
+  revalidatePath("/admin/demo-requests");
+  return { success: true };
+}

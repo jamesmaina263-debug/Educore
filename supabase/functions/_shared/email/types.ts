@@ -4,5 +4,5 @@ export interface EmailAttachment {
 }
 
 export interface EmailProvider {
-  send(to: string, subject: string, message: string, attachments?: EmailAttachment[]): Promise<void>;
+  send(to: string, subject: string, message: string, attachments?: EmailAttachment[], from?: string): Promise<void>;
 }

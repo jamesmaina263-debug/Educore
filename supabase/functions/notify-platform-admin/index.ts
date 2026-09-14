@@ -12,6 +12,12 @@
 import { getEmailProvider } from "../_shared/email/index.ts";
 
 const PLATFORM_ADMIN_EMAIL = Deno.env.get("PLATFORM_ADMIN_EMAIL") ?? "admin@educore.co.ke";
+// Used only for the demo-request-assignment notification (kind: demo_request_assigned),
+// so it reads as personally forwarded by the owner rather than a generic system email.
+// Same literal address already hardcoded in src/app/(admin)/admin/company-email/page.tsx
+// as the connected mailbox -- same Resend account/domain as RESEND_FROM_ADDRESS, see the
+// opt-in `from` override comment in _shared/email/index.ts.
+const ASSIGNMENT_FROM_ADDRESS = "james.maina@educoreafrica.com";
 
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
@@ -35,11 +41,45 @@ Deno.serve(async (req) => {
     student_count?: number;
     message?: string;
     demo_request_id?: string;
+    assignee_name?: string;
+    assignee_email?: string;
   };
   try {
     payload = await req.json();
   } catch {
     return json({ error: "Invalid JSON body" }, 400);
+  }
+
+  const leadDetailLines = [
+    `<li><strong>Contact:</strong> ${payload.name ?? "—"}</li>`,
+    `<li><strong>School:</strong> ${payload.school_name ?? "—"}</li>`,
+    `<li><strong>Email:</strong> ${payload.email ?? "—"}</li>`,
+    `<li><strong>Phone:</strong> ${payload.phone ?? "—"}</li>`,
+    payload.student_count ? `<li><strong>Student count:</strong> ${payload.student_count}</li>` : "",
+    payload.message ? `<li><strong>Message:</strong> ${payload.message}</li>` : "",
+  ].filter(Boolean);
+
+  if (payload.kind === "demo_request_assigned") {
+    if (!payload.assignee_email) return json({ error: "Missing assignee_email" }, 400);
+
+    const subject = `Demo request assigned to you: ${payload.school_name ?? payload.name ?? "Unknown school"}`;
+    const lines = [
+      `<p>Hi ${payload.assignee_name ?? ""}, this demo request has been assigned to you.</p>`,
+      `<ul>`,
+      ...leadDetailLines,
+      `</ul>`,
+      `<p><a href="https://www.educoreafrica.com/admin/demo-requests">View in the Platform Admin Console</a></p>`,
+    ].join("\n");
+
+    try {
+      const emailProvider = getEmailProvider();
+      await emailProvider.send(payload.assignee_email, subject, lines, undefined, ASSIGNMENT_FROM_ADDRESS);
+      return json({ success: true });
+    } catch (err) {
+      console.error(err);
+      const message = err instanceof Error ? err.message : String(err);
+      return json({ error: message }, 500);
+    }
   }
 
   if (payload.kind !== "demo_request") {
@@ -50,17 +90,10 @@ Deno.serve(async (req) => {
   const lines = [
     `<p>A new demo request just came in on the EduCore marketing site.</p>`,
     `<ul>`,
-    `<li><strong>Contact:</strong> ${payload.name ?? "—"}</li>`,
-    `<li><strong>School:</strong> ${payload.school_name ?? "—"}</li>`,
-    `<li><strong>Email:</strong> ${payload.email ?? "—"}</li>`,
-    `<li><strong>Phone:</strong> ${payload.phone ?? "—"}</li>`,
-    payload.student_count ? `<li><strong>Student count:</strong> ${payload.student_count}</li>` : "",
-    payload.message ? `<li><strong>Message:</strong> ${payload.message}</li>` : "",
+    ...leadDetailLines,
     `</ul>`,
     `<p><a href="https://www.educoreafrica.com/admin/demo-requests">View in the Platform Admin Console</a></p>`,
-  ]
-    .filter(Boolean)
-    .join("\n");
+  ].join("\n");
 
   try {
     const emailProvider = getEmailProvider();
