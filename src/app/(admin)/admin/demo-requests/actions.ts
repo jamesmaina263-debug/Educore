@@ -15,3 +15,22 @@ export async function updateDemoRequestStatus(id: string, status: string): Promi
   revalidatePath("/admin/demo-requests");
   return { success: true };
 }
+
+export async function setDemoRequestArchived(id: string, archived: boolean): Promise<ActionResult> {
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("admin_archive_demo_request", {
+    p_id: id,
+    p_archived: archived,
+  });
+  if (error) return { error: error.message };
+  revalidatePath("/admin/demo-requests");
+  return { success: true };
+}
+
+export async function deleteDemoRequest(id: string): Promise<ActionResult> {
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("admin_delete_demo_request", { p_id: id });
+  if (error) return { error: error.message };
+  revalidatePath("/admin/demo-requests");
+  return { success: true };
+}
