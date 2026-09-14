@@ -16,7 +16,7 @@ export default async function AdminDemoRequestsPage() {
   const { data: requests } = await supabase
     .from("marketing_demo_requests")
     .select(
-      "id, created_at, name, school_name, role, email, phone, student_count, message, status, utm_source, utm_medium, utm_campaign",
+      "id, created_at, name, school_name, role, email, phone, student_count, message, status, utm_source, utm_medium, utm_campaign, archived_at",
     )
     .order("created_at", { ascending: false })
     .limit(200);
