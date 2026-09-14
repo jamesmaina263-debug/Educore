@@ -1,0 +1,9 @@
+# SECURITY DEFINER functions in the public schema that are deliberately
+# anon-executable (called by unauthenticated users -- e.g. a public marketing
+# site form). One signature per line, exactly as
+# `name || '(' || pg_get_function_identity_arguments(oid) || ')'` renders it.
+#
+# Empty as of 2026-09-13 (H6, PR #291/#292): every SECURITY DEFINER function in
+# public currently requires authentication. If you're adding an entry, explain
+# why anon needs to call it and confirm the function itself validates its
+# inputs strictly -- it runs with the definer's privileges, not the caller's.
