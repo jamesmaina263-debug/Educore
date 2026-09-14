@@ -3,15 +3,19 @@ import { Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { MarketingButton } from "@/components/marketing/button";
 
-// One tier on the Pricing page. Deliberately has no numeric price slot in
-// its own layout right now -- see Phase 7 note in page.tsx for why -- but
-// the shape (name, tagline, cap, feature list, CTA) is the same shape a
-// real price would slot into later, so adding one won't need a redesign.
+// One tier on the Pricing page. Real pricing (Sep 2026): a flat KES 100 per
+// student, per term, the same across all three tiers -- tiers differ by
+// module coverage and support, not price. Published with a "starting at"
+// qualifier (priceLine/priceNote below) rather than an absolute figure, so
+// the page stays accurate if the rate is revisited later without implying
+// it was ever hidden.
 export function PricingCard({
   name,
   tagline,
   studentCap,
   billingNote,
+  priceLine,
+  priceNote,
   features,
   ctaLabel,
   ctaHref,
@@ -22,6 +26,10 @@ export function PricingCard({
   tagline: string;
   studentCap: string;
   billingNote: string;
+  // e.g. "From KES 100" -- the headline price figure for this tier.
+  priceLine: string;
+  // e.g. "/ student / term" -- unit qualifier shown next to priceLine.
+  priceNote: string;
   features: string[];
   ctaLabel: string;
   ctaHref: string;
@@ -46,11 +54,14 @@ export function PricingCard({
       </p>
 
       <div className="mt-6 border-t border-marketing-navy-900/10 pt-6">
-        <p className="font-mono text-xs font-medium uppercase tracking-[0.14em] text-marketing-blue">
-          Talk to us
+        <p className="text-2xl font-semibold text-marketing-navy-950">
+          {priceLine}{" "}
+          <span className="text-sm font-normal text-marketing-navy-900/60">
+            {priceNote}
+          </span>
         </p>
         <p className="mt-1 text-sm text-marketing-navy-900/70">
-          Quoted per school, based on enrolled students
+          Final quote confirmed with you before you sign up
         </p>
       </div>
 

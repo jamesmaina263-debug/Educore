@@ -381,6 +381,8 @@ export default function MarketingHomePage() {
                 tagline={plan.tagline}
                 studentCap={plan.studentCap}
                 billingNote={plan.billingNote}
+                priceLine={plan.priceLine}
+                priceNote={plan.priceNote}
                 features={plan.features}
                 ctaLabel={plan.ctaLabel}
                 ctaHref="/contact"
