@@ -1,12 +1,11 @@
 "use client";
 
-import { useActionState, useEffect, useRef, useState } from "react";
+import { useActionState, useEffect, useState } from "react";
 import { CheckCircle2 } from "lucide-react";
 import { sendGTMEvent } from "@next/third-parties/google";
 
 import { submitDemoRequest, type DemoRequestState } from "@/app/(marketing)/contact/actions";
 import { MarketingButton } from "@/components/marketing/button";
-import { trackEvent } from "@/components/marketing/analytics";
 import { getStoredAttribution } from "@/lib/attribution";
 import { getStoredCtaSource } from "@/lib/cta-source";
 
@@ -39,8 +38,6 @@ export function DemoRequestForm() {
 
   useEffect(() => {
     if (state.status === "success") {
-      trackEvent("Demo Request Submitted");
-
       // Dedicated conversion event: contact_form_context (above) fires on
       // mount, before the visitor has picked a role or submitted anything,
       // so it can't carry contact_form_role or represent an actual
@@ -91,20 +88,6 @@ export function DemoRequestForm() {
     // cause a second push.
   }, [attribution]);
 
-  // Fires once, on the visitor's first real interaction with any field --
-  // lets the funnel spec's "Demo Form Started -> Demo Request Submitted"
-  // stage measure abandonment, not just completions. Ignores the honeypot
-  // and hidden bot-mitigation fields (they're never focused by a real
-  // visitor, and a bot filling them shouldn't count as a real form start).
-  const startedRef = useRef(false);
-  function handleFormFocus(event: React.FocusEvent<HTMLFormElement>) {
-    if (startedRef.current) return;
-    const targetName = (event.target as HTMLElement).getAttribute("name");
-    if (targetName === "company_website") return;
-    startedRef.current = true;
-    trackEvent("Demo Form Started");
-  }
-
   // GTM's "JS - Contact Form Role" variable was reading document.getElementById
   // ("role") live at submit time, racing the Server Action's success-state
   // swap (which unmounts the form, including #role, the instant the request
@@ -140,7 +123,7 @@ export function DemoRequestForm() {
   }
 
   return (
-    <form action={formAction} onFocusCapture={handleFormFocus} className="flex flex-col gap-5">
+    <form action={formAction} className="flex flex-col gap-5">
       {/* Bot mitigation, not a visible/functional field for real users:
           - honeypot ("company_website") is hidden from sighted users via CSS
             and never announced by a screen reader (aria-hidden + tabIndex -1

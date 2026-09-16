@@ -1,10 +1,10 @@
 "use client";
 
 // Lightweight first-touch marketing attribution capture. Deliberately
-// independent of whether Plausible (or any analytics platform) is
-// configured -- this exists purely so a submitted demo-request lead can be
-// traced back to the channel/campaign that brought the visitor in, and
-// works even if NEXT_PUBLIC_PLAUSIBLE_DOMAIN is never set.
+// independent of whether any analytics platform is configured -- this
+// exists purely so a submitted demo-request lead can be traced back to
+// the channel/campaign that brought the visitor in, and works even if
+// GA4 (GOOGLE_SERVICE_ACCOUNT_JSON/GA4_PROPERTY_ID) is never configured.
 //
 // First-touch, not last-touch: once attribution is captured for this
 // browser tab (sessionStorage), a later page visit without UTM params does

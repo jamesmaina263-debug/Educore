@@ -79,7 +79,8 @@ export default function RootLayout({
           admin analytics page's own stated scope ("public marketing
           website" performance only). It now lives in
           src/app/(marketing)/layout.tsx instead, alongside
-          MarketingAnalytics (Plausible) -- see that file's comment. */}
+          MarketingAnalytics (attribution/CTA-source capture that feeds
+          GTM) -- see that file's comment. */}
       <body className="min-h-full flex flex-col">
         {children}
         <ServiceWorkerRegister />
