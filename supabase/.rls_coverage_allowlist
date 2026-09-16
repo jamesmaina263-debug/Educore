@@ -1,0 +1,13 @@
+# Tables intentionally excluded from scripts/check_rls_coverage.py.
+#
+# One table name per line, `#` for comments. Every entry here needs a comment
+# explaining *why* it's safe for a school_id-bearing table to have RLS off,
+# or to have policies that don't reference auth_school_id()/auth_is_super_admin()
+# -- same convention as .anon_execute_definer_allowlist.
+#
+# Empty on purpose as of the 2026-09-14 production-readiness audit: the sample
+# of tables checked by hand during that audit (students, invoices, payments,
+# marks, student_attendance, school_users, supplier_invoices) all reference
+# auth_school_id()/auth_is_super_admin() directly, so the first real run of
+# this check is expected to either come back clean or surface something that
+# genuinely needs a look -- not something to pre-allowlist speculatively.
