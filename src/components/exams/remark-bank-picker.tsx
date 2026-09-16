@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
-import { searchRemarkBank, REMARK_BANK_CATEGORIES, type RemarkBankEntry } from "@/app/(app)/exams/remark-bank-actions";
+import { searchRemarkBank, addRemarkBankEntry, REMARK_BANK_CATEGORIES, type RemarkBankEntry } from "@/app/(app)/exams/remark-bank-actions";
 
 /**
  * Remark bank picker (Performance Appraisal Engine directive, Phase 10 /
@@ -14,14 +14,33 @@ import { searchRemarkBank, REMARK_BANK_CATEGORIES, type RemarkBankEntry } from "
  * append, or replace if empty); this component never writes anything on its
  * own, so "edit before saving" (per the directive) stays entirely with
  * whatever field the teacher is actually filling in.
+ *
+ * currentText (optional) is the caller's own draft text. When present, a
+ * "Save this comment as a reusable remark" affordance appears, wired to
+ * addRemarkBankEntry -- so a teacher who writes a good comment can
+ * contribute it back to the bank instead of the bank only ever growing
+ * through some separate admin flow.
  */
-export function RemarkBankPicker({ onInsert }: { onInsert: (text: string) => void }) {
+export function RemarkBankPicker({
+  onInsert,
+  currentText,
+}: {
+  onInsert: (text: string) => void;
+  currentText?: string;
+}) {
   const [open, setOpen] = useState(false);
   const [category, setCategory] = useState<string>("");
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<RemarkBankEntry[] | null>(null);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [saveCategory, setSaveCategory] = useState<string>(REMARK_BANK_CATEGORIES[0]?.value ?? "");
+  const [saving, startSaving] = useTransition();
+  // Tracks exactly which text was last saved, rather than a plain boolean --
+  // so "Saved ✓" clears itself the moment the teacher edits the comment
+  // again, computed directly during render instead of via an effect.
+  const [savedText, setSavedText] = useState<string | null>(null);
+  const saved = savedText !== null && savedText === currentText?.trim();
 
   function runSearch(nextCategory = category, nextQuery = query) {
     startTransition(async () => {
@@ -38,6 +57,18 @@ export function RemarkBankPicker({ onInsert }: { onInsert: (text: string) => voi
     if (next && results === null) runSearch();
   }
 
+  function handleSave() {
+    const text = currentText?.trim();
+    if (!text) return;
+    startSaving(async () => {
+      const result = await addRemarkBankEntry({ category: saveCategory, body: text });
+      if ("error" in result) return setError(result.error);
+      setError(null);
+      setSavedText(text);
+      if (open) runSearch();
+    });
+  }
+
   return (
     <div>
       <button
@@ -47,6 +78,30 @@ export function RemarkBankPicker({ onInsert }: { onInsert: (text: string) => voi
       >
         {open ? "Hide remark bank" : "Insert from remark bank"}
       </button>
+      {currentText?.trim() && (
+        <div className="mt-1 flex items-center gap-2">
+          <Select value={saveCategory} onValueChange={setSaveCategory}>
+            <SelectTrigger className="h-7 w-40 text-[0.7rem]">
+              <SelectValue placeholder="Category" />
+            </SelectTrigger>
+            <SelectContent>
+              {REMARK_BANK_CATEGORIES.map((c) => (
+                <SelectItem key={c.value} value={c.value}>
+                  {c.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={saving}
+            className="text-xs text-muted-foreground underline decoration-dotted hover:text-foreground disabled:opacity-50"
+          >
+            {saving ? "Saving…" : saved ? "Saved to remark bank ✓" : "Save this comment as a reusable remark"}
+          </button>
+        </div>
+      )}
       {open && (
         <div className="mt-2 flex flex-col gap-2 rounded-md border border-border bg-muted/30 p-2">
           {error && <p className="text-xs text-danger">{error}</p>}
