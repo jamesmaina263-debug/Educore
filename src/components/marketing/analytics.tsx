@@ -1,38 +1,23 @@
-// Safe integration point for conversion/analytics tracking, deliberately a
-// no-op until manually configured -- see the setup note below. Uses
-// Plausible (cookie-less, no personal data collection, no consent banner
-// required) rather than a cookie-based analytics platform, since this site
-// has no cookie-consent UI yet (see /privacy Section "Error monitoring,
-// analytics, and cookies" for the current, accurate statement of what sets
-// cookies -- GA4/GTM does, on marketing pages, as of PR #135; Plausible
-// itself remains cookie-less and inactive, per the MANUAL SETUP note below).
-//
-// MANUAL SETUP REQUIRED (outside this codebase) to activate:
-//   1. Create a Plausible account (or self-hosted instance) for the
-//      production domain.
-//   2. Set NEXT_PUBLIC_PLAUSIBLE_DOMAIN as a Vercel env var to that domain
-//      (e.g. "educoreafrica.com"). Not a secret -- safe to expose client-side.
-//   3. Optionally set NEXT_PUBLIC_PLAUSIBLE_SCRIPT_URL if self-hosting
-//      instead of using Plausible's default script host.
-// Until step 2 is done, this component renders nothing and trackEvent()
-// silently no-ops -- no third-party request is ever made.
+// Captures attribution/CTA-source context for GTM and delegates click
+// tracking to the shared dataLayer -- this used to also load a Plausible
+// script as a second, cookie-less analytics tool, but Plausible was never
+// actually activated (NEXT_PUBLIC_PLAUSIBLE_DOMAIN was never set) and GA4
+// (via GTM-MGV2XHBB) is the live analytics source the admin dashboard
+// reads from -- see src/lib/ga4.ts and src/app/(admin)/admin/analytics.
+// Removed rather than finished: keeping two parallel, mostly-unconfigured
+// tracking paths was more surface area than value. See /privacy Section
+// "Error monitoring, analytics, and cookies" for the current, accurate
+// statement of what sets cookies (GA4/GTM does, on marketing pages only).
 "use client";
 
 import { useEffect } from "react";
-import Script from "next/script";
 import { captureAttribution } from "@/lib/attribution";
 import { captureCtaSource } from "@/lib/cta-source";
 
-const PLAUSIBLE_DOMAIN = process.env.NEXT_PUBLIC_PLAUSIBLE_DOMAIN;
-const PLAUSIBLE_SCRIPT_URL =
-  process.env.NEXT_PUBLIC_PLAUSIBLE_SCRIPT_URL ??
-  "https://plausible.io/js/script.outbound-links.js";
-
 export function MarketingAnalytics() {
-  // Attribution capture runs unconditionally, independent of whether
-  // Plausible is configured -- see src/lib/attribution.ts. This is what
-  // lets a demo-request submission be traced back to a channel/campaign
-  // even before any analytics account exists.
+  // Attribution capture runs on every marketing-page mount. This is what
+  // lets a demo-request submission be traced back to a channel/campaign --
+  // see src/lib/attribution.ts.
   useEffect(() => {
     captureAttribution();
   }, []);
@@ -43,24 +28,28 @@ export function MarketingAnalytics() {
   // individually across every marketing page -- far less edit surface, and
   // automatically covers any new CTA added later without extra wiring.
   // Attributes each click to the page it was clicked from (location) and
-  // the link's own visible text (label), so "nav Book a Demo" and "pricing
-  // Book a Demo" show up distinctly in Plausible's custom-event breakdown
-  // without needing per-CTA prop plumbing.
+  // the link's own visible text (label).
   //
-  // Covers three link shapes, each its own event: /contact (the form),
-  // wa.me (WhatsApp -- also the link the visible phone number itself uses,
-  // there is no separate tel: link), and mailto: (email). No "Phone Click"
-  // event exists separately from "WhatsApp CTA Click" -- confirmed with
-  // the project owner that the phone number stays a WhatsApp-only link.
-  // NOTE: this listener always runs, independent of PLAUSIBLE_DOMAIN.
-  // It used to be gated behind `if (!PLAUSIBLE_DOMAIN) return`, which meant
-  // that on an unconfigured Plausible instance (the actual state of `main`
-  // as of Aug 2026 -- account creation is still an ops-only pending step)
-  // the whole listener no-opped, captureCtaSource() never ran, sessionStorage
-  // never got written, and demo-request-form.tsx's GTM push for
-  // cta_location/cta_label/cta_tier always read back {} -> "". CTA-source
-  // capture for GTM/GA4 and Plausible's own event tracking are separate
-  // concerns; only the latter should depend on Plausible being configured.
+  // Covers three link shapes: /contact (the form), wa.me (WhatsApp -- also
+  // the link the visible phone number itself uses, there is no separate
+  // tel: link), and mailto: (email). No "Phone Click" event exists
+  // separately from the WhatsApp click -- confirmed with the project owner
+  // that the phone number stays a WhatsApp-only link.
+  //
+  // NOTE: captureCtaSource() only writes to sessionStorage (read back by
+  // demo-request-form.tsx and pushed into dataLayer from there as
+  // cta_location/cta_label/cta_tier on contact_form_context/
+  // contact_form_submit) -- it does not itself send a named click event to
+  // GTM. The admin analytics page's "CTA Clicks" and "Demo Form Started"
+  // funnel rows (src/app/(admin)/admin/analytics/page.tsx) read GA4 goal
+  // names ("Contact CTA Click", "WhatsApp CTA Click", "Email CTA Click",
+  // "Demo Form Started") that nothing currently sends -- those were
+  // previously fired only to Plausible's window.plausible(), which never
+  // ran (domain never configured). Removing that call here doesn't change
+  // those funnel rows' behavior; they were already unpopulated. Sending
+  // those as real GTM dataLayer events (matching the contact_form_submit
+  // pattern in demo-request-form.tsx) is a separate, real follow-up if
+  // that funnel-stage data is wanted.
   useEffect(() => {
     function eventNameFor(href: string): string | null {
       if (href.startsWith("/contact")) return "Contact CTA Click";
@@ -79,21 +68,16 @@ export function MarketingAnalytics() {
       const href = anchor.getAttribute("href") ?? "";
       const eventName = eventNameFor(href);
       if (!eventName) return;
-      const label = anchor.textContent?.trim().replace(/\s+/g, " ").slice(0, 60) || eventName;
-      const location = window.location.pathname;
-
-      // Plausible-specific: only fires once an account/domain exists.
-      if (PLAUSIBLE_DOMAIN) {
-        trackEvent(eventName, { location, label });
-      }
 
       // GTM/GA4-specific: stash which page/label (and, for pricing-tier
       // CTAs, which tier -- see data-cta-tier in pricing-card.tsx) sent
       // them to /contact. demo-request-form.tsx reads this back at mount
       // and pushes it into dataLayer, so the eventual contact_sales/
       // generate_lead GA4 event can carry "which CTA drove this" context.
-      // Runs regardless of Plausible config. Never sent to the server.
+      // Never sent to the server.
       if (eventName === "Contact CTA Click") {
+        const label = anchor.textContent?.trim().replace(/\s+/g, " ").slice(0, 60) || eventName;
+        const location = window.location.pathname;
         const tier = anchor instanceof HTMLElement ? anchor.dataset.ctaTier : undefined;
         captureCtaSource({ location, label, tier });
       }
@@ -103,25 +87,5 @@ export function MarketingAnalytics() {
     return () => document.removeEventListener("click", handleClick);
   }, []);
 
-  if (!PLAUSIBLE_DOMAIN) return null;
-
-  return (
-    <Script
-      defer
-      data-domain={PLAUSIBLE_DOMAIN}
-      src={PLAUSIBLE_SCRIPT_URL}
-      strategy="afterInteractive"
-    />
-  );
-}
-
-// Fires a named conversion event (e.g. "Demo Request Submitted"). No-ops
-// safely if analytics isn't configured or the script hasn't loaded yet --
-// callers never need to guard this themselves.
-export function trackEvent(name: string, props?: Record<string, string | number>) {
-  if (typeof window === "undefined") return;
-  const plausible = (window as typeof window & {
-    plausible?: (name: string, opts?: { props?: Record<string, string | number> }) => void;
-  }).plausible;
-  plausible?.(name, props ? { props } : undefined);
+  return null;
 }

@@ -269,7 +269,7 @@ export default async function AdminAnalyticsPage({
               "Create a Google Cloud service account with the Analytics Data API enabled.",
               "Grant that service account Viewer access on the GA4 property (Admin \u2192 Property Access Management).",
               "Set GOOGLE_SERVICE_ACCOUNT_JSON (the full service-account key JSON) and GA4_PROPERTY_ID as environment variables.",
-              'The "Events" breakdown below shows GA4\'s actual top event names \u2014 it only lines up with the CTA/demo-funnel labels above if GTM (GTM-MGV2XHBB) has been configured to fire matching events. Plausible\'s named Goals from analytics.tsx aren\'t automatically sent to GA4.',
+              'The "Events" breakdown below shows GA4\'s actual top event names \u2014 it only lines up with the CTA/demo-funnel labels above if GTM (GTM-MGV2XHBB) has been configured to fire matching events. As of now, nothing sends events named to match the "CTA Clicks"/"Demo Form Started" funnel rows above, so those will show as unavailable until that\u2019s wired up.',
             ]}
           />
         ) : (

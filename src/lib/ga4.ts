@@ -3,7 +3,8 @@
 // @google-analytics/data SDK -- that package pulls in grpc-js/protobufjs,
 // which is heavy for a Vercel serverless function and unnecessary here since
 // the REST surface is small. Mirrors the same "safe no-op until configured"
-// posture as src/lib/plausible.ts: every exported function returns null on
+// posture as before Plausible was removed (see MARKETING_SITE_STATUS.md's
+// 2026-09-16 entry): every exported function returns null on
 // any configuration gap, auth failure, or non-2xx response, never a
 // fabricated zero. Callers render an explicit "not connected" state for a
 // null result -- see src/components/admin/analytics/not-connected-card.tsx.
@@ -12,13 +13,14 @@
 // notes -- flagged deliberately rather than silently faked):
 //   - Exit pages: GA4 has no native exit-page dimension (a UA concept that
 //     wasn't carried over). getExitPages() always returns null.
-//   - Goal/CTA breakdown: the named events Plausible tracked (Contact CTA
-//     Click, WhatsApp CTA Click, etc. -- see src/components/marketing/
-//     analytics.tsx) are Plausible-specific and are NOT guaranteed to reach
-//     GA4. getGoalBreakdown() reports GA4's actual top event names instead
-//     of assuming those five exist; it will only show the demo-funnel-style
-//     names if GTM (GTM-MGV2XHBB, see src/app/(marketing)/layout.tsx) has separately
-//     been configured to fire matching events.
+//   - Goal/CTA breakdown: getGoalBreakdown() reports GA4's actual top event
+//     names rather than assuming any particular five exist. It will only
+//     show demo-funnel-style names ("Demo Form Started", "Contact CTA
+//     Click", etc. -- the funnel labels in src/app/(admin)/admin/analytics/
+//     page.tsx) if GTM (GTM-MGV2XHBB, see src/app/(marketing)/layout.tsx)
+//     has separately been configured to fire matching events. As of
+//     2026-09-16 nothing sends those specific event names -- see
+//     MARKETING_SITE_STATUS.md's entry from that date.
 //   - UTM breakdown drops the "content" (ad variant) column present in the
 //     Plausible version -- its GA4 dimension name wasn't confirmed against
 //     current API docs, and guessing wrong breaks the entire report call
@@ -77,8 +79,7 @@ type Ga4Row = { dimensionValues?: Ga4DimensionValue[]; metricValues?: Ga4MetricV
 type Ga4ReportResponse = { rows?: Ga4Row[]; totals?: Ga4Row[] };
 
 // Every caller goes through here. Returns null on any configuration gap,
-// auth failure, network failure, or non-2xx response -- same contract as
-// Plausible's queryPlausible.
+// auth failure, network failure, or non-2xx response -- never throws.
 async function runReport(body: Record<string, unknown>): Promise<Ga4ReportResponse | null> {
   if (!PROPERTY_ID) return null;
   const token = await getAccessToken();

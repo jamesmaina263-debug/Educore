@@ -216,3 +216,28 @@ Full pass across **everything currently on the branch**, not just the original P
 - James was told directly, before merge, that: (a) two parallel phase-numbering schemes existed across sessions for the same work, and (b) no session had performed actual browser-based visual/UX/responsive QA (this doc's own "Phase 10") because no such tool is available in this sandbox — only HTTP/HTML-level checks (titles, meta, alt text, broken links, status codes, structured data) were possible.
 - James explicitly authorized merging anyway, and closed out the other/parallel continuity thread so this file is the sole record going forward.
 - Not covered by anything above, still open post-merge: buying a production domain (`src/lib/site.ts` + Vercel/DNS), flipping CSP from `Report-Only` to enforcing after a monitoring window, legal review of `/privacy` and `/terms` (both explicitly self-flag as not-yet-reviewed by counsel), setting `NEXT_PUBLIC_PLAUSIBLE_DOMAIN` to activate analytics, and an actual human/visual pass over the live site.
+
+---
+
+## Update (2026-09-16): Plausible removed, GA4 confirmed as the only live analytics source
+
+The Plausible integration mentioned throughout this doc as "no-op until an env var is manually
+set" was never activated (`NEXT_PUBLIC_PLAUSIBLE_DOMAIN` stayed unset). Since GA4 (via
+`GTM-MGV2XHBB`) was already the actual data source behind the admin Analytics & Marketing
+dashboard, and had been since the GA4 integration landed, Plausible was removed rather than
+finished: `src/lib/plausible.ts` deleted, the Plausible script-loading/`trackEvent` code removed
+from `src/components/marketing/analytics.tsx`, its two call sites in `demo-request-form.tsx`
+removed, `NEXT_PUBLIC_PLAUSIBLE_DOMAIN`/`NEXT_PUBLIC_PLAUSIBLE_SCRIPT_URL`/`PLAUSIBLE_API_KEY`/
+`PLAUSIBLE_API_BASE_URL` dropped from `.env.local.example` (replaced with GA4's own two env
+vars), `plausible.io` dropped from the CSP `script-src`/`connect-src` allowlists, and `/privacy`
+corrected — it previously claimed the EduCore *application* (not just the marketing site) used
+Plausible; it doesn't, and never did (Plausible was only ever wired into the marketing layout).
+
+**Real gap surfaced by this, not fixed here:** the admin analytics page's "CTA Clicks" and
+"Demo Form Started" funnel-stage rows read GA4 goal names (`Contact CTA Click`,
+`WhatsApp CTA Click`, `Email CTA Click`, `Demo Form Started`) that nothing currently sends —
+those names were previously fired only to Plausible's `window.plausible()`, which never ran.
+Removing that dead call doesn't regress anything (those funnel rows were already always empty),
+but it means the gap is now uncontested rather than masked by unused code. Wiring those as real
+GTM `dataLayer` events (same pattern as `contact_form_submit`) is a separate, deliberate
+follow-up if that funnel-stage data is wanted — needs a naming/conversion decision, not just code.
