@@ -12,6 +12,7 @@ import {
   updateRubricCriterion,
   deleteRubricCriterion,
   saveRubricLevelDescriptor,
+  deleteRubricLevelDescriptor,
   saveRubricCriterionScore,
   listRubricCriterionScores,
   type RubricDetail,
@@ -93,6 +94,18 @@ export function RubricEditor({
     });
   }
 
+  // Clearing a descriptor's text to blank and blurring used to do nothing --
+  // the empty value was silently discarded, so the old descriptor stayed in
+  // the database with no way to remove it from this panel. Route the
+  // clear-to-blank case through deleteRubricLevelDescriptor instead.
+  function handleClearDescriptor(criterionId: string, bandId: string) {
+    startTransition(async () => {
+      const result = await deleteRubricLevelDescriptor({ criterion_id: criterionId, band_id: bandId });
+      if ("error" in result) return setError(result.error);
+      router.refresh();
+    });
+  }
+
   return (
     <div className="mt-1 rounded-sm border border-dashed border-border p-2">
       <button
@@ -143,7 +156,14 @@ export function RubricEditor({
                                 defaultValue={existing}
                                 rows={2}
                                 className="min-w-[10rem] text-[0.6875rem]"
-                                onBlur={(e) => e.target.value !== existing && handleSaveDescriptor(c.id, b.id, e.target.value)}
+                                onBlur={(e) => {
+                                  if (e.target.value === existing) return;
+                                  if (!e.target.value.trim()) {
+                                    if (existing) handleClearDescriptor(c.id, b.id);
+                                    return;
+                                  }
+                                  handleSaveDescriptor(c.id, b.id, e.target.value);
+                                }}
                               />
                             </td>
                           );
