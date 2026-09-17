@@ -53,6 +53,10 @@ export function ReceiptDocument({ data }: { data: PaymentReceiptData }) {
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
               <tbody>
                 <ReceiptRow label="Amount paid" value={`KES ${data.amount.toLocaleString()}`} />
+                <ReceiptRow
+                  label="Balance"
+                  value={data.balance > 0 ? `KES ${data.balance.toLocaleString()}` : "Fully paid"}
+                />
                 <ReceiptRow label="Method" value={data.method.toUpperCase()} />
                 <ReceiptRow label="Reference" value={data.reference ?? "—"} />
                 <ReceiptRow label="Purpose" value={data.purpose ?? "—"} />

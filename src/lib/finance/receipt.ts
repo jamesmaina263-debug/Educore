@@ -10,6 +10,7 @@ export interface PaymentReceiptData {
   recordedAt: string;
   recordedByName: string | null;
   reversedTotal: number;
+  balance: number;
   student: {
     fullName: string;
     admissionNumber: string | null;
@@ -42,7 +43,7 @@ export async function getPaymentReceipt(
   const { data: receipt } = await supabase
     .from("receipts")
     .select(
-      "receipt_number, issued_at, payments(method, amount, reference, purpose, recorded_at, school_users(full_name)), students(first_name, last_name, other_names, admission_number, streams(name, classes(name))), schools(name, logo_url, primary_color, address, phone)",
+      "receipt_number, issued_at, student_id, payments(method, amount, reference, purpose, recorded_at, school_users(full_name)), students(first_name, last_name, other_names, admission_number, streams(name, classes(name))), schools(name, logo_url, primary_color, address, phone)",
     )
     .eq("payment_id", paymentId)
     .maybeSingle();
@@ -80,6 +81,16 @@ export async function getPaymentReceipt(
   const { data: reversals } = await supabase.from("payment_reversals").select("amount").eq("payment_id", paymentId);
   const reversedTotal = (reversals ?? []).reduce((sum, r) => sum + Number(r.amount), 0);
 
+  // Current balance, same computed-on-read view the Finance > Student Accounts table reads
+  // (v_student_balances, security_invoker=true — RLS-safe for both staff and the parent portal).
+  // This is the student's balance as of now, not a point-in-time snapshot as of this payment.
+  const { data: balanceRow } = await supabase
+    .from("v_student_balances")
+    .select("balance")
+    .eq("student_id", receipt.student_id)
+    .maybeSingle();
+  const balance = Number(balanceRow?.balance ?? 0);
+
   const fullName = [student.first_name, student.other_names, student.last_name].filter(Boolean).join(" ");
   const classLabel = student.streams ? `${student.streams.classes?.name ?? ""} ${student.streams.name}`.trim() : "—";
 
@@ -93,6 +104,7 @@ export async function getPaymentReceipt(
     recordedAt: payment.recorded_at,
     recordedByName: payment.school_users?.full_name ?? null,
     reversedTotal,
+    balance,
     student: {
       fullName,
       admissionNumber: student.admission_number,
