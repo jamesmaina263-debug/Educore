@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
@@ -975,7 +976,16 @@ export function ProcurementPanel({
               <tbody>
                 {purchaseOrders.map((po) => (
                   <tr key={po.id}>
-                    <td className="font-medium">{po.po_number}</td>
+                    <td className="font-medium">
+                      {po.po_number}{" "}
+                      <Link
+                        href={`/inventory/procurement/${po.id}/print`}
+                        target="_blank"
+                        className="text-[0.6875rem] font-normal text-primary underline underline-offset-2"
+                      >
+                        Print
+                      </Link>
+                    </td>
                     <td className="text-muted-foreground">{po.supplier_name}</td>
                     <td className="text-muted-foreground">
                       <div className="flex flex-col gap-1">
