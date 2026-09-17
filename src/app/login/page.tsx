@@ -24,9 +24,12 @@ function LoginForm() {
   const [state, formAction, pending] = useActionState(login, initialState);
   const searchParams = useSearchParams();
   const wasDeactivated = searchParams.get("deactivated") === "1";
+  const wasSuspended = searchParams.get("suspended") === "1";
   const linkError = searchParams.get("error");
   const errorMessage = state.error ?? linkError ?? (wasDeactivated
       ? "Your account has been deactivated. Contact your school admin."
+      : wasSuspended
+      ? "Your school's account is currently suspended. Contact your school admin."
       : null);
 
   return (
