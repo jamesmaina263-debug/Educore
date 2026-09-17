@@ -297,12 +297,19 @@ export function StudentStep({
     };
     // OS-09: base snapshot from applicantSummary as originally loaded (null, matching a fresh
     // DB read, not the ""-fallback used for the controlled form inputs above).
+    // Note: wizard-data.ts coerces a fresh-row NULL to "" before this prop ever reaches the
+    // client (first_name/last_name/date_of_birth/gender are typed as non-nullable `string`),
+    // so `?? null` here never actually fires -- base ends up as "" while a fresh server-side
+    // read of `current` in updateApplicantIdentity legitimately comes back as real `null`.
+    // mergeOfflineFields then sees base ("") !== current (null) and treats it as a conflict,
+    // silently discarding every typed field and re-raising "required" errors from the RPC.
+    // `||` (not `??`) is required here to also normalize "" to null.
     const base: Record<string, unknown> = {
-      first_name: applicantSummary.first_name ?? null,
-      last_name: applicantSummary.last_name ?? null,
-      other_names: applicantSummary.other_names ?? null,
-      date_of_birth: applicantSummary.date_of_birth ?? null,
-      gender: applicantSummary.gender ?? null,
+      first_name: applicantSummary.first_name || null,
+      last_name: applicantSummary.last_name || null,
+      other_names: applicantSummary.other_names || null,
+      date_of_birth: applicantSummary.date_of_birth || null,
+      gender: applicantSummary.gender || null,
     };
     startTransition(async () => {
       if (!online) {
