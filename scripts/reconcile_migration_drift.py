@@ -29,9 +29,22 @@ red with no trail. It's printed as needing a human decision (add to the
 allowlist, or investigate) and the script exits non-zero if any remain,
 even after writing whatever it safely could.
 
-Requires PROD_MIGRATIONS_JSON: a JSON array of {"version", "name", "statements"}
-objects (statements = array of SQL strings, as stored in
-supabase_migrations.schema_migrations.statements).
+Requires PROD_MIGRATIONS_JSON_FILE: a path to a file containing a JSON array
+of {"version", "name", "statements"} objects (statements = array of SQL
+strings, as stored in supabase_migrations.schema_migrations.statements).
+
+This is read from a FILE, not an env var containing the JSON directly, on
+purpose. It used to be PROD_MIGRATIONS_JSON (the JSON itself, passed through
+GITHUB_ENV and then the step's `env:`), which worked fine while the repo was
+small. By 2026-09-17 the full statements text for the whole migration
+history had grown past the OS's argument/environment size limit, so the
+step's subprocess exec failed outright with "Argument list too long" --
+before this script ever ran, so it never even got the chance to fail
+gracefully. Writing the query result straight to a file and passing the
+*path* keeps the workflow step's own env small regardless of how large the
+history gets. PROD_MIGRATIONS_JSON (content, not path) is still accepted as
+a fallback for local/manual runs where a file's overkill, but CI should use
+the file form.
 """
 import json
 import os
@@ -50,15 +63,29 @@ def sanitize_name(name: str) -> str:
 
 
 def main():
-    raw = os.environ.get("PROD_MIGRATIONS_JSON", "").strip()
-    if not raw:
-        print("PROD_MIGRATIONS_JSON is empty -- did the query step fail? Failing loudly.")
-        return 1
+    json_file = os.environ.get("PROD_MIGRATIONS_JSON_FILE", "").strip()
+    if json_file:
+        try:
+            with open(json_file, "r") as f:
+                raw = f.read().strip()
+        except OSError as e:
+            print(f"Could not read PROD_MIGRATIONS_JSON_FILE ({json_file}): {e}")
+            return 1
+        if not raw:
+            print(f"PROD_MIGRATIONS_JSON_FILE ({json_file}) is empty -- did the query step fail? Failing loudly.")
+            return 1
+    else:
+        # Fallback for local/manual runs; CI should always set the _FILE form
+        # instead (see the module docstring for why).
+        raw = os.environ.get("PROD_MIGRATIONS_JSON", "").strip()
+        if not raw:
+            print("Neither PROD_MIGRATIONS_JSON_FILE nor PROD_MIGRATIONS_JSON is set -- did the query step fail? Failing loudly.")
+            return 1
 
     try:
         prod = json.loads(raw)
     except json.JSONDecodeError as e:
-        print(f"Could not parse PROD_MIGRATIONS_JSON as JSON: {e}")
+        print(f"Could not parse prod migrations JSON: {e}")
         return 1
 
     repo_versions = set(load_repo_versions().keys())
