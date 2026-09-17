@@ -43,11 +43,18 @@ export async function loadBoardingContext(date?: string, session?: string): Prom
   if (!user) redirect("/login");
 
   const [{ data: viewer }, { data: canReadAny }, { data: canWriteData }, { data: canWriteAssigned }] = await Promise.all([
-    supabase.from("school_users").select("full_name, roles(display_name), schools(name)").eq("auth_user_id", user.id).maybeSingle(),
+    supabase.from("school_users").select("full_name, roles(display_name), schools(name, boarding_enabled)").eq("auth_user_id", user.id).maybeSingle(),
     supabase.rpc("auth_has_permission", { p_permission_key: "hostel.read_any" }),
     supabase.rpc("auth_has_permission", { p_permission_key: "hostel.write" }),
     supabase.rpc("auth_has_permission", { p_permission_key: "hostel.write_assigned" }),
   ]);
+
+  // Per-school switch (schools.boarding_enabled, default true) -- a school that's had
+  // Boarding turned off gets redirected out of every /boarding/* page here, at the one
+  // place all of them load through, rather than the nav link alone (which someone could
+  // still bypass with a direct URL or an old bookmark).
+  const viewerSchool = viewer?.schools as unknown as { name: string; boarding_enabled: boolean } | null;
+  if (viewerSchool?.boarding_enabled === false) redirect("/dashboard");
   // hostel.write_assigned holders (e.g. a dormitory master without the
   // hostel_warden role) genuinely have DB-level write access to their
   // assigned dormitory via RLS -- without this, the UI hid every write
@@ -300,7 +307,7 @@ export async function loadBoardingContext(date?: string, session?: string): Prom
   };
 
   const roleName = (viewer?.roles as unknown as { display_name: string } | null)?.display_name;
-  const schoolName = (viewer?.schools as unknown as { name: string } | null)?.name;
+  const schoolName = viewerSchool?.name;
 
   return {
     userName: viewer?.full_name ?? user.email ?? "Account",

@@ -97,14 +97,15 @@ export default async function AdmissionsPage() {
   if (!user) redirect("/login");
 
   const [{ data: schoolUser }, { data: canReview }, { data: canWrite }, { data: canReadFinance }] = await Promise.all([
-    supabase.from("school_users").select("full_name, roles(display_name), schools(name, slug)").eq("auth_user_id", user.id).maybeSingle(),
+    supabase.from("school_users").select("full_name, roles(display_name), schools(name, slug, boarding_enabled)").eq("auth_user_id", user.id).maybeSingle(),
     supabase.rpc("auth_has_permission", { p_permission_key: "admissions.read_any" }),
     supabase.rpc("auth_has_permission", { p_permission_key: "admissions.write" }),
     supabase.rpc("auth_has_permission", { p_permission_key: "finance.read" }),
   ]);
 
   const roleName = (schoolUser?.roles as unknown as { display_name: string } | null)?.display_name;
-  const school = schoolUser?.schools as unknown as { name: string; slug: string } | null;
+  const school = schoolUser?.schools as unknown as { name: string; slug: string; boarding_enabled: boolean } | null;
+  const boardingModuleEnabled = school?.boarding_enabled ?? true;
 
   const [{ data: applications }, { data: drafts }, { data: turnaroundRows }, { data: terms }, { data: feeStructures }] = await Promise.all([
     supabase
@@ -223,10 +224,13 @@ export default async function AdmissionsPage() {
                 </thead>
                 <tbody>
                   {drafts.map((d) => {
-                    const total = applicableStepCount({
-                      boarding_preference: d.boarding_preference,
-                      transport_required: d.transport_required,
-                    });
+                    const total = applicableStepCount(
+                      {
+                        boarding_preference: d.boarding_preference,
+                        transport_required: d.transport_required,
+                      },
+                      boardingModuleEnabled,
+                    );
                     const pct = Math.round((((d.wizard_current_step ?? 0) + 1) / total) * 100);
                     const officer = d.school_users as unknown as { full_name: string } | null;
                     const staleness = draftStaleness(d.updated_at);

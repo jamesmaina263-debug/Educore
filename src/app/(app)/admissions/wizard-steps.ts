@@ -21,6 +21,14 @@ export const WIZARD_STEP_DEFS: WizardStepDef[] = [
   { id: "complete", label: "Complete", applicableFor: () => true, note: "Complete Enrollment — validates the checklist and finalizes the Student record, Finance invoice, and admission history in one safe, idempotent commit. Built in Phase 13." },
 ];
 
-export function applicableStepCount(a: { boarding_preference: string | null; transport_required: boolean | null }) {
-  return WIZARD_STEP_DEFS.filter((s) => s.applicableFor(a)).length;
+export function applicableStepCount(
+  a: { boarding_preference: string | null; transport_required: boolean | null },
+  boardingModuleEnabled: boolean = true,
+) {
+  // Mirrors the wizard page's own boardingModuleEnabled && boarding_preference !== "day" check
+  // (see [id]/wizard/page.tsx) so "step X of Y" on the drafts list always agrees with the
+  // wizard itself, even for a draft whose boarding_preference predates the school's flag
+  // being turned off.
+  const effective = boardingModuleEnabled ? a : { ...a, boarding_preference: "day" };
+  return WIZARD_STEP_DEFS.filter((s) => s.applicableFor(effective)).length;
 }

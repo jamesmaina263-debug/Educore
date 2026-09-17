@@ -56,7 +56,7 @@ export default async function AdmissionWizardPage({ params }: { params: Promise<
     { id: "guardian", label: "Guardian", applicable: true, note: "" },
     { id: "documents", label: "Documents", applicable: true, note: "" },
     { id: "academics", label: "Academic Placement", applicable: true, note: "" },
-    { id: "boarding", label: "Boarding", applicable: application.boarding_preference !== "day", note: "" },
+    { id: "boarding", label: "Boarding", applicable: wizardData.boardingModuleEnabled && application.boarding_preference !== "day", note: "" },
     { id: "transport", label: "Transport", applicable: application.transport_required !== false, note: "" },
     { id: "health", label: "Health", applicable: true, note: "" },
     { id: "finance", label: "Finance", applicable: true, note: "" },

@@ -82,12 +82,17 @@ export function AdmissionDetailsStep({
   termsWithFeeStructure,
   canReadFinance,
   initial,
+  boardingModuleEnabled,
 }: {
   applicationId: string;
   academicYears: AcademicYearOption[];
   terms: TermOption[];
   termsWithFeeStructure: string[];
   canReadFinance: boolean;
+  // Per-school switch (schools.boarding_enabled) -- false hides the boarding option below and
+  // locks new/edited applications to "day", so the wizard's Boarding step (gated on
+  // boarding_preference !== "day", see the wizard page) never shows for this school.
+  boardingModuleEnabled: boolean;
   initial: {
     admission_type: string;
     academic_year_id: string | null;
@@ -102,7 +107,11 @@ export function AdmissionDetailsStep({
 }) {
   const router = useRouter();
   const { online, pendingCount, failed, syncing, sync, discard } = useOfflineSync("admissions");
-  const [form, setForm] = useState(initial);
+  // A school with boarding disabled always saves "day" here, even if this particular
+  // application had "boarding" set before the module was turned off for the school.
+  const [form, setForm] = useState(
+    boardingModuleEnabled ? initial : { ...initial, boarding_preference: "day" },
+  );
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
@@ -197,13 +206,22 @@ export function AdmissionDetailsStep({
         </div>
         <div className="space-y-1.5">
           <Label>Day or boarding</Label>
-          <Select value={form.boarding_preference ?? ""} onValueChange={(v) => setForm({ ...form, boarding_preference: v })}>
-            <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="day">Day</SelectItem>
-              <SelectItem value="boarding">Boarding</SelectItem>
-            </SelectContent>
-          </Select>
+          {boardingModuleEnabled ? (
+            <Select value={form.boarding_preference ?? ""} onValueChange={(v) => setForm({ ...form, boarding_preference: v })}>
+              <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="day">Day</SelectItem>
+                <SelectItem value="boarding">Boarding</SelectItem>
+              </SelectContent>
+            </Select>
+          ) : (
+            <Select value="day" disabled>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="day">Day</SelectItem>
+              </SelectContent>
+            </Select>
+          )}
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="previous_school">Previous school</Label>
