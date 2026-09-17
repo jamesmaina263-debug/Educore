@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { portalLogout } from "@/app/portal/actions";
 import { ChildSwitcher } from "@/components/portal/child-switcher";
@@ -408,7 +409,15 @@ export default async function PortalPage({ searchParams }: { searchParams: Promi
                     </span>
                     <span className="font-medium">
                       KES {Number(p.amount).toLocaleString()}
-                      {receiptNumber && <span className="ml-1 font-mono text-xs text-muted-foreground">{receiptNumber}</span>}
+                      {receiptNumber && (
+                        <Link
+                          href={`/portal/receipts/${p.id}`}
+                          target="_blank"
+                          className="ml-1 font-mono text-xs text-muted-foreground underline underline-offset-2 hover:text-primary"
+                        >
+                          {receiptNumber}
+                        </Link>
+                      )}
                     </span>
                   </li>
                 );
