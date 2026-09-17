@@ -70,7 +70,7 @@ export async function updateSession(request: NextRequest): Promise<SessionUpdate
   if (isProtected && user && !isChangePasswordPath(request.nextUrl.pathname)) {
     const { data: schoolUser } = await supabase
       .from("school_users")
-      .select("status, must_change_password")
+      .select("status, must_change_password, schools(status)")
       .eq("auth_user_id", user.id)
       .maybeSingle();
 
@@ -79,6 +79,18 @@ export async function updateSession(request: NextRequest): Promise<SessionUpdate
       const loginUrl = request.nextUrl.clone();
       loginUrl.pathname = "/login";
       loginUrl.searchParams.set("deactivated", "1");
+      return { response: NextResponse.redirect(loginUrl), isAuthenticated: false };
+    }
+
+    // Same school-suspension gate as login/actions.ts, for anyone who was already
+    // mid-session when their school got suspended (login's own check only runs at
+    // sign-in time). 'trial'/'active' pass; 'suspended'/'cancelled' get signed out.
+    const schoolStatus = (schoolUser?.schools as unknown as { status: string } | null)?.status;
+    if (schoolUser && (schoolStatus === "suspended" || schoolStatus === "cancelled")) {
+      await supabase.auth.signOut();
+      const loginUrl = request.nextUrl.clone();
+      loginUrl.pathname = "/login";
+      loginUrl.searchParams.set("suspended", "1");
       return { response: NextResponse.redirect(loginUrl), isAuthenticated: false };
     }
 

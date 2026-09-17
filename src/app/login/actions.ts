@@ -91,7 +91,7 @@ export async function login(
   if (signInData.user) {
     const { data: schoolUser } = await supabase
       .from("school_users")
-      .select("status, must_change_password, temp_password_expires_at")
+      .select("status, must_change_password, temp_password_expires_at, schools(status)")
       .eq("auth_user_id", signInData.user.id)
       .maybeSingle();
 
@@ -106,6 +106,22 @@ export async function login(
       await supabase.auth.signOut();
       return {
         error: "Your account has been deactivated. Contact your school admin.",
+      };
+    }
+
+    // School-suspension gate. The check above only covers an individual staff
+    // member being switched off -- it says nothing about the school itself.
+    // suspendSchool/suspend_subscription (see admin/actions.ts and
+    // billing_lifecycle_functions.sql) write schools.status = 'suspended',
+    // but until now nothing read it back at sign-in, so a suspended school's
+    // staff could keep logging in as normal. 'trial' and 'active' both pass;
+    // only 'suspended' and 'cancelled' (the other two schools_status_check
+    // values) block here.
+    const schoolStatus = (schoolUser?.schools as unknown as { status: string } | null)?.status;
+    if (schoolUser && (schoolStatus === "suspended" || schoolStatus === "cancelled")) {
+      await supabase.auth.signOut();
+      return {
+        error: "Your school's account is currently suspended. Contact your school admin.",
       };
     }
 
