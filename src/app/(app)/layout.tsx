@@ -19,18 +19,21 @@ export default async function AppRouteGroupLayout({ children }: { children: Reac
   } = await supabase.auth.getUser();
 
   let schoolName: string | undefined;
+  let boardingEnabled = true;
   if (user) {
     const { data: schoolUser } = await supabase
       .from("school_users")
-      .select("schools(name)")
+      .select("schools(name, boarding_enabled)")
       .eq("auth_user_id", user.id)
       .maybeSingle();
-    schoolName = (schoolUser?.schools as unknown as { name: string } | null)?.name;
+    const school = schoolUser?.schools as unknown as { name: string; boarding_enabled: boolean } | null;
+    schoolName = school?.name;
+    boardingEnabled = school?.boarding_enabled ?? true;
   }
 
   return (
     <AppShellChromeProvider>
-      <AppShellFrame schoolName={schoolName}>{children}</AppShellFrame>
+      <AppShellFrame schoolName={schoolName} boardingEnabled={boardingEnabled}>{children}</AppShellFrame>
     </AppShellChromeProvider>
   );
 }
