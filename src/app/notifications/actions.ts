@@ -78,10 +78,25 @@ export async function getMyInAppNotifications(): Promise<
   } = await supabase.auth.getUser();
   if (!user) return { error: "Not signed in." };
 
+  const { data: me } = await supabase.from("school_users").select("id").eq("auth_user_id", user.id).maybeSingle();
+  if (!me) return { error: "Could not resolve your account." };
+
+  // Explicit recipient filter, not left to RLS alone: notification_logs_select's
+  // school_id = auth_school_id() AND communication.read clause exists for the
+  // /communication delivery-health tab, where a school admin needs to see every
+  // message sent at their school. Left unfiltered, this bell query inherited
+  // that same broad visibility -- anyone with communication.read (school_owner,
+  // principal, etc.) saw every in-app notification for the whole school, not
+  // just their own. mark_notification_read() only ever updates a row where
+  // recipient_school_user_id = the caller, so clicking someone else's
+  // notification silently updated 0 rows: it looked read for a moment, then
+  // came back unread on the next load -- indefinitely. Scoping the SELECT to
+  // the caller's own recipient_school_user_id is the fix.
   const { data, error } = await supabase
     .from("notification_logs")
     .select("id, body, subject, created_at, read_at, action_url")
     .eq("channel", "in_app")
+    .eq("recipient_school_user_id", me.id)
     .is("dismissed_at", null)
     .order("created_at", { ascending: false })
     .limit(20);
