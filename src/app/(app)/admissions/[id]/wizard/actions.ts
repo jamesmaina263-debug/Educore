@@ -519,7 +519,17 @@ export async function setAcademicPlacement(applicationId: string, streamId: stri
   const { data: stream } = await supabase.from("streams").select("id, capacity").eq("id", streamId).maybeSingle();
   if (!stream) return { error: "Stream not found." };
   if (stream.capacity != null) {
-    const { count } = await supabase.from("students").select("id", { count: "exact", head: true }).eq("current_class_id", streamId);
+    // status = 'active' matters here: leaving a school (set_student_status) ends a student's
+    // transport/boarding assignments but deliberately does not clear current_class_id (see that
+    // migration's own comment), so an unfiltered count only ever grows -- a stream that's
+    // graduated or lost students over time would eventually read as permanently "at capacity"
+    // even when mostly or entirely empty. Same status filter already used for this kind of
+    // per-class headcount elsewhere (see exams/performance-dashboard-actions.ts).
+    const { count } = await supabase
+      .from("students")
+      .select("id", { count: "exact", head: true })
+      .eq("current_class_id", streamId)
+      .eq("status", "active");
     if ((count ?? 0) >= stream.capacity) return { error: "This class/stream is already at capacity." };
   }
 
