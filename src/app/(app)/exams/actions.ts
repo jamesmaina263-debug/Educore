@@ -395,13 +395,24 @@ export async function editMark(input: {
   if (input.raw_score !== undefined) update.raw_score = input.raw_score;
   if (input.band_id !== undefined) update.band_id = input.band_id;
 
-  const { error } = await supabase
+  // .select() required, not cosmetic: marks_update's own-class clauses (marks.approve /
+  // marks.write scoped to the teacher's own class/subject) mean RLS can block this for a
+  // stale page or a student moved to another class -- and a blocked update matches zero
+  // rows rather than raising an error, so without this check the caller would report
+  // success while nothing was actually changed. Every role holding marks.write/marks.approve
+  // also holds exams.read (verified against live role_permissions) -- the same permission
+  // marks_select requires -- so this doesn't false-negative a legitimate edit.
+  const { data: updated, error } = await supabase
     .from("marks")
     .update(update)
     .eq("exam_id", input.exam_id)
     .eq("student_id", input.student_id)
-    .eq("subject_id", input.subject_id);
+    .eq("subject_id", input.subject_id)
+    .select("student_id");
   if (error) return { error: error.message };
+  if (!updated || updated.length === 0) {
+    return { error: "You don't have permission to edit this mark." };
+  }
   revalidatePath("/exams", "layout");
   return { success: true };
 }
@@ -459,14 +470,33 @@ export async function approveMarks(input: { exam_id: string; class_id: string; s
   } = await supabase.auth.getUser();
   const { data: schoolUser } = await supabase.from("school_users").select("id").eq("auth_user_id", user?.id ?? "").maybeSingle();
 
-  const { error } = await supabase
+  // Count submitted marks in scope before the bulk update, so a genuine RLS block (class
+  // isn't this teacher's own -- marks_update's marks.approve clause is scoped to
+  // class_teacher_id) can be told apart from the benign case of there being nothing left to
+  // approve (already all approved, or nothing submitted yet), which should still report
+  // success exactly as before. Uses marks_select, gated on exams.read -- confirmed every
+  // marks.approve/marks.approve_any holder also has exams.read -- so it sees the same rows
+  // the update below would be allowed to touch.
+  const { count: submittedCount } = await supabase
+    .from("marks")
+    .select("id", { count: "exact", head: true })
+    .eq("exam_id", input.exam_id)
+    .eq("class_id", input.class_id)
+    .eq("subject_id", input.subject_id)
+    .eq("status", "submitted");
+
+  const { data: updated, error } = await supabase
     .from("marks")
     .update({ status: "approved", approved_by: schoolUser?.id ?? null, approved_at: new Date().toISOString() })
     .eq("exam_id", input.exam_id)
     .eq("class_id", input.class_id)
     .eq("subject_id", input.subject_id)
-    .eq("status", "submitted");
+    .eq("status", "submitted")
+    .select("student_id");
   if (error) return { error: error.message };
+  if ((!updated || updated.length === 0) && (submittedCount ?? 0) > 0) {
+    return { error: "You don't have permission to approve marks for this class." };
+  }
   revalidatePath("/exams", "layout");
   return { success: true };
 }
