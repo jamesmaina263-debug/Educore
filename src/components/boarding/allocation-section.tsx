@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/status-badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
+import { StudentCombobox } from "@/components/shared/student-combobox";
 
 export interface StudentOption {
   id: string;
@@ -82,18 +83,12 @@ export function AllocationSection({
                 <DialogTitle>Allocate a boarding bed</DialogTitle>
               </DialogHeader>
               <div className="space-y-3">
-                <Select value={studentId} onValueChange={setStudentId}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select student" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {studentOptions.map((s) => (
-                      <SelectItem key={s.id} value={s.id}>
-                        {s.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <StudentCombobox
+                  students={studentOptions}
+                  value={studentId}
+                  onChange={setStudentId}
+                  placeholder="Select student"
+                />
                 <Select value={bedId} onValueChange={setBedId}>
                   <SelectTrigger>
                     <SelectValue placeholder="Select an available bed" />
