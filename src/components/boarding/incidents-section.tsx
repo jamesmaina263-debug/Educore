@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { StatusBadge } from "@/components/status-badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
+import { StudentCombobox } from "@/components/shared/student-combobox";
 import { useOfflineSync } from "@/hooks/use-offline-sync";
 import { queueMutation } from "@/lib/offline/queue";
 import { BoardingOfflineBanner } from "./offline-banner";
@@ -105,18 +106,12 @@ export function IncidentsSection({
               <DialogTitle>Log a boarding incident</DialogTitle>
             </DialogHeader>
             <div className="space-y-3">
-              <Select value={form.student_id} onValueChange={(v) => setForm({ ...form, student_id: v })}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Student" />
-                </SelectTrigger>
-                <SelectContent>
-                  {boardingStudents.map((s) => (
-                    <SelectItem key={s.id} value={s.id}>
-                      {s.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <StudentCombobox
+                students={boardingStudents}
+                value={form.student_id}
+                onChange={(v) => setForm({ ...form, student_id: v })}
+                placeholder="Student"
+              />
               <Select value={form.incident_type} onValueChange={(v) => setForm({ ...form, incident_type: v })}>
                 <SelectTrigger>
                   <SelectValue />

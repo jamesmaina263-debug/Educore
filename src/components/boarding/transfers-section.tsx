@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
+import { StudentCombobox } from "@/components/shared/student-combobox";
 import type { StudentOption, AvailableBedOption } from "./allocation-section";
 
 export interface TransferRow {
@@ -65,18 +66,12 @@ export function TransfersSection({
               <DialogTitle>Transfer a boarding student</DialogTitle>
             </DialogHeader>
             <div className="space-y-3">
-              <Select value={studentId} onValueChange={setStudentId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Currently boarding student" />
-                </SelectTrigger>
-                <SelectContent>
-                  {boardingStudents.map((s) => (
-                    <SelectItem key={s.id} value={s.id}>
-                      {s.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <StudentCombobox
+                students={boardingStudents}
+                value={studentId}
+                onChange={setStudentId}
+                placeholder="Currently boarding student"
+              />
               <Select value={bedId} onValueChange={setBedId}>
                 <SelectTrigger>
                   <SelectValue placeholder="Transfer to bed" />
