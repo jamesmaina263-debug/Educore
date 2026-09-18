@@ -158,8 +158,17 @@ export async function updateCaseAction(formData: FormData): Promise<ActionResult
     update.closed_at = new Date().toISOString();
   }
 
-  const { error } = await supabase.from("discipline_cases").update(update).eq("id", caseId);
+  // .select() required, not cosmetic: discipline_cases_update's own-assignment clause
+  // (assigned_officer = self) can block this for a stale page or a reassigned case, and RLS
+  // blocks an update by matching zero rows, not raising an error -- without this check the
+  // caller would report success while the case stayed untouched. Every discipline.cases.manage
+  // holder also holds discipline.read_any (verified against live role_permissions), which
+  // discipline_cases_select requires, so this doesn't false-negative a legitimate update.
+  const { data: updated, error } = await supabase.from("discipline_cases").update(update).eq("id", caseId).select("id");
   if (error) return { error: error.message };
+  if (!updated || updated.length === 0) {
+    return { error: "You don't have permission to update this case." };
+  }
 
   revalidatePath("/discipline", "layout");
   return { success: true };
@@ -280,16 +289,25 @@ export async function updateWelfareConcernAction(formData: FormData): Promise<Ac
     update.resolved_by = schoolUser.id;
   }
 
-  const { error } = await supabase.from("welfare_concerns").update(update).eq("id", concernId);
+  // .select() required, not cosmetic: welfare_concerns_update's own-record clause
+  // (raised_by = self) can block this for a stale page, and RLS blocks an update by matching
+  // zero rows, not raising an error. welfare_concerns_select requires the same condition
+  // (welfare.read_any or raised_by = self) as this update's USING clause, so this doesn't
+  // false-negative a legitimate update.
+  const { data: updated, error } = await supabase.from("welfare_concerns").update(update).eq("id", concernId).select("id");
   if (error) return { error: error.message };
+  if (!updated || updated.length === 0) {
+    return { error: "You don't have permission to update this concern." };
+  }
 
   revalidatePath("/discipline", "layout");
   return { success: true };
 }
 
 // ---------------------------------------------------------------------------
-// Safeguarding — RLS is the real gate here; these actions will simply fail
-// with a permission error for anyone without safeguarding.write/read.
+// Safeguarding. Update actions below explicitly check the row came back (see comment on
+// updateSafeguardingReportAction) rather than assuming RLS produces a thrown error on
+// denial -- it doesn't, for a USING-clause block; it silently matches zero rows.
 // ---------------------------------------------------------------------------
 export async function createSafeguardingReportAction(formData: FormData): Promise<ActionResult> {
   const { supabase, schoolUser } = await currentSchoolUser();
@@ -356,8 +374,17 @@ export async function updateSafeguardingReportAction(formData: FormData): Promis
     update.resolved_by = schoolUser.id;
   }
 
-  const { error } = await supabase.from("safeguarding_reports").update(update).eq("id", reportId);
+  // .select() required, not cosmetic: safeguarding_reports_update's USING clause requires
+  // safeguarding.read, which -- unlike some of this file's other RLS-blocked-update checks --
+  // isn't hypothetical here: safeguarding_reports_select requires the exact same permission,
+  // so this doesn't false-negative a legitimate update, and verified every safeguarding.read
+  // holder also holds safeguarding.write (the WITH CHECK requirement) against live
+  // role_permissions.
+  const { data: updated, error } = await supabase.from("safeguarding_reports").update(update).eq("id", reportId).select("id");
   if (error) return { error: error.message };
+  if (!updated || updated.length === 0) {
+    return { error: "You don't have permission to update this report." };
+  }
 
   revalidatePath("/discipline", "layout");
   return { success: true };
