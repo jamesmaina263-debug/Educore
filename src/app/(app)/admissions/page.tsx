@@ -7,7 +7,8 @@ import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import { CopyApplicationLink } from "@/components/admissions/copy-application-link";
 import { DeleteApplicationButton } from "@/components/admissions/delete-application-button";
-import { ClaimApplicationButton } from "@/components/admissions/claim-application-button";
+import { ApplicationsTable, type ApplicationRow } from "@/components/admissions/applications-table";
+import { escapePostgrestOrValue } from "@/lib/postgrest-filter";
 import { createWalkInApplication } from "./walk-in-actions";
 import { deleteApplicationPermanentlyAction, claimApplicationAction } from "./actions";
 import { discardDraft } from "./[id]/wizard/actions";
@@ -70,16 +71,14 @@ function draftStaleness(
   return null;
 }
 
-// Includes 'shortlisted' and 'assessment_required' for forward-compatibility with the
-// reserved statuses above — harmless today since no application ever carries either value.
-const ACTIVE_STATUSES = [
-  "submitted",
-  "under_review",
-  "documents_required",
-  "shortlisted",
-  "interview_scheduled",
-  "assessment_required",
-];
+// Statuses where there's no more admissions decision to make — an application here is done
+// (converted to a student, or closed out) rather than sitting in anyone's working queue.
+const TERMINAL_STATUSES = ["enrolled", "rejected", "withdrawn"];
+
+const VIEW_VALUES = ["active", "enrolled", "closed", "all"] as const;
+type ApplicationsView = (typeof VIEW_VALUES)[number];
+
+const APPLICATIONS_PAGE_SIZE = 25;
 
 // Task 17: same pattern as draftStaleness above -- a plain helper (not a direct Date.now() call
 // inside the Server Component body) so eslint's react-hooks/purity rule doesn't flag it, while
@@ -88,7 +87,18 @@ function thirtyDaysAgoIso(nowMs: number = Date.now()): string {
   return new Date(nowMs - 30 * 24 * 60 * 60 * 1000).toISOString();
 }
 
-export default async function AdmissionsPage() {
+export default async function AdmissionsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ page?: string; q?: string; view?: string }>;
+}) {
+  const { page: pageParam, q, view: viewParam } = await searchParams;
+  const page = Math.max(1, Number(pageParam) || 1);
+  const search = (q ?? "").trim();
+  const view: ApplicationsView = (VIEW_VALUES as readonly string[]).includes(viewParam ?? "")
+    ? (viewParam as ApplicationsView)
+    : "active";
+
   const supabase = await createClient();
 
   const {
@@ -107,15 +117,51 @@ export default async function AdmissionsPage() {
   const school = schoolUser?.schools as unknown as { name: string; slug: string; boarding_enabled: boolean } | null;
   const boardingModuleEnabled = school?.boarding_enabled ?? true;
 
-  const [{ data: applications }, { data: drafts }, { data: turnaroundRows }, { data: terms }, { data: feeStructures }] = await Promise.all([
-    supabase
-      .from("applications")
-      .select(
-        "id, application_number, first_name, last_name, status, application_source, term_id, submitted_at, created_at, assigned_officer_id, school_users!applications_assigned_officer_id_fkey(full_name)",
-      )
-      .neq("status", "draft")
-      .order("created_at", { ascending: false })
-      .limit(200),
+  // The working-queue table is now filtered (by `view`) + paginated server-side, so it no
+  // longer silently truncates at a fixed row count as a school's admissions history grows.
+  // Header KPI counts below are deliberately separate, cheap `head: true` counts against the
+  // *whole* applications table (independent of `view`/page/search) so they keep reflecting
+  // true totals no matter which slice of the list is currently on screen.
+  let applicationsQuery = supabase
+    .from("applications")
+    .select(
+      "id, application_number, first_name, last_name, status, application_source, term_id, submitted_at, created_at, assigned_officer_id, school_users!applications_assigned_officer_id_fkey(full_name)",
+      { count: "exact" },
+    )
+    .neq("status", "draft");
+
+  if (view === "active") {
+    applicationsQuery = applicationsQuery.not("status", "in", `(${TERMINAL_STATUSES.join(",")})`);
+  } else if (view === "enrolled") {
+    applicationsQuery = applicationsQuery.eq("status", "enrolled");
+  } else if (view === "closed") {
+    applicationsQuery = applicationsQuery.in("status", ["rejected", "withdrawn"]);
+  }
+  // view === "all" -> no extra status filter.
+
+  if (search) {
+    // Same escaping convention as students/page.tsx's name/admission-number search -- PostgREST's
+    // .or() parses commas/parens itself, so an unescaped search term could otherwise inject
+    // extra filter clauses.
+    const term = escapePostgrestOrValue(`%${search}%`);
+    applicationsQuery = applicationsQuery.or(
+      `first_name.ilike.${term},last_name.ilike.${term},application_number.ilike.${term}`,
+    );
+  }
+
+  const from = (page - 1) * APPLICATIONS_PAGE_SIZE;
+
+  const [
+    { data: applications, count: applicationsCount },
+    { data: drafts },
+    { data: turnaroundRows },
+    { data: terms },
+    { data: feeStructures },
+    { count: awaitingReviewCount },
+    { count: documentsNeededCount },
+    { count: decidedCount },
+  ] = await Promise.all([
+    applicationsQuery.order("created_at", { ascending: false }).range(from, from + APPLICATIONS_PAGE_SIZE - 1),
     supabase
       .from("applications")
       .select(
@@ -136,16 +182,42 @@ export default async function AdmissionsPage() {
     // officer is already inside a given application's wizard.
     supabase.from("terms").select("id, name"),
     supabase.from("fee_structures").select("term_id").eq("is_active", true),
+    supabase.from("applications").select("id", { count: "exact", head: true }).in("status", ["submitted", "under_review"]),
+    supabase.from("applications").select("id", { count: "exact", head: true }).eq("status", "documents_required"),
+    supabase
+      .from("applications")
+      .select("id", { count: "exact", head: true })
+      .in("status", ["accepted", "conditionally_accepted", "admission_pending"]),
   ]);
 
-  const rows = applications ?? [];
   const termNameById = new Map((terms ?? []).map((t) => [t.id, t.name]));
   const termsWithFeeStructure = new Set((feeStructures ?? []).map((f) => f.term_id));
-  const counts = ACTIVE_STATUSES.reduce(
-    (acc, s) => ({ ...acc, [s]: rows.filter((r) => r.status === s).length }),
-    {} as Record<string, number>,
-  );
-  const decidedCount = rows.filter((r) => ["accepted", "conditionally_accepted", "admission_pending"].includes(r.status)).length;
+
+  const applicationsTotal = applicationsCount ?? 0;
+  const isApplicationsFiltered = Boolean(search) || view !== "active";
+
+  const applicationRows: ApplicationRow[] = (applications ?? []).map((a) => {
+    const officer = a.school_users as unknown as { full_name: string } | null;
+    const feeStructureMissing = !!canReadFinance && !!a.term_id && !termsWithFeeStructure.has(a.term_id);
+    const isTerminal = TERMINAL_STATUSES.includes(a.status);
+    return {
+      id: a.id,
+      application_number: a.application_number,
+      full_name: `${a.first_name} ${a.last_name}`,
+      source_label: a.application_source === "walk_in" ? "Walk-in" : "Online",
+      status_tone: STATUS_TONE[a.status] ?? "neutral",
+      status_label: STATUS_LABELS[a.status] ?? a.status,
+      fee_structure_missing: feeStructureMissing,
+      fee_structure_warning_title: feeStructureMissing
+        ? `No fee structure configured for ${termNameById.get(a.term_id!) ?? "this term"} — Finance will not be able to invoice until this is fixed.`
+        : null,
+      officer_name: officer?.full_name ?? null,
+      is_assigned: !!a.assigned_officer_id,
+      submitted_label: a.submitted_at ? new Date(a.submitted_at).toLocaleDateString() : "—",
+      can_claim: !isTerminal,
+      can_delete: a.status === "rejected" || a.status === "withdrawn",
+    };
+  });
 
   const turnaroundSamples = turnaroundRows ?? [];
   const avgTurnaroundDays =
@@ -170,8 +242,8 @@ export default async function AdmissionsPage() {
           <div>
             <h1 className="text-lg font-semibold">Admissions</h1>
             <p className="text-sm text-muted-foreground">
-              {counts.submitted + counts.under_review} awaiting review · {counts.documents_required} need documents ·{" "}
-              {decidedCount} accepted
+              {awaitingReviewCount ?? 0} awaiting review · {documentsNeededCount ?? 0} need documents ·{" "}
+              {decidedCount ?? 0} accepted
             </p>
           </div>
           {canWrite && (
@@ -279,90 +351,22 @@ export default async function AdmissionsPage() {
           </div>
         )}
 
-        <div className="panel">
-          <header className="flex items-center justify-between border-b border-border px-4 py-2.5">
-            <div className="flex items-center gap-3">
-              <h2 className="text-[0.8125rem] font-semibold">Applications</h2>
-              <span className="text-[0.6875rem] text-muted-foreground">
-                {rows.length} total
-              </span>
-            </div>
-          </header>
-          {rows.length === 0 ? (
-            <p className="p-10 text-center text-sm text-muted-foreground">No applications yet.</p>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="table-dense w-full">
-                <thead className="bg-muted/70">
-                  <tr>
-                    <th>Applicant</th>
-                    <th>Reference</th>
-                    <th>Source</th>
-                    <th>Status</th>
-                    <th>Assigned officer</th>
-                    <th>Submitted</th>
-                    <th className="text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {rows.map((a) => {
-                    const officer = a.school_users as unknown as { full_name: string } | null;
-                    const feeStructureMissing = canReadFinance && !!a.term_id && !termsWithFeeStructure.has(a.term_id);
-                    return (
-                      <tr key={a.id}>
-                        <td className="font-medium">
-                          {a.first_name} {a.last_name}
-                        </td>
-                        <td className="font-mono text-[0.75rem] text-muted-foreground">{a.application_number}</td>
-                        <td className="text-muted-foreground">{a.application_source === "walk_in" ? "Walk-in" : "Online"}</td>
-                        <td>
-                          <div className="flex items-center gap-1.5">
-                            <StatusBadge tone={STATUS_TONE[a.status] ?? "neutral"} label={STATUS_LABELS[a.status] ?? a.status} />
-                            {feeStructureMissing && (
-                              <span
-                                className="rounded-full border border-warning/25 bg-warning-subtle px-1.5 py-0.5 text-[0.625rem] font-medium text-warning"
-                                title={`No fee structure configured for ${termNameById.get(a.term_id!) ?? "this term"} — Finance will not be able to invoice until this is fixed.`}
-                              >
-                                No fee structure
-                              </span>
-                            )}
-                          </div>
-                        </td>
-                        <td className="text-muted-foreground">{officer?.full_name ?? "Unassigned"}</td>
-                        <td className="text-muted-foreground">
-                          {a.submitted_at ? new Date(a.submitted_at).toLocaleDateString() : "—"}
-                        </td>
-                        <td className="text-right">
-                          <div className="flex items-center justify-end gap-3">
-                            {canReview && (
-                              <Link href={`/admissions/${a.id}`} className="text-[0.8125rem] font-medium text-primary hover:underline">
-                                Review
-                              </Link>
-                            )}
-                            {canWrite && (
-                              <ClaimApplicationButton
-                                applicationId={a.id}
-                                isAssigned={!!a.assigned_officer_id}
-                                claimAction={claimApplicationAction}
-                              />
-                            )}
-                            {canWrite && (a.status === "rejected" || a.status === "withdrawn") && (
-                              <DeleteApplicationButton
-                                applicationId={a.id}
-                                applicantLabel={`${a.first_name} ${a.last_name}`}
-                                deleteAction={deleteApplicationPermanentlyAction}
-                              />
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
+        <div className="flex items-center justify-between">
+          <h2 className="text-[0.8125rem] font-semibold">Applications</h2>
         </div>
+        {applicationsTotal === 0 && !isApplicationsFiltered ? (
+          <div className="panel border-dashed p-10 text-center text-sm text-muted-foreground">No applications yet.</div>
+        ) : (
+          <ApplicationsTable
+            rows={applicationRows}
+            totalCount={applicationsTotal}
+            pageSize={APPLICATIONS_PAGE_SIZE}
+            canReview={!!canReview}
+            canWrite={!!canWrite}
+            claimAction={claimApplicationAction}
+            deleteAction={deleteApplicationPermanentlyAction}
+          />
+        )}
       </div>
     </AppShell>
   );
