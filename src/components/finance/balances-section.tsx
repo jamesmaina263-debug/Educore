@@ -43,6 +43,9 @@ export function BalancesSection({
 }) {
   const router = useRouter();
   const [query, setQuery] = useState("");
+  const [classFilter, setClassFilter] = useState<string>("all");
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 25;
   const [target, setTarget] = useState<BalanceRow | null>(null);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -70,16 +73,30 @@ export function BalancesSection({
     router.refresh();
   }
 
+  const classOptions = useMemo(() => {
+    const names = new Set(rows.map((r) => r.class_name).filter(Boolean));
+    return Array.from(names).sort((a, b) => a.localeCompare(b));
+  }, [rows]);
+
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return rows;
-    return rows.filter(
-      (r) =>
+    return rows.filter((r) => {
+      if (classFilter !== "all" && r.class_name !== classFilter) return false;
+      if (!q) return true;
+      return (
         r.full_name.toLowerCase().includes(q) ||
         r.admission_number.toLowerCase().includes(q) ||
-        (r.payment_reference ?? "").toLowerCase().includes(q),
-    );
-  }, [rows, query]);
+        (r.payment_reference ?? "").toLowerCase().includes(q)
+      );
+    });
+  }, [rows, query, classFilter]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const currentPage = Math.min(page, totalPages);
+  const paginated = useMemo(
+    () => filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE),
+    [filtered, currentPage],
+  );
 
   async function handleRecord() {
     if (!target) return;
@@ -166,13 +183,37 @@ export function BalancesSection({
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex items-center justify-between gap-3">
-        <Input
-          placeholder="Search by name, admission number, or payment reference…"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          className="max-w-sm"
-        />
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <Input
+            placeholder="Search by name, admission number, or payment reference…"
+            value={query}
+            onChange={(e) => {
+              setQuery(e.target.value);
+              setPage(1);
+            }}
+            className="max-w-sm"
+          />
+          <Select
+            value={classFilter}
+            onValueChange={(v) => {
+              setClassFilter(v);
+              setPage(1);
+            }}
+          >
+            <SelectTrigger className="w-[180px]">
+              <SelectValue placeholder="All classes" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All classes</SelectItem>
+              {classOptions.map((c) => (
+                <SelectItem key={c} value={c}>
+                  {c}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
         {canWrite && (
           <Button variant="secondary" onClick={() => setGenOpen(true)}>
             Generate invoice
@@ -197,7 +238,7 @@ export function BalancesSection({
           </TableRow>
         </TableHeader>
         <TableBody>
-          {filtered.map((r) => (
+          {paginated.map((r) => (
             <TableRow key={r.student_id}>
               <TableCell className="font-medium">
                 {r.full_name}
@@ -225,6 +266,37 @@ export function BalancesSection({
           ))}
         </TableBody>
       </Table>
+      </div>
+
+      <div className="flex items-center justify-between gap-3 text-sm text-muted-foreground">
+        <span>
+          {filtered.length === 0
+            ? "No students match this search/filter."
+            : `Showing ${(currentPage - 1) * PAGE_SIZE + 1}-${Math.min(currentPage * PAGE_SIZE, filtered.length)} of ${filtered.length}`}
+        </span>
+        {totalPages > 1 && (
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={currentPage <= 1}
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+            >
+              Previous
+            </Button>
+            <span>
+              Page {currentPage} of {totalPages}
+            </span>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={currentPage >= totalPages}
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+            >
+              Next
+            </Button>
+          </div>
+        )}
       </div>
 
       <Dialog open={!!target} onOpenChange={(o) => !o && setTarget(null)}>
