@@ -8,13 +8,17 @@ export function ReceiptDocument({ data }: { data: PaymentReceiptData }) {
   const accent = data.school.primaryColor || "#1e40af";
 
   return (
-    <div style={{ display: "flex", justifyContent: "center", padding: "2rem", background: "#f4f4f5", minHeight: "100vh" }}>
+    <div
+      className="receipt-page"
+      style={{ display: "flex", justifyContent: "center", padding: "2rem", background: "#f4f4f5", minHeight: "100vh" }}
+    >
       <div style={{ width: "560px", maxWidth: "100%" }}>
         <div className="print:hidden" style={{ display: "flex", justifyContent: "flex-end", marginBottom: "12px" }}>
           <PrintReceiptButton />
         </div>
 
         <div
+          className="receipt-card"
           style={{
             borderRadius: "12px",
             overflow: "hidden",
@@ -24,7 +28,10 @@ export function ReceiptDocument({ data }: { data: PaymentReceiptData }) {
             boxShadow: "0 1px 3px rgba(0,0,0,0.1)",
           }}
         >
-          <div style={{ background: accent, color: "#fff", padding: "18px 24px", display: "flex", alignItems: "center", gap: "12px" }}>
+          <div
+            className="receipt-header"
+            style={{ background: accent, color: "#fff", padding: "18px 24px", display: "flex", alignItems: "center", gap: "12px" }}
+          >
             {data.school.logoUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img src={data.school.logoUrl} alt="" style={{ width: 40, height: 40, borderRadius: 6, objectFit: "contain", background: "#fff" }} />
@@ -66,7 +73,10 @@ export function ReceiptDocument({ data }: { data: PaymentReceiptData }) {
             </table>
 
             {data.reversedTotal > 0 && (
-              <p style={{ marginTop: "16px", padding: "10px 12px", background: "#fef2f2", color: "#991b1b", borderRadius: "8px", fontSize: 12 }}>
+              <p
+                className="reversal-banner"
+                style={{ marginTop: "16px", padding: "10px 12px", background: "#fef2f2", color: "#991b1b", borderRadius: "8px", fontSize: 12 }}
+              >
                 {data.reversedTotal >= data.amount
                   ? "This payment has since been fully reversed."
                   : `KES ${data.reversedTotal.toLocaleString()} of this payment has since been reversed.`}
@@ -88,8 +98,27 @@ export function ReceiptDocument({ data }: { data: PaymentReceiptData }) {
       </div>
 
       <style>{`
+        @page {
+          size: A5;
+          margin: 10mm;
+        }
         @media print {
           body { background: #fff !important; }
+          .receipt-page {
+            padding: 0 !important;
+            background: #fff !important;
+            min-height: 0 !important;
+            display: block !important;
+          }
+          .receipt-card {
+            width: 100% !important;
+            box-shadow: none !important;
+          }
+          .receipt-header, .reversal-banner {
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+            color-adjust: exact !important;
+          }
         }
       `}</style>
     </div>
