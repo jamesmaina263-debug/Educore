@@ -22,7 +22,7 @@ export function ReceiptDocument({ data }: { data: PaymentReceiptData }) {
           style={{
             borderRadius: "12px",
             overflow: "hidden",
-            border: "2px solid #dc2626",
+            border: "1px solid #e4e4e7",
             background: "#fff",
             fontFamily: "system-ui, sans-serif",
             boxShadow: "0 1px 3px rgba(0,0,0,0.1)",
