@@ -26,12 +26,22 @@ export async function approveComment(input: { exam_id: string; student_id: strin
     .eq("auth_user_id", user?.id ?? "")
     .maybeSingle();
 
-  const { error } = await supabase
+  // .select() required, not cosmetic: report_cards_update's own-class clause (report_cards.approve
+  // scoped to the student's class teacher) means RLS can block this, and a blocked update matches
+  // zero rows rather than raising an error -- without this check the caller would report success
+  // while the comment stayed unapproved. Every report_cards.approve/approve_any holder also holds
+  // exams.read (verified against live role_permissions) -- the same permission report_cards_select
+  // requires -- so this doesn't false-negative a legitimate approval.
+  const { data: updated, error } = await supabase
     .from("report_cards")
     .update({ comment_source: "teacher_approved", approved_by: schoolUser?.id ?? null, approved_at: new Date().toISOString() })
     .eq("exam_id", input.exam_id)
-    .eq("student_id", input.student_id);
+    .eq("student_id", input.student_id)
+    .select("student_id");
   if (error) return { error: error.message };
+  if (!updated || updated.length === 0) {
+    return { error: "You don't have permission to approve this report card, or it hasn't been generated yet." };
+  }
   revalidatePath("/exams/report-cards");
   return { success: true };
 }
@@ -47,7 +57,8 @@ export async function writeComment(input: { exam_id: string; student_id: string;
     .eq("auth_user_id", user?.id ?? "")
     .maybeSingle();
 
-  const { error } = await supabase
+  // Same RLS-silent-no-op guard as approveComment above.
+  const { data: updated, error } = await supabase
     .from("report_cards")
     .update({
       comment: input.comment,
@@ -56,8 +67,12 @@ export async function writeComment(input: { exam_id: string; student_id: string;
       approved_at: new Date().toISOString(),
     })
     .eq("exam_id", input.exam_id)
-    .eq("student_id", input.student_id);
+    .eq("student_id", input.student_id)
+    .select("student_id");
   if (error) return { error: error.message };
+  if (!updated || updated.length === 0) {
+    return { error: "You don't have permission to write this comment, or the report card hasn't been generated yet." };
+  }
   revalidatePath("/exams/report-cards");
   return { success: true };
 }
@@ -164,12 +179,16 @@ export async function draftCommentWithAI(input: {
       return { error: parsed.error };
     }
 
-    const { error } = await supabase
+    const { data: updated, error } = await supabase
       .from("report_cards")
       .update({ comment: parsed.comment, comment_source: "ai", approved_by: null, approved_at: null })
       .eq("exam_id", input.exam_id)
-      .eq("student_id", input.student_id);
+      .eq("student_id", input.student_id)
+      .select("student_id");
     if (error) return { error: error.message };
+    if (!updated || updated.length === 0) {
+      return { error: "Could not save the draft -- this report card hasn't been generated yet." };
+    }
   } catch (e) {
     console.error("draftCommentWithAI: fetch failed", e);
     return { error: e instanceof Error ? e.message : "Could not reach the AI drafting service." };
