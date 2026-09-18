@@ -30,8 +30,8 @@ export function AppShellFrame({
 
   return (
     <CommandPaletteProvider>
-      <div className="flex h-screen overflow-hidden bg-background">
-        <aside className="hidden w-56 shrink-0 flex-col border-r border-sidebar-border bg-sidebar lg:flex">
+      <div className="flex h-screen overflow-hidden bg-background print:block print:h-auto print:overflow-visible">
+        <aside className="hidden w-56 shrink-0 flex-col border-r border-sidebar-border bg-sidebar lg:flex print:hidden">
           <Link
             href="/dashboard"
             onClick={(e) => {
@@ -47,7 +47,7 @@ export function AppShellFrame({
           <SidebarNav boardingEnabled={boardingEnabled} />
         </aside>
 
-        <div className="flex min-w-0 flex-1 flex-col">
+        <div className="flex min-w-0 flex-1 flex-col print:block print:w-full">
           <Topbar
             breadcrumbs={chrome?.breadcrumbs ?? []}
             userName={chrome?.userName ?? ""}
@@ -63,12 +63,12 @@ export function AppShellFrame({
             // palette.tsx forcing hard navigations) was cached from some
             // earlier visit, so it can be behind what's actually on the
             // server now.
-            <div className="flex items-center gap-2 border-b border-warning/40 bg-warning/10 px-4 py-2 text-sm text-warning-foreground">
+            <div className="flex items-center gap-2 border-b border-warning/40 bg-warning/10 px-4 py-2 text-sm text-warning-foreground print:hidden">
               <WifiOff className="size-4 shrink-0" aria-hidden />
               <span>You&apos;re offline. Pages you visited before are available, but may not show the latest data.</span>
             </div>
           )}
-          <main className="flex-1 overflow-y-auto p-6">{children}</main>
+          <main className="flex-1 overflow-y-auto p-6 print:overflow-visible print:p-0">{children}</main>
         </div>
       </div>
       <CommandPalette boardingEnabled={boardingEnabled} />
