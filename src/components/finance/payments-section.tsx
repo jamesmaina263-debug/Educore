@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -98,7 +99,15 @@ export function PaymentsSection({ payments, canReverse }: { payments: PaymentLis
               <TableCell>
                 <Badge variant={statusVariant[p.status]}>{p.status}</Badge>
               </TableCell>
-              <TableCell className="font-mono text-xs">{p.receipt_number ?? "—"}</TableCell>
+              <TableCell className="font-mono text-xs">
+                {p.receipt_number ? (
+                  <Link href={`/finance/payments/${p.id}/receipt`} target="_blank" className="underline underline-offset-2 hover:text-primary">
+                    {p.receipt_number}
+                  </Link>
+                ) : (
+                  "—"
+                )}
+              </TableCell>
               <TableCell>{new Date(p.recorded_at).toLocaleDateString()}</TableCell>
               {canReverse && (
                 <TableCell className="text-right">
