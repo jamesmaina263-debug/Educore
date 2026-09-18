@@ -42,6 +42,27 @@ export function isGa4Configured(): boolean {
 // DateRangeInput this never needs a shorthand like "7d".
 export type GaDateRangeInput = [string, string];
 
+// Retries once on a transient network-level failure -- observed in production runtime errors
+// on /admin/analytics (2026-09-18): `TypeError: fetch failed` wrapping a
+// `SocketError: other side closed` / `UND_ERR_SOCKET` cause, from a handful of concurrent
+// calls to Google's API per page load (this page fires ~16 GA4 requests via Promise.all).
+// A reused keep-alive socket to googleapis.com occasionally gets closed server-side right as
+// a new request tries to reuse it -- a transport-level hiccup, not a bad request or bad
+// credentials, and it self-resolves on a fresh attempt. Only retries `TypeError` (what
+// undici's fetch throws for a network-level failure); an HTTP error response is a resolved
+// promise, not a throw, so it's unaffected and still handled by each caller's own !res.ok
+// check. Never retries a second time -- if it fails again, the existing null-safe fallback
+// (see file header) takes over exactly as before.
+async function withNetworkRetry<T>(fn: () => Promise<T>): Promise<T> {
+  try {
+    return await fn();
+  } catch (err) {
+    if (!(err instanceof TypeError)) throw err;
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    return fn();
+  }
+}
+
 let cachedAuth: GoogleAuth | null = null;
 
 function getAuthClient(): GoogleAuth | null {
@@ -65,7 +86,7 @@ async function getAccessToken(): Promise<string | null> {
   if (!auth) return null;
   try {
     const client = await auth.getClient();
-    const { token } = await client.getAccessToken();
+    const { token } = await withNetworkRetry(() => client.getAccessToken());
     return token ?? null;
   } catch (err) {
     console.error("GA4 auth failed", err);
@@ -86,19 +107,21 @@ async function runReport(body: Record<string, unknown>): Promise<Ga4ReportRespon
   if (!token) return null;
 
   try {
-    const res = await fetch(`${API_BASE_URL}/properties/${PROPERTY_ID}:runReport`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(body),
-      // Same staleness tolerance as Plausible -- an admin dashboard doesn't
-      // need second-by-second numbers, and this avoids hammering GA4's
-      // Data API quota if the page or its date-range tabs are hit
-      // repeatedly.
-      next: { revalidate: 300 },
-    });
+    const res = await withNetworkRetry(() =>
+      fetch(`${API_BASE_URL}/properties/${PROPERTY_ID}:runReport`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(body),
+        // Same staleness tolerance as Plausible -- an admin dashboard doesn't
+        // need second-by-second numbers, and this avoids hammering GA4's
+        // Data API quota if the page or its date-range tabs are hit
+        // repeatedly.
+        next: { revalidate: 300 },
+      }),
+    );
     if (!res.ok) {
       console.error(`GA4 runReport failed: ${res.status} ${await res.text()}`);
       return null;
@@ -365,15 +388,17 @@ export async function getRealtimeVisitorCount(): Promise<number | null> {
   const token = await getAccessToken();
   if (!token) return null;
   try {
-    const res = await fetch(`${API_BASE_URL}/properties/${PROPERTY_ID}:runRealtimeReport`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ metrics: [{ name: "activeUsers" }] }),
-      next: { revalidate: 30 },
-    });
+    const res = await withNetworkRetry(() =>
+      fetch(`${API_BASE_URL}/properties/${PROPERTY_ID}:runRealtimeReport`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ metrics: [{ name: "activeUsers" }] }),
+        next: { revalidate: 30 },
+      }),
+    );
     if (!res.ok) return null;
     const data = (await res.json()) as Ga4ReportResponse;
     const value = data.rows?.[0]?.metricValues?.[0]?.value ?? data.totals?.[0]?.metricValues?.[0]?.value;
