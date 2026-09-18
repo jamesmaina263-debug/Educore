@@ -16,6 +16,7 @@ import { MpesaPushTrigger } from "@/components/finance/mpesa-push-trigger";
 
 export interface InvoiceListRow {
   id: string;
+  invoice_number: string | null;
   student_id: string;
   student_name: string;
   class_name: string;
@@ -27,7 +28,11 @@ export interface InvoiceListRow {
 }
 
 const kes = (n: number) => `KES ${Math.round(n).toLocaleString()}`;
-const invoiceRef = (id: string) => `INV-${id.slice(0, 8).toUpperCase()}`;
+// Invoices created after the invoice_number column was added carry a real, school-prefixed
+// reference (e.g. LBS-INV/26/17/09/001). Older invoices predate that column and have
+// invoice_number = null, so they keep showing the legacy derived placeholder -- this never
+// changes what was already shown for those rows.
+const invoiceRef = (inv: Pick<InvoiceListRow, "id" | "invoice_number">) => inv.invoice_number ?? `INV-${inv.id.slice(0, 8).toUpperCase()}`;
 
 function invoiceTone(status: InvoiceListRow["status"]) {
   return status === "paid" ? "success" : status === "partially_paid" ? "warning" : "neutral";
@@ -96,7 +101,7 @@ export function InvoicesSection({
             title="Invoice Register"
             subtitle={schoolName}
             rows={invoices.map((inv) => ({
-              Reference: invoiceRef(inv.id),
+              Reference: invoiceRef(inv),
               Student: inv.student_name,
               Class: inv.class_name,
               Issued: inv.created_at,
@@ -131,7 +136,7 @@ export function InvoicesSection({
                 const balance = inv.total_amount - inv.paid - inv.discounted;
                 return (
                   <tr key={inv.id}>
-                    <td className="font-mono text-[0.75rem] text-muted-foreground">{invoiceRef(inv.id)}</td>
+                    <td className="font-mono text-[0.75rem] text-muted-foreground">{invoiceRef(inv)}</td>
                     <td className="font-medium">{inv.student_name}</td>
                     <td className="text-muted-foreground">{inv.class_name}</td>
                     <td className="text-muted-foreground">{new Date(inv.created_at).toLocaleDateString("en-GB", { day: "2-digit", month: "short" })}</td>
@@ -153,7 +158,7 @@ export function InvoicesSection({
                           <DropdownMenuTrigger asChild>
                             <button
                               type="button"
-                              aria-label={`Actions for ${invoiceRef(inv.id)}`}
+                              aria-label={`Actions for ${invoiceRef(inv)}`}
                               className="grid size-6 place-items-center rounded text-muted-foreground hover:bg-accent hover:text-accent-foreground"
                             >
                               <MoreHorizontal className="size-4" aria-hidden />
@@ -182,7 +187,7 @@ export function InvoicesSection({
           </DialogHeader>
           <div className="space-y-3">
             <p className="text-sm text-muted-foreground">
-              Applies to {target?.student_name}&apos;s oldest outstanding invoice first, not only {target ? invoiceRef(target.id) : ""}.
+              Applies to {target?.student_name}&apos;s oldest outstanding invoice first, not only {target ? invoiceRef(target) : ""}.
             </p>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div className="space-y-1.5">
