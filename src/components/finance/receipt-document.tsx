@@ -18,7 +18,7 @@ export function ReceiptDocument({ data }: { data: PaymentReceiptData }) {
           style={{
             borderRadius: "12px",
             overflow: "hidden",
-            border: "1px solid #e4e4e7",
+            border: "2px solid #dc2626",
             background: "#fff",
             fontFamily: "system-ui, sans-serif",
             boxShadow: "0 1px 3px rgba(0,0,0,0.1)",
@@ -72,6 +72,10 @@ export function ReceiptDocument({ data }: { data: PaymentReceiptData }) {
                   : `KES ${data.reversedTotal.toLocaleString()} of this payment has since been reversed.`}
               </p>
             )}
+
+            <p style={{ marginTop: "20px", textAlign: "center", fontSize: 12, color: "#52525b", fontStyle: "italic" }}>
+              Thank you for your payment.
+            </p>
           </div>
 
           {(data.school.address || data.school.phone) && (
