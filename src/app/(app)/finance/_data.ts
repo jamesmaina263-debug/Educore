@@ -272,6 +272,8 @@ export async function loadFinanceContext(): Promise<FinanceContext> {
   const studentOptions: StudentOption[] = (activeStudents ?? []).map((s) => ({
     id: s.id,
     name: `${s.first_name} ${s.last_name}`,
+    admission_number: s.admission_number ?? undefined,
+    class_name: classNameByStream.get(s.current_class_id ?? "") ?? undefined,
   }));
 
   const termOptions: TermOption[] = (terms ?? []).map((t) => ({ id: t.id, name: t.name }));
