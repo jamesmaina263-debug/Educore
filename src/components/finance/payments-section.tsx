@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { reversePaymentAction } from "@/app/(app)/finance/actions";
+import { useServerTableParams } from "@/hooks/use-server-table-params";
 
 export interface PaymentListRow {
   id: string;
@@ -32,8 +33,28 @@ const statusVariant: Record<PaymentListRow["status"], "default" | "outline" | "s
   unallocated: "outline",
 };
 
-export function PaymentsSection({ payments, canReverse }: { payments: PaymentListRow[]; canReverse: boolean }) {
+/**
+ * `payments` arrives already paginated/searched server-side (see
+ * getPaymentsPage) -- URL-driven via useServerTableParams, same hook
+ * balances-section.tsx (#335) and the real Students page already use.
+ */
+function PaymentsSectionInner({
+  payments,
+  totalCount,
+  pageSize,
+  canReverse,
+}: {
+  payments: PaymentListRow[];
+  totalCount: number;
+  pageSize: number;
+  canReverse: boolean;
+}) {
   const router = useRouter();
+  const { pageIndex, pageCount, onPageChange, search, onSearchChange } = useServerTableParams({
+    totalCount,
+    pageSize,
+  });
+  const page = pageIndex + 1;
   const [target, setTarget] = useState<PaymentListRow | null>(null);
   const [amount, setAmount] = useState("");
   const [reason, setReason] = useState("");
@@ -53,7 +74,9 @@ export function PaymentsSection({ payments, canReverse }: { payments: PaymentLis
     router.refresh();
   }
 
-  if (payments.length === 0) {
+  const noPaymentsAtAll = totalCount === 0 && !search;
+
+  if (noPaymentsAtAll) {
     return (
       <div className="panel border-dashed p-10 text-center text-sm text-muted-foreground">
         No payments recorded yet.
@@ -63,6 +86,12 @@ export function PaymentsSection({ payments, canReverse }: { payments: PaymentLis
 
   return (
     <div className="flex flex-col gap-4">
+    <Input
+      placeholder="Search by student name, admission number, or reference…"
+      value={search}
+      onChange={(e) => onSearchChange(e.target.value)}
+      className="max-w-sm"
+    />
     <div className="panel overflow-x-auto">
     <Table className="table-dense">
       <TableHeader>
@@ -125,6 +154,32 @@ export function PaymentsSection({ payments, canReverse }: { payments: PaymentLis
     </Table>
     </div>
 
+    <div className="flex items-center justify-between gap-3 text-sm text-muted-foreground">
+      <span>
+        {totalCount === 0
+          ? "No payments match this search."
+          : `Showing ${(page - 1) * pageSize + 1}-${Math.min(page * pageSize, totalCount)} of ${totalCount}`}
+      </span>
+      {pageCount > 1 && (
+        <div className="flex items-center gap-2">
+          <Button size="sm" variant="outline" disabled={page <= 1} onClick={() => onPageChange(pageIndex - 1)}>
+            Previous
+          </Button>
+          <span>
+            Page {page} of {pageCount}
+          </span>
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={page >= pageCount}
+            onClick={() => onPageChange(pageIndex + 1)}
+          >
+            Next
+          </Button>
+        </div>
+      )}
+    </div>
+
     <Dialog open={!!target} onOpenChange={(o) => !o && setTarget(null)}>
       <DialogContent>
         <DialogHeader>
@@ -153,5 +208,20 @@ export function PaymentsSection({ payments, canReverse }: { payments: PaymentLis
       </DialogContent>
     </Dialog>
     </div>
+  );
+}
+
+export function PaymentsSection(props: {
+  payments: PaymentListRow[];
+  totalCount: number;
+  pageSize: number;
+  canReverse: boolean;
+}) {
+  // useSearchParams (inside useServerTableParams) requires a Suspense
+  // boundary -- same pattern balances-section.tsx and StudentsTable use.
+  return (
+    <Suspense fallback={null}>
+      <PaymentsSectionInner {...props} />
+    </Suspense>
   );
 }
