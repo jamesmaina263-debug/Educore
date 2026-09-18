@@ -263,7 +263,12 @@ export async function updateCurriculumSubStrandContent(input: {
     .eq("auth_user_id", user?.id ?? "")
     .maybeSingle();
 
-  const { error } = await supabase
+  // .select() required, not cosmetic: same RLS-silent-no-op risk as the marks-correction
+  // actions above -- unlikely here since curriculum_sub_strands_update only needs
+  // academics.write (no per-class ownership check), but cheap to guard consistently.
+  // Every academics.write holder also holds academics.read (verified against live
+  // role_permissions), which curriculum_sub_strands_select requires.
+  const { data: updated, error } = await supabase
     .from("curriculum_sub_strands")
     .update({
       learning_outcomes: input.learning_outcomes,
@@ -273,8 +278,12 @@ export async function updateCurriculumSubStrandContent(input: {
       content_updated_by: schoolUser?.id ?? null,
       content_updated_at: new Date().toISOString(),
     })
-    .eq("id", input.sub_strand_id);
+    .eq("id", input.sub_strand_id)
+    .select("id");
   if (error) return { error: error.message };
+  if (!updated || updated.length === 0) {
+    return { error: "You don't have permission to edit this sub-strand." };
+  }
   revalidatePath("/exams/marks");
   return { success: true };
 }
@@ -326,13 +335,22 @@ export async function editCompetencyMark(input: {
   edit_reason: string;
 }): Promise<ActionResult> {
   const supabase = await createClient();
-  const { error } = await supabase
+  // Same RLS-silent-no-op guard as editMark: competency_marks_write's own-class clause
+  // (marks.write scoped to auth_user_teaches_subject_in_stream) can block this for a stale
+  // page or a reassigned student. Every marks.write/marks.write_any holder also holds
+  // exams.read (verified against live role_permissions, same as marks_select), which
+  // competency_marks_select requires, so this doesn't false-negative a legitimate edit.
+  const { data: updated, error } = await supabase
     .from("competency_marks")
     .update({ band_id: input.band_id, edit_reason: input.edit_reason })
     .eq("exam_id", input.exam_id)
     .eq("student_id", input.student_id)
-    .eq("sub_strand_id", input.sub_strand_id);
+    .eq("sub_strand_id", input.sub_strand_id)
+    .select("student_id");
   if (error) return { error: error.message };
+  if (!updated || updated.length === 0) {
+    return { error: "You don't have permission to edit this rating." };
+  }
   revalidatePath("/exams/marks");
   return { success: true };
 }
