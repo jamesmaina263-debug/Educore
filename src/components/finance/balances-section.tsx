@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useState } from "react";
+import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -11,6 +11,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { recordPaymentAction, createInvoiceForStudentAction } from "@/app/(app)/finance/actions";
 import { MpesaPushTrigger } from "@/components/finance/mpesa-push-trigger";
+import { StudentCombobox } from "@/components/shared/student-combobox";
+import { useServerTableParams } from "@/hooks/use-server-table-params";
 import type { StudentOption } from "@/components/finance/waivers-section";
 
 export interface BalanceRow {
@@ -28,24 +30,44 @@ export interface BalanceRow {
 
 type Method = "mpesa" | "cash" | "bank" | "cheque" | "card" | "other";
 
-export function BalancesSection({
+/**
+ * Rows arrive already paginated/searched/filtered server-side (see
+ * getStudentBalancesPage) -- URL-driven via useServerTableParams, the same
+ * hook the real Students page (2026-09-03 audit fix) uses, so page/search
+ * survive reload/back-button and search is debounced before it re-queries.
+ * `classId` isn't part of that hook's param set, so it's handled the same
+ * way StudentsTable handles its own `status` filter: its own router.push.
+ */
+function BalancesSectionInner({
   rows,
+  totalCount,
+  pageSize,
+  classId,
+  classOptions,
   canWrite,
   students,
   activeTermId,
   mpesaActive,
 }: {
   rows: BalanceRow[];
+  totalCount: number;
+  pageSize: number;
+  classId: string;
+  classOptions: { id: string; name: string }[];
   canWrite: boolean;
   students: StudentOption[];
   activeTermId: string | null;
   mpesaActive: boolean;
 }) {
   const router = useRouter();
-  const [query, setQuery] = useState("");
-  const [classFilter, setClassFilter] = useState<string>("all");
-  const [page, setPage] = useState(1);
-  const PAGE_SIZE = 25;
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const { pageIndex, pageCount, onPageChange, search, onSearchChange } = useServerTableParams({
+    totalCount,
+    pageSize,
+  });
+  const page = pageIndex + 1;
+
   const [target, setTarget] = useState<BalanceRow | null>(null);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -61,6 +83,16 @@ export function BalancesSection({
   const [genPending, setGenPending] = useState(false);
   const [genError, setGenError] = useState<string | null>(null);
 
+  function handleClassChange(value: string) {
+    const params = new URLSearchParams(searchParams.toString());
+    if (value === "all") params.delete("classId");
+    else params.set("classId", value);
+    // Changing the filter invalidates whatever page you were on.
+    params.delete("page");
+    const qs = params.toString();
+    router.push(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+  }
+
   async function handleGenerateInvoice() {
     if (!genStudentId || !activeTermId) return;
     setGenPending(true);
@@ -72,31 +104,6 @@ export function BalancesSection({
     setGenStudentId("");
     router.refresh();
   }
-
-  const classOptions = useMemo(() => {
-    const names = new Set(rows.map((r) => r.class_name).filter(Boolean));
-    return Array.from(names).sort((a, b) => a.localeCompare(b));
-  }, [rows]);
-
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    return rows.filter((r) => {
-      if (classFilter !== "all" && r.class_name !== classFilter) return false;
-      if (!q) return true;
-      return (
-        r.full_name.toLowerCase().includes(q) ||
-        r.admission_number.toLowerCase().includes(q) ||
-        (r.payment_reference ?? "").toLowerCase().includes(q)
-      );
-    });
-  }, [rows, query, classFilter]);
-
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const currentPage = Math.min(page, totalPages);
-  const paginated = useMemo(
-    () => filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE),
-    [filtered, currentPage],
-  );
 
   async function handleRecord() {
     if (!target) return;
@@ -132,18 +139,12 @@ export function BalancesSection({
           {activeTermId ? (
             <div className="space-y-1.5">
               <Label>Student</Label>
-              <Select value={genStudentId} onValueChange={setGenStudentId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select a student" />
-                </SelectTrigger>
-                <SelectContent>
-                  {students.map((s) => (
-                    <SelectItem key={s.id} value={s.id}>
-                      {s.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <StudentCombobox
+                students={students}
+                value={genStudentId}
+                onChange={setGenStudentId}
+                placeholder="Search by name or admission number..."
+              />
               <p className="text-xs text-muted-foreground">
                 Applies the active term&apos;s fee structure. If this student already has an invoice for the
                 active term, nothing new is created — you&apos;ll just see the existing one.
@@ -163,7 +164,9 @@ export function BalancesSection({
     </Dialog>
   );
 
-  if (rows.length === 0) {
+  const noAccountsAtAll = totalCount === 0 && !search && !classId;
+
+  if (noAccountsAtAll) {
     return (
       <div className="flex flex-col gap-4">
         <div className="panel border-dashed p-10 text-center text-sm text-muted-foreground">
@@ -181,34 +184,27 @@ export function BalancesSection({
     );
   }
 
+  const totalPages = pageCount;
+
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-3">
           <Input
-            placeholder="Search by name, admission number, or payment reference…"
-            value={query}
-            onChange={(e) => {
-              setQuery(e.target.value);
-              setPage(1);
-            }}
+            placeholder="Search by name or admission number…"
+            value={search}
+            onChange={(e) => onSearchChange(e.target.value)}
             className="max-w-sm"
           />
-          <Select
-            value={classFilter}
-            onValueChange={(v) => {
-              setClassFilter(v);
-              setPage(1);
-            }}
-          >
+          <Select value={classId || "all"} onValueChange={handleClassChange}>
             <SelectTrigger className="w-[180px]">
               <SelectValue placeholder="All classes" />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All classes</SelectItem>
               {classOptions.map((c) => (
-                <SelectItem key={c} value={c}>
-                  {c}
+                <SelectItem key={c.id} value={c.id}>
+                  {c.name}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -238,7 +234,7 @@ export function BalancesSection({
           </TableRow>
         </TableHeader>
         <TableBody>
-          {paginated.map((r) => (
+          {rows.map((r) => (
             <TableRow key={r.student_id}>
               <TableCell className="font-medium">
                 {r.full_name}
@@ -270,28 +266,28 @@ export function BalancesSection({
 
       <div className="flex items-center justify-between gap-3 text-sm text-muted-foreground">
         <span>
-          {filtered.length === 0
+          {totalCount === 0
             ? "No students match this search/filter."
-            : `Showing ${(currentPage - 1) * PAGE_SIZE + 1}-${Math.min(currentPage * PAGE_SIZE, filtered.length)} of ${filtered.length}`}
+            : `Showing ${(page - 1) * pageSize + 1}-${Math.min(page * pageSize, totalCount)} of ${totalCount}`}
         </span>
         {totalPages > 1 && (
           <div className="flex items-center gap-2">
             <Button
               size="sm"
               variant="outline"
-              disabled={currentPage <= 1}
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={page <= 1}
+              onClick={() => onPageChange(pageIndex - 1)}
             >
               Previous
             </Button>
             <span>
-              Page {currentPage} of {totalPages}
+              Page {page} of {totalPages}
             </span>
             <Button
               size="sm"
               variant="outline"
-              disabled={currentPage >= totalPages}
-              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              disabled={page >= totalPages}
+              onClick={() => onPageChange(pageIndex + 1)}
             >
               Next
             </Button>
@@ -389,5 +385,25 @@ export function BalancesSection({
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+export function BalancesSection(props: {
+  rows: BalanceRow[];
+  totalCount: number;
+  pageSize: number;
+  classId: string;
+  classOptions: { id: string; name: string }[];
+  canWrite: boolean;
+  students: StudentOption[];
+  activeTermId: string | null;
+  mpesaActive: boolean;
+}) {
+  // useSearchParams (inside useServerTableParams) requires a Suspense
+  // boundary around whatever reads it -- same pattern StudentsTable uses.
+  return (
+    <Suspense fallback={null}>
+      <BalancesSectionInner {...props} />
+    </Suspense>
   );
 }
