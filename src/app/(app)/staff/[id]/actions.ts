@@ -109,11 +109,20 @@ export async function respondToLeaveRequest(
     .eq("auth_user_id", user.id)
     .maybeSingle();
 
-  const { error } = await supabase
+  // .select() on the update is required, not cosmetic: RLS blocks an unauthorized UPDATE
+  // by matching zero rows, not by raising an error -- without this, someone lacking
+  // staff.leave.approve would get {error: null} back and the caller would report success
+  // even though the request was never touched. Same pattern as
+  // attendance/actions.ts's reviewAttendanceCorrection.
+  const { data: updated, error } = await supabase
     .from("leave_requests")
     .update({ status, approved_by: me?.id ?? null, approved_at: new Date().toISOString() })
-    .eq("id", requestId);
+    .eq("id", requestId)
+    .select("id");
   if (error) return { error: error.message };
+  if (!updated || updated.length === 0) {
+    return { error: "You don't have permission to respond to this leave request." };
+  }
 
   // Best-effort: tell the requester the outcome. Never block the approval on this.
   await supabase.rpc("notify_school_user", {
@@ -136,8 +145,19 @@ export async function cancelLeaveRequest(
   staffId: string,
 ): Promise<{ error: string } | { success: true }> {
   const supabase = await createClient();
-  const { error } = await supabase.from("leave_requests").update({ status: "cancelled" }).eq("id", requestId);
+  // Same RLS-silent-no-op guard as respondToLeaveRequest above: leave_requests_update's
+  // own-request clause only allows this while status = 'pending', so a stale page (the
+  // request got approved/rejected/cancelled elsewhere since it was loaded) would otherwise
+  // silently report success while leaving the request untouched.
+  const { data: updated, error } = await supabase
+    .from("leave_requests")
+    .update({ status: "cancelled" })
+    .eq("id", requestId)
+    .select("id");
   if (error) return { error: error.message };
+  if (!updated || updated.length === 0) {
+    return { error: "This request can no longer be cancelled -- it may have already been responded to." };
+  }
   revalidatePath(`/staff/${staffId}`);
   return { success: true as const };
 }

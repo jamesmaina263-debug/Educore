@@ -83,14 +83,18 @@ export function LeaveTab({
 
   async function respond(requestId: string, status: "approved" | "rejected") {
     setPending(true);
-    await respondToLeaveRequest(requestId, staffId, status);
+    setError(null);
+    const result = await respondToLeaveRequest(requestId, staffId, status);
     setPending(false);
+    if ("error" in result) setError(result.error);
   }
 
   async function cancel(requestId: string) {
     setPending(true);
-    await cancelLeaveRequest(requestId, staffId);
+    setError(null);
+    const result = await cancelLeaveRequest(requestId, staffId);
     setPending(false);
+    if ("error" in result) setError(result.error);
   }
 
   const statusTone: Record<LeaveRequestRow["status"], "success" | "danger" | "neutral"> = {
@@ -154,6 +158,8 @@ export function LeaveTab({
         </ul>
       </div>
 
+      {error && <p className="text-sm text-danger">{error}</p>}
+
       {isSelf && staffGender === null && (
         <p className="text-sm text-muted-foreground">
           Your gender isn&apos;t set yet — ask an admin to set it on your Employment tab before you can request
@@ -213,7 +219,6 @@ export function LeaveTab({
             <Label htmlFor="lr">Reason</Label>
             <Input id="lr" value={form.reason} onChange={(e) => setForm({ ...form, reason: e.target.value })} />
           </div>
-          {error && <p className="text-sm text-danger">{error}</p>}
           <div className="flex gap-2">
             <Button size="sm" onClick={submit} disabled={pending}>
               {pending ? "Submitting…" : "Submit request"}
