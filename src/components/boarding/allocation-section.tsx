@@ -1,13 +1,15 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useState } from "react";
+import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { allocateStudentToBed, endAllocation } from "@/app/(app)/boarding/actions";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { StatusBadge } from "@/components/status-badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { StudentCombobox } from "@/components/shared/student-combobox";
+import { useServerTableParams } from "@/hooks/use-server-table-params";
 
 export interface StudentOption {
   id: string;
@@ -30,24 +32,52 @@ export interface AllocationRow {
   status: "active" | "ended";
 }
 
-export function AllocationSection({
+/**
+ * `allocations` arrives already paginated/searched/status-filtered
+ * server-side (see getAllocationsPage) -- URL-driven via
+ * useServerTableParams, same hook balances-section.tsx/payments-section.tsx
+ * use. This does NOT touch loadBoardingContext's own allocations fetch,
+ * which still feeds bed-occupancy/current-roster/dashboard logic unchanged.
+ */
+function AllocationSectionInner({
   allocations,
+  totalCount,
+  pageSize,
+  showHistory,
   studentOptions,
   availableBeds,
   canWrite,
 }: {
   allocations: AllocationRow[];
+  totalCount: number;
+  pageSize: number;
+  showHistory: boolean;
   studentOptions: StudentOption[];
   availableBeds: AvailableBedOption[];
   canWrite: boolean;
 }) {
   const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const { pageIndex, pageCount, onPageChange, search, onSearchChange } = useServerTableParams({
+    totalCount,
+    pageSize,
+  });
+  const page = pageIndex + 1;
   const [open, setOpen] = useState(false);
   const [studentId, setStudentId] = useState("");
   const [bedId, setBedId] = useState("");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [showHistory, setShowHistory] = useState(false);
+
+  function toggleHistory() {
+    const params = new URLSearchParams(searchParams.toString());
+    if (showHistory) params.delete("status");
+    else params.set("status", "all");
+    params.delete("page");
+    const qs = params.toString();
+    router.push(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+  }
 
   async function submit() {
     setPending(true);
@@ -68,11 +98,9 @@ export function AllocationSection({
     router.refresh();
   }
 
-  const visible = allocations.filter((a) => (showHistory ? true : a.status === "active"));
-
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         {canWrite && (
           <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
@@ -111,9 +139,17 @@ export function AllocationSection({
             </DialogContent>
           </Dialog>
         )}
-        <Button size="sm" variant="ghost" onClick={() => setShowHistory(!showHistory)}>
-          {showHistory ? "Hide history" : "Show full history"}
-        </Button>
+        <div className="flex flex-wrap items-center gap-3">
+          <Input
+            placeholder="Search by student name or admission number…"
+            value={search}
+            onChange={(e) => onSearchChange(e.target.value)}
+            className="max-w-xs"
+          />
+          <Button size="sm" variant="ghost" onClick={toggleHistory}>
+            {showHistory ? "Hide history" : "Show full history"}
+          </Button>
+        </div>
       </div>
 
       <div className="overflow-x-auto">
@@ -129,7 +165,7 @@ export function AllocationSection({
             </tr>
           </thead>
           <tbody>
-            {visible.map((a) => (
+            {allocations.map((a) => (
               <tr key={a.id}>
                 <td>{a.student_name}</td>
                 <td>{a.bed_label}</td>
@@ -149,16 +185,60 @@ export function AllocationSection({
                 )}
               </tr>
             ))}
-            {visible.length === 0 && (
+            {allocations.length === 0 && (
               <tr>
                 <td colSpan={6} className="py-6 text-center text-muted-foreground">
-                  No {showHistory ? "" : "active "}allocations.
+                  No {showHistory ? "" : "active "}allocations{search ? " match this search" : ""}.
                 </td>
               </tr>
             )}
           </tbody>
         </table>
       </div>
+
+      <div className="flex items-center justify-between gap-3 text-sm text-muted-foreground">
+        <span>
+          {totalCount === 0
+            ? ""
+            : `Showing ${(page - 1) * pageSize + 1}-${Math.min(page * pageSize, totalCount)} of ${totalCount}`}
+        </span>
+        {pageCount > 1 && (
+          <div className="flex items-center gap-2">
+            <Button size="sm" variant="outline" disabled={page <= 1} onClick={() => onPageChange(pageIndex - 1)}>
+              Previous
+            </Button>
+            <span>
+              Page {page} of {pageCount}
+            </span>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={page >= pageCount}
+              onClick={() => onPageChange(pageIndex + 1)}
+            >
+              Next
+            </Button>
+          </div>
+        )}
+      </div>
     </div>
+  );
+}
+
+export function AllocationSection(props: {
+  allocations: AllocationRow[];
+  totalCount: number;
+  pageSize: number;
+  showHistory: boolean;
+  studentOptions: StudentOption[];
+  availableBeds: AvailableBedOption[];
+  canWrite: boolean;
+}) {
+  // useSearchParams (inside useServerTableParams) requires a Suspense
+  // boundary -- same pattern balances-section.tsx/payments-section.tsx use.
+  return (
+    <Suspense fallback={null}>
+      <AllocationSectionInner {...props} />
+    </Suspense>
   );
 }

@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { StatusBadge } from "@/components/status-badge";
-import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
+import { StudentCombobox } from "@/components/shared/student-combobox";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
 import { useOfflineSync } from "@/hooks/use-offline-sync";
 import { queueMutation } from "@/lib/offline/queue";
@@ -106,18 +106,12 @@ export function ReferralsSection({
               <DialogTitle>Refer a student</DialogTitle>
             </DialogHeader>
             <div className="space-y-3">
-              <Select value={form.student_id} onValueChange={(v) => setForm({ ...form, student_id: v })}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Student" />
-                </SelectTrigger>
-                <SelectContent>
-                  {studentOptions.map((s) => (
-                    <SelectItem key={s.id} value={s.id}>
-                      {s.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <StudentCombobox
+                students={studentOptions}
+                value={form.student_id}
+                onChange={(v) => setForm({ ...form, student_id: v })}
+                placeholder="Student"
+              />
               <Input placeholder="Referred to (hospital/clinic)" value={form.referred_to} onChange={(e) => setForm({ ...form, referred_to: e.target.value })} />
               <Textarea placeholder="Reason" value={form.reason} onChange={(e) => setForm({ ...form, reason: e.target.value })} />
               <Input type="date" value={form.referral_date} onChange={(e) => setForm({ ...form, referral_date: e.target.value })} />

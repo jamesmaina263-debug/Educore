@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
+import { StudentCombobox } from "@/components/shared/student-combobox";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
 import { useOfflineSync } from "@/hooks/use-offline-sync";
 import { queueMutation } from "@/lib/offline/queue";
@@ -138,18 +139,12 @@ export function MedicationSection({
               <DialogTitle>Administer medication</DialogTitle>
             </DialogHeader>
             <div className="space-y-3">
-              <Select value={form.student_id} onValueChange={(v) => setForm({ ...form, student_id: v })}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Student" />
-                </SelectTrigger>
-                <SelectContent>
-                  {studentOptions.map((s) => (
-                    <SelectItem key={s.id} value={s.id}>
-                      {s.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <StudentCombobox
+                students={studentOptions}
+                value={form.student_id}
+                onChange={(v) => setForm({ ...form, student_id: v })}
+                placeholder="Student"
+              />
               <Select
                 value={form.inventory_item_id}
                 onValueChange={(v) => {

@@ -1,0 +1,58 @@
+# Scheduled cleanup of old, non-production EduCore Vercel deployments.
+#
+# WHERE THIS FILE GOES: .github/workflows/cleanup-vercel-deployments.yml
+# in the Educore repo (github.com/jamesmaina263-debug/Educore).
+#
+# SETUP (one-time):
+#  1. Create a Vercel token at https://vercel.com/account/tokens
+#     scoped to the "jamesmaina263-debug's projects" team.
+#     (Use a separate token from any you use for manual cleanup runs --
+#     this one stays in place long-term, so it should NOT be rotated
+#     the same way as a one-off token.)
+#  2. In the Educore repo: Settings > Secrets and variables > Actions
+#     > New repository secret
+#       Name:  VERCEL_CLEANUP_TOKEN
+#       Value: (the token from step 1)
+#  3. Commit this file at the path above and push to main.
+#  4. Also commit cleanup-vercel-deployments.mjs at the repo root
+#     (or update the `node` command below to match wherever you put it).
+#
+# WHAT IT DOES: every Sunday at 02:00 UTC, runs the same cleanup script
+# used manually earlier, with --execute. It deletes old, non-production
+# deployments (keeping production, rollback candidates, and anything
+# under 14 days old) so Functions/Deployment Storage doesn't creep back
+# up between manual checks. If Vercel's delete-rate-limit (429) is hit
+# partway through, this just picks up the rest next Sunday -- no
+# manual intervention needed.
+#
+# You can also trigger it manually anytime from the Actions tab
+# (the workflow_dispatch trigger below).
+
+name: Cleanup old Vercel deployments
+
+on:
+  schedule:
+    - cron: '0 2 * * 0'   # Sundays at 02:00 UTC
+  workflow_dispatch: {}    # allows manual "Run workflow" button in the Actions tab
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Run cleanup (dry run first, for the logs)
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_CLEANUP_TOKEN }}
+        run: node cleanup-vercel-deployments.mjs
+
+      - name: Run cleanup (execute)
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_CLEANUP_TOKEN }}
+        run: node cleanup-vercel-deployments.mjs --execute
