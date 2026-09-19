@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { StatusBadge } from "@/components/status-badge";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
+import { StudentCombobox } from "@/components/shared/student-combobox";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
 import { useOfflineSync } from "@/hooks/use-offline-sync";
 import { queueMutation } from "@/lib/offline/queue";
@@ -101,18 +102,12 @@ export function EmergenciesSection({
               <DialogTitle>Log a medical emergency</DialogTitle>
             </DialogHeader>
             <div className="space-y-3">
-              <Select value={form.student_id} onValueChange={(v) => setForm({ ...form, student_id: v })}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Student" />
-                </SelectTrigger>
-                <SelectContent>
-                  {studentOptions.map((s) => (
-                    <SelectItem key={s.id} value={s.id}>
-                      {s.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <StudentCombobox
+                students={studentOptions}
+                value={form.student_id}
+                onChange={(v) => setForm({ ...form, student_id: v })}
+                placeholder="Student"
+              />
               <Select value={form.severity} onValueChange={(v: EmergencyRow["severity"]) => setForm({ ...form, severity: v })}>
                 <SelectTrigger>
                   <SelectValue />
