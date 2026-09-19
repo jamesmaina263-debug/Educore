@@ -49,7 +49,11 @@ async function checkOutStudentMutation(payload: {
   outcome: "returned_to_class" | "sent_home" | "referred" | "collected_by_guardian";
   notes?: string;
 }): Promise<MutationResult> {
-  return checkOutStudent(payload.visitId, payload.outcome, payload.notes);
+  const result = await checkOutStudent(payload.visitId, payload.outcome, payload.notes);
+  // A replay whose first attempt already landed (lost ack) finds the visit closed -- the goal state
+  // is reached, so don't strand it in the failed list needing a manual discard.
+  if ("error" in result && result.alreadyCheckedOut) return { success: true };
+  return result;
 }
 
 // Same adapter pattern for submitRollCall(date, session, entries).
