@@ -54,6 +54,29 @@ export async function updateSession(request: NextRequest): Promise<SessionUpdate
     data: { user },
   } = await supabase.auth.getUser();
 
+  // Real "is this school using the app today" signal for the admin console, distinct from
+  // auth.users.last_sign_in_at (only moves on an actual sign-in, not a refreshed session --
+  // see migration 20260918120000). Throttled via a plain cookie read so a returning user
+  // doesn't cost a DB round trip on every request -- only when the cookie is missing/stale
+  // do we call the RPC, which itself re-checks staleness server-side before writing.
+  if (user) {
+    const LAST_SEEN_PING_COOKIE = "edu_last_seen_ping";
+    const THROTTLE_MS = 5 * 60 * 1000;
+    const lastPing = Number(request.cookies.get(LAST_SEEN_PING_COOKIE)?.value ?? 0);
+    if (!lastPing || Date.now() - lastPing > THROTTLE_MS) {
+      try {
+        await supabase.rpc("bump_last_seen");
+      } catch {
+        // Never let a last-seen ping failure block or redirect a real request.
+      }
+      supabaseResponse.cookies.set(LAST_SEEN_PING_COOKIE, String(Date.now()), {
+        httpOnly: true,
+        sameSite: "lax",
+        maxAge: 60 * 60 * 24,
+      });
+    }
+  }
+
   const isProtected = isProtectedPath(request.nextUrl.pathname);
 
   if (isProtected && !user) {

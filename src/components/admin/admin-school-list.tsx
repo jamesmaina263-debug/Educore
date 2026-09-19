@@ -38,11 +38,15 @@ export interface SchoolListRow {
    */
   onboarding_stage: "not_started" | "in_progress" | "complete";
   /**
-   * Latest auth.users.last_sign_in_at across everyone with a school_users row at this
-   * school (sourced from the admin_school_last_active() RPC). Null covers two different
-   * cases the UI can't tell apart from this field alone: no one there has ever signed in,
-   * or the school has no auth-linked school_users rows at all -- both render as "No login
-   * activity recorded" rather than guessing which.
+   * Most recent of (a) auth.users.last_sign_in_at and (b) school_users.last_seen_at --
+   * i.e. whichever is more recent out of "last time someone here actually logged in" and
+   * "last time someone here was seen using the app" (a throttled proxy-layer ping; see
+   * migration 20260918120000) -- across everyone with a school_users row at this school
+   * (sourced from the admin_school_last_active() RPC). A long-lived session that never
+   * re-authenticates would otherwise go stale on login alone even while in daily use.
+   * Null covers two different cases the UI can't tell apart from this field alone: no one
+   * there has ever signed in, or the school has no auth-linked school_users rows at all --
+   * both render as "No login activity recorded" rather than guessing which.
    */
   last_active_at: string | null;
 }
