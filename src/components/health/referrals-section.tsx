@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createReferral, updateReferralOutcome } from "@/app/(app)/health/actions";
 import { Button } from "@/components/ui/button";
@@ -9,6 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { StatusBadge } from "@/components/status-badge";
 import { StudentCombobox } from "@/components/shared/student-combobox";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
+import { useServerTableParams } from "@/hooks/use-server-table-params";
 import { useOfflineSync } from "@/hooks/use-offline-sync";
 import { queueMutation } from "@/lib/offline/queue";
 import { HealthOfflineBanner } from "./offline-banner";
@@ -25,16 +26,30 @@ export interface ReferralRow {
   outcome_notes: string | null;
 }
 
-export function ReferralsSection({
+/**
+ * `referrals` arrives already paginated/searched server-side (see
+ * getReferralsPage) -- same useServerTableParams pattern used elsewhere
+ * in this module. Doesn't touch loadHealthContext.
+ */
+function ReferralsSectionInner({
   referrals,
+  totalCount,
+  pageSize,
   studentOptions,
   canWrite,
 }: {
   referrals: ReferralRow[];
+  totalCount: number;
+  pageSize: number;
   studentOptions: StudentOption[];
   canWrite: boolean;
 }) {
   const router = useRouter();
+  const { pageIndex, pageCount, onPageChange, search, onSearchChange } = useServerTableParams({
+    totalCount,
+    pageSize,
+  });
+  const page = pageIndex + 1;
   const { online, pendingCount, failed, syncing, sync, discard } = useOfflineSync("health");
   const [open, setOpen] = useState(false);
   const [pending, setPending] = useState(false);
@@ -94,7 +109,8 @@ export function ReferralsSection({
   return (
     <div className="flex flex-col gap-4">
       <HealthOfflineBanner online={online} pendingCount={pendingCount} failed={failed} syncing={syncing} sync={sync} discard={discard} />
-      {canWrite && (
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        {canWrite && (
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild>
             <Button size="sm" className="self-start">
@@ -133,7 +149,14 @@ export function ReferralsSection({
             </DialogFooter>
           </DialogContent>
         </Dialog>
-      )}
+        )}
+        <Input
+          placeholder="Search by student name or admission number…"
+          value={search}
+          onChange={(e) => onSearchChange(e.target.value)}
+          className="max-w-xs"
+        />
+      </div>
 
       <div className="overflow-x-auto">
         <table className="table-dense w-full">
@@ -184,13 +207,53 @@ export function ReferralsSection({
             {referrals.length === 0 && (
               <tr>
                 <td colSpan={6} className="py-6 text-center text-muted-foreground">
-                  No referrals on record.
+                  {search ? "No referrals match this search." : "No referrals on record."}
                 </td>
               </tr>
             )}
           </tbody>
         </table>
       </div>
+
+      <div className="flex items-center justify-between gap-3 text-sm text-muted-foreground">
+        <span>
+          {totalCount === 0
+            ? ""
+            : `Showing ${(page - 1) * pageSize + 1}-${Math.min(page * pageSize, totalCount)} of ${totalCount}`}
+        </span>
+        {pageCount > 1 && (
+          <div className="flex items-center gap-2">
+            <Button size="sm" variant="outline" disabled={page <= 1} onClick={() => onPageChange(pageIndex - 1)}>
+              Previous
+            </Button>
+            <span>
+              Page {page} of {pageCount}
+            </span>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={page >= pageCount}
+              onClick={() => onPageChange(pageIndex + 1)}
+            >
+              Next
+            </Button>
+          </div>
+        )}
+      </div>
     </div>
+  );
+}
+
+export function ReferralsSection(props: {
+  referrals: ReferralRow[];
+  totalCount: number;
+  pageSize: number;
+  studentOptions: StudentOption[];
+  canWrite: boolean;
+}) {
+  return (
+    <Suspense fallback={null}>
+      <ReferralsSectionInner {...props} />
+    </Suspense>
   );
 }
