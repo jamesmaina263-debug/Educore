@@ -219,7 +219,7 @@ export default async function DashboardPage() {
   let pendingDiscounts = 0;
   let pendingExpenses = 0;
   if (canSeeFinance) {
-    // Two real scalability bugs fixed here (production readiness audit, Dashboard & frontend
+    // Three real scalability bugs fixed here (production readiness audit, Dashboard & frontend
     // performance / Database scalability sections): invoices and payments were each fetched with
     // NO limit and NO date/term filter -- every invoice and every payment the school has ever
     // recorded, on every single dashboard load, for every staff member with finance access. The
@@ -230,9 +230,20 @@ export default async function DashboardPage() {
     // case the audit calls out -- unbounded today, and it gets slower every term forever. Fixed by
     // pushing the term/date filter into the query (same result, bounded by term instead of by
     // school lifetime) and giving the "latest invoices" widget its own properly limited query.
-    const [{ data: balanceRows }, { data: latestInvoiceRows }, { data: discountRows }, { data: expenseRows }] =
+    //
+    // Third bug (2026-09-14 production-readiness audit): this was still doing
+    // `.from("v_student_balances").select("balance")` with no filter -- one row PER STUDENT (each
+    // itself computed via 4 LATERAL aggregate subqueries) just to sum()/count() two numbers in JS.
+    // A DB-side aggregate RPC for exactly this (get_student_balance_summary(), migration
+    // 20260909053003) was already deployed five days ago but this page was never updated to call
+    // it -- the fix existed in the database and was simply never wired up. Switched to the RPC:
+    // same security boundary (the function is a plain, non-SECURITY-DEFINER SQL function over the
+    // already-RLS-scoped view, so it inherits the exact same access boundary the old JS-side query
+    // relied on), but the sum/count now happen once in Postgres instead of transferring one row per
+    // student to the app on every dashboard load.
+    const [{ data: balanceSummaryRows }, { data: latestInvoiceRows }, { data: discountRows }, { data: expenseRows }] =
       await Promise.all([
-        supabase.from("v_student_balances").select("balance"),
+        supabase.rpc("get_student_balance_summary"),
         supabase
           .from("invoices")
           .select("id, total_amount, status, created_at, term_id, students(first_name, last_name)")
@@ -255,8 +266,9 @@ export default async function DashboardPage() {
         ])
       : [{ data: null }, { data: null }];
 
-    totalOutstanding = (balanceRows ?? []).reduce((sum, b) => sum + Math.max(0, Number(b.balance)), 0);
-    studentsWithBalance = (balanceRows ?? []).filter((b) => Number(b.balance) > 0).length;
+    const balanceSummary = balanceSummaryRows?.[0];
+    totalOutstanding = Number(balanceSummary?.total_outstanding ?? 0);
+    studentsWithBalance = Number(balanceSummary?.students_with_balance ?? 0);
     pendingDiscounts = (discountRows ?? []).length;
     pendingExpenses = (expenseRows ?? []).length;
 
