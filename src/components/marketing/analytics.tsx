@@ -11,6 +11,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { sendGTMEvent } from "@next/third-parties/google";
 import { captureAttribution } from "@/lib/attribution";
 import { captureCtaSource } from "@/lib/cta-source";
 
@@ -36,20 +37,21 @@ export function MarketingAnalytics() {
   // separately from the WhatsApp click -- confirmed with the project owner
   // that the phone number stays a WhatsApp-only link.
   //
-  // NOTE: captureCtaSource() only writes to sessionStorage (read back by
+  // captureCtaSource() only writes to sessionStorage (read back by
   // demo-request-form.tsx and pushed into dataLayer from there as
   // cta_location/cta_label/cta_tier on contact_form_context/
-  // contact_form_submit) -- it does not itself send a named click event to
-  // GTM. The admin analytics page's "CTA Clicks" and "Demo Form Started"
-  // funnel rows (src/app/(admin)/admin/analytics/page.tsx) read GA4 goal
-  // names ("Contact CTA Click", "WhatsApp CTA Click", "Email CTA Click",
-  // "Demo Form Started") that nothing currently sends -- those were
-  // previously fired only to Plausible's window.plausible(), which never
-  // ran (domain never configured). Removing that call here doesn't change
-  // those funnel rows' behavior; they were already unpopulated. Sending
-  // those as real GTM dataLayer events (matching the contact_form_submit
-  // pattern in demo-request-form.tsx) is a separate, real follow-up if
-  // that funnel-stage data is wanted.
+  // contact_form_submit) -- it's context storage, not a click event.
+  // The named sendGTMEvent() call below is the actual click event: it
+  // fires "Contact CTA Click" / "WhatsApp CTA Click" / "Email CTA Click"
+  // straight to dataLayer with the exact goal names the admin analytics
+  // page's "CTA Clicks" funnel row (src/app/(admin)/admin/analytics/
+  // page.tsx) already sums via GA4's getGoalBreakdown() -- no dashboard
+  // change needed, it was already reading for these names, just nothing
+  // sent them (previously only reached Plausible's window.plausible(),
+  // which never ran). Requires a matching GTM container change: a GA4
+  // Event tag per event name (or one tag keyed off {{Event}}), each
+  // firing on a Custom Event trigger for that same name -- not something
+  // committable from this repo.
   useEffect(() => {
     function eventNameFor(href: string): string | null {
       if (href.startsWith("/contact")) return "Contact CTA Click";
@@ -69,6 +71,14 @@ export function MarketingAnalytics() {
       const eventName = eventNameFor(href);
       if (!eventName) return;
 
+      const label = anchor.textContent?.trim().replace(/\s+/g, " ").slice(0, 60) || eventName;
+      const location = window.location.pathname;
+
+      // The named funnel event itself -- fired for all three CTA shapes
+      // (Contact/WhatsApp/Email), matching the exact goal names the admin
+      // analytics page already sums for "CTA Clicks" (see comment above).
+      sendGTMEvent({ event: eventName, cta_location: location, cta_label: label });
+
       // GTM/GA4-specific: stash which page/label (and, for pricing-tier
       // CTAs, which tier -- see data-cta-tier in pricing-card.tsx) sent
       // them to /contact. demo-request-form.tsx reads this back at mount
@@ -76,8 +86,6 @@ export function MarketingAnalytics() {
       // generate_lead GA4 event can carry "which CTA drove this" context.
       // Never sent to the server.
       if (eventName === "Contact CTA Click") {
-        const label = anchor.textContent?.trim().replace(/\s+/g, " ").slice(0, 60) || eventName;
-        const location = window.location.pathname;
         const tier = anchor instanceof HTMLElement ? anchor.dataset.ctaTier : undefined;
         captureCtaSource({ location, label, tier });
       }

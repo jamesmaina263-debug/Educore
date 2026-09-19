@@ -35,9 +35,40 @@ export function DemoRequestForm() {
   // it (still the contact_form_role_selected -> DLV v2 path, see that
   // handler's comment).
   const [selectedRole, setSelectedRole] = useState("");
+  // Guards the "Demo Form Started" push below so it fires once per mount,
+  // not once per field -- see handleFormFocus.
+  const [formStarted, setFormStarted] = useState(false);
+
+  // Fires on first focus into any field in the form (React attaches
+  // "onFocus" at the root via a focusin listener since React 17, so this
+  // form-level handler catches focus on any descendant input/select/
+  // textarea without instrumenting each field separately). Matches the
+  // exact "Demo Form Started" goal name the admin analytics page's funnel
+  // row (src/app/(admin)/admin/analytics/page.tsx) already reads via GA4's
+  // getGoalBreakdown() -- no dashboard change needed, it was already
+  // looking for this name. "Started" = first focus rather than first blur,
+  // so it still captures a mobile visitor who focuses a field then
+  // abandons without ever blurring it. Needs a matching GTM container
+  // change (GA4 Event tag on a Custom Event trigger named "Demo Form
+  // Started") -- not committable from this repo.
+  function handleFormFocus() {
+    if (formStarted) return;
+    setFormStarted(true);
+    sendGTMEvent({ event: "Demo Form Started" });
+  }
 
   useEffect(() => {
     if (state.status === "success") {
+      // Matches the exact "Demo Request Submitted" goal name the admin
+      // analytics page's funnel row already reads (falling back to the
+      // real marketing_demo_requests count if this is absent -- see that
+      // page's demoFormSubmitted). Sent alongside, not instead of, the
+      // existing contact_form_submit event below: that one is already
+      // wired to GTM's contact_sales/generate_lead conversion tags with
+      // its full attribution payload, and this repo has no way to confirm
+      // whether renaming it would break an existing GTM trigger, so it's
+      // left untouched. Needs the same GTM container change as above.
+      sendGTMEvent({ event: "Demo Request Submitted" });
       // Dedicated conversion event: contact_form_context (above) fires on
       // mount, before the visitor has picked a role or submitted anything,
       // so it can't carry contact_form_role or represent an actual
@@ -123,7 +154,7 @@ export function DemoRequestForm() {
   }
 
   return (
-    <form action={formAction} className="flex flex-col gap-5">
+    <form action={formAction} onFocus={handleFormFocus} className="flex flex-col gap-5">
       {/* Bot mitigation, not a visible/functional field for real users:
           - honeypot ("company_website") is hidden from sighted users via CSS
             and never announced by a screen reader (aria-hidden + tabIndex -1
