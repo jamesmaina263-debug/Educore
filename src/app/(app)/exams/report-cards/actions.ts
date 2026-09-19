@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { tagSentryRequestContext } from "@/lib/observability/sentry-context";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { buildReportCardCommentPrompt, geminiGenerateContentUrl, parseGeminiCommentResponse } from "@/lib/ai/report-card-comment";
 
@@ -9,6 +10,7 @@ type ActionResult = { error: string } | { success: true };
 
 export async function generateReportCards(examId: string, classId: string): Promise<ActionResult> {
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
   const { error } = await supabase.rpc("generate_report_cards", { p_exam_id: examId, p_class_id: classId });
   if (error) return { error: error.message };
   revalidatePath("/exams/report-cards");
@@ -17,6 +19,7 @@ export async function generateReportCards(examId: string, classId: string): Prom
 
 export async function approveComment(input: { exam_id: string; student_id: string }): Promise<ActionResult> {
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -48,6 +51,7 @@ export async function approveComment(input: { exam_id: string; student_id: strin
 
 export async function writeComment(input: { exam_id: string; student_id: string; comment: string }): Promise<ActionResult> {
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -95,6 +99,7 @@ export async function draftCommentWithAI(input: {
   }
 
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
 
   // SECURITY: unlike the other actions in this file, this one makes a real,
   // cost-incurring outbound call (Gemini) before ever touching a

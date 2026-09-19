@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { tagSentryRequestContext } from "@/lib/observability/sentry-context";
 
 export type PrefCategory = "fee_reminder" | "absence_alert" | "result_published" | "announcement" | "other";
 export type PrefChannel = "sms" | "email" | "whatsapp";
@@ -18,6 +19,7 @@ export async function getMyNotificationPreferences(): Promise<
   { error: string } | { success: true; rows: PreferenceRow[] }
 > {
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -41,6 +43,7 @@ export async function setNotificationPreference(
   enabled: boolean,
 ): Promise<{ error: string } | { success: true }> {
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -73,6 +76,7 @@ export async function getMyInAppNotifications(): Promise<
   { error: string } | { success: true; notifications: InAppNotification[] }
 > {
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -107,6 +111,7 @@ export async function getMyInAppNotifications(): Promise<
 
 export async function markNotificationReadAction(id: string): Promise<{ error: string } | { success: true }> {
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
   const { error } = await supabase.rpc("mark_notification_read", { p_notification_id: id });
   if (error) return { error: error.message };
   return { success: true };
@@ -117,6 +122,7 @@ export async function markNotificationReadAction(id: string): Promise<{ error: s
 // does not delete the underlying row or affect anyone else's copy of it.
 export async function clearAllNotificationsAction(): Promise<{ error: string } | { success: true }> {
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
   const { error } = await supabase.rpc("clear_my_notifications");
   if (error) return { error: error.message };
   return { success: true };

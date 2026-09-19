@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { tagSentryRequestContext } from "@/lib/observability/sentry-context";
 import { extractEdgeFunctionError } from "@/lib/edge-function-error";
 
 export type ZohoFolder = {
@@ -25,6 +26,7 @@ export type ZohoMessageSummary = {
 
 async function invokeMonitor<T>(actionQuery: string): Promise<{ error: string } | { success: true; data: T }> {
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
   const {
     data: { session },
   } = await supabase.auth.getSession();

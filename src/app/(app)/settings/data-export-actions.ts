@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { tagSentryRequestContext } from "@/lib/observability/sentry-context";
 
 // SD-09 (GTM Readiness Protocol): school-level data export/portability.
 //
@@ -38,6 +39,7 @@ function fmtDate(d: string | null | undefined): string {
 
 export async function exportSchoolData(): Promise<DataExportOutcome> {
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
   const {
     data: { user },
   } = await supabase.auth.getUser();

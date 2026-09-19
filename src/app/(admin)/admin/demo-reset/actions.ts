@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { tagSentryRequestContext } from "@/lib/observability/sentry-context";
 
 // PR-13 (GTM Readiness Protocol): Demo Academy is the sample data used for live sales
 // demos of PR-07 (parent announcements). This lets a platform admin clear whatever was
@@ -13,6 +14,7 @@ export async function resetDemoAcademyAnnouncementsAction(): Promise<
   { error: string } | { success: true }
 > {
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
   const {
     data: { user },
   } = await supabase.auth.getUser();

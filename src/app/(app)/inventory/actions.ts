@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { tagSentryRequestContext } from "@/lib/observability/sentry-context";
 
 type ActionResult = { error: string } | { success: true };
 
@@ -15,6 +16,7 @@ export async function createInventoryItemAction(input: {
   category_id?: string;
 }): Promise<ActionResult> {
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
   const { error } = await supabase.rpc("create_inventory_item", {
     p_name: input.name,
     p_unit: input.unit,
@@ -31,6 +33,7 @@ export async function createInventoryItemAction(input: {
 
 export async function createCategoryAction(name: string): Promise<ActionResult> {
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -54,6 +57,7 @@ export async function recordStockMovementAction(input: {
   client_mutation_id?: string;
 }): Promise<ActionResult> {
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
   const { error } = await supabase.rpc("record_stock_movement", {
     p_item_id: input.item_id,
     p_movement_type: input.movement_type,
@@ -72,6 +76,7 @@ export async function recordStockMovementAction(input: {
 // ---------------------------------------------------------------------------
 export async function createTransferAction(input: { items: { item_id: string; quantity: number }[] }): Promise<ActionResult> {
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
   const { error } = await supabase.rpc("create_inventory_transfers", {
     p_items: input.items.map((i) => ({ item_id: i.item_id, quantity: i.quantity })),
   });
@@ -82,6 +87,7 @@ export async function createTransferAction(input: { items: { item_id: string; qu
 
 async function currentSchoolUser() {
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
   const {
     data: { user },
   } = await supabase.auth.getUser();
