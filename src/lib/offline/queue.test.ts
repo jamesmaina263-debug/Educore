@@ -84,6 +84,43 @@ describe("offline mutation queue", () => {
     expect(pending.every((m) => m.status === "pending")).toBe(true);
   });
 
+  it("stops treating repeated throws as connectivity after MAX_TYPEERROR_ATTEMPTS, marks the item failed, and lets the rest of the queue proceed", async () => {
+    // A queued mutation whose handler always throws -- could be a genuine, permanent
+    // network outage, but could just as easily be a bug in the handler/payload itself
+    // (a TypeError isn't only thrown by a failed fetch). Either way, this must not
+    // silently block everything queued after it forever.
+    const submitAttendance = vi.fn().mockImplementation(async (payload: { stream_id: string }) => {
+      if (payload.stream_id === "bad") throw new TypeError("Cannot read properties of undefined");
+      return { success: true };
+    });
+    vi.doMock("@/app/(app)/attendance/actions", () => ({ submitAttendance }));
+    const { queueMod } = await freshModules();
+    const poisoned = await queueMod.queueMutation("attendance", "submitAttendance", { stream_id: "bad", attendance_date: "2026-01-01", marks: [] });
+    await queueMod.queueMutation("attendance", "submitAttendance", { stream_id: "s2", attendance_date: "2026-01-01", marks: [] });
+
+    // First 4 passes: still gives the benefit of the doubt (assumes offline), stops
+    // the whole pass each time, same as the single-attempt case above.
+    for (let i = 0; i < 4; i++) {
+      const result = await queueMod.syncPendingMutations("attendance");
+      expect(result.synced).toBe(0);
+      const pending = await queueMod.getPendingMutations("attendance");
+      expect(pending.find((m) => m.id === poisoned.id)?.status).toBe("pending");
+    }
+
+    // Meanwhile the connection is actually fine -- the 5th attempt against the
+    // poisoned item marks *it* failed and still reaches (and syncs) the second,
+    // healthy mutation in the same pass.
+    const result = await queueMod.syncPendingMutations("attendance");
+    expect(result).toEqual({ synced: 1, failed: 1 });
+
+    const pending = await queueMod.getPendingMutations("attendance");
+    expect(pending).toHaveLength(1);
+    expect(pending[0].id).toBe(poisoned.id);
+    expect(pending[0].status).toBe("failed");
+    expect(pending[0].attempts).toBe(5);
+    expect(pending[0].last_error).toContain("Cannot read properties of undefined");
+  });
+
   it("discards a failed mutation without retrying it", async () => {
     const { queueMod } = await freshModules();
     const record = await queueMod.queueMutation("attendance", "submitAttendance", { stream_id: "s1", attendance_date: "2026-01-01", marks: [] });
