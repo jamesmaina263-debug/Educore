@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { Mail, Clock, ShieldCheck, MessageCircle } from "lucide-react";
 
 import { Eyebrow } from "@/components/marketing/eyebrow";
@@ -6,10 +7,11 @@ import { Section } from "@/components/marketing/section";
 import { Reveal } from "@/components/marketing/reveal";
 import { DemoRequestForm } from "@/components/marketing/demo-request-form";
 import { BreadcrumbJsonLd, HOME_CRUMB } from "@/components/marketing/breadcrumb-json-ld";
+import { TRIAL_CTA_LABEL, TRIAL_HREF } from "@/lib/marketing/trial";
 
 const TITLE = "Contact — EduCore";
 const DESCRIPTION =
-  "Book a demo or ask a question — tell us a bit about your school and we'll get back to you.";
+  "Book a demo or ask a question — or skip the wait and start a 30-day free trial, no card required.";
 
 export const metadata: Metadata = {
   title: TITLE,
@@ -31,6 +33,16 @@ export default function ContactPage() {
         <p className="mt-5 max-w-xl text-lg leading-relaxed text-white/70">
           A few details are enough to get started — we&apos;ll follow up to
           set up a walkthrough shaped around how your school actually runs.
+        </p>
+        <p className="mt-4 max-w-xl text-base leading-relaxed text-white/70">
+          Would rather try it first?{" "}
+          <Link
+            href={TRIAL_HREF}
+            className="font-medium text-marketing-gold-300 underline underline-offset-2 hover:text-marketing-gold-400"
+          >
+            {TRIAL_CTA_LABEL}
+          </Link>{" "}
+          — no card required.
         </p>
       </Section>
 

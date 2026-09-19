@@ -1,6 +1,8 @@
 import Link from "next/link";
 import Image from "next/image";
 
+import { TRIAL_CTA_SHORT, TRIAL_HREF } from "@/lib/marketing/trial";
+
 const FOOTER_GROUPS = [
   {
     heading: "Product",
@@ -32,7 +34,7 @@ const FOOTER_GROUPS = [
     heading: "Account",
     links: [
       { href: "/login", label: "Sign in" },
-      { href: "/signup", label: "Start a school" },
+      { href: TRIAL_HREF, label: TRIAL_CTA_SHORT },
     ],
   },
 ];
