@@ -278,6 +278,41 @@ describe("offline mutation queue", () => {
     expect(receivedFormData.get("visible_to_guardian")).toBe("on");
   });
 
+  it("treats a replayed sick-bay check-out whose first attempt already landed as synced, not failed", async () => {
+    const checkOutStudent = vi.fn().mockResolvedValue({ error: "This visit has already been checked out.", alreadyCheckedOut: true });
+    vi.doMock("@/app/(app)/health/actions", () => ({
+      checkInStudent: vi.fn(),
+      checkOutStudent,
+      administerMedication: vi.fn(),
+      logEmergency: vi.fn(),
+      createReferral: vi.fn(),
+    }));
+    const { queueMod } = await freshModules();
+    await queueMod.queueMutation("health", "checkOutStudent", { visitId: "visit-1", outcome: "sent_home" as const });
+
+    const result = await queueMod.syncPendingMutations("health");
+
+    expect(result).toEqual({ synced: 1, failed: 0 });
+    expect(checkOutStudent).toHaveBeenCalledWith("visit-1", "sent_home", undefined);
+  });
+
+  it("still fails a sick-bay check-out that was rejected for any other reason", async () => {
+    const checkOutStudent = vi.fn().mockResolvedValue({ error: "Could not check this student out -- the visit may no longer exist, or you may not have permission." });
+    vi.doMock("@/app/(app)/health/actions", () => ({
+      checkInStudent: vi.fn(),
+      checkOutStudent,
+      administerMedication: vi.fn(),
+      logEmergency: vi.fn(),
+      createReferral: vi.fn(),
+    }));
+    const { queueMod } = await freshModules();
+    await queueMod.queueMutation("health", "checkOutStudent", { visitId: "visit-2", outcome: "sent_home" as const });
+
+    const result = await queueMod.syncPendingMutations("health");
+
+    expect(result).toEqual({ synced: 0, failed: 1 });
+  });
+
   it("syncs staff attendance the same way student attendance works, under its own module key", async () => {
     const submitStaffAttendance = vi.fn().mockResolvedValue({ success: true });
     vi.doMock("@/app/(app)/staff/actions", () => ({ submitStaffAttendance }));
