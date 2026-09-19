@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
+import { StudentCombobox } from "@/components/shared/student-combobox";
 import {
   Dialog,
   DialogTrigger,
@@ -117,19 +118,23 @@ const SAFEGUARDING_STATUS_TONE: Record<SafeguardingRow["status"], "neutral" | "w
 };
 
 function StudentPicker({ students, name }: { students: StudentOption[]; name: string }) {
+  // These forms are plain <form action={(fd) => ...}> submissions read via
+  // FormData (not React state), so this stays a thin wrapper: local state
+  // drives the visible StudentCombobox, and a hidden input keeps it
+  // participating in that same native FormData submission under `name`,
+  // same as the original uncontrolled <Select name={name}> did.
+  // Note: native `required` validation doesn't apply to hidden inputs, so
+  // an empty selection now reaches the server instead of being blocked by
+  // the browser -- every action.ts handler already validates student_id is
+  // non-empty server-side (e.g. createIncidentAction's "Student, category,
+  // and description are required." check), so this is a UX-only difference
+  // (error surfaces post-submit instead of pre-submit), not a correctness one.
+  const [value, setValue] = useState("");
   return (
-    <Select name={name} required>
-      <SelectTrigger>
-        <SelectValue placeholder="Select student" />
-      </SelectTrigger>
-      <SelectContent>
-        {students.map((s) => (
-          <SelectItem key={s.id} value={s.id}>
-            {s.name} ({s.admission_number})
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
+    <>
+      <input type="hidden" name={name} value={value} />
+      <StudentCombobox students={students} value={value} onChange={setValue} placeholder="Select student" />
+    </>
   );
 }
 
