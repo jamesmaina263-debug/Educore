@@ -2,8 +2,26 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { setSentryRequestContext } from "@/lib/observability/sentry-context";
 
 type ActionResult = { error: string } | { success: true };
+
+// Production-readiness audit: unlike finance/academics/exams/boarding/communication, this file
+// has no existing choke-point that already resolves the actor/school (every action here calls
+// straight into a SECURITY DEFINER RPC that resolves auth.uid()/auth_school_id() for itself
+// server-side) -- so there's nothing safe to piggyback the Sentry tagging onto. This adds one
+// small, deliberately best-effort helper instead of a new required call: wrapped in try/catch so
+// a failure here (or the extra auth/RPC round trip itself) can never block or slow down an
+// actual payroll operation, called once at the top of each action below. Payroll salary data is
+// exactly the kind of thing worth tagging "which school, which user" on if something goes wrong.
+async function tagPayrollActor(supabase: Awaited<ReturnType<typeof createClient>>) {
+  try {
+    const [{ data: userData }, { data: schoolId }] = await Promise.all([supabase.auth.getUser(), supabase.rpc("auth_school_id")]);
+    setSentryRequestContext({ userId: userData.user?.id, schoolId: schoolId as string | null });
+  } catch {
+    // Never let Sentry tagging itself break a payroll action.
+  }
+}
 
 export async function generatePayrollAction(input: {
   teacher_id: string;
@@ -16,6 +34,7 @@ export async function generatePayrollAction(input: {
   deductions_breakdown?: { name: string; amount: number }[];
 }): Promise<ActionResult> {
   const supabase = await createClient();
+  await tagPayrollActor(supabase);
   const { error } = await supabase.rpc("generate_payroll_record", {
     p_teacher_id: input.teacher_id,
     p_period_year: input.period_year,
@@ -45,6 +64,7 @@ export async function generatePayrollAction(input: {
 
 export async function approvePayrollAction(id: string): Promise<ActionResult> {
   const supabase = await createClient();
+  await tagPayrollActor(supabase);
   const { data: record } = await supabase.from("payroll_records").select("generated_by").eq("id", id).maybeSingle();
   const { error } = await supabase.rpc("approve_payroll_record", { p_id: id });
   if (error) return { error: error.message };
@@ -66,6 +86,7 @@ export async function approvePayrollAction(id: string): Promise<ActionResult> {
 
 export async function markPayrollPaidAction(id: string): Promise<ActionResult> {
   const supabase = await createClient();
+  await tagPayrollActor(supabase);
   const { error } = await supabase.rpc("mark_payroll_paid", { p_id: id });
   if (error) return { error: error.message };
   revalidatePath("/payroll", "layout");
@@ -74,6 +95,7 @@ export async function markPayrollPaidAction(id: string): Promise<ActionResult> {
 
 async function currentSchoolUser() {
   const supabase = await createClient();
+  await tagPayrollActor(supabase);
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -145,6 +167,7 @@ export async function updateStaffStatutoryNumbersAction(input: {
   staff_number?: string;
 }): Promise<ActionResult> {
   const supabase = await createClient();
+  await tagPayrollActor(supabase);
   const { error } = await supabase.rpc("update_staff_statutory_numbers", {
     p_staff_id: input.staff_id,
     p_kra_pin: input.kra_pin || null,

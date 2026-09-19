@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { extractEdgeFunctionError } from "@/lib/edge-function-error";
+import { setSentryRequestContext } from "@/lib/observability/sentry-context";
 
 type ActionResult = { error: string } | { success: true };
 
@@ -11,6 +12,12 @@ async function currentActor(supabase: Awaited<ReturnType<typeof createClient>>) 
     data: { user },
   } = await supabase.auth.getUser();
   const { data: me } = await supabase.from("school_users").select("id, school_id").eq("auth_user_id", user!.id).maybeSingle();
+  // Production-readiness audit: this is the one place every health/sick-bay/medical action
+  // already resolves both the actor and their school, so it's the natural choke-point to tag a
+  // Sentry-captured error with who/which-school -- same reasoning and same helper as
+  // finance/academics/exams/boarding/communication's schoolId(). Medical data is exactly the
+  // kind of thing where "which school, which user" matters most if something goes wrong here.
+  setSentryRequestContext({ userId: user?.id, schoolId: me?.school_id });
   return me;
 }
 
