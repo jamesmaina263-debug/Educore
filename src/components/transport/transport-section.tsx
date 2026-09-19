@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { StatusBadge } from "@/components/status-badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
+import { StudentCombobox } from "@/components/shared/student-combobox";
 import {
   createRouteAction,
   createVehicleAction,
@@ -571,18 +572,12 @@ export function TransportSection({
                 <div className="space-y-3">
                   <div className="space-y-1.5">
                     <Label>Student</Label>
-                    <Select value={assignStudentId} onValueChange={setAssignStudentId}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select student" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {studentOptions.map((s) => (
-                          <SelectItem key={s.id} value={s.id}>
-                            {s.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <StudentCombobox
+                      students={studentOptions}
+                      value={assignStudentId}
+                      onChange={setAssignStudentId}
+                      placeholder="Select student"
+                    />
                   </div>
                   <div className="space-y-1.5">
                     <Label>Route</Label>
