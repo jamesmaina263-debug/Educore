@@ -1,7 +1,29 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { APP_ROUTE_SEGMENTS } from "@/lib/school-slug-routing";
 
 const PROTECTED_PREFIXES = ["/dashboard"];
+
+// Everything a school staff member can reach, minus "admin" -- APP_ROUTE_SEGMENTS includes it
+// only so school-slug-routing's own bookkeeping stays in sync with real (app) folders, but the
+// platform admin console must never be affected by maintenance mode (it's how a super_admin
+// turns maintenance back off), so it's explicitly excluded here regardless of what that set
+// contains.
+const MAINTENANCE_GATED_SEGMENTS = new Set(APP_ROUTE_SEGMENTS);
+MAINTENANCE_GATED_SEGMENTS.delete("admin");
+
+// Same bare-vs-slug-prefixed shape as isProtectedPath below, generalized to the whole
+// school-app surface instead of just "/dashboard" -- this is the single choke point every
+// staff-app request passes through (proxy.ts's matcher), so it's the one place a platform-wide
+// maintenance switch can gate every school-facing route without touching the 40+ individual
+// pages that each carry their own auth check.
+function isMaintenanceGatedPath(pathname: string): boolean {
+  const segments = pathname.split("/").filter(Boolean);
+  if (segments.length === 0) return false;
+  if (MAINTENANCE_GATED_SEGMENTS.has(segments[0])) return true;
+  if (segments.length >= 2 && MAINTENANCE_GATED_SEGMENTS.has(segments[1])) return true;
+  return false;
+}
 
 function isProtectedPath(pathname: string): boolean {
   // Bare form ("/dashboard...") or slug-prefixed form ("/{slug}/dashboard...")
@@ -74,6 +96,37 @@ export async function updateSession(request: NextRequest): Promise<SessionUpdate
         sameSite: "lax",
         maxAge: 60 * 60 * 24,
       });
+    }
+  }
+
+  // Platform-wide maintenance kill switch (see /admin/broadcast's maintenance toggle and the
+  // 20260919133000 migration). Checked only for school-facing routes -- /admin, the marketing
+  // site, /login, /apply, /portal, cron/webhook API routes etc. are all untouched. Wrapped in
+  // try/catch and fails open (never blocks) on any error: a bug or outage in this check must
+  // never itself take the whole platform down.
+  if (isMaintenanceGatedPath(request.nextUrl.pathname)) {
+    try {
+      const { data: maintenance } = await supabase
+        .from("platform_maintenance")
+        .select("enabled")
+        .eq("id", 1)
+        .maybeSingle();
+
+      if (maintenance?.enabled) {
+        let isSuperAdminBypass = false;
+        if (user) {
+          const { data: isSuperAdmin } = await supabase.rpc("auth_is_super_admin");
+          isSuperAdminBypass = isSuperAdmin === true;
+        }
+        if (!isSuperAdminBypass) {
+          const maintenanceUrl = request.nextUrl.clone();
+          maintenanceUrl.pathname = "/maintenance";
+          maintenanceUrl.search = "";
+          return { response: NextResponse.redirect(maintenanceUrl), isAuthenticated: !!user };
+        }
+      }
+    } catch {
+      // Fail open -- see comment above.
     }
   }
 
