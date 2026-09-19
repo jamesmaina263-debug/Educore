@@ -3,12 +3,14 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { tagSentryRequestContext } from "@/lib/observability/sentry-context";
 
 // "+ New Walk-In Admission" (Brief 4.16.1 Entry Point B / 4.16.8). Creates a bare `applications`
 // row in 'draft' status and sends the officer straight into the same wizard used for "Continue
 // Admission" from Phase 10's review screen — one onboarding engine, not two admission systems.
 export async function createWalkInApplication(): Promise<void> {
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
 
   const {
     data: { user },

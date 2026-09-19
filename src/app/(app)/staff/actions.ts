@@ -2,11 +2,13 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { tagSentryRequestContext } from "@/lib/observability/sentry-context";
 
 type ActionResult = { error: string } | { success: true };
 
 export async function setStaffGender(staffId: string, gender: "male" | "female"): Promise<ActionResult> {
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
   const { error } = await supabase.from("school_users").update({ gender }).eq("id", staffId);
   if (error) return { error: error.message };
   revalidatePath("/staff");
@@ -21,6 +23,7 @@ export async function submitStaffAttendance(input: {
   marks: { staff_id: string; status: StaffStatus }[];
 }): Promise<ActionResult> {
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
 
   const { data: schoolId, error: schoolIdError } = await supabase.rpc("auth_school_id");
   if (schoolIdError || !schoolId) return { error: "Could not resolve your school." };
@@ -55,6 +58,7 @@ export async function editStaffAttendanceRecord(
 ): Promise<ActionResult> {
   if (!edit_reason.trim()) return { error: "A reason is required to edit an already-marked day." };
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
   const { error } = await supabase.from("staff_attendance").update({ status, edit_reason }).eq("id", id);
   if (error) return { error: error.message };
   revalidatePath("/staff");

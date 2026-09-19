@@ -2,11 +2,13 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { tagSentryRequestContext } from "@/lib/observability/sentry-context";
 
 type ActionResult = { error: string } | { success: true };
 
 export async function createRouteAction(input: { name: string; description?: string; fee_amount: number }): Promise<ActionResult> {
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -39,6 +41,7 @@ export async function createVehicleAction(input: {
   status?: string;
 }): Promise<ActionResult> {
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -67,6 +70,7 @@ export async function createVehicleAction(input: {
 
 export async function createStopAction(input: { route_id: string; name: string; sequence: number; pickup_time?: string; capacity?: number }): Promise<ActionResult> {
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -94,6 +98,7 @@ export async function assignTransportAction(input: {
   stop_id?: string;
 }): Promise<ActionResult> {
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
   const { error } = await supabase.rpc("assign_transport", {
     p_student_id: input.student_id,
     p_route_id: input.route_id,
@@ -108,6 +113,7 @@ export async function assignTransportAction(input: {
 
 export async function endTransportAssignmentAction(id: string): Promise<ActionResult> {
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
   const { error } = await supabase.rpc("end_transport_assignment", { p_id: id });
   if (error) return { error: error.message };
   revalidatePath("/transport");

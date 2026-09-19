@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { tagSentryRequestContext } from "@/lib/observability/sentry-context";
 import { logAdminAction } from "@/lib/log-admin-action";
 
 type ActionResult = { error: string } | { success: true };
@@ -20,6 +21,7 @@ export async function createFeatureFlag(key: string, label: string, description:
   }
 
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -44,6 +46,7 @@ export async function createFeatureFlag(key: string, label: string, description:
 // that was never inserted.
 export async function setSchoolFeatureFlag(schoolId: string, flagId: string, enabled: boolean): Promise<ActionResult> {
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -62,6 +65,7 @@ export async function setSchoolFeatureFlag(schoolId: string, flagId: string, ena
 
 export async function deleteFeatureFlag(flagId: string): Promise<ActionResult> {
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
   const { error } = await supabase.from("platform_feature_flags").delete().eq("id", flagId);
   if (error) return { error: error.message };
   void logAdminAction(supabase, "delete_feature_flag", { flag_id: flagId });

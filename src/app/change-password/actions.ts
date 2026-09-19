@@ -2,6 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { tagSentryRequestContext } from "@/lib/observability/sentry-context";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isPasswordPwned } from "@/lib/password-breach-check";
 
@@ -31,6 +32,7 @@ export async function changePassword(
   }
 
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
   const {
     data: { user },
   } = await supabase.auth.getUser();

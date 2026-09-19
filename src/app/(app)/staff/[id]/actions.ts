@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { tagSentryRequestContext } from "@/lib/observability/sentry-context";
 
 export async function updateEmployment(
   staffId: string,
@@ -15,6 +16,7 @@ export async function updateEmployment(
   },
 ): Promise<{ error: string } | { success: true }> {
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
   const { error } = await supabase.from("school_users").update(input).eq("id", staffId);
   if (error) return { error: error.message };
   revalidatePath(`/staff/${staffId}`);
@@ -26,6 +28,7 @@ export async function addQualification(
   input: { qualification_name: string; institution?: string; year_obtained?: number; expiry_date?: string },
 ): Promise<{ error: string } | { success: true }> {
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
   const { data: schoolId, error: schoolIdError } = await supabase.rpc("auth_school_id");
   if (schoolIdError || !schoolId) return { error: "Could not resolve your school." };
 
@@ -57,6 +60,7 @@ export async function requestLeave(
     return { error: "End date must be on or after the start date." };
   }
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
   const { data: schoolId, error: schoolIdError } = await supabase.rpc("auth_school_id");
   if (schoolIdError || !schoolId) return { error: "Could not resolve your school." };
 
@@ -98,6 +102,7 @@ export async function respondToLeaveRequest(
   status: "approved" | "rejected",
 ): Promise<{ error: string } | { success: true }> {
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -145,6 +150,7 @@ export async function cancelLeaveRequest(
   staffId: string,
 ): Promise<{ error: string } | { success: true }> {
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
   // Same RLS-silent-no-op guard as respondToLeaveRequest above: leave_requests_update's
   // own-request clause only allows this while status = 'pending', so a stale page (the
   // request got approved/rejected/cancelled elsewhere since it was loaded) would otherwise

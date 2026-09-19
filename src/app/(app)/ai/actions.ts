@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { tagSentryRequestContext } from "@/lib/observability/sentry-context";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 // Phase 4, Item 1: Natural-language analytics ("Ask Educore AI").
@@ -285,6 +286,7 @@ export async function askEducoreAI(question: string): Promise<AskAIResult> {
   if (!trimmed) return { error: "Ask a question first." };
 
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
   const {
     data: { user },
   } = await supabase.auth.getUser();

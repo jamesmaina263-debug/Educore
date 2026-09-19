@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { tagSentryRequestContext } from "@/lib/observability/sentry-context";
 
 type ActionResult = { error: string } | { success: true };
 
@@ -12,6 +13,7 @@ type ActionResult = { error: string } | { success: true };
 // so this is safe to expose directly off the current session.
 export async function deleteGuardianPermanentlyAction(guardianId: string): Promise<ActionResult> {
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
   const { error } = await supabase.rpc("delete_school_user_permanently", {
     p_school_user_id: guardianId,
     p_reason: "Deleted from Parents directory",
@@ -29,6 +31,7 @@ export async function deleteGuardianPermanentlyAction(guardianId: string): Promi
 // history (children, etc.) that shouldn't just be lost.
 export async function mergeGuardianAccountsAction(keepId: string, duplicateId: string): Promise<ActionResult> {
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
   const { error } = await supabase.rpc("merge_guardian_accounts", {
     p_keep_id: keepId,
     p_duplicate_id: duplicateId,

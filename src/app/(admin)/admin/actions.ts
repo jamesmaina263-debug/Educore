@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { tagSentryRequestContext } from "@/lib/observability/sentry-context";
 import { logAdminAction } from "@/lib/log-admin-action";
 
 type ActionResult = { error: string } | { success: true };
@@ -13,6 +14,7 @@ type ActionResult = { error: string } | { success: true };
 // no longer needs a SQL console or a trip to Billing's expanded row.
 export async function suspendSchool(schoolId: string, reason: string): Promise<ActionResult> {
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
   const { error } = await supabase.rpc("suspend_subscription", {
     p_school_id: schoolId,
     p_reason: reason || null,
@@ -26,6 +28,7 @@ export async function suspendSchool(schoolId: string, reason: string): Promise<A
 
 export async function reactivateSchool(schoolId: string): Promise<ActionResult> {
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
   const { error } = await supabase.rpc("reactivate_school", { p_school_id: schoolId });
   if (error) return { error: error.message };
   void logAdminAction(supabase, "reactivate_school", { school_id: schoolId });

@@ -3,10 +3,12 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { tagSentryRequestContext } from "@/lib/observability/sentry-context";
 import { safeStorageFilename } from "@/lib/storage-path";
 
 export async function portalLogout() {
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
   await supabase.auth.signOut();
   redirect("/parent-login");
 }
@@ -21,6 +23,7 @@ export async function submitHomeworkAction(
 ): Promise<{ error: string } | { success: true; submissionId: string }> {
   if (!text.trim() && !hasFiles) return { error: "Write something or attach a file before submitting." };
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
   const { data, error } = await supabase
     .from("assignment_submissions")
     .upsert(
@@ -49,6 +52,7 @@ export async function uploadSubmissionAttachmentAction(
   if (!(file instanceof File) || file.size === 0) return { error: "No file provided." };
 
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -80,6 +84,7 @@ export async function uploadSubmissionAttachmentAction(
 
 export async function deleteSubmissionAttachmentAction(attachmentId: string): Promise<ActionResult> {
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
   const { data: row, error: fetchError } = await supabase
     .from("assignment_submission_attachments")
     .select("storage_path")
@@ -104,6 +109,7 @@ export async function deleteSubmissionAttachmentAction(attachmentId: string): Pr
  */
 export async function getAssignmentAttachmentUrlAction(storagePath: string): Promise<{ url: string } | { error: string }> {
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
   const { data, error } = await supabase.storage.from("assignment-attachments").createSignedUrl(storagePath, 60 * 5);
   if (error || !data) return { error: error?.message ?? "Could not create download link." };
   return { url: data.signedUrl };
@@ -111,6 +117,7 @@ export async function getAssignmentAttachmentUrlAction(storagePath: string): Pro
 
 export async function bookPtSlotAction(slotId: string, studentId: string, notes: string): Promise<ActionResult> {
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -132,6 +139,7 @@ export async function bookPtSlotAction(slotId: string, studentId: string, notes:
 
 export async function cancelPtBookingAction(bookingId: string): Promise<ActionResult> {
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
   const { error } = await supabase.from("pt_meeting_bookings").update({ status: "cancelled" }).eq("id", bookingId);
   if (error) return { error: error.message };
   revalidatePath("/portal");
@@ -140,6 +148,7 @@ export async function cancelPtBookingAction(bookingId: string): Promise<ActionRe
 
 export async function markConnectItemReadAction(itemId: string): Promise<ActionResult> {
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
   const { error } = await supabase.rpc("mark_connect_item_read", { p_item_id: itemId });
   if (error) return { error: error.message };
   revalidatePath("/portal");
@@ -148,6 +157,7 @@ export async function markConnectItemReadAction(itemId: string): Promise<ActionR
 
 export async function acknowledgeConnectItemAction(itemId: string): Promise<ActionResult> {
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
   const { error } = await supabase.rpc("acknowledge_connect_item", { p_item_id: itemId });
   if (error) return { error: error.message };
   revalidatePath("/portal");
@@ -157,6 +167,7 @@ export async function acknowledgeConnectItemAction(itemId: string): Promise<Acti
 export async function replyConnectItemAction(itemId: string, body: string): Promise<ActionResult> {
   if (!body.trim()) return { error: "Please write a reply before sending." };
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
   const { error } = await supabase.rpc("reply_connect_item", { p_item_id: itemId, p_body: body.trim() });
   if (error) return { error: error.message };
   revalidatePath("/portal");
@@ -165,6 +176,7 @@ export async function replyConnectItemAction(itemId: string, body: string): Prom
 
 export async function markAnnouncementReadAction(id: string): Promise<ActionResult> {
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
   const { error } = await supabase.rpc("mark_announcement_read", { p_id: id });
   if (error) return { error: error.message };
   revalidatePath("/portal");
@@ -173,6 +185,7 @@ export async function markAnnouncementReadAction(id: string): Promise<ActionResu
 
 export async function acknowledgeAnnouncementAction(id: string): Promise<ActionResult> {
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
   const { error } = await supabase.rpc("acknowledge_announcement", { p_id: id });
   if (error) return { error: error.message };
   revalidatePath("/portal");
@@ -181,6 +194,7 @@ export async function acknowledgeAnnouncementAction(id: string): Promise<ActionR
 
 export async function completeAnnouncementAction(id: string): Promise<ActionResult> {
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
   const { error } = await supabase.rpc("complete_announcement_action", { p_id: id });
   if (error) return { error: error.message };
   revalidatePath("/portal");
@@ -189,6 +203,7 @@ export async function completeAnnouncementAction(id: string): Promise<ActionResu
 
 export async function getAnnouncementAttachmentUrlAction(storagePath: string): Promise<{ url: string } | { error: string }> {
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
   // Bucket RLS (announcement_attachments_storage_select) already restricts this to
   // announcements the caller is an actual recipient of -- no extra check needed here.
   const { data, error } = await supabase.storage.from("announcement-attachments").createSignedUrl(storagePath, 60 * 5);

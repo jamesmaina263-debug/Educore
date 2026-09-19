@@ -1,4 +1,5 @@
 import * as Sentry from "@sentry/nextjs";
+import type { createClient } from "@/lib/supabase/server";
 
 // 2026-09-14 production-readiness audit finding: Sentry is installed and correctly configured
 // with sendDefaultPii: false (see src/sentry.server.config.ts), but nothing in the app actually
@@ -28,5 +29,22 @@ export function setSentryRequestContext(params: { schoolId?: string | null; user
   }
   if (params.schoolId) {
     Sentry.setTag("school_id", params.schoolId);
+  }
+}
+
+// Same helper as the one written inline in payroll/actions.ts (tagPayrollActor), generalized so
+// the 40+ other Server Action files without their own existing user/school choke-point don't each
+// need their own copy of this try/catch. Deliberately best-effort and self-contained: resolves
+// the caller's user id and school id itself (one auth call + one RPC, in parallel) and tags them,
+// wrapped so a failure here -- including the ordinary, expected case of no authenticated user yet
+// (login, signup, password reset) or a platform admin with no school_id at all -- can never throw
+// into, block, or slow down the actual action. Call once, right after `const supabase = await
+// createClient();`, in any Server Action that doesn't already resolve school_id itself.
+export async function tagSentryRequestContext(supabase: Awaited<ReturnType<typeof createClient>>) {
+  try {
+    const [{ data: userData }, { data: schoolId }] = await Promise.all([supabase.auth.getUser(), supabase.rpc("auth_school_id")]);
+    setSentryRequestContext({ userId: userData.user?.id, schoolId: schoolId as string | null });
+  } catch {
+    // Never let Sentry tagging itself break the calling action.
   }
 }

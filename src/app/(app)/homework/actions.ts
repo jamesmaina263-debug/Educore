@@ -2,12 +2,14 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { tagSentryRequestContext } from "@/lib/observability/sentry-context";
 import { safeStorageFilename } from "@/lib/storage-path";
 
 type ActionResult = { error: string } | { success: true };
 
 async function currentSchoolUser() {
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -116,6 +118,7 @@ export async function deleteAssignmentAttachmentAction(attachmentId: string): Pr
  */
 export async function getAssignmentAttachmentUrlAction(storagePath: string): Promise<{ url: string } | { error: string }> {
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
   const { data, error } = await supabase.storage.from("assignment-attachments").createSignedUrl(storagePath, 60 * 5);
   if (error || !data) return { error: error?.message ?? "Could not create download link." };
   return { url: data.signedUrl };
@@ -127,6 +130,7 @@ export async function gradeSubmissionAction(
   feedback: string,
 ): Promise<ActionResult> {
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -144,6 +148,7 @@ export async function gradeSubmissionAction(
 
 export async function getSubmissionsAction(assignmentId: string) {
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
   const { data, error } = await supabase
     .from("assignment_submissions")
     .select(

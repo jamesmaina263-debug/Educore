@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { tagSentryRequestContext } from "@/lib/observability/sentry-context";
 import { classifyTrend, type TrendResult } from "@/lib/academics/growth-trend";
 
 // ---------------------------------------------------------------------------
@@ -61,6 +62,7 @@ export interface StudentGrowthSummary {
 
 export async function getStudentGrowth(studentId: string): Promise<StudentGrowthSummary | { error: string }> {
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
 
   // ---- 1. Subject percentage trend (numeric-model marks only) ----
   const { data: markRows, error: markError } = await supabase

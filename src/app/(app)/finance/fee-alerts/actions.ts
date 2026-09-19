@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { tagSentryRequestContext } from "@/lib/observability/sentry-context";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 type ActionResult = { error: string } | { success: true };
@@ -17,6 +18,7 @@ type ActionResult = { error: string } | { success: true };
 
 export async function checkFeeThresholdsAction(): Promise<{ error: string } | { success: true; created: number }> {
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
   const { data, error } = await supabase.rpc("check_fee_thresholds");
   if (error) return { error: error.message };
   revalidatePath("/finance/fee-alerts");
@@ -25,6 +27,7 @@ export async function checkFeeThresholdsAction(): Promise<{ error: string } | { 
 
 export async function updateDraftBodyAction(alertId: string, body: string): Promise<ActionResult> {
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
   const { error } = await supabase
     .from("fee_threshold_alerts")
     .update({ draft_body: body })
@@ -37,6 +40,7 @@ export async function updateDraftBodyAction(alertId: string, body: string): Prom
 
 export async function dismissAlertAction(alertId: string, reason: string): Promise<ActionResult> {
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -59,6 +63,7 @@ export async function dismissAlertAction(alertId: string, reason: string): Promi
 
 export async function approveAndSendAction(alertId: string): Promise<ActionResult> {
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
   const { data, error } = await supabase.rpc("send_fee_threshold_alert", { p_alert_id: alertId });
   if (error) return { error: error.message };
   revalidatePath("/finance/fee-alerts");
@@ -87,6 +92,7 @@ export async function polishDraftWithAIAction(alertId: string): Promise<ActionRe
   }
 
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
   const {
     data: { user },
   } = await supabase.auth.getUser();

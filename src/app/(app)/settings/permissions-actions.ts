@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { tagSentryRequestContext } from "@/lib/observability/sentry-context";
 import { ALL_PERMISSION_KEYS } from "@/lib/permissions-catalog";
 
 type ActionResult = { error: string } | { success: true };
@@ -29,6 +30,7 @@ export async function getEffectivePermissionsForUser(schoolUserId: string): Prom
   { error: string } | { success: true; permissions: EffectivePermission[]; roleName: string }
 > {
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
 
   const { data: targetUser, error: targetError } = await supabase
     .from("school_users")
@@ -83,6 +85,7 @@ export async function setUserPermissionOverride(
   allowed: boolean,
 ): Promise<ActionResult> {
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
 
   const { data: targetUser, error: targetError } = await supabase
     .from("school_users")
@@ -120,6 +123,7 @@ export async function setUserPermissionOverride(
 /** Remove a per-user override so the staff member reverts to their role's default/override. */
 export async function clearUserPermissionOverride(schoolUserId: string, permissionKey: string): Promise<ActionResult> {
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
   const { error } = await supabase
     .from("user_permission_overrides")
     .delete()

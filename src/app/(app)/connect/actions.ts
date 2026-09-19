@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { tagSentryRequestContext } from "@/lib/observability/sentry-context";
 
 type ActionResult = { error: string } | { success: true };
 
@@ -14,6 +15,7 @@ export async function createConnectItemAction(input: {
   requiresResponse: boolean;
 }): Promise<ActionResult> {
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
   const { error } = await supabase.rpc("create_connect_item", {
     p_student_id: input.studentId,
     p_category: input.category,
@@ -29,6 +31,7 @@ export async function createConnectItemAction(input: {
 
 export async function resolveConnectItemAction(itemId: string): Promise<ActionResult> {
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
   const { error } = await supabase.rpc("resolve_connect_item", { p_item_id: itemId });
   if (error) return { error: error.message };
   revalidatePath("/connect");

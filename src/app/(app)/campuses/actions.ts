@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { tagSentryRequestContext } from "@/lib/observability/sentry-context";
 
 type ActionResult = { error: string } | { success: true };
 type IssueApiKeyResult = { error: string } | { success: true; raw_key: string; key_prefix: string };
@@ -15,6 +16,7 @@ export async function updateGroupBranding(input: {
   custom_domain?: string;
 }): Promise<ActionResult> {
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
   const { data: groupId, error: groupIdError } = await supabase.rpc("auth_group_id");
   if (groupIdError || !groupId) return { error: "Could not resolve your school group." };
 
@@ -39,6 +41,7 @@ export async function issueGroupApiKey(input: {
   scopes: string[];
 }): Promise<IssueApiKeyResult> {
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
   const { data: groupId, error: groupIdError } = await supabase.rpc("auth_group_id");
   if (groupIdError || !groupId) return { error: "Could not resolve your school group." };
 
@@ -61,6 +64,7 @@ export async function issueGroupApiKey(input: {
 
 export async function revokeGroupApiKey(id: string): Promise<ActionResult> {
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
   const { data: schoolUser } = await supabase
     .from("school_users")
     .select("id")

@@ -104,6 +104,9 @@ export async function submitDemoRequest(
     };
   }
 
+  // No tagSentryRequestContext() call here: this is a public unauthenticated insert endpoint (see
+  // the comment above) -- there is never a session to tag, so the call would be a guaranteed
+  // no-op every time.
   const supabase = await createClient();
   const { error } = await supabase.from("marketing_demo_requests").insert({
     name,
