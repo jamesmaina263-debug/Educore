@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { setSentryRequestContext } from "@/lib/observability/sentry-context";
 import type { Recipient } from "@/app/(app)/communication/actions";
 import { escapePostgrestOrValue } from "@/lib/postgrest-filter";
 import { safeStorageFilename } from "@/lib/storage-path";
@@ -59,6 +60,7 @@ async function currentStaff(supabase: Awaited<ReturnType<typeof createClient>>) 
   } = await supabase.auth.getUser();
   if (!user) return null;
   const { data } = await supabase.from("school_users").select("id, school_id").eq("auth_user_id", user.id).maybeSingle();
+  setSentryRequestContext({ userId: user.id, schoolId: data?.school_id });
   return data;
 }
 
