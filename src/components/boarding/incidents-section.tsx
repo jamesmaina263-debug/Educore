@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import { useRouter } from "next/navigation";
 import { logIncident, updateIncidentStatus } from "@/app/(app)/boarding/actions";
 import { Button } from "@/components/ui/button";
@@ -11,6 +11,7 @@ import { StatusBadge } from "@/components/status-badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { StudentCombobox } from "@/components/shared/student-combobox";
+import { useServerTableParams } from "@/hooks/use-server-table-params";
 import { useOfflineSync } from "@/hooks/use-offline-sync";
 import { queueMutation } from "@/lib/offline/queue";
 import { BoardingOfflineBanner } from "./offline-banner";
@@ -31,16 +32,31 @@ export interface IncidentRow {
 
 const INCIDENT_TYPES = ["Bullying", "Property damage", "Curfew violation", "Health emergency", "Fighting", "Other"];
 
-export function IncidentsSection({
+/**
+ * `incidents` arrives already paginated/searched server-side (see
+ * getIncidentsPage) -- same useServerTableParams pattern as
+ * allocation-section.tsx/transfers-section.tsx. Doesn't touch
+ * loadBoardingContext or the offline-queue sync path.
+ */
+function IncidentsSectionInner({
   incidents,
+  totalCount,
+  pageSize,
   boardingStudents,
   canWrite,
 }: {
   incidents: IncidentRow[];
+  totalCount: number;
+  pageSize: number;
   boardingStudents: StudentOption[];
   canWrite: boolean;
 }) {
   const router = useRouter();
+  const { pageIndex, pageCount, onPageChange, search, onSearchChange } = useServerTableParams({
+    totalCount,
+    pageSize,
+  });
+  const page = pageIndex + 1;
   const { online, pendingCount, failed, syncing, sync, discard } = useOfflineSync("boarding");
   const [open, setOpen] = useState(false);
   const [pending, setPending] = useState(false);
@@ -94,7 +110,8 @@ export function IncidentsSection({
   return (
     <div className="flex flex-col gap-4">
       <BoardingOfflineBanner online={online} pendingCount={pendingCount} failed={failed} syncing={syncing} sync={sync} discard={discard} />
-      {canWrite && (
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        {canWrite && (
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild>
             <Button size="sm" className="self-start">
@@ -146,7 +163,14 @@ export function IncidentsSection({
             </DialogFooter>
           </DialogContent>
         </Dialog>
-      )}
+        )}
+        <Input
+          placeholder="Search by student name or admission number…"
+          value={search}
+          onChange={(e) => onSearchChange(e.target.value)}
+          className="max-w-xs"
+        />
+      </div>
 
       <div className="overflow-x-auto">
         <table className="table-dense w-full">
@@ -184,13 +208,53 @@ export function IncidentsSection({
             {incidents.length === 0 && (
               <tr>
                 <td colSpan={6} className="py-6 text-center text-muted-foreground">
-                  No incidents on record.
+                  No incidents {search ? "match this search" : "on record"}.
                 </td>
               </tr>
             )}
           </tbody>
         </table>
       </div>
+
+      <div className="flex items-center justify-between gap-3 text-sm text-muted-foreground">
+        <span>
+          {totalCount === 0
+            ? ""
+            : `Showing ${(page - 1) * pageSize + 1}-${Math.min(page * pageSize, totalCount)} of ${totalCount}`}
+        </span>
+        {pageCount > 1 && (
+          <div className="flex items-center gap-2">
+            <Button size="sm" variant="outline" disabled={page <= 1} onClick={() => onPageChange(pageIndex - 1)}>
+              Previous
+            </Button>
+            <span>
+              Page {page} of {pageCount}
+            </span>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={page >= pageCount}
+              onClick={() => onPageChange(pageIndex + 1)}
+            >
+              Next
+            </Button>
+          </div>
+        )}
+      </div>
     </div>
+  );
+}
+
+export function IncidentsSection(props: {
+  incidents: IncidentRow[];
+  totalCount: number;
+  pageSize: number;
+  boardingStudents: StudentOption[];
+  canWrite: boolean;
+}) {
+  return (
+    <Suspense fallback={null}>
+      <IncidentsSectionInner {...props} />
+    </Suspense>
   );
 }
