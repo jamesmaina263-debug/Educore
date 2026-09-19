@@ -1,7 +1,9 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { AdminBroadcastForm } from "@/components/admin/admin-broadcast-form";
+import { AdminMaintenanceToggle } from "@/components/admin/admin-maintenance-toggle";
 import type { BroadcastHistoryRow } from "@/app/(admin)/admin/broadcast/actions";
+import { getMaintenanceStatus } from "@/app/(admin)/admin/broadcast/maintenance-actions";
 
 export default async function AdminBroadcastPage() {
   const supabase = await createClient();
@@ -15,6 +17,7 @@ export default async function AdminBroadcastPage() {
   if (isSuperAdmin !== true) redirect("/dashboard");
 
   const { data: history } = await supabase.rpc("get_platform_announcement_history");
+  const maintenanceStatus = await getMaintenanceStatus();
 
   return (
     <div className="flex flex-col gap-4">
@@ -26,6 +29,8 @@ export default async function AdminBroadcastPage() {
           announcements.
         </p>
       </div>
+
+      <AdminMaintenanceToggle status={maintenanceStatus} />
 
       <AdminBroadcastForm history={(history as BroadcastHistoryRow[]) ?? []} />
     </div>
