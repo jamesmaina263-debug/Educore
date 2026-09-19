@@ -5,6 +5,7 @@ import { MarketingNav } from "@/components/marketing/nav";
 import { MarketingFooter } from "@/components/marketing/footer";
 import { MarketingJsonLd } from "@/components/marketing/json-ld";
 import { MarketingAnalytics } from "@/components/marketing/analytics";
+import { ExitIntentLeadMagnet } from "@/components/marketing/exit-intent-lead-magnet";
 
 // Shared by every public marketing page (see src/lib/school-slug-routing.ts
 // NEVER_PREFIX for the full route list this covers). Deliberately does not
@@ -37,6 +38,7 @@ export default function MarketingLayout({ children }: { children: ReactNode }) {
       <MarketingNav />
       <main className="flex-1">{children}</main>
       <MarketingFooter />
+      <ExitIntentLeadMagnet />
       <Analytics />
     </div>
   );
