@@ -115,7 +115,9 @@ function SickBaySectionInner({
     }
     const checkoutResult = await checkOutStudent(referFor.id, "referred", `Referred to ${referForm.referred_to}`);
     setPending(false);
-    if ("error" in checkoutResult) return setError(checkoutResult.error);
+    // The referral above is already saved, so a visit someone else closed in the meantime is not a
+    // failure -- reporting one would invite a retry that creates a duplicate referral.
+    if ("error" in checkoutResult && !checkoutResult.alreadyCheckedOut) return setError(checkoutResult.error);
     setReferDone(true);
     router.refresh();
   }
