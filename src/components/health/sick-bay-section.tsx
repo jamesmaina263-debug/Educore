@@ -9,6 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { StatusBadge } from "@/components/status-badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
+import { StudentCombobox } from "@/components/shared/student-combobox";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { useOfflineSync } from "@/hooks/use-offline-sync";
@@ -179,18 +180,12 @@ export function SickBaySection({
                 <DialogTitle>Check in to sick bay</DialogTitle>
               </DialogHeader>
               <div className="space-y-3">
-                <Select value={checkInForm.student_id} onValueChange={(v) => setCheckInForm({ ...checkInForm, student_id: v })}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Student" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {studentOptions.map((s) => (
-                      <SelectItem key={s.id} value={s.id}>
-                        {s.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <StudentCombobox
+                  students={studentOptions}
+                  value={checkInForm.student_id}
+                  onChange={(v) => setCheckInForm({ ...checkInForm, student_id: v })}
+                  placeholder="Student"
+                />
                 <Input placeholder="Reason" value={checkInForm.reason} onChange={(e) => setCheckInForm({ ...checkInForm, reason: e.target.value })} />
                 <Textarea placeholder="Symptoms (optional)" value={checkInForm.symptoms} onChange={(e) => setCheckInForm({ ...checkInForm, symptoms: e.target.value })} />
                 <Input
