@@ -208,6 +208,7 @@ export function ReportCardList({
                         onChange={(e) => setDrafts((p) => ({ ...p, [r.student_id]: e.target.value }))}
                       />
                       <RemarkBankPicker
+                        currentText={drafts[r.student_id]}
                         onInsert={(text) =>
                           setDrafts((p) => ({ ...p, [r.student_id]: p[r.student_id] ? `${p[r.student_id]} ${text}` : text }))
                         }

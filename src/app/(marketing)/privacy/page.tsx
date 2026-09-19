@@ -142,9 +142,8 @@ export default function PrivacyPage() {
               <span className="font-mono text-sm">educoreafrica.com</span>.
               It is scoped to this marketing website only; it is never
               active in the EduCore application that enrolled schools and
-              families use, which instead uses a separate, cookie-less
-              analytics tool (Plausible, described below) that does not
-              track individuals. When you submit the contact/demo form,
+              families use, which has no analytics or tracking of any kind.
+              When you submit the contact/demo form,
               Google Analytics separately records that a form was
               submitted, along with which page and marketing campaign or
               link brought you there and, for sales-qualified submissions,
@@ -359,7 +358,6 @@ export default function PrivacyPage() {
                     ["Twilio (WhatsApp Business API) / SMS gateway", "Sending parent communications the School initiates", "Recipient phone number, message content"],
                     ["Sentry", "Error monitoring", "Technical error data only — default PII collection is disabled in every environment. Ingest endpoint is EU-region (*.ingest.de.sentry.io) — see Section 9."],
                     ["Google Analytics (via Google Tag Manager)", "Website analytics (marketing site only, not the application)", "Aggregated visitor traffic (pages viewed, referral source, device/browser type) and anonymous form-submission events; sets analytics cookies on the marketing site only"],
-                    ["Plausible", "Website analytics (marketing site only, not the application)", "Aggregated, cookie-less traffic data — not currently active"],
                   ].map(([name, purpose, data]) => (
                     <tr key={name}>
                       <td className="w-1/4 px-4 py-3 align-top font-medium text-marketing-navy-950">

@@ -14,10 +14,12 @@ import { navItems } from "./nav-items";
 import { useCommandPalette } from "./command-palette-context";
 import { useOnlineStatus } from "@/hooks/use-online-status";
 
-export function CommandPalette() {
+export function CommandPalette({ boardingEnabled = true }: { boardingEnabled?: boolean }) {
   const { open, setOpen } = useCommandPalette();
   const router = useRouter();
   const online = useOnlineStatus();
+
+  const items = boardingEnabled ? navItems : navItems.filter((item) => !item.href.startsWith("/boarding"));
 
   const go = useCallback(
     (href: string) => {
@@ -41,7 +43,7 @@ export function CommandPalette() {
       <CommandList>
         <CommandEmpty>No results found.</CommandEmpty>
         <CommandGroup heading="Navigate">
-          {navItems.map((item) => (
+          {items.map((item) => (
             <CommandItem
               key={item.href}
               value={item.label}

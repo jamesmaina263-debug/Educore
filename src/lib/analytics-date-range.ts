@@ -1,5 +1,3 @@
-import type { DateRangeInput } from "@/lib/plausible";
-
 export type PeriodKey = "today" | "yesterday" | "7d" | "30d" | "90d" | "custom";
 
 export const PERIOD_OPTIONS: { key: PeriodKey; label: string }[] = [
@@ -27,45 +25,43 @@ function daysAgo(n: number): Date {
   return d;
 }
 
-// Maps a UI period key to the date_range shape the Plausible Stats API
-// expects, and separately to a [start, end] pair covering the *current*
-// period -- used both for display and to derive the equivalent prior
-// period for comparison. `custom` requires both `from`/`to` -- the caller
-// (the admin page) is expected to have already fallen back to a preset if
-// either is missing or invalid, so this function can assume they're present
-// and well-formed by the time it's called with period === "custom".
+// Maps a UI period key to a [start, end] ISO date pair covering the
+// *current* period -- used both for display and to derive the equivalent
+// prior period for comparison (see priorPeriod below), and passed straight
+// into GA4's GaDateRangeInput ([startDate, endDate]) by the caller. `custom`
+// requires both `from`/`to` -- the caller (the admin page) is expected to
+// have already fallen back to a preset if either is missing or invalid, so
+// this function can assume they're present and well-formed by the time
+// it's called with period === "custom".
 export function resolveDateRange(
   period: PeriodKey,
   custom?: { from: string; to: string },
-): { plausibleRange: DateRangeInput; startIso: string; endIso: string; label: string } {
+): { startIso: string; endIso: string; label: string } {
   if (period === "today") {
     const today = isoDate(new Date());
-    return { plausibleRange: "day", startIso: today, endIso: today, label: "Today" };
+    return { startIso: today, endIso: today, label: "Today" };
   }
   if (period === "yesterday") {
     const y = isoDate(daysAgo(1));
-    return { plausibleRange: [y, y], startIso: y, endIso: y, label: "Yesterday" };
+    return { startIso: y, endIso: y, label: "Yesterday" };
   }
   if (period === "7d") {
-    return { plausibleRange: "7d", startIso: isoDate(daysAgo(6)), endIso: isoDate(new Date()), label: "Last 7 days" };
+    return { startIso: isoDate(daysAgo(6)), endIso: isoDate(new Date()), label: "Last 7 days" };
   }
   if (period === "30d") {
-    return { plausibleRange: "30d", startIso: isoDate(daysAgo(29)), endIso: isoDate(new Date()), label: "Last 30 days" };
+    return { startIso: isoDate(daysAgo(29)), endIso: isoDate(new Date()), label: "Last 30 days" };
   }
   if (period === "custom" && custom) {
     const { from, to } = custom;
     return {
-      plausibleRange: [from, to],
       startIso: from,
       endIso: to,
       label: from === to ? from : `${from} – ${to}`,
     };
   }
-  // Plausible's built-in buckets stop at 91d; a custom [start, end] pair
-  // gets an exact 90 days instead of relying on the closest preset.
   const start = isoDate(daysAgo(89));
   const end = isoDate(new Date());
-  return { plausibleRange: [start, end], startIso: start, endIso: end, label: "Last 90 days" };
+  return { startIso: start, endIso: end, label: "Last 90 days" };
 }
 
 // Equivalent-length prior period for a given [start, end] pair, so KPI

@@ -42,6 +42,10 @@ export interface WizardStepData {
   mpesaActive: boolean;
   status: string;
   enrollmentResult: { student_id: string; admission_number: string; invoice_id: string | null; payment_reference: string | null; total_amount: number | null } | null;
+  // Per-school switch (schools.boarding_enabled, default true) -- false only for a school that
+  // explicitly doesn't offer boarding. Used to hide the boarding/day choice on Admission
+  // Details and to skip the Boarding step regardless of a stale boarding_preference value.
+  boardingModuleEnabled: boolean;
 }
 
 export async function loadWizardStepData(supabase: SupabaseClient, applicationId: string, schoolId: string): Promise<WizardStepData> {
@@ -54,6 +58,7 @@ export async function loadWizardStepData(supabase: SupabaseClient, applicationId
     { data: canReadFinance },
     { data: requirements },
     { data: mpesaSettings },
+    { data: school },
   ] = await Promise.all([
     supabase
       .from("applications")
@@ -67,6 +72,7 @@ export async function loadWizardStepData(supabase: SupabaseClient, applicationId
     supabase.rpc("auth_has_permission", { p_permission_key: "finance.read" }),
     supabase.from("application_document_requirements").select("category, label, required").eq("school_id", schoolId).order("display_order"),
     supabase.from("mpesa_settings").select("is_active").maybeSingle(),
+    supabase.from("schools").select("boarding_enabled").eq("id", schoolId).maybeSingle(),
   ]);
 
   const studentId = application?.resulting_student_id ?? null;
@@ -171,5 +177,6 @@ export async function loadWizardStepData(supabase: SupabaseClient, applicationId
     mpesaActive: mpesaSettings?.is_active ?? false,
     status: application?.status ?? "draft",
     enrollmentResult,
+    boardingModuleEnabled: school?.boarding_enabled ?? true,
   };
 }

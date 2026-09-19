@@ -114,7 +114,7 @@ export async function loadFinanceContext(): Promise<FinanceContext> {
       supabase.from("classes").select("id, name").order("level_order"),
       supabase.from("fee_structures").select("id, name, term_id, class_id, boarding_type, fee_category, is_active, terms(name), classes(name)").order("created_at", { ascending: false }),
       supabase.from("fee_items").select("fee_structure_id, name, amount"),
-      supabase.from("invoices").select("id, student_id, total_amount, status, created_at, term_id, students(first_name, last_name, current_class_id, admission_number), terms(name)").order("created_at", { ascending: false }),
+      supabase.from("invoices").select("id, invoice_number, student_id, total_amount, status, created_at, term_id, students(first_name, last_name, current_class_id, admission_number), terms(name)").order("created_at", { ascending: false }),
       supabase.from("payments").select("id, student_id, method, amount, reference, purpose, notes, status, phone_number, recorded_at, students(first_name, last_name)").order("recorded_at", { ascending: false }),
       supabase.from("discounts").select("id, invoice_id, amount, reason, status, students(first_name, last_name)").order("created_at", { ascending: false }),
       supabase.from("expenses").select("id, category, vendor, amount, description, status").order("created_at", { ascending: false }),
@@ -176,6 +176,7 @@ export async function loadFinanceContext(): Promise<FinanceContext> {
     const st = inv.students as unknown as { first_name: string; last_name: string; current_class_id: string } | null;
     return {
       id: inv.id,
+      invoice_number: inv.invoice_number,
       student_id: inv.student_id,
       student_name: st ? `${st.first_name} ${st.last_name}` : "",
       class_name: st ? classNameByStream.get(st.current_class_id) ?? "" : "",
@@ -271,6 +272,8 @@ export async function loadFinanceContext(): Promise<FinanceContext> {
   const studentOptions: StudentOption[] = (activeStudents ?? []).map((s) => ({
     id: s.id,
     name: `${s.first_name} ${s.last_name}`,
+    admission_number: s.admission_number ?? undefined,
+    class_name: classNameByStream.get(s.current_class_id ?? "") ?? undefined,
   }));
 
   const termOptions: TermOption[] = (terms ?? []).map((t) => ({ id: t.id, name: t.name }));

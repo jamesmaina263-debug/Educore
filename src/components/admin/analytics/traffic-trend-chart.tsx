@@ -1,19 +1,21 @@
 "use client";
 
 import { Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import type { TimeseriesPoint } from "@/lib/plausible";
+import type { TimeseriesPoint } from "@/lib/ga4";
 
 const MONTH_LABELS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 function formatTick(value: string, granularity: "day" | "week" | "month"): string {
-  // `value` is always an ISO8601 date (YYYY-MM-DD) regardless of
-  // granularity -- Plausible's time:week/time:month dimensions return the
-  // bucket's start date, not a pre-formatted label.
+  // `value` has already been through formatPeriodLabel() in src/lib/ga4.ts
+  // by the time it gets here: "YYYY-MM-DD" for day, "YYYY-Wnn" for week,
+  // "YYYY-MM" for month (GA4's raw yearWeek/yearMonth dimensions don't
+  // resolve to a specific calendar date, so week/month are best-effort
+  // labels, not real bucket-start dates).
   if (granularity === "month") {
     const monthIndex = Number(value.slice(5, 7)) - 1;
     return MONTH_LABELS[monthIndex] ?? value.slice(5, 7);
   }
-  // day and week both read fine as "MM-DD" (week shows the week's start date)
+  // day -> "MM-DD"; week -> "Wnn" (both read fine sliced from index 5)
   return value.slice(5);
 }
 

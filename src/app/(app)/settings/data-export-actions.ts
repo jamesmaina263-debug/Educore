@@ -93,7 +93,7 @@ export async function exportSchoolData(): Promise<DataExportOutcome> {
     supabase.from("subjects").select("name, code, is_core, is_active").order("name"),
     supabase
       .from("invoices")
-      .select("students(admission_number, first_name, last_name), terms(name), total_amount, status, created_at")
+      .select("id, invoice_number, students(admission_number, first_name, last_name), terms(name), total_amount, status, created_at")
       .order("created_at"),
     supabase
       .from("payments")
@@ -211,10 +211,11 @@ export async function exportSchoolData(): Promise<DataExportOutcome> {
     },
     {
       name: "Invoices",
-      headers: ["Student Adm. No.", "Student Name", "Term", "Total Amount (KES)", "Status", "Created At"],
+      headers: ["Reference", "Student Adm. No.", "Student Name", "Term", "Total Amount (KES)", "Status", "Created At"],
       rows: (invoices ?? []).map((i) => {
         const student = i.students as unknown as { admission_number: string; first_name: string; last_name: string } | null;
         return [
+          i.invoice_number ?? `INV-${(i.id as string).slice(0, 8).toUpperCase()}`,
           student?.admission_number ?? "",
           student ? `${student.first_name} ${student.last_name}` : "",
           (i.terms as unknown as { name: string } | null)?.name ?? "",

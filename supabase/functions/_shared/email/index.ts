@@ -9,6 +9,12 @@ import { ConsoleEmailProvider } from "./consoleProvider.ts";
 // replacement for this send path. Do not add Zoho back into this factory without
 // explicit sign-off — an earlier attempt to do so risked silently rerouting real
 // school communications through Zoho's free-tier send limits.
+//
+// EmailProvider.send()'s optional `from` param (added for the demo-request-assignment
+// notification) is an opt-in per-call override of the address below, not a Zoho
+// integration -- it still sends through this same Resend account/domain, just with a
+// different verified from-address for that one email. Existing callers that don't pass
+// it are unaffected.
 export function getEmailProvider(): EmailProvider {
   const apiKey = Deno.env.get("RESEND_API_KEY");
   const fromAddress = Deno.env.get("RESEND_FROM_ADDRESS");

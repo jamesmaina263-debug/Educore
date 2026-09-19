@@ -57,14 +57,18 @@ function NavRow({
   );
 }
 
-export function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
+export function SidebarNav({ onNavigate, boardingEnabled = true }: { onNavigate?: () => void; boardingEnabled?: boolean }) {
   const pathname = usePathname();
   const online = useOnlineStatus();
   const [manuallyOpen, setManuallyOpen] = useState<Record<string, boolean>>({});
 
+  const groups = boardingEnabled
+    ? navGroups
+    : navGroups.map((group) => ({ ...group, items: group.items.filter((item) => item.href !== "/boarding") }));
+
   return (
     <nav className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-2">
-      {navGroups.map((group) => (
+      {groups.map((group) => (
         <div key={group.label} className="flex flex-col gap-0.5">
           <p className="px-2.5 pb-1 pt-1 text-[10px] font-semibold uppercase tracking-wider text-sidebar-foreground/40">
             {group.label}

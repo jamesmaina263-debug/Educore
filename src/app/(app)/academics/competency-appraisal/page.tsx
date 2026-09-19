@@ -5,6 +5,7 @@ import { AppShell } from "@/components/app-shell/app-shell";
 import { CompetencyAppraisalFilters } from "@/components/academics/competency-appraisal-filters";
 import { CompetencyAppraisalGrid } from "@/components/academics/competency-appraisal-grid";
 import { loadCompetencyAppraisalContext } from "./_data";
+import { ensureDefaultCompetencyScale } from "../competency-appraisal-actions";
 
 export default async function CompetencyAppraisalPage({
   searchParams,
@@ -18,6 +19,13 @@ export default async function CompetencyAppraisalPage({
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
+
+  // Idempotent, per its own doc comment "safe to call on every page load" --
+  // this was written to self-heal the grading scale here but was never
+  // actually wired to a caller. Best-effort: a failure here shouldn't block
+  // the page, since any real absence of a scale will surface where it
+  // matters (submitting a rating) rather than silently here.
+  await ensureDefaultCompetencyScale();
 
   const ctx = await loadCompetencyAppraisalContext(streamParam, termParam, indicatorParam);
 

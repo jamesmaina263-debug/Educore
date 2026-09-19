@@ -191,11 +191,16 @@ export async function decideApplicationAction(
   const { data: application } = await supabase
     .from("applications")
     .select(
-      "application_number, first_name, last_name, guardian_id, school_id, application_source, boarding_preference, transport_required, school_users!applications_guardian_id_fkey(phone, full_name)",
+      "application_number, first_name, last_name, guardian_id, school_id, application_source, boarding_preference, transport_required, school_users!applications_guardian_id_fkey(phone, full_name), schools(boarding_enabled)",
     )
     .eq("id", applicationId)
     .maybeSingle();
   if (!application) return { error: "Application not found." };
+  // A school with boarding disabled always treats stored boarding_preference as inapplicable,
+  // same as the wizard (wizard-steps.ts / step-forms.tsx) and check_admission_checklist() —
+  // otherwise a stale 'boarding' value from before the school turned boarding off would get
+  // this applicant called a "boarder" in the acceptance admission-form email below.
+  const boardingModuleEnabled = (application.schools as unknown as { boarding_enabled: boolean } | null)?.boarding_enabled ?? true;
 
   // The fee structure is already known and already committed to well before this point for an
   // online applicant (that's the whole reason for sending it in the acceptance email) — so
@@ -247,7 +252,7 @@ export async function decideApplicationAction(
         studentName: `${application.first_name} ${application.last_name}`,
         guardianName: guardian?.full_name ?? "Parent/Guardian",
         applicationNumber: application.application_number,
-        isBoarder: application.boarding_preference === "boarding",
+        isBoarder: boardingModuleEnabled && application.boarding_preference === "boarding",
         needsTransport: application.transport_required === true,
       });
     } catch (formError) {

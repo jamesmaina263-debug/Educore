@@ -11,6 +11,7 @@ import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { createFeeWaiverAction, revokeFeeWaiverAction } from "@/app/(app)/finance/actions";
+import { StudentCombobox } from "@/components/shared/student-combobox";
 
 export interface FeeWaiverRow {
   id: string;
@@ -27,6 +28,8 @@ export interface FeeWaiverRow {
 export interface StudentOption {
   id: string;
   name: string;
+  admission_number?: string;
+  class_name?: string;
 }
 
 export interface TermOption {
@@ -119,18 +122,12 @@ export function WaiversSection({
               <div className="space-y-3">
                 <div className="space-y-1.5">
                   <Label>Student</Label>
-                  <Select value={studentId} onValueChange={setStudentId}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select a student" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {students.map((s) => (
-                        <SelectItem key={s.id} value={s.id}>
-                          {s.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <StudentCombobox
+                    students={students}
+                    value={studentId}
+                    onChange={setStudentId}
+                    placeholder="Search by name or admission number..."
+                  />
                 </div>
                 <div className="space-y-1.5">
                   <Label>Name</Label>

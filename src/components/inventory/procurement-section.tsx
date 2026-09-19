@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
@@ -19,6 +20,7 @@ import { StatusBadge } from "@/components/status-badge";
 import type { ItemRow } from "@/components/inventory/inventory-section";
 import {
   approveRequisitionAction,
+  previewRequisitionApprovalAction,
   completeAssetMaintenanceAction,
   createAssetAction,
   createPurchaseOrderAction,
@@ -172,9 +174,42 @@ function ApproveRequisitionButton({ requisitionId, suppliers }: { requisitionId:
   }
 
   function handleApproveClick() {
-    const fd = new FormData();
-    fd.set("requisition_id", requisitionId);
-    attempt(fd);
+    setError(null);
+    startTransition(async () => {
+      // Run the read-only preview first instead of just trying approveRequisitionAction
+      // and parsing its error string for "no supplier on file"/"no unit cost on file" --
+      // the preview gives structured needs_supplier/needs_cost flags per item, so the
+      // common case (nothing missing) still resolves in one click, and the case that
+      // needs a supplier/cost shows the picker immediately instead of after a failed
+      // attempt.
+      const preview = await previewRequisitionApprovalAction(requisitionId);
+      if ("error" in preview) {
+        setError(preview.error);
+        return;
+      }
+      const missingSupplier = preview.rows.some((r) => r.needs_supplier);
+      const missingCost = preview.rows.some((r) => r.needs_cost);
+      if (missingSupplier || missingCost) {
+        setNeedsSupplier(missingSupplier);
+        setNeedsCost(missingCost);
+        setError(
+          missingSupplier && missingCost
+            ? "Some items need a supplier and unit cost before this can be approved."
+            : missingSupplier
+              ? "Some items need a supplier before this can be approved."
+              : "Some items need a unit cost before this can be approved.",
+        );
+        return;
+      }
+      const fd = new FormData();
+      fd.set("requisition_id", requisitionId);
+      const res = await approveRequisitionAction(fd);
+      if ("error" in res) {
+        setNeedsSupplier(res.error.includes("no supplier on file"));
+        setNeedsCost(res.error.includes("no unit cost on file"));
+        setError(res.error);
+      }
+    });
   }
 
   function handleResolvedSubmit() {
@@ -941,7 +976,16 @@ export function ProcurementPanel({
               <tbody>
                 {purchaseOrders.map((po) => (
                   <tr key={po.id}>
-                    <td className="font-medium">{po.po_number}</td>
+                    <td className="font-medium">
+                      {po.po_number}{" "}
+                      <Link
+                        href={`/inventory/procurement/${po.id}/print`}
+                        target="_blank"
+                        className="text-[0.6875rem] font-normal text-primary underline underline-offset-2"
+                      >
+                        Print
+                      </Link>
+                    </td>
                     <td className="text-muted-foreground">{po.supplier_name}</td>
                     <td className="text-muted-foreground">
                       <div className="flex flex-col gap-1">

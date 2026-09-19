@@ -107,8 +107,11 @@ export async function submitApplication(
   if (schoolError || !school) {
     return { error: "We couldn't find this school. Please check the link and try again." };
   }
+  // Deliberately generic -- same spirit as login's "Invalid email or password.": an applicant
+  // gets told to go through the school rather than being informed the school itself is
+  // suspended (billing status isn't something a prospective family needs to know).
   if (school.status === "suspended" || school.status === "cancelled") {
-    return { error: "This school is not accepting online applications at the moment." };
+    return { error: "This school isn't accepting online applications right now. Please contact the school directly." };
   }
 
   // Basic duplicate-submission guard: same guardian phone + same student name applied in the

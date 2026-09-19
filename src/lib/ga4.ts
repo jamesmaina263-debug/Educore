@@ -3,7 +3,8 @@
 // @google-analytics/data SDK -- that package pulls in grpc-js/protobufjs,
 // which is heavy for a Vercel serverless function and unnecessary here since
 // the REST surface is small. Mirrors the same "safe no-op until configured"
-// posture as src/lib/plausible.ts: every exported function returns null on
+// posture as before Plausible was removed (see MARKETING_SITE_STATUS.md's
+// 2026-09-16 entry): every exported function returns null on
 // any configuration gap, auth failure, or non-2xx response, never a
 // fabricated zero. Callers render an explicit "not connected" state for a
 // null result -- see src/components/admin/analytics/not-connected-card.tsx.
@@ -12,13 +13,14 @@
 // notes -- flagged deliberately rather than silently faked):
 //   - Exit pages: GA4 has no native exit-page dimension (a UA concept that
 //     wasn't carried over). getExitPages() always returns null.
-//   - Goal/CTA breakdown: the named events Plausible tracked (Contact CTA
-//     Click, WhatsApp CTA Click, etc. -- see src/components/marketing/
-//     analytics.tsx) are Plausible-specific and are NOT guaranteed to reach
-//     GA4. getGoalBreakdown() reports GA4's actual top event names instead
-//     of assuming those five exist; it will only show the demo-funnel-style
-//     names if GTM (GTM-MGV2XHBB, see src/app/(marketing)/layout.tsx) has separately
-//     been configured to fire matching events.
+//   - Goal/CTA breakdown: getGoalBreakdown() reports GA4's actual top event
+//     names rather than assuming any particular five exist. It will only
+//     show demo-funnel-style names ("Demo Form Started", "Contact CTA
+//     Click", etc. -- the funnel labels in src/app/(admin)/admin/analytics/
+//     page.tsx) if GTM (GTM-MGV2XHBB, see src/app/(marketing)/layout.tsx)
+//     has separately been configured to fire matching events. As of
+//     2026-09-16 nothing sends those specific event names -- see
+//     MARKETING_SITE_STATUS.md's entry from that date.
 //   - UTM breakdown drops the "content" (ad variant) column present in the
 //     Plausible version -- its GA4 dimension name wasn't confirmed against
 //     current API docs, and guessing wrong breaks the entire report call
@@ -39,6 +41,27 @@ export function isGa4Configured(): boolean {
 // src/lib/analytics-date-range.ts's startIso/endIso, so unlike Plausible's
 // DateRangeInput this never needs a shorthand like "7d".
 export type GaDateRangeInput = [string, string];
+
+// Retries once on a transient network-level failure -- observed in production runtime errors
+// on /admin/analytics (2026-09-18): `TypeError: fetch failed` wrapping a
+// `SocketError: other side closed` / `UND_ERR_SOCKET` cause, from a handful of concurrent
+// calls to Google's API per page load (this page fires ~16 GA4 requests via Promise.all).
+// A reused keep-alive socket to googleapis.com occasionally gets closed server-side right as
+// a new request tries to reuse it -- a transport-level hiccup, not a bad request or bad
+// credentials, and it self-resolves on a fresh attempt. Only retries `TypeError` (what
+// undici's fetch throws for a network-level failure); an HTTP error response is a resolved
+// promise, not a throw, so it's unaffected and still handled by each caller's own !res.ok
+// check. Never retries a second time -- if it fails again, the existing null-safe fallback
+// (see file header) takes over exactly as before.
+async function withNetworkRetry<T>(fn: () => Promise<T>): Promise<T> {
+  try {
+    return await fn();
+  } catch (err) {
+    if (!(err instanceof TypeError)) throw err;
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    return fn();
+  }
+}
 
 let cachedAuth: GoogleAuth | null = null;
 
@@ -63,7 +86,7 @@ async function getAccessToken(): Promise<string | null> {
   if (!auth) return null;
   try {
     const client = await auth.getClient();
-    const { token } = await client.getAccessToken();
+    const { token } = await withNetworkRetry(() => client.getAccessToken());
     return token ?? null;
   } catch (err) {
     console.error("GA4 auth failed", err);
@@ -77,27 +100,28 @@ type Ga4Row = { dimensionValues?: Ga4DimensionValue[]; metricValues?: Ga4MetricV
 type Ga4ReportResponse = { rows?: Ga4Row[]; totals?: Ga4Row[] };
 
 // Every caller goes through here. Returns null on any configuration gap,
-// auth failure, network failure, or non-2xx response -- same contract as
-// Plausible's queryPlausible.
+// auth failure, network failure, or non-2xx response -- never throws.
 async function runReport(body: Record<string, unknown>): Promise<Ga4ReportResponse | null> {
   if (!PROPERTY_ID) return null;
   const token = await getAccessToken();
   if (!token) return null;
 
   try {
-    const res = await fetch(`${API_BASE_URL}/properties/${PROPERTY_ID}:runReport`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(body),
-      // Same staleness tolerance as Plausible -- an admin dashboard doesn't
-      // need second-by-second numbers, and this avoids hammering GA4's
-      // Data API quota if the page or its date-range tabs are hit
-      // repeatedly.
-      next: { revalidate: 300 },
-    });
+    const res = await withNetworkRetry(() =>
+      fetch(`${API_BASE_URL}/properties/${PROPERTY_ID}:runReport`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(body),
+        // Same staleness tolerance as Plausible -- an admin dashboard doesn't
+        // need second-by-second numbers, and this avoids hammering GA4's
+        // Data API quota if the page or its date-range tabs are hit
+        // repeatedly.
+        next: { revalidate: 300 },
+      }),
+    );
     if (!res.ok) {
       console.error(`GA4 runReport failed: ${res.status} ${await res.text()}`);
       return null;
@@ -364,15 +388,17 @@ export async function getRealtimeVisitorCount(): Promise<number | null> {
   const token = await getAccessToken();
   if (!token) return null;
   try {
-    const res = await fetch(`${API_BASE_URL}/properties/${PROPERTY_ID}:runRealtimeReport`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ metrics: [{ name: "activeUsers" }] }),
-      next: { revalidate: 30 },
-    });
+    const res = await withNetworkRetry(() =>
+      fetch(`${API_BASE_URL}/properties/${PROPERTY_ID}:runRealtimeReport`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ metrics: [{ name: "activeUsers" }] }),
+        next: { revalidate: 30 },
+      }),
+    );
     if (!res.ok) return null;
     const data = (await res.json()) as Ga4ReportResponse;
     const value = data.rows?.[0]?.metricValues?.[0]?.value ?? data.totals?.[0]?.metricValues?.[0]?.value;
