@@ -482,16 +482,15 @@ export async function uploadDocumentAsStaff(applicationId: string, category: str
   const { error: uploadError } = await supabase.storage.from("application-documents").upload(path, file);
   if (uploadError) return { error: uploadError.message };
 
-  const { data: existing } = await supabase
+  // Any earlier document for this category is replaced -- but only AFTER the new row is safely
+  // saved. This used to delete the old file and row first and insert the new row last, so a failed
+  // insert destroyed the previously verified document and left the new file orphaned. Nothing
+  // enforces one row per (application, category), so inserting first is safe.
+  const { data: previous } = await supabase
     .from("documents")
     .select("id, storage_path")
     .eq("application_id", applicationId)
-    .eq("category", category)
-    .maybeSingle();
-  if (existing) {
-    await supabase.storage.from("application-documents").remove([existing.storage_path]);
-    await supabase.from("documents").delete().eq("id", existing.id);
-  }
+    .eq("category", category);
 
   const { error: insertError } = await supabase.from("documents").insert({
     school_id: application.school_id,
@@ -505,7 +504,23 @@ export async function uploadDocumentAsStaff(applicationId: string, category: str
     verified_by: staff?.id ?? null,
     verified_at: new Date().toISOString(),
   });
-  if (insertError) return { error: insertError.message };
+  if (insertError) {
+    // The old document is untouched; just don't leave the new file behind with no row pointing at it.
+    await supabase.storage.from("application-documents").remove([path]);
+    return { error: insertError.message };
+  }
+
+  if (previous && previous.length > 0) {
+    const { error: deleteError } = await supabase
+      .from("documents")
+      .delete()
+      .in("id", previous.map((d) => d.id));
+    if (deleteError) {
+      // Keep the old files in storage so no surviving row is left pointing at a deleted object.
+      return { error: `The new file was saved, but the previous version could not be removed: ${deleteError.message}` };
+    }
+    await supabase.storage.from("application-documents").remove(previous.map((d) => d.storage_path));
+  }
 
   revalidatePath(`/admissions/${applicationId}/wizard`);
   return { success: true };
@@ -796,8 +811,17 @@ export async function completeEnrollmentAction(applicationId: string): Promise<{
           school_user_id: application.guardian_id,
           values: { first_name: app2?.first_name ?? "", last_name: app2?.last_name ?? "" },
         };
-        await composeAndSendAction({ recipients: [recipient], template_id: template.id, channel: template.channel });
-        confirmationSent = true;
+        const sendResult = await composeAndSendAction({ recipients: [recipient], template_id: template.id, channel: template.channel });
+        // composeAndSendAction reports failure by returning { error } (it doesn't throw), and can
+        // succeed with nothing actually sent. Previously confirmationSent was set unconditionally, so
+        // the completion screen told the officer a confirmation went out when it hadn't.
+        if ("error" in sendResult) {
+          confirmationNote = `No confirmation message was sent automatically — ${sendResult.error.replace(/\.?$/, ".")}`;
+        } else if (sendResult.sent > 0) {
+          confirmationSent = true;
+        } else {
+          confirmationNote = "No confirmation message was sent automatically — the message could not be delivered.";
+        }
       } else {
         confirmationNote = "No confirmation message was sent automatically — no admission-category communication template is configured for this school.";
       }
