@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useState } from "react";
+import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { checkInStudent, checkOutStudent, sendHealthAlertAction, createReferral } from "@/app/(app)/health/actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,6 +12,7 @@ import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@
 import { StudentCombobox } from "@/components/shared/student-combobox";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
+import { useServerTableParams } from "@/hooks/use-server-table-params";
 import { useOfflineSync } from "@/hooks/use-offline-sync";
 import { queueMutation } from "@/lib/offline/queue";
 import { HealthOfflineBanner } from "./offline-banner";
@@ -33,22 +34,49 @@ export interface SickBayVisitRow {
 
 type Outcome = "returned_to_class" | "sent_home" | "referred" | "collected_by_guardian";
 
-export function SickBaySection({
+/**
+ * `visits` arrives already paginated/searched/status-filtered server-side
+ * (see getSickBayPage) -- same useServerTableParams + URL-driven
+ * showHistory-toggle pattern as boarding/allocation-section.tsx (#346).
+ * Doesn't touch loadHealthContext.
+ */
+function SickBaySectionInner({
   visits,
+  totalCount,
+  pageSize,
+  showHistory,
   studentOptions,
   canWrite,
 }: {
   visits: SickBayVisitRow[];
+  totalCount: number;
+  pageSize: number;
+  showHistory: boolean;
   studentOptions: StudentOption[];
   canWrite: boolean;
 }) {
   const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const { pageIndex, pageCount, onPageChange, search, onSearchChange } = useServerTableParams({
+    totalCount,
+    pageSize,
+  });
+  const page = pageIndex + 1;
   const { online, pendingCount, failed, syncing, sync, discard } = useOfflineSync("health");
   const [checkInOpen, setCheckInOpen] = useState(false);
   const [checkOutFor, setCheckOutFor] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [showHistory, setShowHistory] = useState(false);
+
+  function toggleHistory() {
+    const params = new URLSearchParams(searchParams.toString());
+    if (showHistory) params.delete("status");
+    else params.set("status", "all");
+    params.delete("page");
+    const qs = params.toString();
+    router.push(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+  }
 
   const [checkInForm, setCheckInForm] = useState({ student_id: "", reason: "", symptoms: "", temperature_c: "" });
   const [checkOutForm, setCheckOutForm] = useState<{ outcome: Outcome; notes: string }>({ outcome: "returned_to_class", notes: "" });
@@ -164,12 +192,10 @@ export function SickBaySection({
     router.refresh();
   }
 
-  const visible = visits.filter((v) => (showHistory ? true : v.is_open));
-
   return (
     <div className="flex flex-col gap-4">
       <HealthOfflineBanner online={online} pendingCount={pendingCount} failed={failed} syncing={syncing} sync={sync} discard={discard} />
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         {canWrite && (
           <Dialog open={checkInOpen} onOpenChange={setCheckInOpen}>
             <DialogTrigger asChild>
@@ -205,9 +231,17 @@ export function SickBaySection({
             </DialogContent>
           </Dialog>
         )}
-        <Button size="sm" variant="ghost" onClick={() => setShowHistory(!showHistory)}>
-          {showHistory ? "Hide history" : "Show full history"}
-        </Button>
+        <div className="flex flex-wrap items-center gap-3">
+          <Input
+            placeholder="Search by student name or admission number…"
+            value={search}
+            onChange={(e) => onSearchChange(e.target.value)}
+            className="max-w-xs"
+          />
+          <Button size="sm" variant="ghost" onClick={toggleHistory}>
+            {showHistory ? "Hide history" : "Show full history"}
+          </Button>
+        </div>
       </div>
 
       <div className="overflow-x-auto">
@@ -223,7 +257,7 @@ export function SickBaySection({
             </tr>
           </thead>
           <tbody>
-            {visible.map((v) => (
+            {visits.map((v) => (
               <tr key={v.id}>
                 <td>{v.student_name}</td>
                 <td>{new Date(v.check_in_at).toLocaleString()}</td>
@@ -271,15 +305,45 @@ export function SickBaySection({
                 )}
               </tr>
             ))}
-            {visible.length === 0 && (
+            {visits.length === 0 && (
               <tr>
                 <td colSpan={6} className="py-6 text-center text-muted-foreground">
-                  {showHistory ? "No sick bay visits on record." : "No one currently in sick bay."}
+                  {search
+                    ? "No visits match this search."
+                    : showHistory
+                      ? "No sick bay visits on record."
+                      : "No one currently in sick bay."}
                 </td>
               </tr>
             )}
           </tbody>
         </table>
+      </div>
+
+      <div className="flex items-center justify-between gap-3 text-sm text-muted-foreground">
+        <span>
+          {totalCount === 0
+            ? ""
+            : `Showing ${(page - 1) * pageSize + 1}-${Math.min(page * pageSize, totalCount)} of ${totalCount}`}
+        </span>
+        {pageCount > 1 && (
+          <div className="flex items-center gap-2">
+            <Button size="sm" variant="outline" disabled={page <= 1} onClick={() => onPageChange(pageIndex - 1)}>
+              Previous
+            </Button>
+            <span>
+              Page {page} of {pageCount}
+            </span>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={page >= pageCount}
+              onClick={() => onPageChange(pageIndex + 1)}
+            >
+              Next
+            </Button>
+          </div>
+        )}
       </div>
 
       <Dialog open={notifyFor !== null} onOpenChange={(open) => !open && setNotifyFor(null)}>
@@ -378,5 +442,22 @@ export function SickBaySection({
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+export function SickBaySection(props: {
+  visits: SickBayVisitRow[];
+  totalCount: number;
+  pageSize: number;
+  showHistory: boolean;
+  studentOptions: StudentOption[];
+  canWrite: boolean;
+}) {
+  // useSearchParams (inside useServerTableParams) requires a Suspense
+  // boundary -- same pattern as boarding/allocation-section.tsx (#346).
+  return (
+    <Suspense fallback={null}>
+      <SickBaySectionInner {...props} />
+    </Suspense>
   );
 }
