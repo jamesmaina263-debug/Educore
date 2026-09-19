@@ -1,0 +1,9 @@
+-- Auto-reconciled by scripts/reconcile_migration_drift.py: this version was applied directly to production without a matching git commit at the time. Content below is byte-for-byte what's recorded in supabase_migrations.schema_migrations for version 20260918072915 -- reconstructed, not rewritten.
+
+DROP POLICY IF EXISTS "remark_bank_entries_write" ON public."remark_bank_entries";
+DROP POLICY IF EXISTS "remark_bank_entries_select" ON public."remark_bank_entries";
+CREATE POLICY "remark_bank_entries_insert" ON public."remark_bank_entries" AS PERMISSIVE FOR INSERT TO public WITH CHECK ((((school_id = auth_school_id()) AND auth_has_permission('academics.write'::text)) OR ((school_id IS NULL) AND auth_is_super_admin())));
+CREATE POLICY "remark_bank_entries_delete" ON public."remark_bank_entries" AS PERMISSIVE FOR DELETE TO public USING ((((school_id = auth_school_id()) AND auth_has_permission('academics.write'::text)) OR ((school_id IS NULL) AND auth_is_super_admin())));
+CREATE POLICY "remark_bank_entries_update" ON public."remark_bank_entries" AS PERMISSIVE FOR UPDATE TO public USING ((((school_id = auth_school_id()) AND auth_has_permission('academics.write'::text)) OR ((school_id IS NULL) AND auth_is_super_admin()))) WITH CHECK ((((school_id = auth_school_id()) AND auth_has_permission('academics.write'::text)) OR ((school_id IS NULL) AND auth_is_super_admin())));
+CREATE POLICY "remark_bank_entries_select" ON public."remark_bank_entries" AS PERMISSIVE FOR SELECT TO public USING (((((school_id = auth_school_id()) AND auth_has_permission('academics.write'::text)) OR ((school_id IS NULL) AND auth_is_super_admin()))) OR (( SELECT auth.role() AS role) = 'authenticated' AND (((school_id IS NULL) OR ((school_id = auth_school_id()) AND auth_has_permission('academics.read'::text))))));
+
