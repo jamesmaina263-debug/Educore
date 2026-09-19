@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { tagSentryRequestContext } from "@/lib/observability/sentry-context";
+import { validateReviewInput } from "@/lib/performance/review-input";
 
 type ActionResult = { error: string } | { success: true };
 
@@ -14,6 +15,9 @@ export async function createReviewAction(input: {
   competency_scores: Record<string, number>;
   notes: string;
 }): Promise<ActionResult> {
+  const validated = validateReviewInput(input);
+  if ("error" in validated) return { error: validated.error };
+
   const supabase = await createClient();
   await tagSentryRequestContext(supabase);
   const {
@@ -29,8 +33,8 @@ export async function createReviewAction(input: {
     academic_year_id: input.academic_year_id,
     term_id: input.term_id,
     review_type: input.review_type,
-    competency_scores: input.competency_scores,
-    notes: input.notes,
+    competency_scores: validated.competency_scores,
+    notes: validated.notes,
   });
   if (error) return { error: error.message };
   revalidatePath("/performance");
