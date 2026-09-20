@@ -18,6 +18,8 @@ const ROUTES: { path: string; priority: number; changeFrequency: MetadataRoute.S
   { path: "/cbc-school-management", priority: 0.7, changeFrequency: "monthly" },
   { path: "/school-attendance-management", priority: 0.7, changeFrequency: "monthly" },
   { path: "/parent-communication", priority: 0.7, changeFrequency: "monthly" },
+  { path: "/student-performance-appraisal", priority: 0.7, changeFrequency: "monthly" },
+  { path: "/teacher-performance-management", priority: 0.7, changeFrequency: "monthly" },
   { path: "/ai-automation", priority: 0.7, changeFrequency: "monthly" },
   { path: "/finance-fees", priority: 0.7, changeFrequency: "monthly" },
   { path: "/security", priority: 0.6, changeFrequency: "monthly" },
