@@ -17,6 +17,13 @@ export type BlogPostSummary = {
 
 export const BLOG_POSTS: BlogPostSummary[] = [
   {
+    slug: "kjsea-sba-records-kenya-schools",
+    title: "KJSEA and School-Based Assessment: The Grade 7\u20138 Records Your School Needs on File",
+    description:
+      "Grade 7 and 8 school-based assessment makes up a fifth of a learner's KJSEA score. What the SBA actually is, who uploads it, what KNEC asks schools to keep, and where records go missing.",
+    publishedOn: "2026-09-20",
+  },
+  {
     slug: "free-school-management-system-kenya",
     title: "Free School Management Software in Kenya: What \"Free\" Actually Covers",
     description:
