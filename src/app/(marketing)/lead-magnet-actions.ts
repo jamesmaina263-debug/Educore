@@ -17,7 +17,7 @@ export type LeadMagnetState = {
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MIN_FILL_TIME_MS = 1000;
 
-// Inserts into public.marketing_leads (20260919131500_marketing_leads.sql),
+// Inserts into public.marketing_leads (20260919175031_marketing_leads.sql),
 // isolated from the tenant schema exactly like marketing_demo_requests --
 // insert-only RLS, no foreign keys into product data, super-admin-only read.
 export async function submitLeadMagnet(
@@ -75,25 +75,25 @@ export async function submitLeadMagnet(
   }
 
   const supabase = await createClient();
-  // onConflict against the unique constraint on email (lowercased above): a
-  // visitor who resubmits (cleared storage, different browser) gets the
-  // same success response and their download, without a constraint-
-  // violation error surfacing, and without a duplicate row.
-  const { error } = await supabase
-    .from("marketing_leads")
-    .upsert(
-      {
-        email,
-        resource,
-        source_page: sourcePage,
-        utm_source: utmSource,
-        utm_medium: utmMedium,
-        utm_campaign: utmCampaign,
-      },
-      { onConflict: "email", ignoreDuplicates: true },
-    );
+  // Plain insert, not upsert: anon has INSERT-only RLS on this table (no
+  // SELECT policy, by design -- visitors shouldn't be able to read back
+  // other people's captured emails). INSERT ... ON CONFLICT requires
+  // SELECT-level visibility for Postgres to evaluate the conflict, so the
+  // previous upsert(..., { onConflict, ignoreDuplicates }) failed under
+  // anon regardless of the row's actual uniqueness. A resubmitted email
+  // now hits the unique constraint directly, caught below (23505) and
+  // treated the same as a fresh success: same response and download,
+  // without a duplicate row or a leaked error.
+  const { error } = await supabase.from("marketing_leads").insert({
+    email,
+    resource,
+    source_page: sourcePage,
+    utm_source: utmSource,
+    utm_medium: utmMedium,
+    utm_campaign: utmCampaign,
+  });
 
-  if (error) {
+  if (error && error.code !== "23505") {
     return {
       status: "error",
       message: "Something went wrong on our end. Please try again.",
