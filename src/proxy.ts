@@ -27,7 +27,17 @@ export const config = {
   // MIME-type mismatch (swallowed by the .catch() in
   // service-worker-register.tsx), so no service worker -- and therefore no
   // offline fallback -- was ever actually running.
+  //
+  // Same bug, same fix, for `pdf`/`doc`/`docx`/`zip`: the lead-magnet
+  // download at /downloads/cbc-digital-readiness-checklist.pdf hit this
+  // exact gap -- "downloads" isn't a real school slug or APP_ROUTE_SEGMENT,
+  // so resolveSlugRouting's fallback branch treated it as one and stripped
+  // it, rewriting to /cbc-digital-readiness-checklist.pdf (no such route,
+  // 404) instead of ever reaching the real static file. Extending the
+  // extension list here (rather than adding "downloads" to NEVER_PREFIX)
+  // covers this file and any future doc dropped under /public the same way,
+  // without special-casing one folder name.
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|sw\\.js|offline\\.html|manifest\\.webmanifest|robots\\.txt|sitemap\\.xml|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|txt|xml|json|webmanifest)$).*)",
+    "/((?!_next/static|_next/image|favicon.ico|sw\\.js|offline\\.html|manifest\\.webmanifest|robots\\.txt|sitemap\\.xml|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|txt|xml|json|webmanifest|pdf|doc|docx|zip)$).*)",
   ],
 };
