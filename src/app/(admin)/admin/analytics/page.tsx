@@ -7,6 +7,8 @@ import { CustomRangePicker } from "@/components/admin/analytics/custom-range-pic
 import { BreakdownList } from "@/components/admin/analytics/breakdown-list";
 import { EngagedOnlyToggle } from "@/components/admin/analytics/engaged-only-toggle";
 import { TrafficTrendChart } from "@/components/admin/analytics/traffic-trend-chart";
+import { KeyEventsChart } from "@/components/admin/analytics/key-events-chart";
+import { ChannelPerformanceList } from "@/components/admin/analytics/channel-performance-list";
 import { ConversionFunnel, type FunnelStage } from "@/components/admin/analytics/conversion-funnel";
 import { GranularityTabs } from "@/components/admin/analytics/granularity-tabs";
 import {
@@ -34,8 +36,16 @@ import {
   getCountryBreakdown,
   getRegionBreakdown,
   getRealtimeVisitorCount,
+  getKeyEventsTimeseries,
+  getChannelPerformance,
   type TimeGranularity,
 } from "@/lib/ga4";
+
+// The two GA4 key events flagged for conversion tracking (GA4 Admin > Key
+// events) -- see MARKETING_SITE_STATUS.md's GTM readiness notes. Kept as a
+// single source of truth so the fetch call and the chart's legend can't
+// drift apart.
+const KEY_EVENT_NAMES = ["sign_up", "Demo Request Submitted"];
 import {
   isSearchConsoleConfigured,
   getSearchOverviewStats,
@@ -118,6 +128,8 @@ export default async function AdminAnalyticsPage({
     countries,
     regions,
     realtimeVisitors,
+    keyEventsSeries,
+    channelPerformance,
   ] = gaConfigured
     ? await Promise.all([
         getOverviewStats(gaRange),
@@ -140,8 +152,10 @@ export default async function AdminAnalyticsPage({
         getCountryBreakdown(gaRange, 10, engagedOnly),
         getRegionBreakdown(gaRange, 10, engagedOnly),
         getRealtimeVisitorCount(),
+        getKeyEventsTimeseries(gaRange, KEY_EVENT_NAMES, granularity),
+        getChannelPerformance(gaRange, 10),
       ])
-    : [null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null];
+    : [null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null];
 
   // Search Console -- a separate config check and a separate, smaller
   // Promise.all than GA4's, since it's a distinct data source (see
@@ -281,6 +295,10 @@ export default async function AdminAnalyticsPage({
               </div>
               <TrafficTrendChart data={timeseries ?? []} granularity={granularity} />
             </div>
+            <div className="lg:col-span-2">
+              <KeyEventsChart data={keyEventsSeries ?? []} eventNames={KEY_EVENT_NAMES} granularity={granularity} />
+            </div>
+            <ChannelPerformanceList rows={channelPerformance ?? []} />
             <BreakdownList
               title="Top pages"
               rows={(topPages ?? []).map((r) => ({ label: r.label, value: r.visitors }))}
