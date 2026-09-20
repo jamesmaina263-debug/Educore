@@ -141,6 +141,18 @@ export default async function PortalPage({ searchParams }: { searchParams: Promi
         .order("slot_date", { ascending: true })
         .order("start_time", { ascending: true })
     : { data: null };
+  // The embedded pt_meeting_bookings above is filtered by RLS to this guardian's OWN bookings, so it
+  // can only ever say "0 or 1 booked" -- slots never showed as Full. Real per-slot counts come from a
+  // definer function that returns just the counts (no names or student ids) for this school's slots.
+  // If it fails for any reason, fall back to the old (under-counting) figure rather than break the page.
+  const slotIds = (slotRows ?? []).map((s) => s.id);
+  const bookedCountBySlot = new Map<string, number>();
+  if (slotIds.length > 0) {
+    const { data: counts } = await supabase.rpc("pt_slot_booked_counts", { p_slot_ids: slotIds });
+    for (const c of (counts ?? []) as { slot_id: string; booked_count: number }[]) {
+      bookedCountBySlot.set(c.slot_id, c.booked_count);
+    }
+  }
   const ptSlots: PortalSlotRow[] = (slotRows ?? []).map((s) => {
     const teacher = s.school_users as unknown as { full_name: string } | null;
     const bookings = (s.pt_meeting_bookings ?? []) as { id: string; status: string; student_id: string }[];
@@ -154,7 +166,7 @@ export default async function PortalPage({ searchParams }: { searchParams: Promi
       end_time: s.end_time,
       location: s.location,
       capacity: s.capacity,
-      booked_count: booked.length,
+      booked_count: bookedCountBySlot.get(s.id) ?? booked.length,
       my_booking_id: mine?.id ?? null,
     };
   });
