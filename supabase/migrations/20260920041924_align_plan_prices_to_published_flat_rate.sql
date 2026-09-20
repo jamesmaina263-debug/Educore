@@ -1,3 +1,8 @@
+-- Renamed from 20260919180000 to 20260920041924 to match the version production recorded when
+-- this was applied directly (same statement, verified against schema_migrations). Without the
+-- rename, `supabase db push` refused to run at all ("Remote migration versions not found in
+-- local migrations directory") and Deploy migrations failed on every push.
+
 -- Aligns the platform's plan prices with the rate published on the marketing
 -- site (Sep 14 2026, PR #294): a flat KES 100 per student, per term, the same
 -- across Starter, Growth and Enterprise -- tiers differ by module coverage and
