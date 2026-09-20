@@ -136,11 +136,21 @@ export async function gradeSubmissionAction(
   } = await supabase.auth.getUser();
   if (!user) return { error: "Not signed in." };
 
-  const { error } = await supabase
+  // Record who graded it (the column and its FK have always existed; nothing ever filled it in).
+  // Left null rather than failing the grade if the lookup finds nothing.
+  const { data: grader } = await supabase.from("school_users").select("id").eq("auth_user_id", user.id).maybeSingle();
+
+  // .select() so a blocked update (RLS reports zero matched rows as success) isn't shown as graded.
+  // Safe with respect to SELECT/UPDATE alignment: UPDATE needs academics.write or being the
+  // assignment's teacher; SELECT needs academics.read or being the teacher, and every academics.write
+  // role (academic_officer, deputy_principal, principal, school_owner) also holds academics.read.
+  const { data: updated, error } = await supabase
     .from("assignment_submissions")
-    .update({ status: "graded", grade: grade.trim() || null, feedback: feedback.trim() || null })
-    .eq("id", submissionId);
+    .update({ status: "graded", grade: grade.trim() || null, feedback: feedback.trim() || null, graded_by: grader?.id ?? null })
+    .eq("id", submissionId)
+    .select("id");
   if (error) return { error: error.message };
+  if (!updated || updated.length === 0) return { error: "Could not save this grade -- you may not have permission to grade this assignment." };
 
   revalidatePath("/homework");
   return { success: true };
