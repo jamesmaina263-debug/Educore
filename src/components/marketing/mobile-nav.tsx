@@ -8,6 +8,7 @@ import { Menu, X, ChevronDown } from "lucide-react";
 import { MarketingButton } from "@/components/marketing/button";
 import { NAV_ITEMS, isDropdown, type NavItem } from "@/components/marketing/nav-data";
 import { cn } from "@/lib/utils";
+import { TRIAL_CTA_SHORT, TRIAL_HREF } from "@/lib/marketing/trial";
 
 // Expandable disclosure for a Platform/Solutions item on mobile. Each
 // dropdown's groups are flattened into one indented list under a heading --
@@ -129,6 +130,11 @@ export function MobileNav() {
               </Link>
             </Dialog.Close>
             <MarketingButton asChild>
+              <Dialog.Close asChild>
+                <Link href={TRIAL_HREF}>{TRIAL_CTA_SHORT}</Link>
+              </Dialog.Close>
+            </MarketingButton>
+            <MarketingButton asChild variant="outline-on-dark">
               <Dialog.Close asChild>
                 <Link href="/contact">Book a Demo</Link>
               </Dialog.Close>
