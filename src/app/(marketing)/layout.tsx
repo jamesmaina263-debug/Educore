@@ -6,6 +6,8 @@ import { MarketingFooter } from "@/components/marketing/footer";
 import { MarketingJsonLd } from "@/components/marketing/json-ld";
 import { MarketingAnalytics } from "@/components/marketing/analytics";
 import { ExitIntentLeadMagnet } from "@/components/marketing/exit-intent-lead-magnet";
+import { ConsentDefaults } from "@/components/marketing/consent-defaults";
+import { CookieNotice } from "@/components/marketing/cookie-notice";
 
 // Shared by every public marketing page (see src/lib/school-slug-routing.ts
 // NEVER_PREFIX for the full route list this covers). Deliberately does not
@@ -32,6 +34,9 @@ import { ExitIntentLeadMagnet } from "@/components/marketing/exit-intent-lead-ma
 export default function MarketingLayout({ children }: { children: ReactNode }) {
   return (
     <div className="flex min-h-full flex-col bg-marketing-canvas">
+      {/* Must stay immediately before GoogleTagManager: applies a returning
+          visitor's "declined" cookie choice before any Google tag runs. */}
+      <ConsentDefaults />
       <GoogleTagManager gtmId="GTM-MGV2XHBB" />
       <MarketingJsonLd />
       <MarketingAnalytics />
@@ -39,6 +44,7 @@ export default function MarketingLayout({ children }: { children: ReactNode }) {
       <main className="flex-1">{children}</main>
       <MarketingFooter />
       <ExitIntentLeadMagnet />
+      <CookieNotice />
       <Analytics />
     </div>
   );

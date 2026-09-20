@@ -5,6 +5,11 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getRealClientIp } from "@/lib/get-real-client-ip";
 import { sendSecurityAlert } from "@/lib/security-alert";
+import {
+  isMissingColumnError,
+  legacyAttributionColumns,
+  parseAttributionFormData,
+} from "@/lib/marketing/attribution-fields";
 
 export type LeadMagnetState = {
   status: "idle" | "success" | "error";
@@ -37,9 +42,7 @@ export async function submitLeadMagnet(
   const email = String(formData.get("email") ?? "").trim().toLowerCase();
   const resource = String(formData.get("resource") ?? "").trim() || "cbc_digital_readiness_checklist";
   const sourcePage = String(formData.get("source_page") ?? "").trim().slice(0, 200) || null;
-  const utmSource = String(formData.get("utm_source") ?? "").trim().slice(0, 100) || null;
-  const utmMedium = String(formData.get("utm_medium") ?? "").trim().slice(0, 100) || null;
-  const utmCampaign = String(formData.get("utm_campaign") ?? "").trim().slice(0, 100) || null;
+  const attribution = parseAttributionFormData(formData);
 
   if (!email) {
     return { status: "error", message: "Enter your email address." };
@@ -84,14 +87,17 @@ export async function submitLeadMagnet(
   // now hits the unique constraint directly, caught below (23505) and
   // treated the same as a fresh success: same response and download,
   // without a duplicate row or a leaked error.
-  const { error } = await supabase.from("marketing_leads").insert({
-    email,
-    resource,
-    source_page: sourcePage,
-    utm_source: utmSource,
-    utm_medium: utmMedium,
-    utm_campaign: utmCampaign,
-  });
+  const lead = { email, resource, source_page: sourcePage };
+  let { error } = await supabase.from("marketing_leads").insert({ ...lead, ...attribution });
+  if (isMissingColumnError(error)) {
+    // The extra attribution columns come from a migration the deploy workflow
+    // applies in parallel with the app deploy. If the code is briefly live
+    // first, keep the lead (with the three original UTM columns) rather than
+    // failing the visitor's submission.
+    ({ error } = await supabase
+      .from("marketing_leads")
+      .insert({ ...lead, ...legacyAttributionColumns(attribution) }));
+  }
 
   if (error && error.code !== "23505") {
     return {
