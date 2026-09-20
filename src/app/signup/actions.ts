@@ -31,18 +31,37 @@ export type Plan = {
 
 /**
  * The redesigned signup form has no plan-selection step (not in the
- * screenshot spec) — every self-signup starts on the cheapest active plan,
- * same trial terms as before. An admin can move the school to a different
- * plan later from Settings > Billing.
+ * screenshot spec) — every self-signup starts the free trial on the Starter
+ * plan. An admin can move the school to a different plan later from
+ * Settings > Billing.
+ *
+ * This used to pick "the cheapest active plan", which only worked while the
+ * three plans had different prices. Pricing is now a flat KES 100 per student
+ * across all tiers, so ordering by price alone would tie and could return any
+ * of them. Starter is therefore selected by code, with the old cheapest-plan
+ * lookup kept only as a fallback if that row is ever renamed or deactivated.
  */
-async function getCheapestActivePlan(
+const TRIAL_PLAN_CODE = "starter";
+
+async function getTrialPlan(
   adminClient: ReturnType<typeof createAdminClient>,
 ): Promise<Plan | null> {
+  const columns = "id, code, name, description, price_per_student_kes, billing_period";
+
+  const { data: starter } = await adminClient
+    .from("subscription_plans")
+    .select(columns)
+    .eq("is_active", true)
+    .eq("code", TRIAL_PLAN_CODE)
+    .maybeSingle();
+  if (starter) return starter;
+
   const { data } = await adminClient
     .from("subscription_plans")
-    .select("id, code, name, description, price_per_student_kes, billing_period")
+    .select(columns)
     .eq("is_active", true)
     .order("price_per_student_kes", { ascending: true })
+    .order("max_students", { ascending: true, nullsFirst: false })
     .limit(1)
     .maybeSingle();
   return data ?? null;
@@ -231,8 +250,8 @@ export async function signUpSchool(
     logoToUpload = logoFile;
   }
 
-  // ---- Plan (auto-assigned — see getCheapestActivePlan above) ----
-  const plan = await getCheapestActivePlan(adminClient);
+  // ---- Plan (auto-assigned — see getTrialPlan above) ----
+  const plan = await getTrialPlan(adminClient);
   if (!plan) {
     return { error: "Signup is temporarily unavailable — no active plan is configured. Please contact support." };
   }

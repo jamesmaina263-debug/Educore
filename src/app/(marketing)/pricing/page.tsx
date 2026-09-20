@@ -8,10 +8,11 @@ import { Section } from "@/components/marketing/section";
 import { Reveal } from "@/components/marketing/reveal";
 import { PricingCard } from "@/components/marketing/pricing-card";
 import { BreadcrumbJsonLd, HOME_CRUMB } from "@/components/marketing/breadcrumb-json-ld";
+import { TRIAL_CTA_LABEL, TRIAL_CTA_SHORT, TRIAL_HREF } from "@/lib/marketing/trial";
 
 const TITLE = "School Management System Pricing Kenya — EduCore";
 const DESCRIPTION =
-  "EduCore pricing starts at KES 100 per student, per term, the same flat rate across all three plans — Starter, Growth, and Enterprise — which scale by module coverage, not price.";
+  "EduCore pricing starts at KES 100 per student, per term, flat across Starter, Growth, and Enterprise. Try it free for 30 days — no card required.";
 
 export const metadata: Metadata = {
   title: TITLE,
@@ -44,7 +45,8 @@ export const PLANS = [
       "Academics",
       "Finance & Fees",
     ],
-    ctaLabel: "Talk to Sales",
+    ctaLabel: TRIAL_CTA_SHORT,
+    ctaHref: TRIAL_HREF,
   },
   {
     name: "Growth",
@@ -62,7 +64,8 @@ export const PLANS = [
       "Inventory & Procurement",
       "Communication",
     ],
-    ctaLabel: "Talk to Sales",
+    ctaLabel: TRIAL_CTA_SHORT,
+    ctaHref: TRIAL_HREF,
   },
   {
     name: "Enterprise",
@@ -76,7 +79,10 @@ export const PLANS = [
       "Full platform module set",
       "Educore AI features",
     ],
+    // Enterprise (large schools / school groups, AI features) stays a
+    // conversation rather than self-serve -- see /contact.
     ctaLabel: "Talk to Sales",
+    ctaHref: "/contact",
   },
 ];
 
@@ -94,7 +100,18 @@ export default function PricingPage() {
           Simple pricing, starting at KES 100 per student, per term. Every
           plan — Starter, Growth, and Enterprise — starts at that same flat
           rate; they scale by module coverage and support, not price.
+          Every school starts with a 30-day free trial, no card required.
         </p>
+        <div className="mt-8 flex flex-wrap items-center gap-3">
+          <MarketingButton asChild size="lg">
+            <Link href={TRIAL_HREF}>
+              {TRIAL_CTA_LABEL} <ArrowRight className="h-4 w-4" />
+            </Link>
+          </MarketingButton>
+          <MarketingButton asChild size="lg" variant="outline-on-dark">
+            <Link href="/contact">Book a Demo</Link>
+          </MarketingButton>
+        </div>
       </Section>
 
       {/* 2 — Plan cards */}
@@ -112,7 +129,7 @@ export default function PricingPage() {
                 priceNote={plan.priceNote}
                 features={plan.features}
                 ctaLabel={plan.ctaLabel}
-                ctaHref="/contact"
+                ctaHref={plan.ctaHref}
                 ctaTier={plan.name}
               />
             ))}
@@ -170,21 +187,26 @@ export default function PricingPage() {
       {/* 4 — Final CTA */}
       <Section tone="canvas" className="text-center">
         <Reveal className="mx-auto flex max-w-2xl flex-col items-center">
-          <Eyebrow>Get a quote</Eyebrow>
+          <Eyebrow>Get started</Eyebrow>
           <h2 className="mt-4 text-3xl font-semibold tracking-tight text-marketing-navy-950 sm:text-4xl">
-            Tell us about your school, get a number back.
+            Start free for 30 days. Talk numbers when you&apos;re ready.
           </h2>
           <p className="mt-4 text-base leading-relaxed text-marketing-navy-900/70">
-            A short conversation is all it takes to size a plan to your
-            student count and the modules you need.
+            Create your school&apos;s account and try EduCore with your own
+            data — no card required. When you&apos;re ready to
+            go on, we&apos;ll size a plan to your student count and the
+            modules you need.
           </p>
           <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
             <MarketingButton asChild size="lg">
-              <Link href="/contact">
-                Book a Demo <ArrowRight className="h-4 w-4" />
+              <Link href={TRIAL_HREF}>
+                {TRIAL_CTA_LABEL} <ArrowRight className="h-4 w-4" />
               </Link>
             </MarketingButton>
             <MarketingButton asChild size="lg" variant="outline">
+              <Link href="/contact">Book a Demo</Link>
+            </MarketingButton>
+            <MarketingButton asChild size="lg" variant="ghost">
               <Link href="/platform">Explore the Platform</Link>
             </MarketingButton>
           </div>
