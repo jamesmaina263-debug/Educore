@@ -1,13 +1,36 @@
 @import "tailwindcss";
 @import "tw-animate-css";
-@import "@fontsource/inter/400.css";
-@import "@fontsource/inter/500.css";
-@import "@fontsource/inter/600.css";
-@import "@fontsource/inter/700.css";
-@import "@fontsource/inter/800.css";
+/*
+ * Inter is one variable-weight file per unicode subset (weights 100-900), not
+ * five static weight files. The latin subset is ~48 KB total vs ~24 KB x every
+ * weight actually used (the homepage alone uses 400/500/600/800), and unicode-range
+ * still gates latin-ext/cyrillic/etc. so nothing extra downloads unless a page
+ * actually contains those characters (e.g. the Kikuyu characters in a student
+ * name). The family name it registers is "Inter Variable", not "Inter".
+ */
+@import "@fontsource-variable/inter";
 @import "@fontsource/ibm-plex-mono/400.css";
 @import "@fontsource/ibm-plex-mono/500.css";
 @import "@fontsource/ibm-plex-mono/600.css";
+
+/*
+ * Metric-adjusted fallback for Inter. With font-display: swap the page paints in
+ * the fallback first and swaps when Inter arrives; a plain system font is a
+ * different width/height, so every line reflows on the swap (layout shift). This
+ * face is Arial rescaled to Inter's measured average glyph width (size-adjust)
+ * and vertical metrics (ascent/descent from Inter's hhea table: 1984/-494 per
+ * 2048 upm, divided by the size-adjust), so the swap moves almost nothing.
+ * Same technique next/font applies automatically; done by hand here because the
+ * project deliberately avoids next/font/google (see src/app/layout.tsx).
+ */
+@font-face {
+  font-family: "Inter Fallback";
+  src: local("Arial");
+  size-adjust: 107.4%;
+  ascent-override: 90.2%;
+  descent-override: 22.5%;
+  line-gap-override: 0%;
+}
 
 @custom-variant dark (&:is(.dark *));
 
@@ -21,7 +44,7 @@
  */
 
 @theme inline {
-  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-sans: "Inter Variable", "Inter Fallback", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
 
   --radius-sm: calc(var(--radius) - 2px);
