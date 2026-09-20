@@ -1,0 +1,28 @@
+version: 2
+updates:
+  # npm dependencies. Grouped into one weekly PR for minor/patch bumps so
+  # this doesn't spam individual PRs for every transitive package; major
+  # version bumps still get their own PR since those are more likely to
+  # need real review. Every PR still has to pass the normal `ci` check
+  # (and, per AGENTS.md, can't merge to main without it going green) --
+  # this only proposes updates, it never applies them on its own.
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    groups:
+      minor-and-patch:
+        update-types: ["minor", "patch"]
+    labels:
+      - "dependencies"
+
+  # GitHub Actions versions pinned in .github/workflows/*.yml (e.g.
+  # actions/checkout@v4). Same weekly cadence, kept separate from the npm
+  # ecosystem above per Dependabot's own convention.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    labels:
+      - "dependencies"
