@@ -28,10 +28,21 @@ export const metadata: Metadata = {
 // a plain restatement of the pricing structure from Phase 7. Nothing here
 // introduces a new claim that hasn't already been grounded elsewhere on
 // the site -- deliberately, so this page can't drift from what's real.
+// The two free-trial answers are grounded in src/lib/marketing/trial.ts (see
+// its header for the code paths verified: 30-day self-serve signup, no card,
+// expire_trials() pausing sign-in, no automatic deletion).
 const FAQS = [
   {
     q: "What is EduCore?",
     a: "EduCore is a school management platform that brings admissions, academics, finance, attendance, and parent communication into one connected system, so a school's team isn't reconciling the same information across spreadsheets, paper registers, and separate tools.",
+  },
+  {
+    q: "Is there a free trial?",
+    a: "Yes. Every school gets a 30-day free trial, no card required. You can create your school's account yourself and start using EduCore straight away, or book a demo first if you'd rather have a walkthrough.",
+  },
+  {
+    q: "What happens when the 30-day trial ends?",
+    a: "Sign-in for your school is paused until a plan is agreed, and we confirm the exact figure with you before you're invoiced. Nothing is deleted automatically when a trial ends. To keep going, get in touch before the 30 days are up so your team isn't interrupted.",
   },
   {
     q: "Which modules are included?",
@@ -67,7 +78,7 @@ const FAQS = [
   },
   {
     q: "How do we get started?",
-    a: "Book a demo and the team will walk through which modules and plan fit your school's size — there's no need to guess at that ahead of time.",
+    a: "Start a 30-day free trial — no card required — and set up your school's account yourself. Or book a demo and the team will walk through which modules and plan fit your school's size. There's no need to guess at that ahead of time.",
   },
 ];
 

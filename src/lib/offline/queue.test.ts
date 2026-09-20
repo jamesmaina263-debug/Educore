@@ -128,6 +128,21 @@ describe("offline mutation queue", () => {
     expect(await queueMod.getPendingMutations("attendance")).toHaveLength(0);
   });
 
+  it("returns mutations in queue order even when many are queued within the same millisecond", async () => {
+    const { queueMod } = await freshModules();
+    const nowSpy = vi.spyOn(Date, "now").mockReturnValue(1_700_000_000_000);
+    try {
+      const ids: string[] = [];
+      for (let i = 0; i < 25; i++) {
+        ids.push((await queueMod.queueMutation("attendance", "submitAttendance", { n: i })).id);
+      }
+      const pending = await queueMod.getPendingMutations("attendance");
+      expect(pending.map((m) => m.id)).toEqual(ids);
+    } finally {
+      nowSpy.mockRestore();
+    }
+  });
+
   it("adapts checkOutStudent's positional-args signature correctly when replaying from the queue", async () => {
     const checkOutStudent = vi.fn().mockResolvedValue({ success: true });
     vi.doMock("@/app/(app)/health/actions", () => ({

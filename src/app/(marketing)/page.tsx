@@ -31,6 +31,7 @@ import { DashboardFrame } from "@/components/marketing/dashboard-frame";
 import { FeatureCard } from "@/components/marketing/feature-card";
 import { PricingCard } from "@/components/marketing/pricing-card";
 import { PLANS } from "./pricing/page";
+import { TRIAL_CTA_LABEL, TRIAL_HREF, TRIAL_TERMS } from "@/lib/marketing/trial";
 
 const PLATFORM_MODULES = [
   { icon: UserPlus, title: "Admissions", description: "From inquiry to enrollment, tracked in one pipeline instead of scattered forms and phone calls." },
@@ -116,7 +117,7 @@ const TRUST_POINTS = [
 
 const TITLE = "EduCore — School Management Software for Kenyan Schools";
 const DESCRIPTION =
-  "Admissions, academics, finance, attendance, and parent communication in one connected platform — with M-Pesa built in and per-school data isolation.";
+  "Admissions, academics, finance, attendance, and parent communication in one platform, with M-Pesa built in. Start a 30-day free trial — no card required.";
 
 export const metadata: Metadata = {
   title: TITLE,
@@ -152,11 +153,14 @@ export default function MarketingHomePage() {
           </p>
           <div className="mt-9 flex flex-wrap items-center gap-4">
             <MarketingButton size="lg" asChild>
-              <Link href="/contact">
-                Book a Demo <ArrowRight className="h-4 w-4" />
+              <Link href={TRIAL_HREF}>
+                {TRIAL_CTA_LABEL} <ArrowRight className="h-4 w-4" />
               </Link>
             </MarketingButton>
             <MarketingButton size="lg" variant="outline-on-dark" asChild>
+              <Link href="/contact">Book a Demo</Link>
+            </MarketingButton>
+            <MarketingButton size="lg" variant="ghost-on-dark" asChild>
               <Link
                 href="https://wa.me/254702904562?text=Hi%2C%20I%27d%20like%20to%20know%20more%20about%20EduCore%20for%20my%20school."
                 target="_blank"
@@ -165,10 +169,8 @@ export default function MarketingHomePage() {
                 <MessageCircle className="h-4 w-4" /> Chat on WhatsApp
               </Link>
             </MarketingButton>
-            <MarketingButton size="lg" variant="ghost-on-dark" asChild>
-              <Link href="/platform">See How It Works</Link>
-            </MarketingButton>
           </div>
+          <p className="mt-4 text-sm font-medium text-white/70">{TRIAL_TERMS}</p>
           <p className="mt-6 text-xs font-medium uppercase tracking-[0.14em] text-white/50">
             Built for modern schools &bull; Secure &bull; Cloud-based &bull; Scalable
           </p>
@@ -385,7 +387,7 @@ export default function MarketingHomePage() {
                 priceNote={plan.priceNote}
                 features={plan.features}
                 ctaLabel={plan.ctaLabel}
-                ctaHref="/contact"
+                ctaHref={plan.ctaHref}
               />
             </Reveal>
           ))}
@@ -400,16 +402,21 @@ export default function MarketingHomePage() {
             Ready to run your school smarter?
           </h2>
           <p className="max-w-xl text-white/65">
-            A demo is built around your admissions, fees, and academics
-            setup &mdash; not a generic tour.
+            Try EduCore free for 30 days with your own school&apos;s data
+            &mdash; no card required. Prefer a walkthrough first? A demo is
+            built around your admissions, fees, and academics setup, not a
+            generic tour.
           </p>
           <div className="mt-2 flex flex-wrap items-center justify-center gap-3">
             <MarketingButton size="lg" asChild>
-              <Link href="/contact">
-                Book a Demo <ArrowRight className="h-4 w-4" />
+              <Link href={TRIAL_HREF}>
+                {TRIAL_CTA_LABEL} <ArrowRight className="h-4 w-4" />
               </Link>
             </MarketingButton>
             <MarketingButton size="lg" variant="outline-on-dark" asChild>
+              <Link href="/contact">Book a Demo</Link>
+            </MarketingButton>
+            <MarketingButton size="lg" variant="ghost-on-dark" asChild>
               <Link href="/platform">Explore the Platform</Link>
             </MarketingButton>
           </div>

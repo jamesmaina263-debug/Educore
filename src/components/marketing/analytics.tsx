@@ -55,6 +55,12 @@ export function MarketingAnalytics() {
   useEffect(() => {
     function eventNameFor(href: string): string | null {
       if (href.startsWith("/contact")) return "Contact CTA Click";
+      // Self-serve free-trial signups (nav/hero/pricing/footer all link to
+      // /signup). Sums into the admin "CTA Clicks" funnel row automatically
+      // -- that row matches any goal name containing "CTA". The actual
+      // conversion (an account being created) is the separate sign_up event
+      // in signup-form.tsx, not this click.
+      if (href.startsWith("/signup")) return "Trial CTA Click";
       if (href.startsWith("https://wa.me/") || href.startsWith("http://wa.me/")) {
         return "WhatsApp CTA Click";
       }

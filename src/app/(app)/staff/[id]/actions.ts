@@ -3,22 +3,23 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { tagSentryRequestContext } from "@/lib/observability/sentry-context";
+import { buildEmploymentUpdate, type EmploymentInput } from "@/lib/staff/employment-input";
 
 export async function updateEmployment(
   staffId: string,
-  input: {
-    position?: string | null;
-    department?: string | null;
-    hire_date?: string | null;
-    contract_type?: "permanent" | "contract" | "part_time" | null;
-    contract_end_date?: string | null;
-    gender?: "male" | "female" | null;
-  },
+  input: EmploymentInput,
 ): Promise<{ error: string } | { success: true }> {
+  const built = buildEmploymentUpdate(input);
+  if ("error" in built) return { error: built.error };
+
   const supabase = await createClient();
   await tagSentryRequestContext(supabase);
-  const { error } = await supabase.from("school_users").update(input).eq("id", staffId);
+  // .select() so a blocked update (zero matched rows, which RLS reports as success) isn't shown as
+  // saved. Safe with respect to SELECT/UPDATE alignment: school_users UPDATE needs self / staff.manage
+  // in the same school, and the SELECT policy is school-wide, so anything updatable is also returnable.
+  const { data: updated, error } = await supabase.from("school_users").update(built.payload).eq("id", staffId).select("id");
   if (error) return { error: error.message };
+  if (!updated || updated.length === 0) return { error: "Could not update this staff member -- you may not have permission." };
   revalidatePath(`/staff/${staffId}`);
   return { success: true as const };
 }
