@@ -7,6 +7,7 @@ import { sendGTMEvent } from "@next/third-parties/google";
 import { submitDemoRequest, type DemoRequestState } from "@/app/(marketing)/contact/actions";
 import { MarketingButton } from "@/components/marketing/button";
 import { getStoredAttribution } from "@/lib/attribution";
+import { ATTRIBUTION_KEYS } from "@/lib/marketing/attribution-fields";
 import { getStoredCtaSource } from "@/lib/cta-source";
 
 const initialState: DemoRequestState = { status: "idle" };
@@ -177,9 +178,9 @@ export function DemoRequestForm() {
       {/* Marketing attribution, forwarded silently -- see src/lib/attribution.ts.
           Never shown or asked of the visitor; empty/absent if nothing was
           captured this session. */}
-      <input type="hidden" name="utm_source" value={attribution.utm_source ?? ""} />
-      <input type="hidden" name="utm_medium" value={attribution.utm_medium ?? ""} />
-      <input type="hidden" name="utm_campaign" value={attribution.utm_campaign ?? ""} />
+      {ATTRIBUTION_KEYS.map((key) => (
+        <input key={key} type="hidden" name={key} value={attribution[key] ?? ""} />
+      ))}
 
       <div className="grid gap-5 sm:grid-cols-2">
         <Field label="Your name" htmlFor="name">
