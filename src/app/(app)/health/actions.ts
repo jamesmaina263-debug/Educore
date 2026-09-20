@@ -334,14 +334,20 @@ export async function requestMedicalSuppliesAction(input: {
   const me = await currentActor(supabase);
   if (!me) return { error: "Could not resolve your account." };
 
-  const items = input.items.filter((i) => i.inventory_item_id && i.item_description.trim() && i.quantity > 0);
+  const items = input.items.filter((i) => i.inventory_item_id && i.item_description.trim() && Number.isFinite(i.quantity) && i.quantity > 0);
   if (!input.purpose.trim() || items.length === 0) {
     return { error: "Purpose and at least one catalog item with a quantity are required." };
   }
 
+  // The requisition is created as a DRAFT, its items are added, and only then is it submitted.
+  // It used to be inserted as "submitted" up front with a delete-on-failure rollback -- but the
+  // nurse has no DELETE right on purchase_requisitions (only inventory.procurement.approve does), so
+  // that rollback silently deleted zero rows and a failed items insert left an itemless *submitted*
+  // request sitting in the approvers' queue. A draft that never gets submitted stays out of the
+  // queue, and the nurse's own-draft UPDATE right (RLS) is what lets her submit it.
   const { data: requisition, error } = await supabase
     .from("purchase_requisitions")
-    .insert({ school_id: me.school_id, purpose: input.purpose, status: "submitted", requested_by: me.id })
+    .insert({ school_id: me.school_id, purpose: input.purpose, status: "draft", requested_by: me.id })
     .select("id")
     .single();
   if (error) return { error: error.message };
@@ -358,11 +364,17 @@ export async function requestMedicalSuppliesAction(input: {
       inventory_item_id: i.inventory_item_id ?? null,
     })),
   );
-  if (itemError) {
-    // Don't leave an itemless requisition behind claiming success -- roll the header back.
-    await supabase.from("purchase_requisitions").delete().eq("id", requisition.id);
-    return { error: `Could not save the request items: ${itemError.message}` };
-  }
+  if (itemError) return { error: `Could not save the request items, so nothing was sent for approval: ${itemError.message}` };
+
+  // .select() so a blocked submit (zero matched rows) isn't reported as sent. Alignment: the UPDATE
+  // policy allows the requester's own draft; the SELECT policy allows requested_by = self.
+  const { data: submitted, error: submitError } = await supabase
+    .from("purchase_requisitions")
+    .update({ status: "submitted" })
+    .eq("id", requisition.id)
+    .select("id");
+  if (submitError) return { error: `Could not submit the request: ${submitError.message}` };
+  if (!submitted || submitted.length === 0) return { error: "Could not submit the request for approval. Nothing was sent." };
 
   // Best-effort: let whoever can approve procurement (owner/principal/deputy)
   // know a medical supplies request is waiting. Never block the request on this.
