@@ -17,6 +17,13 @@ export type BlogPostSummary = {
 
 export const BLOG_POSTS: BlogPostSummary[] = [
   {
+    slug: "data-protection-act-kenya-schools-guide",
+    title: "The Data Protection Act for Kenyan Schools: A Practical Guide",
+    description:
+      "What Kenya's Data Protection Act asks of schools: registering with the ODPC, parental consent, photos and exam results, children's and biometric data, the 72-hour breach rule, and what to ask your software vendor, including where your data is stored.",
+    publishedOn: "2026-09-20",
+  },
+  {
     slug: "kjsea-sba-records-kenya-schools",
     title: "KJSEA and School-Based Assessment: The Grade 7\u20138 Records Your School Needs on File",
     description:
