@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useRef, useState } from "react";
+import { useActionState, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import {
   UserRound,
   Building2,
@@ -18,6 +18,14 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { TurnstileWidget } from "@/components/turnstile-widget";
 import { sendGTMEvent } from "@next/third-parties/google";
+import {
+  captureAttribution,
+  getAttributionSnapshot,
+  getServerAttributionSnapshot,
+  subscribeToAttribution,
+  type Attribution,
+} from "@/lib/attribution";
+import { ATTRIBUTION_KEYS } from "@/lib/marketing/attribution-fields";
 import { signUpSchool, type SignupState } from "./actions";
 import {
   TITLE_OPTIONS,
@@ -113,6 +121,24 @@ export function SignupForm() {
     }
   }, [state.success, state.honeypot]);
 
+  // Marketing attribution (UTM tags + Google Ads click ID) for the signup
+  // record. /signup has its own layout and does not mount MarketingAnalytics,
+  // so a visitor whose ad lands straight on this page would otherwise never
+  // get their parameters captured. captureAttribution() is first-touch and
+  // idempotent: it is a no-op if a marketing page already captured them earlier
+  // this session. Filled after mount (sessionStorage does not exist during
+  // server render) and submitted as hidden inputs; the server action stores
+  // them best-effort and never lets them affect the signup itself.
+  const attributionJson = useSyncExternalStore(
+    subscribeToAttribution,
+    getAttributionSnapshot,
+    getServerAttributionSnapshot,
+  );
+  const attribution = JSON.parse(attributionJson) as Attribution;
+  useEffect(() => {
+    captureAttribution();
+  }, []);
+
   const set = (field: SelectField) => (v: string) => setValues((prev) => ({ ...prev, [field]: v }));
 
   // Names resolved client-side via Intl.DisplayNames — see institution-reference-data.ts.
@@ -171,6 +197,9 @@ export function SignupForm() {
       onChange={recomputeProgress}
     >
       <input type="hidden" name="form_loaded_at" value={formLoadedAt} />
+      {ATTRIBUTION_KEYS.map((key) => (
+        <input key={key} type="hidden" name={key} value={attribution[key] ?? ""} />
+      ))}
       {/* Honeypot — hidden from real users via CSS, left unfilled by them; bots that fill
           every field will trip it. Named distinctly from the real "website" field below. */}
       <div className="absolute -left-[9999px]" aria-hidden="true">

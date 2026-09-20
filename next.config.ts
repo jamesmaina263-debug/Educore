@@ -1,5 +1,7 @@
 import type { NextConfig } from "next";
 import { withSentryConfig } from "@sentry/nextjs";
+import path from "node:path";
+import { buildCsp, marketingHeaderSources } from "./src/lib/csp";
 
 const nextConfig: NextConfig = {
   experimental: {
@@ -48,54 +50,12 @@ const nextConfig: NextConfig = {
       // than producing an origin-less connect-src that would block every
       // Supabase call in report-only mode too.
     }
-    const csp = [
-      "default-src 'self'",
-      // Next.js injects small inline bootstrap/hydration scripts; 'unsafe-inline'
-      // is required for those specifically (not a general allowance for
-      // third-party script injection).
-      // https://*.googletagmanager.com is GTM's own loader script
-      // (src/app/layout.tsx's <GoogleTagManager>) plus any tag GTM injects
-      // into the page afterward -- container-configured tags (GA4 included)
-      // load from the same host. This is a host-based allowlist, not a
-      // nonce: a real nonce would require reading a per-request value via
-      // next/headers in the root layout, which forces every page under it
-      // out of static prerendering (verified against a build -- all 11
-      // marketing pages would flip from prerendered to server-rendered per
-      // request). Deliberately traded a marginally weaker script-src for
-      // keeping those pages static.
-      // https://challenges.cloudflare.com is Turnstile's own loader script
-      // (src/components/turnstile-widget.tsx, used on the signup-page
-      // captcha) -- missing here would silently break new-school signup the
-      // moment this policy started enforcing.
-      "script-src 'self' 'unsafe-inline' https://*.googletagmanager.com https://challenges.cloudflare.com",
-      // Tailwind v4 and Radix UI apply styles at runtime via inserted <style>
-      // tags/inline style attributes -- 'unsafe-inline' is required here too.
-      "style-src 'self' 'unsafe-inline'",
-      "img-src 'self' data: blob: https:",
-      "font-src 'self' data:",
-      // Two real consumers, both would break under the default (default-src
-      // 'self') without this: Turnstile renders its widget in an iframe from
-      // its own host, and src/components/document-preview-dialog.tsx renders
-      // PDF documents (admission/student/staff uploads) in an iframe pointed
-      // at a short-lived signed Supabase Storage URL.
-      `frame-src 'self' ${supabaseOrigin} https://challenges.cloudflare.com`,
-      // google-analytics.com/analytics.google.com are GA4's own
-      // hit-collection endpoints -- these need a connect-src entry
-      // regardless of the script-src approach above, since that's a
-      // separate fetch/beacon call GA4 makes after GTM loads it, not a
-      // <script> element CSP already covers.
-      `connect-src 'self' ${supabaseOrigin} https://*.ingest.de.sentry.io https://*.ingest.sentry.io https://*.googletagmanager.com https://*.google-analytics.com https://*.analytics.google.com`,
-      "frame-ancestors 'none'",
-      "base-uri 'self'",
-      "form-action 'self'",
-      // report-uri is deprecated but still the only directive older/some
-      // mobile browsers honor; report-to is the modern replacement and needs
-      // a matching Report-To response header (below) naming the same group.
-      // Sent together so violations are visible regardless of which one a
-      // given browser supports -- see /api/csp-report for what receives them.
-      "report-uri /api/csp-report",
-      "report-to csp-endpoint",
-    ].join("; ");
+    // The directive-by-directive reasoning lives in src/lib/csp.ts. `csp` applies
+    // everywhere; `marketingCsp` (same policy plus the hosts Google documents
+    // for Google Ads and Ads-linked Google Analytics) is applied only to the
+    // public marketing pages and /signup, the only places GTM loads.
+    const csp = buildCsp({ supabaseOrigin });
+    const marketingCsp = buildCsp({ supabaseOrigin, marketing: true });
 
     const reportTo = JSON.stringify({
       group: "csp-endpoint",
@@ -131,6 +91,12 @@ const nextConfig: NextConfig = {
           { key: "Content-Security-Policy", value: csp },
         ],
       },
+      // Later rules override earlier ones for the same header key, so these
+      // replace only the CSP on the marketing pages and /signup.
+      ...marketingHeaderSources(path.join(process.cwd(), "src/app/(marketing)")).map((source) => ({
+        source,
+        headers: [{ key: "Content-Security-Policy", value: marketingCsp }],
+      })),
     ];
   },
 };
