@@ -43,6 +43,9 @@ Deno.serve(async (req) => {
     demo_request_id?: string;
     assignee_name?: string;
     assignee_email?: string;
+    resource?: string;
+    source_page?: string;
+    lead_id?: string;
   };
   try {
     payload = await req.json();
@@ -74,6 +77,29 @@ Deno.serve(async (req) => {
     try {
       const emailProvider = getEmailProvider();
       await emailProvider.send(payload.assignee_email, subject, lines, undefined, ASSIGNMENT_FROM_ADDRESS);
+      return json({ success: true });
+    } catch (err) {
+      console.error(err);
+      const message = err instanceof Error ? err.message : String(err);
+      return json({ error: message }, 500);
+    }
+  }
+
+  if (payload.kind === "lead_magnet") {
+    const subject = `New lead magnet download: ${payload.email ?? "unknown"}`;
+    const lines = [
+      `<p>A visitor just downloaded a lead magnet on the EduCore marketing site.</p>`,
+      `<ul>`,
+      `<li><strong>Email:</strong> ${payload.email ?? "—"}</li>`,
+      `<li><strong>Resource:</strong> ${payload.resource ?? "—"}</li>`,
+      `<li><strong>Source page:</strong> ${payload.source_page ?? "—"}</li>`,
+      `</ul>`,
+      `<p><a href="https://www.educoreafrica.com/admin/leads">View in the Platform Admin Console</a></p>`,
+    ].join("\n");
+
+    try {
+      const emailProvider = getEmailProvider();
+      await emailProvider.send(PLATFORM_ADMIN_EMAIL, subject, lines);
       return json({ success: true });
     } catch (err) {
       console.error(err);
