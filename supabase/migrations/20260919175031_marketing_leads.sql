@@ -14,20 +14,17 @@
 -- later doesn't require a schema change, just a new default value from the
 -- client.
 --
--- Unique on email (lowercased before insert by the server action, so this
--- achieves case-insensitive de-duplication without needing an expression
--- index -- Postgres/PostgREST's upsert onConflict target must reference an
--- actual constraint or plain-column index, not an arbitrary expression).
--- The client-side 30-day localStorage suppression (see
--- ExitIntentLeadMagnet) is the primary defense against duplicate rows from
--- the same visitor, but it's not authoritative (cleared storage, different
--- browser, private/incognito). onConflict + ignoreDuplicates at the call
--- site makes a resubmission idempotent rather than surfacing a
--- constraint-violation error to a real visitor.
+-- The email-uniqueness approach taken here (a case-insensitive expression
+-- index) turned out to be the wrong choice for how the app actually
+-- de-duplicates -- see 20260919175202_marketing_leads_fix_unique_constraint.sql,
+-- applied immediately after this one, which corrects it. Left as originally
+-- applied rather than folded together, so the committed migration history
+-- matches the live project's migration history exactly (see
+-- migration-drift-check.yml).
 create table if not exists public.marketing_leads (
   id uuid primary key default gen_random_uuid(),
   created_at timestamptz not null default now(),
-  email text not null unique,
+  email text not null,
   resource text not null default 'cbc_digital_readiness_checklist',
   source_page text,
   utm_source text,
@@ -37,6 +34,12 @@ create table if not exists public.marketing_leads (
 
 comment on table public.marketing_leads is
   'Public marketing-site lead-magnet email captures (exit-intent / scroll-depth prompt). Isolated from the tenant schema, insert-only for anon/authenticated, readable by super admins.';
+
+-- Expression uniqueness (case-insensitive email) requires an index, not a
+-- table-level UNIQUE constraint -- Postgres only allows plain columns there.
+-- Superseded by the follow-up migration -- see note above.
+create unique index if not exists marketing_leads_email_lower_idx
+  on public.marketing_leads (lower(email));
 
 alter table public.marketing_leads enable row level security;
 
