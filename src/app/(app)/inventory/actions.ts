@@ -251,14 +251,20 @@ export async function createRequisitionAction(input: {
   if (!schoolUser) return { error: "Could not resolve your account." };
 
   const purpose = input.purpose.trim();
-  const items = input.items.filter((i) => i.inventory_item_id && i.item_description.trim() && i.quantity > 0);
+  const items = input.items.filter((i) => i.inventory_item_id && i.item_description.trim() && Number.isFinite(i.quantity) && i.quantity > 0);
   if (!purpose || items.length === 0) {
     return { error: "Purpose and at least one catalog item with a quantity are required." };
   }
 
+  // Created as a DRAFT, items added, then submitted. It used to be inserted as "submitted" with a
+  // delete-on-failure rollback, but only inventory.procurement.approve can DELETE a requisition --
+  // storekeepers (inventory_officer) and the bursar can't -- so the rollback silently deleted zero
+  // rows and a failed items insert left an itemless submitted request in the approvers' queue. A
+  // draft that never gets submitted stays out of the queue; the requester's own-draft UPDATE right
+  // (RLS) is what lets them submit it.
   const { data: requisition, error } = await supabase
     .from("purchase_requisitions")
-    .insert({ school_id: schoolUser.school_id, purpose, status: "submitted", requested_by: schoolUser.id })
+    .insert({ school_id: schoolUser.school_id, purpose, status: "draft", requested_by: schoolUser.id })
     .select("id")
     .single();
   if (error) return { error: error.message };
@@ -276,11 +282,17 @@ export async function createRequisitionAction(input: {
       inventory_item_id: i.inventory_item_id,
     })),
   );
-  if (itemError) {
-    // Don't leave an itemless requisition behind claiming success -- roll the header back.
-    await supabase.from("purchase_requisitions").delete().eq("id", requisition.id);
-    return { error: `Could not save the requisition items: ${itemError.message}` };
-  }
+  if (itemError) return { error: `Could not save the requisition items, so nothing was sent for approval: ${itemError.message}` };
+
+  // .select() so a blocked submit (zero matched rows) isn't reported as sent. Alignment: the UPDATE
+  // policy allows the requester's own draft; the SELECT policy allows requested_by = self.
+  const { data: submitted, error: submitError } = await supabase
+    .from("purchase_requisitions")
+    .update({ status: "submitted" })
+    .eq("id", requisition.id)
+    .select("id");
+  if (submitError) return { error: `Could not submit the requisition: ${submitError.message}` };
+  if (!submitted || submitted.length === 0) return { error: "Could not submit the requisition for approval. Nothing was sent." };
 
   revalidatePath("/inventory", "layout");
 
