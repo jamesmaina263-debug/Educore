@@ -17,6 +17,13 @@ export type BlogPostSummary = {
 
 export const BLOG_POSTS: BlogPostSummary[] = [
   {
+    slug: "free-school-management-system-kenya",
+    title: "Free School Management Software in Kenya: What \"Free\" Actually Covers",
+    description:
+      "Free core platforms, open-source editions, student-capped free tiers and trials all get called free. Where the real costs show up for a Kenyan school, a checklist to compare them, and when free is genuinely the right call.",
+    publishedOn: "2026-09-20",
+  },
+  {
     slug: "student-performance-appraisal-kenya-schools",
     title: "Student Performance Appraisal & Merit Lists for Kenyan Schools",
     description:
