@@ -33,6 +33,7 @@ export const NEVER_PREFIX = new Set([
   "privacy", "terms", "finance-fees", "security", "blog",
   "student-management-system", "cbc-school-management",
   "school-attendance-management", "parent-communication",
+  "student-performance-appraisal", "teacher-performance-management",
 ]);
 
 export type SlugRouting = { type: "next" } | { type: "redirect"; url: URL } | { type: "rewrite"; url: URL };
