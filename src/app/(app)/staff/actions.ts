@@ -31,7 +31,10 @@ export async function submitStaffAttendance(input: {
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  const { data: me } = await supabase.from("school_users").select("id").eq("auth_user_id", user!.id).single();
+  // An expired session (e.g. an offline-queued register replaying hours later) must come back as an
+  // error the queue can record, not a null-dereference crash.
+  if (!user) return { error: "Not signed in." };
+  const { data: me } = await supabase.from("school_users").select("id").eq("auth_user_id", user.id).single();
 
   const rows = input.marks.map((m) => ({
     school_id: schoolId,

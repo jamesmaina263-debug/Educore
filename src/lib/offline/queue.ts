@@ -26,6 +26,16 @@ function newId(): string {
     : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
+// queued_at has millisecond resolution, and the store's key is a random UUID, so two writes queued
+// within the same millisecond used to tie in getPendingMutations()'s sort and come back in random
+// (UUID) order -- silently breaking the "replay in the order it happened" guarantee below (and
+// making the queue's own tests flaky). Each timestamp is forced to be strictly later than the last.
+let lastQueuedAtMs = 0;
+function nextQueuedAt(): string {
+  lastQueuedAtMs = Math.max(Date.now(), lastQueuedAtMs + 1);
+  return new Date(lastQueuedAtMs).toISOString();
+}
+
 /** Queue a write for later replay. Call this from a form's submit handler when `useOfflineSync().online` is false. */
 export async function queueMutation<TPayload>(
   module: string,
@@ -37,7 +47,7 @@ export async function queueMutation<TPayload>(
     module,
     type,
     payload,
-    queued_at: new Date().toISOString(),
+    queued_at: nextQueuedAt(),
     status: "pending",
   };
   // OS-10: `payload` is encrypted at rest -- it's the field that actually carries PII

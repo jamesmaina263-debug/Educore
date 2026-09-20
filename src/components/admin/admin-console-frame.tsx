@@ -8,6 +8,7 @@ import {
   CreditCard,
   BarChart3,
   Inbox,
+  UserPlus,
   Palette,
   RotateCcw,
   Mail,
@@ -66,6 +67,7 @@ const NAV_GROUPS: AdminNavGroup[] = [
       { href: "/admin/broadcast", label: "Broadcast", icon: Megaphone },
       { href: "/admin/company-email", label: "Company Email", icon: Mail },
       { href: "/admin/demo-requests", label: "Requests", icon: Inbox },
+      { href: "/admin/leads", label: "Leads", icon: UserPlus },
     ],
   },
   {
