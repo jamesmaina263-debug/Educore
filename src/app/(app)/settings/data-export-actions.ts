@@ -86,7 +86,8 @@ export async function exportSchoolData(): Promise<DataExportOutcome> {
     // below via get_staff_statutory_numbers(), the one sanctioned read path for that column.
     supabase
       .from("school_users")
-      .select("id, full_name, email, phone, status, position, department, hire_date, roles(display_name)")
+      .select("id, full_name, email, phone, status, position, department, hire_date, roles!inner(display_name, name)")
+      .not("roles.name", "in", "(parent,student,super_admin)")
       .order("full_name"),
     supabase.from("academic_years").select("name, start_date, end_date, status").order("start_date"),
     supabase.from("terms").select("name, term_number, start_date, end_date, status, academic_years(name)").order("start_date"),

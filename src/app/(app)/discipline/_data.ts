@@ -76,7 +76,11 @@ export async function loadDisciplineContext(): Promise<DisciplineContext> {
     safeguardingResult,
   ] = await Promise.all([
     supabase.from("students").select("id, first_name, last_name, admission_number").order("first_name"),
-    supabase.from("school_users").select("id, full_name").order("full_name"),
+    supabase
+      .from("school_users")
+      .select("id, full_name, roles!inner(name)")
+      .not("roles.name", "in", "(parent,student,super_admin)")
+      .order("full_name"),
     supabase.from("disciplinary_action_types").select("id, name, category").eq("active", true).order("name"),
     supabase
       .from("discipline_records")

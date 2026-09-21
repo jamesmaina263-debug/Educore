@@ -67,8 +67,9 @@ export default async function ViewAsSchoolPage({ params }: { params: Promise<{ s
       .maybeSingle(),
     supabase
       .from("school_users")
-      .select("id, full_name, position, status, roles(display_name)")
+      .select("id, full_name, position, status, roles!inner(display_name, name)")
       .eq("school_id", schoolId)
+      .not("roles.name", "in", "(parent,student,super_admin)")
       .order("full_name")
       .limit(25),
     supabase.from("students").select("id", { count: "exact", head: true }).eq("school_id", schoolId),
@@ -94,12 +95,12 @@ export default async function ViewAsSchoolPage({ params }: { params: Promise<{ s
     )?.last_active_at ?? null;
 
   const planName = (sub?.subscription_plans as unknown as { name: string } | null)?.name ?? "No plan";
-  const staffRows = (staff ?? []) as {
+  const staffRows = (staff ?? []) as unknown as {
     id: string;
     full_name: string;
     position: string | null;
     status: string;
-    roles: { display_name: string }[] | null;
+    roles: { display_name: string } | null;
   }[];
 
   return (
@@ -146,7 +147,7 @@ export default async function ViewAsSchoolPage({ params }: { params: Promise<{ s
                 {staffRows.map((s) => (
                   <tr key={s.id}>
                     <td className="font-medium">{s.full_name}</td>
-                    <td>{s.roles?.[0]?.display_name ?? "—"}</td>
+                    <td>{s.roles?.display_name ?? "—"}</td>
                     <td>{s.position ?? "—"}</td>
                     <td>
                       <StatusBadge tone={s.status === "active" ? "success" : "neutral"} label={s.status} />
