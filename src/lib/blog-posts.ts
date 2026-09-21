@@ -24,6 +24,13 @@ export const BLOG_POSTS: BlogPostSummary[] = [
     publishedOn: "2026-09-21",
   },
   {
+    slug: "boarding-school-management-kenya",
+    title: "Boarding School Management in Kenya: Safety Standards, Roll Call and the Records That Matter",
+    description:
+      "What the Ministry's Safety Standards Manual expects of a boarding school, the records that back those standards up, how to handle exeats and visitors, and what software can and cannot do.",
+    publishedOn: "2026-09-21",
+  },
+  {
     slug: "mpesa-paybill-till-stk-push-school-fees",
     title: "M-Pesa Paybill vs Till vs STK Push for School Fees in Kenya",
     description:
