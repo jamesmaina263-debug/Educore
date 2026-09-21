@@ -90,7 +90,7 @@ jobs:
           echo "Dump verified: parses correctly and contains data for all expected core tables."
 
       - name: Upload backup artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: educore-backup-${{ github.run_id }}
           path: educore-backup-*.dump
