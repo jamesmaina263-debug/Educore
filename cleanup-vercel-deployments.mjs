@@ -107,7 +107,7 @@ console.log(`${EXECUTE ? "Deleting" : "Would delete"} ${candidates.length} old, 
 
 for (const d of candidates) {
   const date = new Date(d.created).toISOString().slice(0, 10);
-  console.log(`  ${date}  ${d.id}  ${d.url}`);
+  console.log(`  ${date}  ${d.uid}  ${d.url}`);
 }
 
 if (!EXECUTE) {
@@ -119,11 +119,14 @@ console.log("\nDeleting...");
 let deleted = 0;
 for (const d of candidates) {
   try {
-    await deleteDeployment(d.id);
+    await deleteDeployment(d.uid);
     deleted++;
-    console.log(`  deleted ${d.id}`);
+    console.log(`  deleted ${d.uid}`);
   } catch (err) {
-    console.error(`  FAILED ${d.id}: ${err.message}`);
+    console.error(`  FAILED ${d.uid}: ${err.message}`);
   }
 }
 console.log(`\nDone. Deleted ${deleted}/${candidates.length}.`);
+if (deleted < candidates.length) {
+  process.exit(1);
+}
