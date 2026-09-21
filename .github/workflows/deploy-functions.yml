@@ -41,7 +41,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: supabase/setup-cli@v1
+      - uses: supabase/setup-cli@v3
         with:
           # Pinned per Supabase's own supply-chain guidance (avoid floating tags for CI
           # tooling, same principle as pinning application dependencies) -- version: latest
