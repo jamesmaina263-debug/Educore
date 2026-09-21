@@ -58,7 +58,7 @@
     "fake-indexeddb": "^6.2.5",
     "tailwindcss": "^4",
     "typescript": "^5",
-    "vitest": "^4.1.10"
+    "vitest": "^5.0.1"
   },
   "overrides": {
     "uuid": "^11.1.1",
