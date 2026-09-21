@@ -63,7 +63,10 @@ export default async function AdminOverviewPage({
     // and the overdue total all need to be derived from the same full set below.
     supabase.from("platform_invoices").select("school_id, amount_kes, status, paid_at, due_at"),
     supabase.from("students").select("school_id"),
-    supabase.from("school_users").select("school_id"),
+    // Staff count for the school list below -- excludes parent/student/super_admin rows,
+    // same filter used by /staff, /admin/view-as/[schoolId], and everywhere else "staff"
+    // is counted. (This was previously unfiltered and inflated the count with parents.)
+    supabase.from("school_users").select("school_id, roles!inner(name)").not("roles.name", "in", "(parent,student,super_admin)"),
     // Onboarding-completeness signal for the school list below: has this school set up any
     // classes, streams, and an active fee structure? Just school_id -- only presence/absence
     // per school matters here, not the rows themselves.
