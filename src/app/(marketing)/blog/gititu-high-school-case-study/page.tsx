@@ -13,27 +13,33 @@ import { BlogByline } from "@/components/marketing/blog-byline";
 import { TRIAL_HREF, TRIAL_CTA_SHORT } from "@/lib/marketing/trial";
 
 // ---------------------------------------------------------------------------
-// PUBLICATION GATE. This page renders a 404 until APPROVED is true.
+// PUBLICATION GATE. Renders a 404 (and is noindex) whenever APPROVED is false.
 //
-// Everything below the quotes is the school's own written answers, supplied
-// to EduCore on 2026-09-20 in response to four questions. They may only be
-// published after the school approves IN WRITING: (a) the quotes exactly as
-// they appear here, (b) the name/role attribution shown, and (c) use of the
-// school's name (and logo, if shown). Flip APPROVED to true, and fill in the
-// three constants below, only once that approval exists. If the school
-// prefers anonymity, set SCHOOL_NAME to "a Kenyan school" and remove the
-// role from ATTRIBUTION.
+// The quotes below are the four written answers Gititu High School's
+// principal supplied on 2026-09-20. Written approval was received from him
+// the same day for: (a) publishing the four answers exactly as written,
+// (b) the credit "Mr. Andrew Murage, Principal, Gititu High School",
+// (c) use of the school's name on the EduCore website and in marketing, and
+// (d) use of the school's logo (not currently shown on this page).
+// He also asked that figures from the live EduCore system NOT be presented as
+// the school's actual figures, because student onboarding and records
+// migration are still under way (expected to complete in about a month).
+// This page therefore contains no figures. When the migration finishes, ask
+// the school for real before/after numbers and update the page, with the
+// school's re-approval of any new wording.
+// If the school withdraws permission, set APPROVED = false (page 404s
+// immediately) and remove the BLOG_POSTS entry.
 // ---------------------------------------------------------------------------
-const APPROVED = false;
-const SCHOOL_NAME = "[School name]";
-const ATTRIBUTION = "[Name], [role], [School name]";
-const PUBLISHED_ON = "2026-09-20"; // update to the actual go-live date on approval
+const APPROVED = true;
+const SCHOOL_NAME = "Gititu High School";
+const ATTRIBUTION = "Mr. Andrew Murage, Principal, Gititu High School";
+const PUBLISHED_ON = "2026-09-20";
 
-const SLUG = "kenyan-school-end-of-term-one-system-case-study";
+const SLUG = "gititu-high-school-case-study";
 const PATH = `/blog/${SLUG}`;
-const TITLE = "Case Study: A Kenyan School on Running End of Term From One System — EduCore";
+const TITLE = "Case Study: Gititu High School on Running End of Term From One System — EduCore";
 const DESCRIPTION =
-  "In its own words, a Kenyan school describes end of term before and after moving marks, fees and student records into one system, what surprised it, and what still needs improving.";
+  "In his own words, the principal of Gititu High School describes end of term before and after moving marks, fees and student records into EduCore, what surprised the school, and what still needs improving.";
 
 export const metadata: Metadata = {
   title: TITLE,
@@ -91,7 +97,7 @@ export default function KenyanSchoolCaseStudyPost() {
   return (
     <>
       <BreadcrumbJsonLd
-        items={[HOME_CRUMB, { name: "Blog", path: "/blog" }, { name: "School case study", path: PATH }]}
+        items={[HOME_CRUMB, { name: "Blog", path: "/blog" }, { name: "Gititu High School case study", path: PATH }]}
       />
       <ArticleJsonLd headline={TITLE} description={DESCRIPTION} path={PATH} datePublished={PUBLISHED_ON} />
 
@@ -103,10 +109,10 @@ export default function KenyanSchoolCaseStudyPost() {
         </h1>
         <BlogByline publishedOn={PUBLISHED_ON} />
         <p className="mt-5 max-w-2xl text-lg leading-relaxed text-white/70">
-          We asked a school using EduCore four questions and are publishing
-          the answers as they wrote them: what end of term used to involve,
-          what changed for fees and report cards, and what is still not
-          perfect.
+          We asked Gititu High School&apos;s principal four questions and are
+          publishing the answers exactly as he wrote them: what end of term
+          used to involve, what changed for fees and report cards, and what
+          is still not perfect.
         </p>
       </Section>
 
@@ -143,10 +149,14 @@ export default function KenyanSchoolCaseStudyPost() {
         <Reveal className="mx-auto max-w-3xl">
           <Eyebrow>About This Case Study</Eyebrow>
           <p className="mt-4 text-sm leading-relaxed text-marketing-navy-900/70">
-            The answers above are the school&apos;s own, quoted exactly and
-            published with its written approval. They describe one
-            school&apos;s experience; results vary by school, and EduCore is
-            not claiming a measured time saving. To see how the same areas
+            The answers above are the principal&apos;s own, quoted exactly and
+            published with his written approval. They describe one
+            school&apos;s experience so far: Gititu High School is still
+            onboarding students and migrating its records, which it expects
+            to complete in about a month. The school has asked that figures
+            from its live system not be treated as its actual figures, so this
+            case study contains none, and EduCore is not claiming a measured
+            time saving. Results vary by school. To see how the same areas
             work, read our guides to{" "}
             <Link
               href="/blog/mpesa-fee-collection-automation-kenya-schools"
