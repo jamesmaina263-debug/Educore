@@ -40,7 +40,7 @@ on:
         required: false
         default: '14'
       report_pr:
-        description: 'Diagnostic only: PR number to post the cleanup output to. Leave blank to skip.'
+        description: 'Optional: PR number to post this run''s real output to as a comment. Leave blank to skip.'
         required: false
         default: ''
 
@@ -69,11 +69,10 @@ jobs:
           VERCEL_TOKEN: ${{ secrets.VERCEL_CLEANUP_TOKEN }}
         run: node cleanup-vercel-deployments.mjs --keep-days "${{ github.event.inputs.keep_days || '14' }}" --execute 2>&1 | tee -a cleanup-output.txt
 
-      # Temporary diagnostic step: the Actions log-storage host isn't reachable
-      # from the environment being used to verify manual runs of this workflow,
-      # so post the real output as a PR comment instead. Remove once that's
-      # no longer needed.
-      - name: Post cleanup output as a PR comment
+      # Optional: since Actions' raw log storage isn't reachable from every
+      # environment used to debug this workflow, pass report_pr on a manual
+      # dispatch to also get the real output posted as a PR comment.
+      - name: Post cleanup output as a PR comment (optional)
         if: always() && github.event.inputs.report_pr != ''
         env:
           GH_TOKEN: ${{ github.token }}
