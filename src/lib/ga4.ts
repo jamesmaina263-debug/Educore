@@ -381,6 +381,75 @@ export async function getGoalBreakdown(dateRange: GaDateRangeInput): Promise<Goa
     }));
 }
 
+export type KeyEventSeriesPoint = { date: string; counts: Record<string, number> };
+
+// Time series for specific named GA4 events (e.g. "sign_up", "Demo Request
+// Submitted") -- distinct from getGoalBreakdown()'s single-period totals,
+// this tracks how each named event trends day-by-day so a spike or
+// drop-off is visible rather than buried in one summed number. Events only
+// appear once GA4 has actually received them; an event with zero rows in
+// range simply contributes 0 for every date, same posture as the rest of
+// this file's "never fabricate a value" rule.
+export async function getKeyEventsTimeseries(
+  dateRange: GaDateRangeInput,
+  eventNames: string[],
+  granularity: TimeGranularity = "day",
+): Promise<KeyEventSeriesPoint[] | null> {
+  if (eventNames.length === 0) return [];
+  const result = await runReport({
+    dateRanges: toDateRange(dateRange),
+    dimensions: [{ name: GRANULARITY_DIMENSION[granularity] }, { name: "eventName" }],
+    metrics: [{ name: "eventCount" }],
+    dimensionFilter: {
+      filter: { fieldName: "eventName", inListFilter: { values: eventNames } },
+    },
+    orderBys: [{ dimension: { dimensionName: GRANULARITY_DIMENSION[granularity] } }],
+    limit: 1000,
+  });
+  if (!result) return null;
+  if (!result.rows) return [];
+  const byDate = new Map<string, Record<string, number>>();
+  for (const row of result.rows) {
+    const eventName = row.dimensionValues?.[1]?.value;
+    if (!eventName) continue;
+    const label = formatPeriodLabel(row.dimensionValues?.[0]?.value ?? "", granularity);
+    const count = Number(row.metricValues?.[0]?.value ?? 0);
+    const existing = byDate.get(label) ?? {};
+    existing[eventName] = (existing[eventName] ?? 0) + count;
+    byDate.set(label, existing);
+  }
+  return Array.from(byDate.entries())
+    .map(([date, counts]) => ({ date, counts }))
+    .sort((a, b) => a.date.localeCompare(b.date));
+}
+
+export type ChannelPerformanceRow = { label: string; sessions: number; engagementRate: number };
+
+// Channel-level session volume paired with GA4's engagement rate -- a
+// quality signal alongside getChannels() above (which reports
+// totalUsers/engagedSessions to match the other visitor-count breakdowns
+// on this page). engagementRate comes back from GA4 as a 0-1 fraction;
+// converted to a 0-100 percentage here so callers never re-derive it.
+export async function getChannelPerformance(
+  dateRange: GaDateRangeInput,
+  limit = 10,
+): Promise<ChannelPerformanceRow[] | null> {
+  const result = await runReport({
+    dateRanges: toDateRange(dateRange),
+    dimensions: [{ name: "sessionDefaultChannelGroup" }],
+    metrics: [{ name: "sessions" }, { name: "engagementRate" }],
+    orderBys: [{ metric: { metricName: "sessions" }, desc: true }],
+    limit,
+  });
+  if (!result) return null;
+  if (!result.rows) return [];
+  return result.rows.map((row) => ({
+    label: row.dimensionValues?.[0]?.value || "(none)",
+    sessions: Number(row.metricValues?.[0]?.value ?? 0),
+    engagementRate: Number(row.metricValues?.[1]?.value ?? 0) * 100,
+  }));
+}
+
 // GA4's separate Realtime API, mirroring the "lightweight active-visitors
 // count" the admin page shows -- not a full realtime dimension breakdown.
 export async function getRealtimeVisitorCount(): Promise<number | null> {
