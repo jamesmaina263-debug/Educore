@@ -1,10 +1,13 @@
 "use client";
 
-import { useActionState, useEffect, useState } from "react";
+import { useActionState, useEffect, useRef, useState, useTransition } from "react";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { CheckCircle2 } from "lucide-react";
 import { sendGTMEvent } from "@next/third-parties/google";
 
 import { submitDemoRequest, type DemoRequestState } from "@/app/(marketing)/contact/actions";
+import { saveDemoContactStep } from "@/app/(marketing)/contact/partial-lead-actions";
 import { MarketingButton } from "@/components/marketing/button";
 import { getStoredAttribution } from "@/lib/attribution";
 import { ATTRIBUTION_KEYS } from "@/lib/marketing/attribution-fields";
@@ -21,8 +24,27 @@ const ROLE_OPTIONS = [
   "Other",
 ];
 
+// Step 1 fields, validated with the browser's own constraint validation before Continue saves
+// them. Their values are then carried into step 2 as hidden inputs (see the form below).
+const STEP_ONE_FIELDS = ["name", "school_name", "email", "phone"] as const;
+type ContactDetails = Record<(typeof STEP_ONE_FIELDS)[number], string>;
+const EMPTY_CONTACT: ContactDetails = { name: "", school_name: "", email: "", phone: "" };
+
 export function DemoRequestForm() {
   const [state, formAction, pending] = useActionState(submitDemoRequest, initialState);
+  // Two-step form: step 1 (contact details) is saved server-side the moment the visitor
+  // presses Continue, so a visitor who never finishes step 2 is still a lead. Step 2 holds the
+  // rest of the request and the real submit. See partial-lead-actions.ts.
+  const [step, setStep] = useState<1 | 2>(1);
+  const [savingContact, startSavingContact] = useTransition();
+  const [contactError, setContactError] = useState<string | null>(null);
+  // Step-1 values that were saved. Kept in state (not read back from the DOM) because React 19
+  // resets uncontrolled form fields after a form action finishes -- if the final submit errors,
+  // anything only held in an input would be blanked. Step 2 re-submits them as hidden inputs,
+  // which a form reset does not clear.
+  const [contact, setContact] = useState<ContactDetails>(EMPTY_CONTACT);
+  const formRef = useRef<HTMLFormElement>(null);
+  const pathname = usePathname();
   const [renderedAt] = useState(() => Date.now());
   // Read once at mount, not on every render -- whatever was captured
   // earlier in this session by MarketingAnalytics (see
@@ -56,6 +78,45 @@ export function DemoRequestForm() {
     if (formStarted) return;
     setFormStarted(true);
     sendGTMEvent({ event: "Demo Form Started" });
+  }
+
+  // Moves keyboard/screen-reader focus to the first step-2 field when the step changes.
+  useEffect(() => {
+    if (step === 2) document.getElementById("role")?.focus();
+  }, [step]);
+
+  function handleContinue() {
+    const form = formRef.current;
+    if (!form) return;
+    for (const field of STEP_ONE_FIELDS) {
+      const el = form.elements.namedItem(field) as HTMLInputElement | null;
+      if (el && !el.reportValidity()) return;
+    }
+    setContactError(null);
+    const data = new FormData(form);
+    const saved = Object.fromEntries(
+      STEP_ONE_FIELDS.map((field) => [field, String(data.get(field) ?? "").trim()]),
+    ) as ContactDetails;
+    startSavingContact(async () => {
+      const result = await saveDemoContactStep(data);
+      if (result.status === "error") {
+        setContactError(result.message);
+        return;
+      }
+      // Needs a matching GTM container change to reach GA4 (like "Demo Form Started" above).
+      sendGTMEvent({ event: "Demo Form Contact Step Completed" });
+      setContact(saved);
+      setStep(2);
+    });
+  }
+
+  // Enter in a step-1 field means "Continue", not "submit the whole form" (which would fail
+  // server-side validation for the step-2 fields that aren't on screen yet).
+  function handleStepOneKeyDown(event: React.KeyboardEvent<HTMLDivElement>) {
+    if (event.key !== "Enter" || step !== 1) return;
+    if ((event.target as HTMLElement).tagName !== "INPUT") return;
+    event.preventDefault();
+    handleContinue();
   }
 
   useEffect(() => {
@@ -155,7 +216,12 @@ export function DemoRequestForm() {
   }
 
   return (
-    <form action={formAction} onFocus={handleFormFocus} className="flex flex-col gap-5">
+    <form
+      ref={formRef}
+      action={formAction}
+      onFocus={handleFormFocus}
+      className="flex flex-col gap-5"
+    >
       {/* Bot mitigation, not a visible/functional field for real users:
           - honeypot ("company_website") is hidden from sighted users via CSS
             and never announced by a screen reader (aria-hidden + tabIndex -1
@@ -175,6 +241,7 @@ export function DemoRequestForm() {
         />
       </div>
       <input type="hidden" name="rendered_at" value={renderedAt} />
+      <input type="hidden" name="source_page" value={pathname} />
       {/* Marketing attribution, forwarded silently -- see src/lib/attribution.ts.
           Never shown or asked of the visitor; empty/absent if nothing was
           captured this session. */}
@@ -182,85 +249,146 @@ export function DemoRequestForm() {
         <input key={key} type="hidden" name={key} value={attribution[key] ?? ""} />
       ))}
 
-      <div className="grid gap-5 sm:grid-cols-2">
-        <Field label="Your name" htmlFor="name">
-          <input
-            id="name"
-            name="name"
-            type="text"
-            required
-            autoComplete="name"
-            className={inputClass}
-          />
-        </Field>
-        <Field label="School name" htmlFor="school_name">
-          <input
-            id="school_name"
-            name="school_name"
-            type="text"
-            required
-            className={inputClass}
-          />
-        </Field>
-      </div>
+      <p className="text-xs font-medium uppercase tracking-wide text-marketing-navy-900/60">
+        Step {step} of 2 — {step === 1 ? "Your contact details" : "About your school"}
+      </p>
 
-      <div className="grid gap-5 sm:grid-cols-2">
-        <Field label="Your role" htmlFor="role">
-          <select
-            id="role"
-            name="role"
-            required
-            defaultValue=""
-            onChange={handleRoleChange}
-            className={inputClass}
-          >
-            <option value="" disabled>
-              Select a role
-            </option>
-            {ROLE_OPTIONS.map((r) => (
-              <option key={r} value={r}>
-                {r}
-              </option>
-            ))}
-          </select>
-        </Field>
-        <Field label="Roughly how many students?" htmlFor="student_count" optional>
-          <input
-            id="student_count"
-            name="student_count"
-            type="number"
-            min={0}
-            inputMode="numeric"
-            className={inputClass}
-          />
-        </Field>
-      </div>
+      {step === 1 && (
+        <div className="flex flex-col gap-5" onKeyDown={handleStepOneKeyDown}>
+          <div className="grid gap-5 sm:grid-cols-2">
+            <Field label="Your name" htmlFor="name">
+              <input
+                id="name"
+                name="name"
+                type="text"
+                required
+                defaultValue={contact.name}
+                autoComplete="name"
+                className={inputClass}
+              />
+            </Field>
+            <Field label="School name" htmlFor="school_name">
+              <input
+                id="school_name"
+                name="school_name"
+                type="text"
+                required
+                defaultValue={contact.school_name}
+                className={inputClass}
+              />
+            </Field>
+          </div>
 
-      <div className="grid gap-5 sm:grid-cols-2">
-        <Field label="Email" htmlFor="email">
-          <input
-            id="email"
-            name="email"
-            type="email"
-            required
-            autoComplete="email"
-            className={inputClass}
-          />
-        </Field>
-        <Field label="Phone" htmlFor="phone" optional>
-          <input
-            id="phone"
-            name="phone"
-            type="tel"
-            autoComplete="tel"
-            className={inputClass}
-          />
-        </Field>
-      </div>
+          <div className="grid gap-5 sm:grid-cols-2">
+            <Field label="Email" htmlFor="email">
+              <input
+                id="email"
+                name="email"
+                type="email"
+                required
+                defaultValue={contact.email}
+                autoComplete="email"
+                className={inputClass}
+              />
+            </Field>
+            <Field label="Phone" htmlFor="phone" optional>
+              <input
+                id="phone"
+                name="phone"
+                type="tel"
+                defaultValue={contact.phone}
+                autoComplete="tel"
+                className={inputClass}
+              />
+            </Field>
+          </div>
 
-      <Field label="Anything specific you'd like us to cover?" htmlFor="message" optional>
-        <textarea id="message" name="message" rows={4} className={inputClass} />
-      </Field>
+          {contactError && (
+            <p role="alert" className="text-sm font-medium text-destructive">
+              {contactError}
+            </p>
+          )}
+
+          <div className="flex flex-col gap-3">
+            <MarketingButton
+              type="button"
+              size="lg"
+              onClick={handleContinue}
+              disabled={savingContact}
+              className="w-full sm:w-auto sm:self-start"
+            >
+              {savingContact ? "Saving..." : "Continue"}
+            </MarketingButton>
+            {/* Disclosure for saving step 1 before the final submit -- keep in sync with the
+                "What we collect" section of /privacy. */}
+            <p className="text-xs leading-relaxed text-marketing-navy-900/70">
+              When you continue, we save these contact details so our team can follow up about your
+              demo, even if you don&apos;t finish the next step. See our{" "}
+              <Link href="/privacy" className="underline underline-offset-2 hover:text-marketing-blue">
+                privacy policy
+              </Link>
+              .
+            </p>
+          </div>
+        </div>
+      )}
+
+      {step === 2 && (
+        <>
+          {STEP_ONE_FIELDS.map((field) => (
+            <input key={field} type="hidden" name={field} value={contact[field]} />
+          ))}
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-md bg-marketing-canvas px-3 py-2 text-sm text-marketing-navy-900/80">
+            <span>
+              Booking for <strong className="font-semibold">{contact.name}</strong> at{" "}
+              <strong className="font-semibold">{contact.school_name}</strong>
+            </span>
+            <button
+              type="button"
+              onClick={() => setStep(1)}
+              className="text-marketing-blue underline-offset-2 hover:underline"
+            >
+              Edit details
+            </button>
+          </div>
+
+          <div className="grid gap-5 sm:grid-cols-2">
+            <Field label="Your role" htmlFor="role">
+              <select
+                id="role"
+                name="role"
+                required
+                defaultValue=""
+                onChange={handleRoleChange}
+                className={inputClass}
+              >
+                <option value="" disabled>
+                  Select a role
+                </option>
+                {ROLE_OPTIONS.map((r) => (
+                  <option key={r} value={r}>
+                    {r}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field label="Roughly how many students?" htmlFor="student_count" optional>
+              <input
+                id="student_count"
+                name="student_count"
+                type="number"
+                min={0}
+                inputMode="numeric"
+                className={inputClass}
+              />
+            </Field>
+          </div>
+
+          <Field label="Anything specific you'd like us to cover?" htmlFor="message" optional>
+            <textarea id="message" name="message" rows={4} className={inputClass} />
+          </Field>
+        </>
+      )}
 
       {state.status === "error" && (
         <p role="alert" className="text-sm font-medium text-destructive">
@@ -268,9 +396,11 @@ export function DemoRequestForm() {
         </p>
       )}
 
-      <MarketingButton type="submit" size="lg" disabled={pending} className="w-full sm:w-auto">
-        {pending ? "Sending..." : "Book a Demo"}
-      </MarketingButton>
+      {step === 2 && (
+        <MarketingButton type="submit" size="lg" disabled={pending} className="w-full sm:w-auto">
+          {pending ? "Sending..." : "Book a Demo"}
+        </MarketingButton>
+      )}
     </form>
   );
 }

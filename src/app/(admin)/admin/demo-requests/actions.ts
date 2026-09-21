@@ -50,3 +50,29 @@ export async function assignDemoRequest(id: string, teamMemberId: string | null)
   revalidatePath("/admin/demo-requests");
   return { success: true };
 }
+
+// Step-1 leads from the two-step demo form who never submitted the full request
+// (see marketing_demo_partial_leads).
+export async function setDemoPartialLeadContacted(
+  id: string,
+  contacted: boolean,
+): Promise<ActionResult> {
+  const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
+  const { error } = await supabase.rpc("admin_set_demo_partial_lead_status", {
+    p_id: id,
+    p_status: contacted ? "contacted" : "incomplete",
+  });
+  if (error) return { error: error.message };
+  revalidatePath("/admin/demo-requests");
+  return { success: true };
+}
+
+export async function deleteDemoPartialLead(id: string): Promise<ActionResult> {
+  const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
+  const { error } = await supabase.rpc("admin_delete_demo_partial_lead", { p_id: id });
+  if (error) return { error: error.message };
+  revalidatePath("/admin/demo-requests");
+  return { success: true };
+}
