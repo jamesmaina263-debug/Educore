@@ -17,6 +17,13 @@ export type BlogPostSummary = {
 
 export const BLOG_POSTS: BlogPostSummary[] = [
   {
+    slug: "mpesa-paybill-till-stk-push-school-fees",
+    title: "M-Pesa Paybill vs Till vs STK Push for School Fees in Kenya",
+    description:
+      "Paybill and Till are where school fees land. STK push is how a payment gets started. What each does, who pays the fee, how it affects reconciliation, and how a school should set them up.",
+    publishedOn: "2026-09-21",
+  },
+  {
     slug: "gititu-high-school-case-study",
     title: "Case Study: Gititu High School on Running End of Term From One System",
     description:
