@@ -51,3 +51,21 @@ export function parseDemoContactStep(formData: FormData): DemoContactStepResult 
     },
   };
 }
+
+/**
+ * How long step-1 leads are kept before the daily retention cron deletes them. Single source
+ * for the cron (src/app/api/cron/communication-retention/route.ts) and for anything that needs
+ * to know when counts stop being complete (the analytics funnel). The admin panel copy and the
+ * privacy policy also say "60 days" -- keep them in step if this ever changes.
+ */
+export const DEMO_PARTIAL_RETENTION_DAYS = 60;
+
+/**
+ * True when a reporting window starts earlier than the retention limit, so counts of saved
+ * leads for it are incomplete (older rows have already been deleted).
+ */
+export function startsBeyondPartialRetention(startIso: string, now: Date = new Date()): boolean {
+  const start = new Date(`${startIso}T00:00:00Z`).getTime();
+  if (Number.isNaN(start)) return false;
+  return start < now.getTime() - DEMO_PARTIAL_RETENTION_DAYS * 24 * 60 * 60 * 1000;
+}

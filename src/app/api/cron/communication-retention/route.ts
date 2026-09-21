@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isValidCronRequest } from "@/lib/cron-auth";
 import { sendSecurityAlert } from "@/lib/security-alert";
+import { DEMO_PARTIAL_RETENTION_DAYS } from "@/lib/marketing/demo-partial";
 
 export const dynamic = "force-dynamic";
 
@@ -53,9 +54,11 @@ export async function GET(request: Request) {
 
   // Unrelated to communication history but the same kind of sweep, and this is the existing
   // daily retention job: delete step-1 demo-form leads (people who never submitted the full
-  // request) after 60 days. Deliberately non-fatal -- a failure here must not mask the
+  // request) after DEMO_PARTIAL_RETENTION_DAYS (60). Deliberately non-fatal -- a failure here must not mask the
   // communication sweep above having succeeded -- but it does alert.
-  const partialLeadsPurged = await adminClient.rpc("purge_stale_demo_partial_leads", { p_days: 60 });
+  const partialLeadsPurged = await adminClient.rpc("purge_stale_demo_partial_leads", {
+    p_days: DEMO_PARTIAL_RETENTION_DAYS,
+  });
   if (partialLeadsPurged.error) {
     void sendSecurityAlert("Communication-retention cron (demo partial leads purge) failed", {
       error: partialLeadsPurged.error.message,
