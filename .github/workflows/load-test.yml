@@ -78,7 +78,7 @@ jobs:
           echo "anon_key=$ANON_KEY" >> "$GITHUB_OUTPUT"
           echo "supabase_url=https://oifyxuujtmiqhokfcatv.supabase.co" >> "$GITHUB_OUTPUT"
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 20
 
