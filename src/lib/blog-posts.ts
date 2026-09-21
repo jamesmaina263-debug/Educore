@@ -17,6 +17,13 @@ export type BlogPostSummary = {
 
 export const BLOG_POSTS: BlogPostSummary[] = [
   {
+    slug: "gititu-high-school-case-study",
+    title: "Case Study: Gititu High School on Running End of Term From One System",
+    description:
+      "In his own words, the principal of Gititu High School describes end of term before and after moving marks, fees and student records into EduCore, what surprised the school, and what still needs improving.",
+    publishedOn: "2026-09-20",
+  },
+  {
     slug: "data-protection-act-kenya-schools-guide",
     title: "The Data Protection Act for Kenyan Schools: A Practical Guide",
     description:
