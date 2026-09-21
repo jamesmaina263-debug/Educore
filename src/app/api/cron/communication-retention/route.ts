@@ -51,9 +51,21 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: purged.error.message }, { status: 500 });
   }
 
+  // Unrelated to communication history but the same kind of sweep, and this is the existing
+  // daily retention job: delete step-1 demo-form leads (people who never submitted the full
+  // request) after 60 days. Deliberately non-fatal -- a failure here must not mask the
+  // communication sweep above having succeeded -- but it does alert.
+  const partialLeadsPurged = await adminClient.rpc("purge_stale_demo_partial_leads", { p_days: 60 });
+  if (partialLeadsPurged.error) {
+    void sendSecurityAlert("Communication-retention cron (demo partial leads purge) failed", {
+      error: partialLeadsPurged.error.message,
+    });
+  }
+
   return NextResponse.json({
     archived: archived.data,
     purged: purged.data,
+    demo_partial_leads_purged: partialLeadsPurged.error ? null : partialLeadsPurged.data,
     ran_at: new Date().toISOString(),
   });
 }

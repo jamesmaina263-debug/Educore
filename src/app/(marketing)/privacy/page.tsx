@@ -93,13 +93,18 @@ export default function PrivacyPage() {
               What we collect
             </h3>
             <p className="mt-3 text-marketing-navy-900/75">
-              If you submit the contact/demo request form on this site, we
+              If you use the contact/demo request form on this site, we
               collect the information you provide: your name, school name,
               role, email address, and phone number and message if you
-              choose to include them. If you arrived via a marketing link
+              choose to include them. The form has two steps. When you press
+              Continue after the first step (name, school, email, and
+              optional phone), we save those details straight away so our
+              team can follow up about your demo, even if you don&apos;t
+              finish the second step. If you don&apos;t complete the form, we
+              delete those saved details after 60 days. If you arrived via a marketing link
               containing campaign parameters (for example, from an ad or a
               shared link), we also record which campaign referred you at
-              the time you submit the form, so we understand which channels
+              the time you continue or submit the form, so we understand which channels
               are helpful. We do not collect this information anywhere else
               on the marketing site — pages you simply browse do not submit
               any personal information to us.
@@ -111,11 +116,13 @@ export default function PrivacyPage() {
               How we store and use it
             </h3>
             <p className="mt-3 text-marketing-navy-900/75">
-              Demo request submissions are stored in a dedicated database
-              table, separate from any school&apos;s student, academic, or
-              financial records, and are only ever written to, never read
-              back, by this website. Access is restricted to the EduCore
-              team, and used to respond to your enquiry and arrange a demo.
+              Demo request submissions, and first-step details from people
+              who started but didn&apos;t finish the form, are stored in
+              dedicated database tables, separate from any school&apos;s
+              student, academic, or financial records, and are only ever
+              written to, never read back, by this website&apos;s public
+              pages. Access is restricted to the EduCore team, and used to
+              respond to your enquiry and arrange a demo.
               The campaign tags and, if you had not declined cookies, the
               ad click identifier described under &ldquo;Error monitoring,
               analytics, and cookies&rdquo; below are stored with it so we
@@ -575,7 +582,7 @@ export default function PrivacyPage() {
           </div>
 
           <p className="text-xs text-marketing-navy-900/60">
-            Last updated: September 20, 2026.
+            Last updated: September 21, 2026.
           </p>
         </div>
       </Section>

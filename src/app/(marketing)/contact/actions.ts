@@ -5,6 +5,8 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getRealClientIp } from "@/lib/get-real-client-ip";
 import { sendSecurityAlert } from "@/lib/security-alert";
+import { markIncompleteLeadCompleted } from "@/lib/marketing/demo-partial-store";
+import { normalizeLeadEmail } from "@/lib/marketing/demo-partial";
 import {
   isMissingColumnError,
   legacyAttributionColumns,
@@ -140,6 +142,10 @@ export async function submitDemoRequest(
       message: "Something went wrong on our end. Please try again, or email us directly.",
     };
   }
+
+  // The visitor finished the form: close out any step-1 lead saved for this email (see
+  // partial-lead-actions.ts) so it no longer shows as "started but didn't finish".
+  await markIncompleteLeadCompleted(admin, normalizeLeadEmail(email));
 
   return { status: "success" };
 }
