@@ -17,6 +17,13 @@ export type BlogPostSummary = {
 
 export const BLOG_POSTS: BlogPostSummary[] = [
   {
+    slug: "school-payroll-statutory-deductions-kenya",
+    title: "School Payroll in Kenya: PAYE, SHIF, NSSF and the Housing Levy Explained (2026)",
+    description:
+      "The four statutory deductions on a Kenyan school payslip in 2026: what each is, the rates after the February 2026 NSSF change, the order they are applied in, a worked example, deadlines, and common mistakes.",
+    publishedOn: "2026-09-21",
+  },
+  {
     slug: "mpesa-paybill-till-stk-push-school-fees",
     title: "M-Pesa Paybill vs Till vs STK Push for School Fees in Kenya",
     description:
