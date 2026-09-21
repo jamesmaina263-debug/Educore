@@ -17,6 +17,13 @@ export type BlogPostSummary = {
 
 export const BLOG_POSTS: BlogPostSummary[] = [
   {
+    slug: "teacher-performance-reviews-kenya-schools",
+    title: "Teacher Performance Reviews for Kenyan Schools: Termly, Structured, and Kept Private",
+    description:
+      "Why teacher appraisal usually lives in a locked cabinet or a Principal's private notebook, and how EduCore keeps it structured instead — 1-5 competency scoring, an automatically computed rating, and visibility locked to the reviewer tier and the teacher being reviewed.",
+    publishedOn: "2026-09-21",
+  },
+  {
     slug: "school-payroll-statutory-deductions-kenya",
     title: "School Payroll in Kenya: PAYE, SHIF, NSSF and the Housing Levy Explained (2026)",
     description:
