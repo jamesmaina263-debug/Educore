@@ -33,7 +33,12 @@ name: Cleanup old Vercel deployments
 on:
   schedule:
     - cron: '0 2 * * 0'   # Sundays at 02:00 UTC
-  workflow_dispatch: {}    # allows manual "Run workflow" button in the Actions tab
+  workflow_dispatch:
+    inputs:
+      keep_days:
+        description: 'Days of deployments to keep untouched (production/rollback candidates are always kept regardless). Only used for manual runs; the Sunday schedule always uses 14.'
+        required: false
+        default: '14'
 
 jobs:
   cleanup:
@@ -50,9 +55,9 @@ jobs:
       - name: Run cleanup (dry run first, for the logs)
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_CLEANUP_TOKEN }}
-        run: node cleanup-vercel-deployments.mjs
+        run: node cleanup-vercel-deployments.mjs --keep-days "${{ github.event.inputs.keep_days || '14' }}"
 
       - name: Run cleanup (execute)
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_CLEANUP_TOKEN }}
-        run: node cleanup-vercel-deployments.mjs --execute
+        run: node cleanup-vercel-deployments.mjs --keep-days "${{ github.event.inputs.keep_days || '14' }}" --execute
