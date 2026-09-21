@@ -21,6 +21,7 @@ import { usePathname } from "next/navigation";
 import { sendGTMEvent } from "@next/third-parties/google";
 import { MarketingButton } from "@/components/marketing/button";
 import { getStoredAttribution } from "@/lib/attribution";
+import { ATTRIBUTION_KEYS } from "@/lib/marketing/attribution-fields";
 import { submitLeadMagnet, type LeadMagnetState } from "@/app/(marketing)/lead-magnet-actions";
 
 const STORAGE_KEY = "educore_lead_magnet_state";
@@ -199,9 +200,9 @@ export function ExitIntentLeadMagnet() {
             <input type="hidden" name="rendered_at" value={renderedAt} />
             <input type="hidden" name="resource" value={RESOURCE} />
             <input type="hidden" name="source_page" value={pathname ?? ""} />
-            <input type="hidden" name="utm_source" value={attribution.utm_source ?? ""} />
-            <input type="hidden" name="utm_medium" value={attribution.utm_medium ?? ""} />
-            <input type="hidden" name="utm_campaign" value={attribution.utm_campaign ?? ""} />
+            {ATTRIBUTION_KEYS.map((key) => (
+              <input key={key} type="hidden" name={key} value={attribution[key] ?? ""} />
+            ))}
 
             <input
               type="email"

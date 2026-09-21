@@ -115,9 +115,12 @@ export default function PrivacyPage() {
               table, separate from any school&apos;s student, academic, or
               financial records, and are only ever written to, never read
               back, by this website. Access is restricted to the EduCore
-              team, and used solely to respond to your enquiry and arrange a
-              demo. We do not sell this information, and we do not use it
-              for advertising.
+              team, and used to respond to your enquiry and arrange a demo.
+              The campaign tags and, if you had not declined cookies, the
+              ad click identifier described under &ldquo;Error monitoring,
+              analytics, and cookies&rdquo; below are stored with it so we
+              can measure which ads work. We do not sell this information,
+              and we do not use your contact details for advertising.
             </p>
           </div>
 
@@ -140,20 +143,59 @@ export default function PrivacyPage() {
               the site is performing. This sets analytics cookies in your
               browser when you visit{" "}
               <span className="font-mono text-sm">educoreafrica.com</span>.
-              It is scoped to this marketing website only; it is never
-              active in the EduCore application that enrolled schools and
-              families use, which has no analytics or tracking of any kind.
-              When you submit the contact/demo form,
+              It is scoped to this marketing website and the free-trial
+              sign-up page only; it is never active in the EduCore
+              application that enrolled schools and families use, which
+              has no analytics or tracking of any kind.
+              When you submit the contact/demo form or create a free-trial
+              account,
               Google Analytics separately records that a form was
-              submitted, along with which page and marketing campaign or
+              submitted or an account was created, along with which page
+              and marketing campaign or
               link brought you there and, for sales-qualified submissions,
               which pricing tier CTA you came from — so we can measure how
               many visitors convert into enquiries and which channels drive
               that. It does not receive the name, email, phone number, or
               message you entered, or the role you selected in the form.
-              We do not use Google Analytics for advertising or
-              retargeting, and we do not share the data it collects with
-              any third party beyond Google as the analytics processor.
+              We do not share the data it collects with any third party
+              beyond Google.
+            </p>
+            <p className="mt-3 text-marketing-navy-900/75">
+              We advertise on Google Search (Google Ads). When you click
+              one of our ads, Google adds a click identifier (such as{" "}
+              <span className="font-mono text-sm">gclid</span>) to the
+              address of the page you land on. Unless you decline cookies
+              (see below), Google Analytics and Google Ads use cookies and
+              that identifier to recognise that a visit came from one of
+              our ads, so we can measure which ads lead to a demo request,
+              a checklist download, or a free-trial sign-up. We also store
+              the campaign tags from the link and, unless you declined
+              cookies, the click identifier alongside that demo request,
+              checklist download, or free-trial account, so we can tell
+              which ads bring in real schools and report those results
+              back to Google Ads. The click identifier is a code issued by
+              Google; it does not contain your name, email address, or
+              phone number, and we do not send those to Google Ads. We may
+              also use Google&apos;s audience features (remarketing) to show
+              our ads to people who have previously visited this site; you
+              can turn off ad personalisation in your Google Ads Settings
+              (adssettings.google.com).
+            </p>
+            <p className="mt-3 text-marketing-navy-900/75">
+              <span className="font-semibold text-marketing-navy-950">
+                Your cookie choice.
+              </span>{" "}
+              When you first visit, a notice lets you accept or decline
+              analytics and advertising cookies; until you decline, they
+              are on. If you decline, we tell Google&apos;s tags not to set
+              or read those cookies on your later page views, we delete the
+              Google cookies this site has already set where your browser
+              allows, and we do not store the ad click identifier. Google
+              may still receive limited signals that do not use cookies,
+              such as the fact that a page was visited. Your choice is
+              remembered in your browser and you can change it at any time
+              using &ldquo;Cookie settings&rdquo; in the footer of this
+              site.
             </p>
           </div>
 
@@ -357,7 +399,7 @@ export default function PrivacyPage() {
                     ["Safaricom (M-Pesa)", "Fee payment processing", "Payment amount, phone number, transaction reference — not full financial account details"],
                     ["Twilio (WhatsApp Business API) / SMS gateway", "Sending parent communications the School initiates", "Recipient phone number, message content"],
                     ["Sentry", "Error monitoring", "Technical error data only — default PII collection is disabled in every environment. Ingest endpoint is EU-region (*.ingest.de.sentry.io) — see Section 9."],
-                    ["Google Analytics (via Google Tag Manager)", "Website analytics (marketing site only, not the application)", "Aggregated visitor traffic (pages viewed, referral source, device/browser type) and anonymous form-submission events; sets analytics cookies on the marketing site only"],
+                    ["Google Analytics and Google Ads (via Google Tag Manager)", "Website analytics and advertising measurement (marketing site and free-trial sign-up page only, not the application)", "Aggregated visitor traffic (pages viewed, referral source, device/browser type), anonymous form-submission and sign-up events, and, for visits from a Google ad, the ad click identifier; sets analytics and advertising cookies unless you decline"],
                   ].map(([name, purpose, data]) => (
                     <tr key={name}>
                       <td className="w-1/4 px-4 py-3 align-top font-medium text-marketing-navy-950">
@@ -533,7 +575,7 @@ export default function PrivacyPage() {
           </div>
 
           <p className="text-xs text-marketing-navy-900/60">
-            Last updated: August 30, 2026.
+            Last updated: September 20, 2026.
           </p>
         </div>
       </Section>

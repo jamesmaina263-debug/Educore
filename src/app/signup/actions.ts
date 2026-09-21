@@ -8,6 +8,7 @@ import { sendSecurityAlert } from "@/lib/security-alert";
 import { safeStorageFilename } from "@/lib/storage-path";
 import { generateTemporaryPassword, temporaryPasswordExpiry } from "@/lib/temporary-password";
 import { verifyTurnstileToken } from "@/lib/turnstile";
+import { parseAttributionFormData } from "@/lib/marketing/attribution-fields";
 import {
   isValidTitle,
   isValidSchoolType,
@@ -346,6 +347,26 @@ export async function signUpSchool(
     await adminClient.from("schools").delete().eq("id", school.id);
     await adminClient.auth.admin.deleteUser(created.user.id);
     return { error: trialError.message };
+  }
+
+  // ---- 4b. Marketing attribution (best-effort — never fails the signup) ----
+  // Which ad/campaign brought this school in, so a paying customer can later
+  // be traced to the Google Ads click (gclid) and reported back as a
+  // conversion. Written to its own isolated table, after the school is fully
+  // created, so nothing here can affect signup: a missing table (migration not
+  // applied yet), a database error, or no attribution at all is simply skipped.
+  try {
+    const attribution = parseAttributionFormData(formData);
+    if (Object.values(attribution).some((v) => v !== null)) {
+      const { error: attributionError } = await adminClient
+        .from("marketing_signup_attribution")
+        .insert({ school_id: school.id, ...attribution });
+      if (attributionError) {
+        console.warn("signup attribution not stored", attributionError.code);
+      }
+    }
+  } catch (e) {
+    console.warn("signup attribution not stored", e instanceof Error ? e.message : e);
   }
 
   // ---- 5. Logo upload (optional, best-effort — never fails the signup) ----

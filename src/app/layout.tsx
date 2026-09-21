@@ -3,13 +3,13 @@ import "./globals.css";
 import { ServiceWorkerRegister } from "@/components/pwa/service-worker-register";
 import { SITE_URL, SITE_NAME } from "@/lib/site";
 
-// Deliberately not using next/font/google here: it requires a build-time
-// fetch to Google Fonts, which fails in restricted-network environments
-// and adds an external dependency this project doesn't need. EduCore's
-// non-functional requirements call for reliable performance on patchy
-// connectivity, so we ship with the system font stack (defined in
-// globals.css) instead. Swap in a self-hosted variable font later if the
-// design system calls for one.
+// Fonts: deliberately not next/font/google -- it requires a build-time fetch
+// to Google Fonts, which fails in restricted-network environments and adds an
+// external dependency this project doesn't need (EduCore's non-functional
+// requirements call for reliable performance on patchy connectivity).
+// Instead, Inter (variable weight) and IBM Plex Mono are self-hosted from npm
+// via @fontsource*, imported in globals.css, with a metric-adjusted "Inter
+// Fallback" face there so the font swap doesn't shift layout.
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
