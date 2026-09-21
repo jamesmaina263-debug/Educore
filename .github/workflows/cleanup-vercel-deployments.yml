@@ -43,6 +43,9 @@ on:
 jobs:
   cleanup:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
@@ -55,9 +58,19 @@ jobs:
       - name: Run cleanup (dry run first, for the logs)
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_CLEANUP_TOKEN }}
-        run: node cleanup-vercel-deployments.mjs --keep-days "${{ github.event.inputs.keep_days || '14' }}"
+        run: node cleanup-vercel-deployments.mjs --keep-days "${{ github.event.inputs.keep_days || '14' }}" 2>&1 | tee cleanup-output.txt
 
       - name: Run cleanup (execute)
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_CLEANUP_TOKEN }}
-        run: node cleanup-vercel-deployments.mjs --keep-days "${{ github.event.inputs.keep_days || '14' }}" --execute
+        run: node cleanup-vercel-deployments.mjs --keep-days "${{ github.event.inputs.keep_days || '14' }}" --execute 2>&1 | tee -a cleanup-output.txt
+
+      # Temporary diagnostic step: the Actions log-storage host isn't reachable
+      # from the environment being used to verify manual runs of this workflow,
+      # so post the real output as a PR comment instead. Remove once that's
+      # no longer needed.
+      - name: Post cleanup output as a PR comment
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh pr comment 405 --body-file cleanup-output.txt
