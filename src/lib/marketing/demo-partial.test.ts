@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { normalizeLeadEmail, parseDemoContactStep } from "./demo-partial";
+import {
+  normalizeLeadEmail,
+  parseDemoContactStep,
+  startsBeyondPartialRetention,
+} from "./demo-partial";
 
 function form(entries: Record<string, string>) {
   const fd = new FormData();
@@ -71,5 +75,30 @@ describe("normalizeLeadEmail", () => {
     expect(normalizeLeadEmail("  A@B.co ")).toBe("a@b.co");
     expect(normalizeLeadEmail(null)).toBe("");
     expect(normalizeLeadEmail(undefined)).toBe("");
+  });
+});
+
+describe("startsBeyondPartialRetention", () => {
+  const now = new Date("2026-09-21T12:00:00Z");
+
+  it("is false for windows fully inside the retention period", () => {
+    expect(startsBeyondPartialRetention("2026-09-21", now)).toBe(false); // today
+    expect(startsBeyondPartialRetention("2026-09-15", now)).toBe(false); // last 7 days
+    expect(startsBeyondPartialRetention("2026-08-23", now)).toBe(false); // last 30 days
+  });
+
+  it("is true once the window starts earlier than the retention limit", () => {
+    expect(startsBeyondPartialRetention("2026-06-24", now)).toBe(true); // last 90 days
+    expect(startsBeyondPartialRetention("2026-01-01", now)).toBe(true); // custom, far back
+  });
+
+  it("flips exactly at the boundary (rows before now - 60 days are already purged)", () => {
+    // now - 60d = 2026-07-23T12:00Z, so a window starting 2026-07-23T00:00Z has lost its morning.
+    expect(startsBeyondPartialRetention("2026-07-23", now)).toBe(true);
+    expect(startsBeyondPartialRetention("2026-07-24", now)).toBe(false);
+  });
+
+  it("ignores an unparseable date instead of flagging it", () => {
+    expect(startsBeyondPartialRetention("not-a-date", now)).toBe(false);
   });
 });

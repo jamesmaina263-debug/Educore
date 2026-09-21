@@ -10,6 +10,10 @@ import { TrafficTrendChart } from "@/components/admin/analytics/traffic-trend-ch
 import { KeyEventsChart } from "@/components/admin/analytics/key-events-chart";
 import { ChannelPerformanceList } from "@/components/admin/analytics/channel-performance-list";
 import { ConversionFunnel, type FunnelStage } from "@/components/admin/analytics/conversion-funnel";
+import {
+  DEMO_PARTIAL_RETENTION_DAYS,
+  startsBeyondPartialRetention,
+} from "@/lib/marketing/demo-partial";
 import { GranularityTabs } from "@/components/admin/analytics/granularity-tabs";
 import {
   resolveDateRange,
@@ -89,7 +93,11 @@ export default async function AdminAnalyticsPage({
       ? rawGranularity
       : defaultGranularity(period, startIso, endIso);
 
-  const [{ data: demoRequests }, { count: priorPeriodDemoCount }] = await Promise.all([
+  const [
+    { data: demoRequests },
+    { count: priorPeriodDemoCount },
+    { count: contactSavedCount, error: contactSavedError },
+  ] = await Promise.all([
     supabase
       .from("marketing_demo_requests")
       .select("id, created_at, status, utm_source")
@@ -100,6 +108,13 @@ export default async function AdminAnalyticsPage({
       .select("id", { count: "exact", head: true })
       .gte("created_at", `${prior.startIso}T00:00:00Z`)
       .lte("created_at", `${prior.endIso}T23:59:59Z`),
+    // Everyone who pressed Continue on step 1 of the demo form and had their contact details
+    // saved, whatever happened next (still open, contacted, or went on to submit).
+    supabase
+      .from("marketing_demo_partial_leads")
+      .select("id", { count: "exact", head: true })
+      .gte("created_at", `${startIso}T00:00:00Z`)
+      .lte("created_at", `${endIso}T23:59:59Z`),
   ]);
 
   const demoRequestCount = demoRequests?.length ?? 0;
@@ -179,6 +194,10 @@ export default async function AdminAnalyticsPage({
   const demoFormStarted = goals?.find((g) => g.goal === "Demo Form Started")?.events ?? null;
   const demoFormSubmitted = goals?.find((g) => g.goal === "Demo Request Submitted")?.events ?? null;
 
+  const contactSavedNote = startsBeyondPartialRetention(startIso)
+    ? `From the database (step 1 of the demo form) — includes visitors GA4 can't see. Saved leads are deleted after ${DEMO_PARTIAL_RETENTION_DAYS} days, so this count is incomplete for this period`
+    : "From the database (step 1 of the demo form) — includes visitors GA4 can't see, so it can exceed the stage above";
+
   const funnelStages: FunnelStage[] = [
     { label: "Website Visitors", value: overview?.visitors ?? null },
     {
@@ -188,6 +207,15 @@ export default async function AdminAnalyticsPage({
     },
     { label: "CTA Clicks", value: ctaClicks ?? null },
     { label: "Demo Form Started", value: demoFormStarted },
+    // Counted from the database, not GA4, so unlike the stages around it this includes
+    // visitors GA4 can't see (declined cookies, blockers) -- it can exceed "Demo Form Started".
+    // null ("Not tracked yet") on a query error rather than 0, so a broken query never reads as
+    // "nobody saved their details".
+    {
+      label: "Contact Details Saved",
+      value: contactSavedError ? null : (contactSavedCount ?? 0),
+      note: contactSavedNote,
+    },
     // Real regardless of Plausible -- backed directly by marketing_demo_requests.
     { label: "Demo Request Submitted", value: demoFormSubmitted ?? demoRequestCount },
     { label: "Demo Completed", value: null, note: "No field tracks this today" },
