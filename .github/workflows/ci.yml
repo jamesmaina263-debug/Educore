@@ -19,6 +19,15 @@ jobs:
 
       - run: npm ci
 
+      - name: Dependency audit
+        # Fails the build on high/critical vulnerabilities only. Moderate/low
+        # findings are surfaced (npm audit still prints them) but don't block
+        # CI -- Dependabot's weekly PRs are the mechanism for those, since
+        # gating every PR on every moderate finding would make CI red for
+        # reasons unrelated to the change being reviewed. Re-evaluate this
+        # threshold if that trade-off stops making sense.
+        run: npm audit --audit-level=high
+
       - name: Type check
         run: npx tsc --noEmit
 

@@ -117,9 +117,9 @@ export default function SecurityPage() {
               Reviewed for known vulnerabilities.
             </h2>
             <p className="mt-4 text-white/70">
-              Third-party packages are reviewed for known vulnerabilities as
-              part of our security process. Automated scanning on every
-              change is on our roadmap, not yet in place.
+              Third-party packages are checked for known vulnerabilities on
+              every change before it ships, with automated update proposals
+              reviewed weekly to stay current.
             </p>
           </Reveal>
         </div>
