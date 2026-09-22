@@ -147,17 +147,45 @@ export default async function StudentProfilePage({
     .order("incident_date", { ascending: false });
   const disciplineRecords: DisciplineRow[] = disciplineRows ?? [];
 
-  const canManageStudents = (await supabase.rpc("auth_has_permission", { p_permission_key: "students.write" })).data === true;
-  const canDeleteStudents = (await supabase.rpc("auth_has_permission", { p_permission_key: "students.delete" })).data === true;
-  const canUploadDocuments = (await supabase.rpc("auth_has_permission", { p_permission_key: "students.documents.write" })).data === true;
-  const canReadMedical = (await supabase.rpc("auth_has_permission", { p_permission_key: "students.medical.read" })).data === true;
-  const canReadDiscipline = (await supabase.rpc("auth_has_permission", { p_permission_key: "discipline.read_any" })).data === true;
-  const canReadFinance = (await supabase.rpc("auth_has_permission", { p_permission_key: "finance.read" })).data === true;
-  const canIssueCertificates = (await supabase.rpc("auth_has_permission", { p_permission_key: "certificates.write" })).data === true;
-  const canWriteDiscipline = (await supabase.rpc("auth_has_permission", { p_permission_key: "discipline.write" })).data === true;
-  const canViewBiometric = (await supabase.rpc("auth_has_permission", { p_permission_key: "biometric.view" })).data === true;
-  const canEnrollBiometric = (await supabase.rpc("auth_has_permission", { p_permission_key: "biometric.enroll" })).data === true;
-  const canRevokeBiometric = (await supabase.rpc("auth_has_permission", { p_permission_key: "biometric.revoke" })).data === true;
+  // These 11 checks are independent of each other -- none depends on another's result -- so
+  // running them one at a time was 11 sequential network round-trips to Supabase on every
+  // visit to this page. Batching them cuts that to the time of the single slowest check.
+  const [
+    { data: canManageStudentsData },
+    { data: canDeleteStudentsData },
+    { data: canUploadDocumentsData },
+    { data: canReadMedicalData },
+    { data: canReadDisciplineData },
+    { data: canReadFinanceData },
+    { data: canIssueCertificatesData },
+    { data: canWriteDisciplineData },
+    { data: canViewBiometricData },
+    { data: canEnrollBiometricData },
+    { data: canRevokeBiometricData },
+  ] = await Promise.all([
+    supabase.rpc("auth_has_permission", { p_permission_key: "students.write" }),
+    supabase.rpc("auth_has_permission", { p_permission_key: "students.delete" }),
+    supabase.rpc("auth_has_permission", { p_permission_key: "students.documents.write" }),
+    supabase.rpc("auth_has_permission", { p_permission_key: "students.medical.read" }),
+    supabase.rpc("auth_has_permission", { p_permission_key: "discipline.read_any" }),
+    supabase.rpc("auth_has_permission", { p_permission_key: "finance.read" }),
+    supabase.rpc("auth_has_permission", { p_permission_key: "certificates.write" }),
+    supabase.rpc("auth_has_permission", { p_permission_key: "discipline.write" }),
+    supabase.rpc("auth_has_permission", { p_permission_key: "biometric.view" }),
+    supabase.rpc("auth_has_permission", { p_permission_key: "biometric.enroll" }),
+    supabase.rpc("auth_has_permission", { p_permission_key: "biometric.revoke" }),
+  ]);
+  const canManageStudents = canManageStudentsData === true;
+  const canDeleteStudents = canDeleteStudentsData === true;
+  const canUploadDocuments = canUploadDocumentsData === true;
+  const canReadMedical = canReadMedicalData === true;
+  const canReadDiscipline = canReadDisciplineData === true;
+  const canReadFinance = canReadFinanceData === true;
+  const canIssueCertificates = canIssueCertificatesData === true;
+  const canWriteDiscipline = canWriteDisciplineData === true;
+  const canViewBiometric = canViewBiometricData === true;
+  const canEnrollBiometric = canEnrollBiometricData === true;
+  const canRevokeBiometric = canRevokeBiometricData === true;
   const canSeeBiometricTab = canViewBiometric || canEnrollBiometric || canRevokeBiometric;
 
   const { data: biometricProfileRow } = await supabase

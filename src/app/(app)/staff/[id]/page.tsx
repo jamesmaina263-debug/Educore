@@ -103,9 +103,18 @@ export default async function StaffProfilePage({
   const canManageStaff = canManage === true;
   const canReadDocuments = canManageStaff || isSelf;
 
-  const canViewBiometric = (await supabase.rpc("auth_has_permission", { p_permission_key: "biometric.view" })).data === true;
-  const canEnrollBiometric = (await supabase.rpc("auth_has_permission", { p_permission_key: "biometric.enroll" })).data === true;
-  const canRevokeBiometric = (await supabase.rpc("auth_has_permission", { p_permission_key: "biometric.revoke" })).data === true;
+  const [
+    { data: canViewBiometricData },
+    { data: canEnrollBiometricData },
+    { data: canRevokeBiometricData },
+  ] = await Promise.all([
+    supabase.rpc("auth_has_permission", { p_permission_key: "biometric.view" }),
+    supabase.rpc("auth_has_permission", { p_permission_key: "biometric.enroll" }),
+    supabase.rpc("auth_has_permission", { p_permission_key: "biometric.revoke" }),
+  ]);
+  const canViewBiometric = canViewBiometricData === true;
+  const canEnrollBiometric = canEnrollBiometricData === true;
+  const canRevokeBiometric = canRevokeBiometricData === true;
   const canSeeBiometricTab = canViewBiometric || canEnrollBiometric || canRevokeBiometric;
 
   const { data: biometricProfileRow } = await supabase
