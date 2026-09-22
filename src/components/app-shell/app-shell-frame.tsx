@@ -49,7 +49,6 @@ export function AppShellFrame({
 
         <div className="flex min-w-0 flex-1 flex-col print:block print:w-full">
           <Topbar
-            breadcrumbs={chrome?.breadcrumbs ?? []}
             userName={chrome?.userName ?? ""}
             userRole={chrome?.userRole}
             onSignOut={chrome?.onSignOut ?? (() => {})}
