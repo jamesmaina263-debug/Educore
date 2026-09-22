@@ -53,19 +53,36 @@ export async function loadFinanceContext(): Promise<FinanceContext> {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const [{ data: schoolUser }, { data: canRead }, { data: canWrite }, { data: canApproveDiscounts }, { data: canApproveExpenses }, { data: mpesaSettings }] =
-    await Promise.all([
-      supabase
-        .from("school_users")
-        .select("full_name, roles(display_name), schools(name, expense_approval_threshold, fee_alert_threshold)")
-        .eq("auth_user_id", user.id)
-        .maybeSingle(),
-      supabase.rpc("auth_has_permission", { p_permission_key: "finance.read" }),
-      supabase.rpc("auth_has_permission", { p_permission_key: "finance.write" }),
-      supabase.rpc("auth_has_permission", { p_permission_key: "discounts.approve" }),
-      supabase.rpc("auth_has_permission", { p_permission_key: "expenses.approve" }),
-      supabase.from("mpesa_settings").select("is_active").maybeSingle(),
-    ]);
+  const [
+    { data: schoolUser, error: schoolUserError },
+    { data: canRead, error: canReadError },
+    { data: canWrite, error: canWriteError },
+    { data: canApproveDiscounts, error: canApproveDiscountsError },
+    { data: canApproveExpenses, error: canApproveExpensesError },
+    { data: mpesaSettings, error: mpesaSettingsError },
+  ] = await Promise.all([
+    supabase
+      .from("school_users")
+      .select("full_name, roles(display_name), schools(name, expense_approval_threshold, fee_alert_threshold)")
+      .eq("auth_user_id", user.id)
+      .maybeSingle(),
+    supabase.rpc("auth_has_permission", { p_permission_key: "finance.read" }),
+    supabase.rpc("auth_has_permission", { p_permission_key: "finance.write" }),
+    supabase.rpc("auth_has_permission", { p_permission_key: "discounts.approve" }),
+    supabase.rpc("auth_has_permission", { p_permission_key: "expenses.approve" }),
+    supabase.from("mpesa_settings").select("is_active").maybeSingle(),
+  ]);
+
+  // A failed permission/account query used to fall through as `undefined`, which every
+  // `=== true` / `??` default below treats the same as "no, false, empty" -- so instead of an
+  // error, the page would just silently show as if the user had no finance access at all.
+  // Throwing here lets the Finance route's error.tsx show a real error screen instead.
+  const accountError =
+    schoolUserError || canReadError || canWriteError || canApproveDiscountsError || canApproveExpensesError || mpesaSettingsError;
+  if (accountError) {
+    console.error("[finance] failed to load account/permission data", accountError);
+    throw new Error("Failed to load your Finance account details. Please try again.");
+  }
 
   const roleName = (schoolUser?.roles as unknown as { display_name: string } | null)?.display_name;
   const school = schoolUser?.schools as unknown as { name: string; expense_approval_threshold: number | null; fee_alert_threshold: number | null } | null;
@@ -108,38 +125,90 @@ export async function loadFinanceContext(): Promise<FinanceContext> {
     };
   }
 
-  const [{ data: years }, { data: classes }, { data: structures }, { data: feeItems }, { data: invoices }, { data: payments }, { data: discounts }, { data: expenses }, { data: balances }, { data: allocations }, { data: waivers }, { data: activeStudents }, { data: accounts }, { data: receipts }, { data: reversals }] =
-    await Promise.all([
-      supabase.from("academic_years").select("id, status").eq("status", "active"),
-      supabase.from("classes").select("id, name").order("level_order"),
-      supabase.from("fee_structures").select("id, name, term_id, class_id, boarding_type, fee_category, is_active, terms(name), classes(name)").order("created_at", { ascending: false }),
-      supabase.from("fee_items").select("fee_structure_id, name, amount"),
-      supabase.from("invoices").select("id, invoice_number, student_id, total_amount, status, created_at, term_id, students(first_name, last_name, current_class_id, admission_number), terms(name)").order("created_at", { ascending: false }),
-      supabase.from("payments").select("id, student_id, method, amount, reference, purpose, notes, status, phone_number, recorded_at, students(first_name, last_name)").order("recorded_at", { ascending: false }),
-      supabase.from("discounts").select("id, invoice_id, amount, reason, status, students(first_name, last_name)").order("created_at", { ascending: false }),
-      supabase.from("expenses").select("id, category, vendor, amount, description, status").order("created_at", { ascending: false }),
-      supabase.from("v_student_balances").select("student_id, total_invoiced, total_discounted, total_paid, balance, credit_balance, stream_id"),
-      supabase.from("payment_allocations").select("invoice_id, amount_allocated"),
-      supabase
-        .from("fee_waivers")
-        .select("id, name, waiver_type, discount_kind, discount_value, status, students(first_name, last_name), starts_term:terms!fee_waivers_starts_term_id_fkey(name)")
-        .order("created_at", { ascending: false }),
-      supabase
-        .from("students")
-        .select("id, first_name, last_name, admission_number, current_class_id")
-        .eq("status", "active")
-        .order("first_name"),
-      supabase.from("student_financial_accounts").select("student_id, payment_reference"),
-      supabase.from("receipts").select("payment_id, receipt_number"),
-      supabase.from("payment_reversals").select("payment_id, amount"),
-    ]);
+  const financeQueryLabels = [
+    "academic years",
+    "classes",
+    "fee structures",
+    "fee items",
+    "invoices",
+    "payments",
+    "discounts",
+    "expenses",
+    "student balances",
+    "payment allocations",
+    "fee waivers",
+    "active students",
+    "financial accounts",
+    "receipts",
+    "payment reversals",
+  ] as const;
+  const financeResults = await Promise.all([
+    supabase.from("academic_years").select("id, status").eq("status", "active"),
+    supabase.from("classes").select("id, name").order("level_order"),
+    supabase.from("fee_structures").select("id, name, term_id, class_id, boarding_type, fee_category, is_active, terms(name), classes(name)").order("created_at", { ascending: false }),
+    supabase.from("fee_items").select("fee_structure_id, name, amount"),
+    supabase.from("invoices").select("id, invoice_number, student_id, total_amount, status, created_at, term_id, students(first_name, last_name, current_class_id, admission_number), terms(name)").order("created_at", { ascending: false }),
+    supabase.from("payments").select("id, student_id, method, amount, reference, purpose, notes, status, phone_number, recorded_at, students(first_name, last_name)").order("recorded_at", { ascending: false }),
+    supabase.from("discounts").select("id, invoice_id, amount, reason, status, students(first_name, last_name)").order("created_at", { ascending: false }),
+    supabase.from("expenses").select("id, category, vendor, amount, description, status").order("created_at", { ascending: false }),
+    supabase.from("v_student_balances").select("student_id, total_invoiced, total_discounted, total_paid, balance, credit_balance, stream_id"),
+    supabase.from("payment_allocations").select("invoice_id, amount_allocated"),
+    supabase
+      .from("fee_waivers")
+      .select("id, name, waiver_type, discount_kind, discount_value, status, students(first_name, last_name), starts_term:terms!fee_waivers_starts_term_id_fkey(name)")
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("students")
+      .select("id, first_name, last_name, admission_number, current_class_id")
+      .eq("status", "active")
+      .order("first_name"),
+    supabase.from("student_financial_accounts").select("student_id, payment_reference"),
+    supabase.from("receipts").select("payment_id, receipt_number"),
+    supabase.from("payment_reversals").select("payment_id, amount"),
+  ]);
+
+  // Same reasoning as the account/permission batch above: a failed query here used to
+  // silently render as "this school has no invoices / no payments / zero balances" --
+  // exactly the shape a healthy new term or a paid-off account has -- instead of an error.
+  // For money data that's the worst possible failure mode, so fail loudly instead.
+  for (let i = 0; i < financeResults.length; i++) {
+    if (financeResults[i].error) {
+      console.error(`[finance] failed to load ${financeQueryLabels[i]}`, financeResults[i].error);
+      throw new Error(`Failed to load Finance data (${financeQueryLabels[i]}). Please try again.`);
+    }
+  }
+  const [
+    { data: years },
+    { data: classes },
+    { data: structures },
+    { data: feeItems },
+    { data: invoices },
+    { data: payments },
+    { data: discounts },
+    { data: expenses },
+    { data: balances },
+    { data: allocations },
+    { data: waivers },
+    { data: activeStudents },
+    { data: accounts },
+    { data: receipts },
+    { data: reversals },
+  ] = financeResults;
 
   const activeYearId = years?.[0]?.id ?? "";
-  const { data: terms } = activeYearId
+  const { data: terms, error: termsError } = activeYearId
     ? await supabase.from("terms").select("id, name, status").eq("academic_year_id", activeYearId)
-    : { data: [] };
+    : { data: [], error: null };
+  if (termsError) {
+    console.error("[finance] failed to load terms", termsError);
+    throw new Error("Failed to load Finance data (terms). Please try again.");
+  }
 
-  const { data: streamsWithClass } = await supabase.from("streams").select("id, class_id, classes(name)");
+  const { data: streamsWithClass, error: streamsError } = await supabase.from("streams").select("id, class_id, classes(name)");
+  if (streamsError) {
+    console.error("[finance] failed to load streams", streamsError);
+    throw new Error("Failed to load Finance data (streams). Please try again.");
+  }
   const classNameByStream = new Map(
     (streamsWithClass ?? []).map((s) => [s.id, (s.classes as unknown as { name: string } | null)?.name ?? ""]),
   );
