@@ -27,22 +27,14 @@ export function CollectionTrendChart({
 }) {
   return (
     <ResponsiveContainer width="100%" height={220}>
-      <LineChart data={data} margin={{ top: 4, right: 8, bottom: 0, left: -18 }}>
+      <BarChart data={data} margin={{ top: 4, right: 8, bottom: 0, left: -18 }}>
         <CartesianGrid stroke="var(--border)" vertical={false} />
         <XAxis dataKey="week" tickLine={false} axisLine={false} fontSize={11} stroke="var(--muted-foreground)" />
         <YAxis tickLine={false} axisLine={false} fontSize={11} stroke="var(--muted-foreground)" />
-        <Tooltip contentStyle={tooltipStyle} />
-        <Line
-          type="monotone"
-          dataKey="invoiced"
-          stroke="var(--chart-5)"
-          strokeWidth={1.5}
-          dot={false}
-          strokeDasharray="4 3"
-          isAnimationActive={false}
-        />
-        <Line type="monotone" dataKey="collected" stroke="var(--chart-1)" strokeWidth={2} dot={false} isAnimationActive={false} />
-      </LineChart>
+        <Tooltip contentStyle={tooltipStyle} cursor={{ fill: "var(--accent)" }} />
+        <Bar dataKey="collected" name="Collected" fill="var(--chart-1)" radius={[2, 2, 0, 0]} isAnimationActive={false} />
+        <Bar dataKey="invoiced" name="Invoiced" fill="var(--chart-5)" radius={[2, 2, 0, 0]} isAnimationActive={false} />
+      </BarChart>
     </ResponsiveContainer>
   );
 }
