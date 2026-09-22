@@ -1,6 +1,6 @@
 "use client";
 
-import { Menu, Search } from "lucide-react";
+import { Menu } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
@@ -14,26 +14,24 @@ import {
 import { Sheet, SheetTrigger, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { SidebarNav } from "./sidebar-nav";
 import { NotificationBell } from "./notification-bell";
-import { useCommandPalette } from "./command-palette-context";
-import type { BreadcrumbItem } from "./breadcrumbs";
-import { Breadcrumbs } from "./breadcrumbs";
 import { clearOfflineCaches } from "@/lib/offline/clear-on-logout";
 
+// Breadcrumbs + the visible ⌘K search box have been retired from the header
+// (see command-palette-context.tsx -- the ⌘K keyboard shortcut itself still
+// works globally, it just never needed a visible button). Notifications and
+// the account/sign-out menu stay exactly where they were, top-right, per
+// request -- only the clutter around them was removed.
 export function Topbar({
-  breadcrumbs,
   userName,
   userRole,
   onSignOut,
   schoolName,
 }: {
-  breadcrumbs: BreadcrumbItem[];
   userName: string;
   userRole?: string;
   onSignOut: () => void;
   schoolName?: string;
 }) {
-  const { setOpen } = useCommandPalette();
-
   // Wipe this session's offline-cached pages before the actual sign-out
   // Server Action runs, so a different person signing in on this device
   // afterward can never be served a stale cached page from this session.
@@ -59,19 +57,6 @@ export function Topbar({
           <SidebarNav />
         </SheetContent>
       </Sheet>
-
-      <Breadcrumbs items={breadcrumbs} className="hidden sm:flex" />
-
-      <button
-        onClick={() => setOpen(true)}
-        className="ml-2 flex h-8 flex-1 max-w-sm items-center gap-2 rounded-md border border-border bg-background px-2.5 text-sm text-muted-foreground transition-colors hover:bg-muted"
-      >
-        <Search className="size-3.5" />
-        <span className="flex-1 text-left">Search…</span>
-        <kbd className="rounded border border-border bg-surface px-1 font-mono text-[10px]">
-          ⌘K
-        </kbd>
-      </button>
 
       <div className="ml-auto flex items-center gap-1">
         <NotificationBell />

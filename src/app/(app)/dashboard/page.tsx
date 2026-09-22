@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { ArrowDownRight, ArrowUpRight, CalendarCheck, Plus, Wallet } from "lucide-react";
+import { ArrowDownRight, ArrowUpRight, CalendarCheck, CircleDollarSign, Database, Plus, Users, Wallet } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { logout } from "@/app/login/actions";
 import { AppShell } from "@/components/app-shell/app-shell";
@@ -387,6 +387,8 @@ export default async function DashboardPage() {
       delta: `+${admittedThisTerm}`,
       up: true,
       note: activeTerm ? `admitted ${activeTerm.name}` : "this term",
+      icon: Users,
+      iconClass: "bg-info-subtle text-info",
     },
     canSeeFinance && {
       label: "Fees collected (term)",
@@ -394,6 +396,8 @@ export default async function DashboardPage() {
       delta: `${collectedPct}%`,
       up: collectedPct >= 50,
       note: `of ${kes(invoicedThisTerm)} invoiced`,
+      icon: CircleDollarSign,
+      iconClass: "bg-success-subtle text-success",
     },
     canSeeAttendance && {
       label: "Attendance today",
@@ -401,6 +405,8 @@ export default async function DashboardPage() {
       delta: attendanceRate >= 90 ? "On target" : "Below target",
       up: attendanceRate >= 90,
       note: `${presentToday} of ${rosterToday} present`,
+      icon: CalendarCheck,
+      iconClass: "bg-violet-500/10 text-violet-600 dark:text-violet-400",
     },
     canSeeFinance && {
       label: "Outstanding balance",
@@ -408,8 +414,18 @@ export default async function DashboardPage() {
       delta: `${studentsWithBalance} students`,
       up: false,
       note: "with a balance owing",
+      icon: Database,
+      iconClass: "bg-destructive-subtle text-destructive",
     },
-  ].filter(Boolean) as { label: string; value: string; delta: string; up: boolean; note: string }[];
+  ].filter(Boolean) as {
+    label: string;
+    value: string;
+    delta: string;
+    up: boolean;
+    note: string;
+    icon: typeof Users;
+    iconClass: string;
+  }[];
 
   const tasks = [
     canSeeAttendance &&
@@ -535,7 +551,12 @@ export default async function DashboardPage() {
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
             {metrics.map((m) => (
               <div key={m.label} className="panel px-4 py-3">
-                <p className="label-eyebrow">{m.label}</p>
+                <div className="flex items-start justify-between gap-2">
+                  <p className="label-eyebrow">{m.label}</p>
+                  <span className={`flex size-8 shrink-0 items-center justify-center rounded-full ${m.iconClass}`}>
+                    <m.icon className="size-4" aria-hidden />
+                  </span>
+                </div>
                 <p className="mt-1.5 text-2xl font-semibold tracking-tight" data-numeric>
                   {m.value}
                 </p>
