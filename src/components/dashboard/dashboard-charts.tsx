@@ -67,7 +67,7 @@ export function AttendanceByClassChart({
         <YAxis domain={[0, 100]} tickLine={false} axisLine={false} fontSize={11} stroke="var(--muted-foreground)" />
         <Tooltip contentStyle={tooltipStyle} cursor={{ fill: "var(--accent)" }} />
         <Bar dataKey="rate" fill="var(--chart-1)" radius={[2, 2, 0, 0]} barSize={26} isAnimationActive={false}>
-          <LabelList dataKey="rate" position="top" fontSize={11} fill="var(--foreground)" formatter={(v: number) => `${v}%`} />
+          <LabelList dataKey="rate" position="top" fontSize={11} fill="var(--foreground)" formatter={(v) => (v === undefined ? "" : `${v}%`)} />
         </Bar>
       </BarChart>
     </ResponsiveContainer>
