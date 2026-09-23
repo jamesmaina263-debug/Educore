@@ -16,6 +16,7 @@ import {
   Megaphone,
   ScrollText,
   Flag,
+  Blocks,
   Menu,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -75,6 +76,7 @@ const NAV_GROUPS: AdminNavGroup[] = [
     items: [
       { href: "/admin/system-health", label: "System Health", icon: HeartPulse },
       { href: "/admin/feature-flags", label: "Feature Flags", icon: Flag },
+      { href: "/admin/modules", label: "Modules", icon: Blocks },
       { href: "/admin/activity-log", label: "Activity Log", icon: ScrollText },
       { href: "/admin/demo-reset", label: "Demo Reset", icon: RotateCcw },
     ],
