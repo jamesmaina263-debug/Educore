@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ArrowDownRight, ArrowUpRight, CalendarCheck, CircleDollarSign, Database, Plus, Users, Wallet } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import { getCachedUser } from "@/lib/supabase/get-user";
 import { logout } from "@/app/login/actions";
 import { AppShell } from "@/components/app-shell/app-shell";
 import { StatusBadge } from "@/components/status-badge";
@@ -54,9 +55,7 @@ function Panel({ title, meta, children }: { title: string; meta?: string; childr
 
 export default async function DashboardPage() {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCachedUser();
   if (!user) redirect("/login");
 
   // Platform staff land on the Platform Admin Console (src/app/(admin)) instead -- a super

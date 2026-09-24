@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getCachedUser } from "@/lib/supabase/get-user";
 import type { PayrollRow, StaffOption, SalaryStructureRow } from "@/components/payroll/payroll-section";
 
 // Shape returned by the get_staff_statutory_numbers() RPC -- see
@@ -29,9 +30,7 @@ export interface PayrollContext {
 
 export async function loadPayrollContext(): Promise<PayrollContext> {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCachedUser();
   if (!user) redirect("/login");
 
   const [{ data: schoolUser }, { data: canReadAny }, { data: canWrite }, { data: canApprove }] = await Promise.all([

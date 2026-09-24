@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getCachedUser } from "@/lib/supabase/get-user";
 import type { HealthDashboardStats } from "@/components/health/dashboard-section";
 import type { MedicalRecordListRow } from "@/components/health/medical-records-section";
 import type { SickBayVisitRow } from "@/components/health/sick-bay-section";
@@ -40,9 +41,7 @@ export interface HealthContext {
 
 export async function loadHealthContext(): Promise<HealthContext> {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCachedUser();
   if (!user) redirect("/login");
 
   const [{ data: viewer }, { data: canReadAny }, { data: canWriteData }, { data: canReadMedicalData }, { data: canRequestData }, { data: moduleEnabled }] = await Promise.all([

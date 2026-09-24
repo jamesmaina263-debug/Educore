@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { AppShellChromeProvider } from "@/components/app-shell/app-shell-chrome-context";
 import { AppShellFrame } from "@/components/app-shell/app-shell-frame";
 import { createClient } from "@/lib/supabase/server";
+import { getCachedUser } from "@/lib/supabase/get-user";
 
 // Shared by every authenticated staff-facing route (see the folders grouped under this route
 // group). A route group's parentheses are stripped from the URL by Next.js, so moving pages
@@ -14,9 +15,7 @@ import { createClient } from "@/lib/supabase/server";
 // per-page) since it's tenant-level, not page-level, and shouldn't flicker on navigation.
 export default async function AppRouteGroupLayout({ children }: { children: ReactNode }) {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCachedUser();
 
   let schoolName: string | undefined;
   // disabledHrefs generalizes the old single `boardingEnabled` boolean to a list, so each
