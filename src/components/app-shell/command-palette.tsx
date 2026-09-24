@@ -14,12 +14,15 @@ import { navItems } from "./nav-items";
 import { useCommandPalette } from "./command-palette-context";
 import { useOnlineStatus } from "@/hooks/use-online-status";
 
-export function CommandPalette({ boardingEnabled = true }: { boardingEnabled?: boolean }) {
+export function CommandPalette({ disabledHrefs = [] }: { disabledHrefs?: string[] }) {
   const { open, setOpen } = useCommandPalette();
   const router = useRouter();
   const online = useOnlineStatus();
 
-  const items = boardingEnabled ? navItems : navItems.filter((item) => !item.href.startsWith("/boarding"));
+  const items =
+    disabledHrefs.length === 0
+      ? navItems
+      : navItems.filter((item) => !disabledHrefs.some((href) => item.href === href || item.href.startsWith(`${href}/`)));
 
   const go = useCallback(
     (href: string) => {

@@ -45,13 +45,21 @@ export async function loadHealthContext(): Promise<HealthContext> {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const [{ data: viewer }, { data: canReadAny }, { data: canWriteData }, { data: canReadMedicalData }, { data: canRequestData }] = await Promise.all([
+  const [{ data: viewer }, { data: canReadAny }, { data: canWriteData }, { data: canReadMedicalData }, { data: canRequestData }, { data: moduleEnabled }] = await Promise.all([
     supabase.from("school_users").select("id, full_name, roles(display_name), schools(name)").eq("auth_user_id", user.id).maybeSingle(),
     supabase.rpc("auth_has_permission", { p_permission_key: "health.read_any" }),
     supabase.rpc("auth_has_permission", { p_permission_key: "health.write" }),
     supabase.rpc("auth_has_permission", { p_permission_key: "students.medical.read" }),
     supabase.rpc("auth_has_permission", { p_permission_key: "health.procurement.request" }),
+    supabase.rpc("auth_school_module_enabled", { p_key: "health" }),
   ]);
+  // Per-school module switch (school_modules, default enabled -- see school_module_enabled) --
+  // a school that's had Health turned off gets redirected out of every /health/* page here, at
+  // the one place all of them load through, same as boarding_enabled's redirect in
+  // boarding/_data.ts. moduleEnabled fails safe to true (missing row, typo, or a core module),
+  // so this can only ever narrow access for a school explicitly toggled off, never lock anyone
+  // out unexpectedly.
+  if (moduleEnabled === false) redirect("/dashboard");
   const canWrite = canWriteData === true;
   const canReadMedicalRecords = canReadMedicalData === true;
   const canRequestSupplies = canRequestData === true;

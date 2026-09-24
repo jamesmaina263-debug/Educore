@@ -30,7 +30,12 @@ function isShortcutBlockedTarget(el: EventTarget | null): boolean {
 // AppShellFrame) so it can read the palette's open state and stay silent while
 // the palette itself is open. Also disabled while focus is in a form field or
 // any open dialog -- see isShortcutBlockedTarget.
-export function GoToShortcuts() {
+//
+// disabledHrefs mirrors SidebarNav/CommandPalette's own prop -- added alongside Discipline's
+// gating since without it, a school with a module disabled could still reach it via this
+// shortcut even though it's hidden from the sidebar and command palette. This closes the same
+// gap for every module already in disabledHrefs (Boarding, Health too), not just Discipline.
+export function GoToShortcuts({ disabledHrefs = [] }: { disabledHrefs?: string[] }) {
   const { open: paletteOpen } = useCommandPalette();
   const router = useRouter();
   const online = useOnlineStatus();
@@ -75,7 +80,7 @@ export function GoToShortcuts() {
       const key = e.key.toLowerCase();
       clearPending();
 
-      const match = GO_TO_SHORTCUTS.find((s) => s.key === key);
+      const match = GO_TO_SHORTCUTS.find((s) => s.key === key && !disabledHrefs.includes(s.href));
       if (match) {
         e.preventDefault();
         // Same offline-forces-hard-navigation reasoning as sidebar-nav.tsx.
@@ -92,7 +97,7 @@ export function GoToShortcuts() {
       document.removeEventListener("keydown", handleKeyDown);
       clearPending();
     };
-  }, [paletteOpen, router, online]);
+  }, [paletteOpen, router, online, disabledHrefs]);
 
   return null;
 }
