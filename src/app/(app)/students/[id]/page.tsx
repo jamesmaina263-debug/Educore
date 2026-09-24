@@ -21,6 +21,8 @@ import { getStudentGrowth } from "./growth-actions";
 import { GrowthTab } from "./growth-tab";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
+import { getSchoolSlug } from "@/lib/school-slug-server";
+import { withSchoolSlug } from "@/lib/school-slug-href";
 
 export default async function StudentProfilePage({
   params,
@@ -32,6 +34,7 @@ export default async function StudentProfilePage({
 
   const user = await getCachedUser();
   if (!user) redirect("/login");
+  const schoolSlug = await getSchoolSlug();
 
   const { data: schoolUser } = await supabase
     .from("school_users")
@@ -337,7 +340,7 @@ export default async function StudentProfilePage({
             <StudentDeleteControl studentId={id} fullName={fullName} />
           )}
           <Button asChild variant="outline" size="sm">
-            <Link href={`/students/${id}/id-card`} target="_blank">
+            <Link href={withSchoolSlug(schoolSlug, `/students/${id}/id-card`)} target="_blank">
               Print ID card
             </Link>
           </Button>
