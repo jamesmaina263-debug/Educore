@@ -18,8 +18,8 @@ export const metadata: Metadata = {
   title: TITLE,
   description: DESCRIPTION,
   alternates: { canonical: "/blog/best-school-management-system-kenya" },
-  openGraph: { title: TITLE, description: DESCRIPTION, url: "/blog/best-school-management-system-kenya" },
-  twitter: { card: "summary_large_image", title: TITLE, description: DESCRIPTION },
+  openGraph: { title: TITLE, description: DESCRIPTION, url: "/blog/best-school-management-system-kenya", images: ["/og-image.png"] },
+  twitter: { card: "summary_large_image", title: TITLE, description: DESCRIPTION, images: ["/og-image.png"] },
 };
 
 // Verified against the codebase before adding the AI bullet (Sep 2026

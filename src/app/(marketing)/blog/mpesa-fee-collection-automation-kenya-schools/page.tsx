@@ -25,8 +25,8 @@ export const metadata: Metadata = {
   title: TITLE,
   description: DESCRIPTION,
   alternates: { canonical: "/blog/mpesa-fee-collection-automation-kenya-schools" },
-  openGraph: { title: TITLE, description: DESCRIPTION, url: "/blog/mpesa-fee-collection-automation-kenya-schools" },
-  twitter: { card: "summary_large_image", title: TITLE, description: DESCRIPTION },
+  openGraph: { title: TITLE, description: DESCRIPTION, url: "/blog/mpesa-fee-collection-automation-kenya-schools", images: ["/og-image.png"] },
+  twitter: { card: "summary_large_image", title: TITLE, description: DESCRIPTION, images: ["/og-image.png"] },
 };
 
 // Every EduCore capability below was verified against the codebase before
