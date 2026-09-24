@@ -15,8 +15,7 @@ const SLUG = "mpesa-paybill-till-stk-push-school-fees";
 const PATH = `/blog/${SLUG}`;
 const PUBLISHED_ON = "2026-09-21";
 const TITLE = "M-Pesa Paybill vs Till vs STK Push for School Fees in Kenya — EduCore";
-const DESCRIPTION =
-  "Paybill and Till are where school fees land. STK push is how a payment gets started. What each does, who pays the fee, how it affects reconciliation, and how a school should set them up.";
+const DESCRIPTION = "Paybill and Till are where school fees land; STK push starts the payment. What each does, who pays the fee, and how to set them up.";
 const STANDARD_ARTICLE =
   "https://www.standardmedia.co.ke/business/business/article/2001554316/safaricom-halves-m-pesa-merchant-fees-in-cbk-led-move";
 

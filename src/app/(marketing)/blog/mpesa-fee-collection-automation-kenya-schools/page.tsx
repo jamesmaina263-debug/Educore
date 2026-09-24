@@ -18,8 +18,7 @@ import { ArticleJsonLd } from "@/components/marketing/article-json-ld";
 import { BlogByline } from "@/components/marketing/blog-byline";
 
 const TITLE = "M-Pesa Fee Collection Automation for Kenyan Schools — EduCore";
-const DESCRIPTION =
-  "Why manual M-Pesa reconciliation is where Kenyan school bursars lose the most time, and how EduCore automates it — STK push, statement matching, and auto-allocation to invoices.";
+const DESCRIPTION = "Why manual M-Pesa reconciliation costs Kenyan school bursars the most time, and how EduCore automates it with STK push and auto-allocation.";
 
 export const metadata: Metadata = {
   title: TITLE,
