@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect, notFound } from "next/navigation";
 import { Lock } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import { getCachedUser } from "@/lib/supabase/get-user";
 import { logout } from "@/app/login/actions";
 import { AppShell } from "@/components/app-shell/app-shell";
 import { StatusBadge } from "@/components/status-badge";
@@ -12,9 +13,7 @@ import { ExamComponentPicker } from "@/components/exams/exam-component-picker";
 export default async function ExamProgressPage({ params }: { params: Promise<{ examId: string }> }) {
   const { examId } = await params;
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCachedUser();
   if (!user) redirect("/login");
 
   const { data: schoolUser } = await supabase

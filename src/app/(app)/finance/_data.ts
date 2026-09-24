@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getCachedUser } from "@/lib/supabase/get-user";
 import type { FeeStructureRow } from "@/components/finance/fee-structures-section";
 import type { InvoiceListRow } from "@/components/finance/invoices-section";
 import type { BalanceRow } from "@/components/finance/balances-section";
@@ -48,9 +49,7 @@ export interface FinanceContext {
  */
 export async function loadFinanceContext(): Promise<FinanceContext> {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCachedUser();
   if (!user) redirect("/login");
 
   const [
