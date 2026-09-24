@@ -20,8 +20,7 @@ import { ArticleJsonLd } from "@/components/marketing/article-json-ld";
 import { BlogByline } from "@/components/marketing/blog-byline";
 
 const TITLE = "CBC/CBE Assessment & Learner Performance in Kenya — EduCore";
-const DESCRIPTION =
-  "How CBC/CBE competency-based assessment works in Kenya, the roles KICD and KNEC actually play, and how EduCore turns strand-level assessment records into real performance insight for schools.";
+const DESCRIPTION = "How CBC/CBE competency-based assessment works in Kenya, the roles KICD and KNEC play, and how EduCore turns strand-level records into insight.";
 
 export const metadata: Metadata = {
   title: TITLE,

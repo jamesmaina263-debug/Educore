@@ -11,8 +11,7 @@ import { ArticleJsonLd } from "@/components/marketing/article-json-ld";
 import { BlogByline } from "@/components/marketing/blog-byline";
 
 const TITLE = "Student Performance Appraisal & Merit Lists for Kenyan Schools — EduCore";
-const DESCRIPTION =
-  "Why end-of-term merit lists usually mean a teacher rebuilding a spreadsheet from scratch, and how EduCore computes rankings, growth trends, and a class performance dashboard automatically from the marks already entered.";
+const DESCRIPTION = "Why merit lists usually mean rebuilding a spreadsheet from scratch, and how EduCore computes rankings and growth trends automatically.";
 
 export const metadata: Metadata = {
   title: TITLE,
