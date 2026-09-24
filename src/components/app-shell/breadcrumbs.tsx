@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useOnlineStatus } from "@/hooks/use-online-status";
+import { useSchoolHref } from "./school-slug-context";
 
 export interface BreadcrumbItem {
   label: string;
@@ -19,6 +20,7 @@ export function Breadcrumbs({
   className?: string;
 }) {
   const online = useOnlineStatus();
+  const toHref = useSchoolHref();
   return (
     <nav aria-label="Breadcrumb" className={cn("flex items-center text-sm", className)}>
       <ol className="flex items-center gap-1.5">
@@ -28,7 +30,7 @@ export function Breadcrumbs({
             <li key={`${item.label}-${i}`} className="flex items-center gap-1.5">
               {item.href && !last ? (
                 <Link
-                  href={item.href}
+                  href={toHref(item.href)}
                   onClick={(e) => {
                     // Same offline-forces-hard-navigation reasoning as
                     // sidebar-nav.tsx -- a soft <Link> navigation can't be

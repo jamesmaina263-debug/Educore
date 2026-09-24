@@ -10,6 +10,8 @@ import { CommandPaletteProvider } from "./command-palette-context";
 import { GoToShortcuts } from "./go-to-shortcuts";
 import { useAppShellChrome } from "./app-shell-chrome-context";
 import { useOnlineStatus } from "@/hooks/use-online-status";
+import { SchoolSlugProvider } from "./school-slug-context";
+import { withSchoolSlug } from "@/lib/school-slug-href";
 
 // Renders the sidebar + topbar + main frame exactly once, at the (app) layout level, so it
 // never remounts across navigations between pages -- this is what keeps the sidebar's scroll
@@ -20,20 +22,23 @@ export function AppShellFrame({
   children,
   schoolName,
   disabledHrefs = [],
+  schoolSlug,
 }: {
   children: ReactNode;
   schoolName?: string;
   disabledHrefs?: string[];
+  schoolSlug?: string;
 }) {
   const { chrome } = useAppShellChrome();
   const online = useOnlineStatus();
 
   return (
+    <SchoolSlugProvider slug={schoolSlug}>
     <CommandPaletteProvider>
       <div className="flex h-screen overflow-hidden bg-background print:block print:h-auto print:overflow-visible">
         <aside className="hidden w-56 shrink-0 flex-col border-r border-sidebar-border bg-sidebar lg:flex print:hidden">
           <Link
-            href="/dashboard"
+            href={withSchoolSlug(schoolSlug, "/dashboard")}
             onClick={(e) => {
               if (!online) {
                 e.preventDefault();
@@ -73,5 +78,6 @@ export function AppShellFrame({
       <CommandPalette disabledHrefs={disabledHrefs} />
       <GoToShortcuts disabledHrefs={disabledHrefs} />
     </CommandPaletteProvider>
+    </SchoolSlugProvider>
   );
 }
