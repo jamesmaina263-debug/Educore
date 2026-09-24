@@ -9,6 +9,7 @@ import {
   BarChart3,
   Inbox,
   UserPlus,
+  Briefcase,
   Palette,
   RotateCcw,
   Mail,
@@ -69,6 +70,7 @@ const NAV_GROUPS: AdminNavGroup[] = [
       { href: "/admin/company-email", label: "Company Email", icon: Mail },
       { href: "/admin/demo-requests", label: "Requests", icon: Inbox },
       { href: "/admin/leads", label: "Leads", icon: UserPlus },
+      { href: "/admin/sales-pipeline", label: "Sales Pipeline", icon: Briefcase },
     ],
   },
   {
