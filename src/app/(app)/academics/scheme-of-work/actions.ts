@@ -1,0 +1,402 @@
+"use server";
+
+import { revalidatePath } from "next/cache";
+import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { tagSentryRequestContext } from "@/lib/observability/sentry-context";
+import {
+  SCHEME_OF_WORK_PROMPT_VERSION,
+  GEMINI_SCHEME_MODEL,
+  buildSchemeOfWorkPrompt,
+  schemeOfWorkResponseSchema,
+  parseSchemeOfWorkResponse,
+  checkSchemeOfWorkQuality,
+  weeksGenerated as countWeeksGenerated,
+  type SchemeOfWorkDraft,
+  type SchemeOfWorkDraftWeek,
+} from "@/lib/ai/scheme-of-work";
+import { geminiGenerateContentUrl } from "@/lib/ai/report-card-comment";
+
+// ---------------------------------------------------------------------------
+// generateSchemeWithAI
+//
+// Deliberately never writes to schemes_of_work / scheme_of_work_entries.
+// It returns a validated draft for the teacher to review; only
+// saveGeneratedScheme (below), called on an explicit "Save" click, persists
+// anything. This is what makes "never silently overwrite an existing
+// scheme" and "never save a failed/malformed response" true by
+// construction rather than by a check that could be missed.
+// ---------------------------------------------------------------------------
+
+export interface GenerateSchemeInput {
+  academic_year_id: string;
+  term_id: string;
+  class_id: string;
+  stream_id: string | null;
+  subject_id: string;
+  total_weeks: number;
+  lessons_per_week: number;
+  curriculum_framework: string | null;
+  /** Client-generated once per "Generate"/"Regenerate" click; reused across
+   *  that click's own retries so a double-click or network retry can't
+   *  create two concurrent generations (enforced by the unique index on
+   *  scheme_of_work_ai_requests(requested_by, idempotency_key)). */
+  idempotency_key: string;
+}
+
+export type GenerateSchemeResult =
+  | { error: string }
+  | {
+      success: true;
+      requestId: string;
+      draft: SchemeOfWorkDraft;
+      warnings: string[];
+      partial: boolean;
+      weeksRequested: number;
+      weeksGenerated: number;
+    };
+
+function isNonEmptyUuidLike(v: unknown): v is string {
+  return typeof v === "string" && v.trim().length > 0;
+}
+
+export async function generateSchemeWithAI(input: GenerateSchemeInput): Promise<GenerateSchemeResult> {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) {
+    return { error: "AI generation isn't configured yet — GEMINI_API_KEY is missing from the server environment." };
+  }
+
+  // ---- 1. Validate the request before anything else touches the network or DB. ----
+  if (
+    !isNonEmptyUuidLike(input.academic_year_id) ||
+    !isNonEmptyUuidLike(input.term_id) ||
+    !isNonEmptyUuidLike(input.class_id) ||
+    !isNonEmptyUuidLike(input.subject_id) ||
+    !isNonEmptyUuidLike(input.idempotency_key)
+  ) {
+    return { error: "Please select the academic year, term, class and subject before generating the scheme." };
+  }
+  if (!Number.isInteger(input.total_weeks) || input.total_weeks <= 0 || input.total_weeks > 52) {
+    return { error: "Please enter a valid number of teaching weeks (1–52)." };
+  }
+  if (!Number.isInteger(input.lessons_per_week) || input.lessons_per_week <= 0 || input.lessons_per_week > 20) {
+    return { error: "Please enter a valid number of lessons per week (1–20)." };
+  }
+
+  const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return { error: "You must be signed in." };
+  }
+
+  // ---- 2. Permission. ----
+  const { data: canGenerate } = await supabase.rpc("auth_has_permission", { p_permission_key: "scheme_of_work.generate_ai" });
+  if (!canGenerate) {
+    return { error: "You don't have permission to generate a scheme with AI." };
+  }
+
+  const { data: schoolUser } = await supabase
+    .from("school_users")
+    .select("id, school_id")
+    .eq("auth_user_id", user.id)
+    .maybeSingle();
+  if (!schoolUser) {
+    return { error: "You must be signed in." };
+  }
+
+  // ---- 3. Validate the referenced entities exist, belong to this school (RLS-scoped
+  //         select), and fetch the names the prompt needs, in one round trip each. ----
+  const [{ data: yearRow }, { data: termRow }, { data: classRow }, { data: subjectRow }, streamResult] = await Promise.all([
+    supabase.from("academic_years").select("name").eq("id", input.academic_year_id).maybeSingle(),
+    supabase.from("terms").select("name").eq("id", input.term_id).maybeSingle(),
+    supabase.from("classes").select("name").eq("id", input.class_id).maybeSingle(),
+    supabase.from("subjects").select("name").eq("id", input.subject_id).maybeSingle(),
+    input.stream_id
+      ? supabase.from("streams").select("name").eq("id", input.stream_id).maybeSingle()
+      : Promise.resolve({ data: null }),
+  ]);
+
+  if (!yearRow || !termRow || !classRow || !subjectRow || (input.stream_id && !streamResult.data)) {
+    return { error: "Please select the academic year, term, class and subject before generating the scheme." };
+  }
+
+  // ---- 4. Idempotency: claim this request before doing anything cost-incurring. ----
+  const { error: idempotencyError } = await supabase.from("scheme_of_work_ai_requests").insert({
+    school_id: schoolUser.school_id,
+    requested_by: schoolUser.id,
+    idempotency_key: input.idempotency_key,
+    prompt_version: SCHEME_OF_WORK_PROMPT_VERSION,
+    weeks_requested: input.total_weeks,
+  });
+  if (idempotencyError) {
+    if (idempotencyError.code === "23505") {
+      return { error: "This generation request was already submitted. Please wait for it to finish, or start a new one." };
+    }
+    return { error: "Something went wrong while preparing your scheme. No existing scheme data was changed. Please try again." };
+  }
+
+  const { data: requestRow } = await supabase
+    .from("scheme_of_work_ai_requests")
+    .select("id")
+    .eq("requested_by", schoolUser.id)
+    .eq("idempotency_key", input.idempotency_key)
+    .single();
+  const requestId: string | undefined = requestRow?.id;
+
+  const startedAt = Date.now();
+  const markRequestFailed = async (failureCategory: string) => {
+    if (!requestId) return;
+    await supabase
+      .from("scheme_of_work_ai_requests")
+      .update({ status: "failed", failure_category: failureCategory, duration_ms: Date.now() - startedAt, completed_at: new Date().toISOString() })
+      .eq("id", requestId);
+  };
+
+  // ---- 5. Rate limit (per-teacher, independent of the general write permission). ----
+  try {
+    const adminClient = createAdminClient();
+    const { data: withinLimit } = await adminClient.rpc("increment_and_check_rate_limit", {
+      p_bucket: `ai-scheme-generation:${user.id}`,
+      p_max_events: 20,
+      p_window_seconds: 3600,
+    });
+    if (withinLimit === false) {
+      await markRequestFailed("rate_limit");
+      return { error: "AI generation is temporarily busy. Please wait a moment and try again." };
+    }
+  } catch {
+    // If the admin client isn't configured in this environment, fall through rather
+    // than blocking a legitimate, permission-checked, idempotency-claimed request.
+  }
+
+  // ---- 6. Build the prompt server-side, from validated DB fields only (never raw
+  //         teacher free-text -- see the doc comment on buildSchemeOfWorkPrompt). ----
+  const prompt = buildSchemeOfWorkPrompt({
+    subjectName: subjectRow.name,
+    className: classRow.name,
+    streamName: streamResult.data?.name ?? null,
+    termName: termRow.name,
+    academicYearName: yearRow.name,
+    totalWeeks: input.total_weeks,
+    lessonsPerWeek: input.lessons_per_week,
+    curriculumFramework: input.curriculum_framework,
+  });
+
+  // ---- 7. Call Gemini. Same Vercel Hobby ~10s hard cap noted in
+  //         draftCommentWithAI applies here -- a large scheme (many weeks x many
+  //         lessons) is a known risk of hitting that cap; see the PR notes. ----
+  let res: Response;
+  try {
+    res = await fetch(geminiGenerateContentUrl(apiKey, GEMINI_SCHEME_MODEL), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: {
+          maxOutputTokens: 8000,
+          temperature: 0.4,
+          responseMimeType: "application/json",
+          responseSchema: schemeOfWorkResponseSchema,
+        },
+      }),
+      signal: AbortSignal.timeout(8000),
+    });
+  } catch (e) {
+    const isTimeout = e instanceof Error && (e.name === "TimeoutError" || e.name === "AbortError");
+    await markRequestFailed(isTimeout ? "timeout" : "network");
+    return isTimeout
+      ? { error: "Generation timed out. The AI took too long to respond. No changes were made to your existing scheme." }
+      : { error: "Connection interrupted. We couldn't complete the AI request. Your existing work is safe. Please check your connection and try again." };
+  }
+
+  if (!res.ok) {
+    const body = await res.text();
+    console.error(`generateSchemeWithAI: Gemini returned ${res.status} (request ${requestId}): ${body.slice(0, 500)}`);
+    if (res.status === 401 || res.status === 403) {
+      await markRequestFailed("auth_config");
+      return { error: "AI generation is currently unavailable. Please contact your school administrator if the problem continues." };
+    }
+    if (res.status === 429) {
+      await markRequestFailed("rate_limit");
+      return { error: "AI generation is temporarily busy. Please wait a moment and try again." };
+    }
+    if (res.status >= 500) {
+      await markRequestFailed("ai_unavailable");
+      return { error: "AI generation is temporarily unavailable. Your existing scheme data has not been affected. Please try again shortly." };
+    }
+    await markRequestFailed("server_error");
+    return { error: "Something went wrong while preparing your scheme. No existing scheme data was changed. Please try again." };
+  }
+
+  const data = await res.json();
+  const parsed = parseSchemeOfWorkResponse(data);
+  if ("error" in parsed) {
+    console.error(`generateSchemeWithAI: response failed validation (request ${requestId}): ${parsed.error}`, JSON.stringify(data).slice(0, 500));
+    await markRequestFailed(parsed.error.includes("no content") || parsed.error.includes("no weeks") ? "empty_response" : "malformed_response");
+    return { error: "We couldn't prepare the scheme correctly. The AI returned an unexpected result. Please try generating it again." };
+  }
+
+  const generated = countWeeksGenerated(parsed.draft);
+  const partial = generated < input.total_weeks;
+  const warnings = checkSchemeOfWorkQuality(parsed.draft, input.total_weeks, input.lessons_per_week);
+
+  if (requestId) {
+    await supabase
+      .from("scheme_of_work_ai_requests")
+      .update({
+        status: partial ? "partial" : "succeeded",
+        weeks_generated: generated,
+        duration_ms: Date.now() - startedAt,
+        completed_at: new Date().toISOString(),
+      })
+      .eq("id", requestId);
+  }
+
+  return {
+    success: true,
+    requestId: requestId ?? "",
+    draft: parsed.draft,
+    warnings,
+    partial,
+    weeksRequested: input.total_weeks,
+    weeksGenerated: generated,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// saveGeneratedScheme
+//
+// The only action that writes to schemes_of_work / scheme_of_work_entries
+// for AI-originated content, called on the teacher's explicit "Save" click
+// after they've reviewed (and possibly edited) the draft. If scheme_id is
+// omitted, a new scheme is created -- and if one already exists for this
+// exact teacher+class+stream+subject+term, the unique constraint on
+// schemes_of_work rejects the insert rather than silently creating a
+// duplicate or merging into the existing one; the caller is told to open
+// the existing scheme and save into it (by passing its id) instead.
+// ---------------------------------------------------------------------------
+
+export interface SaveGeneratedSchemeInput {
+  request_id: string | null;
+  academic_year_id: string;
+  term_id: string;
+  class_id: string;
+  stream_id: string | null;
+  subject_id: string;
+  total_weeks: number;
+  lessons_per_week: number;
+  weeks: SchemeOfWorkDraftWeek[];
+  /** Save into this existing scheme instead of creating a new one. */
+  scheme_id?: string;
+}
+
+export type SaveGeneratedSchemeResult = { error: string } | { success: true; schemeId: string };
+
+export async function saveGeneratedScheme(input: SaveGeneratedSchemeInput): Promise<SaveGeneratedSchemeResult> {
+  if (!Array.isArray(input.weeks) || input.weeks.length === 0) {
+    return { error: "There's nothing to save — generate or add scheme content first." };
+  }
+  for (const week of input.weeks) {
+    if (!Number.isInteger(week.week) || week.week <= 0 || !Array.isArray(week.entries) || week.entries.length === 0) {
+      return { error: "We couldn't prepare the scheme correctly. Please try generating it again." };
+    }
+    for (const entry of week.entries) {
+      if (!Number.isInteger(entry.lesson) || entry.lesson <= 0 || !entry.topic?.trim()) {
+        return { error: "We couldn't prepare the scheme correctly. Please try generating it again." };
+      }
+    }
+  }
+
+  const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "You must be signed in." };
+
+  const { data: schoolUser } = await supabase
+    .from("school_users")
+    .select("id, school_id")
+    .eq("auth_user_id", user.id)
+    .maybeSingle();
+  if (!schoolUser) return { error: "You must be signed in." };
+
+  let schemeId: string;
+
+  if (!input.scheme_id) {
+    const { data: created, error: createError } = await supabase
+      .from("schemes_of_work")
+      .insert({
+        school_id: schoolUser.school_id,
+        academic_year_id: input.academic_year_id,
+        term_id: input.term_id,
+        class_id: input.class_id,
+        stream_id: input.stream_id,
+        subject_id: input.subject_id,
+        teacher_id: schoolUser.id,
+        total_weeks: input.total_weeks,
+        lessons_per_week: input.lessons_per_week,
+        origin: "ai_generated",
+        status: "draft",
+        created_by: schoolUser.id,
+      })
+      .select("id")
+      .single();
+
+    if (createError) {
+      if (createError.code === "23505") {
+        return {
+          error: "A scheme already exists for this class, subject and term. Open it and save into it instead of creating a new one.",
+        };
+      }
+      return { error: "Something went wrong while preparing your scheme. No existing scheme data was changed. Please try again." };
+    }
+    schemeId = created.id;
+  } else {
+    // Ownership/permission is enforced by RLS on the update below (or the
+    // entries upsert), not by this select -- this is only to fail fast with
+    // a clear message instead of a confusing empty-write result.
+    const { data: existing } = await supabase.from("schemes_of_work").select("id").eq("id", input.scheme_id).maybeSingle();
+    if (!existing) {
+      return { error: "You don't have permission to save this scheme, or it no longer exists." };
+    }
+    schemeId = existing.id;
+  }
+
+  const rows = input.weeks.flatMap((week) =>
+    week.entries.map((entry) => ({
+      scheme_id: schemeId,
+      week_number: week.week,
+      lesson_number: entry.lesson,
+      topic: entry.topic,
+      subtopic: entry.subtopic || null,
+      learning_outcomes: entry.learning_outcomes || null,
+      content: entry.content || null,
+      activities: entry.activities || null,
+      teaching_methods: entry.methods || null,
+      resources: entry.resources || null,
+      assessment_methods: entry.assessment || null,
+      source: "ai_generated",
+    })),
+  );
+
+  const { error: entriesError } = await supabase
+    .from("scheme_of_work_entries")
+    .upsert(rows, { onConflict: "scheme_id,week_number,lesson_number" });
+
+  if (entriesError) {
+    return { error: "Something went wrong while saving your scheme. Please try again." };
+  }
+
+  if (input.request_id) {
+    await supabase.from("scheme_of_work_ai_requests").update({ scheme_id: schemeId }).eq("id", input.request_id);
+  }
+
+  revalidatePath("/academics/scheme-of-work");
+  return { success: true, schemeId };
+}
