@@ -19,21 +19,26 @@ export default async function AppRouteGroupLayout({ children }: { children: Reac
   } = await supabase.auth.getUser();
 
   let schoolName: string | undefined;
-  let boardingEnabled = true;
+  // disabledHrefs generalizes the old single `boardingEnabled` boolean to a list, so each
+  // additional module toggled through school_modules (see auth_school_module_enabled) is one
+  // more entry here rather than one more prop threaded through AppShellFrame/SidebarNav/
+  // CommandPalette. Boarding keeps reading schools.boarding_enabled directly (unmigrated, see
+  // #425's own note) -- everything else reads the new module system.
+  const disabledHrefs: string[] = [];
   if (user) {
-    const { data: schoolUser } = await supabase
-      .from("school_users")
-      .select("schools(name, boarding_enabled)")
-      .eq("auth_user_id", user.id)
-      .maybeSingle();
+    const [{ data: schoolUser }, { data: healthEnabled }] = await Promise.all([
+      supabase.from("school_users").select("schools(name, boarding_enabled)").eq("auth_user_id", user.id).maybeSingle(),
+      supabase.rpc("auth_school_module_enabled", { p_key: "health" }),
+    ]);
     const school = schoolUser?.schools as unknown as { name: string; boarding_enabled: boolean } | null;
     schoolName = school?.name;
-    boardingEnabled = school?.boarding_enabled ?? true;
+    if (school?.boarding_enabled === false) disabledHrefs.push("/boarding");
+    if (healthEnabled === false) disabledHrefs.push("/health");
   }
 
   return (
     <AppShellChromeProvider>
-      <AppShellFrame schoolName={schoolName} boardingEnabled={boardingEnabled}>{children}</AppShellFrame>
+      <AppShellFrame schoolName={schoolName} disabledHrefs={disabledHrefs}>{children}</AppShellFrame>
     </AppShellChromeProvider>
   );
 }
