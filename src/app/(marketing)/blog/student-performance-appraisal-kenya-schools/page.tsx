@@ -10,7 +10,7 @@ import { BreadcrumbJsonLd, HOME_CRUMB } from "@/components/marketing/breadcrumb-
 import { ArticleJsonLd } from "@/components/marketing/article-json-ld";
 import { BlogByline } from "@/components/marketing/blog-byline";
 
-const TITLE = "Student Performance Appraisal & Merit Lists for Kenyan Schools — EduCore";
+const TITLE = "Student Performance Appraisal for Kenyan Schools — EduCore";
 const DESCRIPTION = "Why merit lists usually mean rebuilding a spreadsheet from scratch, and how EduCore computes rankings and growth trends automatically.";
 
 export const metadata: Metadata = {
