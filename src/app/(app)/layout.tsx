@@ -1,7 +1,10 @@
 import type { ReactNode } from "react";
 import { AppShellChromeProvider } from "@/components/app-shell/app-shell-chrome-context";
 import { AppShellFrame } from "@/components/app-shell/app-shell-frame";
+import { cookies } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
+import { SCHOOL_SLUG_COOKIE } from "@/lib/school-slug-cookie";
+import { sanitizeSchoolSlug } from "@/lib/school-slug-href";
 import { getCachedUser } from "@/lib/supabase/get-user";
 
 // Shared by every authenticated staff-facing route (see the folders grouped under this route
@@ -15,6 +18,10 @@ import { getCachedUser } from "@/lib/supabase/get-user";
 // per-page) since it's tenant-level, not page-level, and shouldn't flicker on navigation.
 export default async function AppRouteGroupLayout({ children }: { children: ReactNode }) {
   const supabase = await createClient();
+  // Lets the sidebar/breadcrumbs/palette link straight to "/{slug}/students" instead of "/students",
+  // which proxy.ts would otherwise answer with a 307 (an extra round trip on every click). Absent or
+  // malformed cookie -> undefined -> links are unchanged bare paths, exactly as before.
+  const schoolSlug = sanitizeSchoolSlug((await cookies()).get(SCHOOL_SLUG_COOKIE)?.value);
   const user = await getCachedUser();
 
   let schoolName: string | undefined;
@@ -41,7 +48,7 @@ export default async function AppRouteGroupLayout({ children }: { children: Reac
 
   return (
     <AppShellChromeProvider>
-      <AppShellFrame schoolName={schoolName} disabledHrefs={disabledHrefs}>{children}</AppShellFrame>
+      <AppShellFrame schoolName={schoolName} disabledHrefs={disabledHrefs} schoolSlug={schoolSlug}>{children}</AppShellFrame>
     </AppShellChromeProvider>
   );
 }
