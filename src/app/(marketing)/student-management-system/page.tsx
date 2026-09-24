@@ -21,8 +21,7 @@ import { MiniFrame } from "@/components/marketing/mini-frame";
 import { BreadcrumbJsonLd, HOME_CRUMB } from "@/components/marketing/breadcrumb-json-ld";
 
 const TITLE = "Student Management System Kenya — EduCore";
-const DESCRIPTION =
-  "One student record per learner — admissions, academics, discipline, medical, guardians, and ID cards — instead of five spreadsheets. The student management system built for Kenyan schools.";
+const DESCRIPTION = "One student record per learner — admissions, academics, discipline, medical, guardians, ID cards — instead of five spreadsheets.";
 
 export const metadata: Metadata = {
   title: TITLE,

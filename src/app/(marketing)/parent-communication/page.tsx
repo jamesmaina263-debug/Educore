@@ -11,8 +11,7 @@ import { MiniFrame } from "@/components/marketing/mini-frame";
 import { BreadcrumbJsonLd, HOME_CRUMB } from "@/components/marketing/breadcrumb-json-ld";
 
 const TITLE = "Parent Communication Platform Kenya — EduCore";
-const DESCRIPTION =
-  "WhatsApp and SMS from one place, structured teacher-to-parent items instead of a group chat, termly newsletters sent automatically, and fee alerts a human always approves first. The parent communication platform built for Kenyan schools.";
+const DESCRIPTION = "WhatsApp and SMS from one place: structured teacher-to-parent items, automatic termly newsletters, and fee alerts a human always approves first.";
 
 export const metadata: Metadata = {
   title: TITLE,

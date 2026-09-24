@@ -12,8 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { BreadcrumbJsonLd, HOME_CRUMB } from "@/components/marketing/breadcrumb-json-ld";
 
 const TITLE = "Teacher Performance Management System — EduCore Kenya";
-const DESCRIPTION =
-  "Termly and annual teacher reviews with structured 1-5 competency scoring, an overall rating computed automatically, and visibility locked to the reviewer tier and the reviewed teacher only. A human-judgment record, not an AI score.";
+const DESCRIPTION = "Termly and annual teacher reviews with structured 1-5 scoring and an automatic rating, visible only to the reviewer tier and the teacher reviewed.";
 
 export const metadata: Metadata = {
   title: TITLE,

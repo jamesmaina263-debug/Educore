@@ -11,8 +11,7 @@ import { ArticleJsonLd } from "@/components/marketing/article-json-ld";
 import { BlogByline } from "@/components/marketing/blog-byline";
 
 const TITLE = "Best School Management System in Kenya (2026 Guide) — EduCore";
-const DESCRIPTION =
-  "What actually separates a school management system schools keep using from one that gets abandoned for spreadsheets — M-Pesa, CBC grading, offline resilience, and real data isolation, evaluated for Kenyan schools.";
+const DESCRIPTION = "What separates a school system schools keep using from one abandoned for spreadsheets — M-Pesa, CBC grading, offline resilience, data isolation.";
 
 export const metadata: Metadata = {
   title: TITLE,

@@ -15,8 +15,7 @@ const SLUG = "school-payroll-statutory-deductions-kenya";
 const PATH = `/blog/${SLUG}`;
 const PUBLISHED_ON = "2026-09-21";
 const TITLE = "School Payroll in Kenya: PAYE, SHIF, NSSF and the Housing Levy Explained (2026) — EduCore";
-const DESCRIPTION =
-  "The four statutory deductions on a Kenyan school payslip in 2026: what each is, the rates after the February 2026 NSSF change, the order they are applied in, a worked example, deadlines, and common mistakes.";
+const DESCRIPTION = "The four statutory deductions on a Kenyan school payslip in 2026: rates after the NSSF change, order applied, a worked example, deadlines.";
 const KRA_NOTICE =
   "https://www.kra.go.ke/news-center/public-notices/2157-amendments-to-paye-computation-pursuant-to-the-tax-laws-amendment-act,-2024";
 

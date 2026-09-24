@@ -12,8 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { BreadcrumbJsonLd, HOME_CRUMB } from "@/components/marketing/breadcrumb-json-ld";
 
 const TITLE = "CBC School Management System — EduCore Kenya";
-const DESCRIPTION =
-  "A CBC school management system that also handles 8-4-4-style numeric grading side by side — set per school, grade, or class. Built for Kenya's competency-based curriculum, not bolted onto a foreign grading model.";
+const DESCRIPTION = "A CBC school management system that handles 8-4-4 numeric grading side by side, set per school, grade, or class. Built for Kenya's curriculum.";
 
 export const metadata: Metadata = {
   title: TITLE,

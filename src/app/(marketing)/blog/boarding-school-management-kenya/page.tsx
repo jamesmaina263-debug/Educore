@@ -15,8 +15,7 @@ const SLUG = "boarding-school-management-kenya";
 const PATH = `/blog/${SLUG}`;
 const PUBLISHED_ON = "2026-09-21";
 const TITLE = "Boarding School Management in Kenya: Safety Standards, Roll Call and the Records That Matter — EduCore";
-const DESCRIPTION =
-  "What the Ministry's Safety Standards Manual expects of a boarding school, the records that back those standards up, how to handle exeats and visitors, and what software can and cannot do.";
+const DESCRIPTION = "What the Ministry's Safety Standards Manual expects of a boarding school, the records that back it up, and what software can and cannot do.";
 const NATION_ARTICLE =
   "https://nation.africa/kenya/news/history-of-school-fire-tragedies-and-what-the-safety-guidelines-say-5477284";
 const KNA_ARTICLE = "https://www.kenyanews.go.ke/tragedy-and-neglect-school-fires-and-the-unlearned-safety-lessons/";

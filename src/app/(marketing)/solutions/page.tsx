@@ -22,8 +22,7 @@ import { cn } from "@/lib/utils";
 import { BreadcrumbJsonLd, HOME_CRUMB } from "@/components/marketing/breadcrumb-json-ld";
 
 const TITLE = "School Administration Software by Role — EduCore Kenya";
-const DESCRIPTION =
-  "How EduCore's school administration software changes day to day for School Owners, Principals, Administrators, Teachers, Finance Teams, Parents, and Students — role by role.";
+const DESCRIPTION = "How EduCore's school administration software changes day to day for Owners, Principals, Administrators, Teachers, Finance Teams, and Parents.";
 
 export const metadata: Metadata = {
   title: TITLE,

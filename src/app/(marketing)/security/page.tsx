@@ -9,8 +9,7 @@ import { Reveal } from "@/components/marketing/reveal";
 import { BreadcrumbJsonLd, HOME_CRUMB } from "@/components/marketing/breadcrumb-json-ld";
 
 const TITLE = "Security & Data Privacy — EduCore Kenya";
-const DESCRIPTION =
-  "How EduCore protects student, parent, and financial data: per-school data isolation, role-based permissions, an audit log, and M-Pesa payments confirmed server-side, not client-trusted.";
+const DESCRIPTION = "How EduCore protects student, parent, and financial data: per-school isolation, role-based permissions, an audit log, server-side M-Pesa checks.";
 
 export const metadata: Metadata = {
   title: TITLE,
