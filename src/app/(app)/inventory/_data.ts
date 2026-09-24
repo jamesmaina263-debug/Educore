@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getCachedUser } from "@/lib/supabase/get-user";
 import type { ItemRow, MovementRow, CategoryOption, TransferRow } from "@/components/inventory/inventory-section";
 import type {
   AssetRow,
@@ -33,9 +34,7 @@ export interface InventoryContext {
 
 export async function loadInventoryContext(): Promise<InventoryContext> {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCachedUser();
   if (!user) redirect("/login");
 
   const [{ data: schoolUser }, { data: canReadAny }, { data: canWrite }, { data: canApprove }] = await Promise.all([

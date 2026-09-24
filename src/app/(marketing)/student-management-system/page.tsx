@@ -21,15 +21,14 @@ import { MiniFrame } from "@/components/marketing/mini-frame";
 import { BreadcrumbJsonLd, HOME_CRUMB } from "@/components/marketing/breadcrumb-json-ld";
 
 const TITLE = "Student Management System Kenya — EduCore";
-const DESCRIPTION =
-  "One student record per learner — admissions, academics, discipline, medical, guardians, and ID cards — instead of five spreadsheets. The student management system built for Kenyan schools.";
+const DESCRIPTION = "One student record per learner — admissions, academics, discipline, medical, guardians, ID cards — instead of five spreadsheets.";
 
 export const metadata: Metadata = {
   title: TITLE,
   description: DESCRIPTION,
   alternates: { canonical: "/student-management-system" },
-  openGraph: { title: TITLE, description: DESCRIPTION, url: "/student-management-system" },
-  twitter: { card: "summary_large_image", title: TITLE, description: DESCRIPTION },
+  openGraph: { title: TITLE, description: DESCRIPTION, url: "/student-management-system", images: ["/og-image.png"] },
+  twitter: { card: "summary_large_image", title: TITLE, description: DESCRIPTION, images: ["/og-image.png"] },
 };
 
 // Every capability below matches a real tab/page under (app)/students/[id]/

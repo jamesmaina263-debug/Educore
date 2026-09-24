@@ -15,15 +15,14 @@ const SLUG = "free-school-management-system-kenya";
 const PATH = `/blog/${SLUG}`;
 const PUBLISHED_ON = "2026-09-20";
 const TITLE = "Free School Management Software in Kenya: What \"Free\" Actually Covers — EduCore";
-const DESCRIPTION =
-  "Free core platforms, open-source editions, student-capped free tiers and trials all get called free. Where the real costs show up for a Kenyan school, a checklist to compare them, and when free is genuinely the right call.";
+const DESCRIPTION = "Free platforms, open-source editions, and capped free tiers all get called free. Where the real costs show up, and when free is the right call.";
 
 export const metadata: Metadata = {
   title: TITLE,
   description: DESCRIPTION,
   alternates: { canonical: PATH },
-  openGraph: { title: TITLE, description: DESCRIPTION, url: PATH },
-  twitter: { card: "summary_large_image", title: TITLE, description: DESCRIPTION },
+  openGraph: { title: TITLE, description: DESCRIPTION, url: PATH, images: ["/og-image.png"] },
+  twitter: { card: "summary_large_image", title: TITLE, description: DESCRIPTION, images: ["/og-image.png"] },
 };
 
 // Claims about EduCore below were checked against the repo before writing:

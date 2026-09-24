@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getCachedUser } from "@/lib/supabase/get-user";
 import type { BrandingData } from "@/components/settings/branding-form";
 import type { GeneralSettingsData } from "@/components/settings/general-panel";
 import type { StaffRow, RoleOption } from "@/components/settings/staff-roles-table";
@@ -44,9 +45,7 @@ export interface SettingsContext {
 
 export async function loadSettingsContext(): Promise<SettingsContext> {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCachedUser();
   if (!user) redirect("/login");
 
   const [
