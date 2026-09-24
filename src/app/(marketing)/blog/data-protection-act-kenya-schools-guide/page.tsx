@@ -14,8 +14,7 @@ const SLUG = "data-protection-act-kenya-schools-guide";
 const PATH = `/blog/${SLUG}`;
 const PUBLISHED_ON = "2026-09-20";
 const TITLE = "The Data Protection Act for Kenyan Schools: A Practical Guide — EduCore";
-const DESCRIPTION =
-  "What Kenya's Data Protection Act asks of schools: registering with the ODPC, parental consent, photos and exam results, children's and biometric data, the 72-hour breach rule, and what to ask your software vendor, including where your data is stored.";
+const DESCRIPTION = "What Kenya's Data Protection Act asks of schools: ODPC registration, parental consent, biometric data, the 72-hour breach rule, vendor questions.";
 const ODPC_EDUCATION_NOTE = "https://www.odpc.go.ke/wp-content/uploads/2024/02/ODPC-Guidance-Note-for-the-Education-Sector.pdf";
 const ODPC_CHILDREN_NOTE =
   "https://www.odpc.go.ke/wp-content/uploads/2025/11/ODPC-%E2%80%93-Guidance-Note-for-Processing-Childrens-Data.pdf";
@@ -25,8 +24,8 @@ export const metadata: Metadata = {
   title: TITLE,
   description: DESCRIPTION,
   alternates: { canonical: PATH },
-  openGraph: { title: TITLE, description: DESCRIPTION, url: PATH },
-  twitter: { card: "summary_large_image", title: TITLE, description: DESCRIPTION },
+  openGraph: { title: TITLE, description: DESCRIPTION, url: PATH, images: ["/og-image.png"] },
+  twitter: { card: "summary_large_image", title: TITLE, description: DESCRIPTION, images: ["/og-image.png"] },
 };
 
 // Sourcing (researched Sep 2026; primary sources read directly):

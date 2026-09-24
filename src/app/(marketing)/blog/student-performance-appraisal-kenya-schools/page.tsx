@@ -11,15 +11,14 @@ import { ArticleJsonLd } from "@/components/marketing/article-json-ld";
 import { BlogByline } from "@/components/marketing/blog-byline";
 
 const TITLE = "Student Performance Appraisal & Merit Lists for Kenyan Schools — EduCore";
-const DESCRIPTION =
-  "Why end-of-term merit lists usually mean a teacher rebuilding a spreadsheet from scratch, and how EduCore computes rankings, growth trends, and a class performance dashboard automatically from the marks already entered.";
+const DESCRIPTION = "Why merit lists usually mean rebuilding a spreadsheet from scratch, and how EduCore computes rankings and growth trends automatically.";
 
 export const metadata: Metadata = {
   title: TITLE,
   description: DESCRIPTION,
   alternates: { canonical: "/blog/student-performance-appraisal-kenya-schools" },
-  openGraph: { title: TITLE, description: DESCRIPTION, url: "/blog/student-performance-appraisal-kenya-schools" },
-  twitter: { card: "summary_large_image", title: TITLE, description: DESCRIPTION },
+  openGraph: { title: TITLE, description: DESCRIPTION, url: "/blog/student-performance-appraisal-kenya-schools", images: ["/og-image.png"] },
+  twitter: { card: "summary_large_image", title: TITLE, description: DESCRIPTION, images: ["/og-image.png"] },
 };
 
 // Every EduCore capability below verified against the codebase before writing, same sources as

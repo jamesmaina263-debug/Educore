@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getCachedUser } from "@/lib/supabase/get-user";
 import type { ExamRow, TermOption, ClassOption, SubjectOption } from "@/components/exams/exams-section";
 import type { GradingScaleRow, ClassRow } from "@/components/exams/grading-scales-section";
 
@@ -27,9 +28,7 @@ export interface ExamsContext {
 
 export async function loadExamsContext(): Promise<ExamsContext> {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCachedUser();
   if (!user) redirect("/login");
 
   const { data: schoolUser } = await supabase

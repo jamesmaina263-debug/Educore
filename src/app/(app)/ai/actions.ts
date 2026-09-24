@@ -281,6 +281,23 @@ const PERMISSION_LABEL: Record<PermissionKey, string> = {
   "academics.read": "academics",
 };
 
+// Permissions that correspond to a module wired into the school_modules system (see
+// #425/#427/#431), so the module check can reuse auth_school_module_enabled directly.
+// hostel.read_any/boarding is deliberately NOT here -- Boarding still lives on its own
+// schools.boarding_enabled column (unmigrated, see #425's own note), not in platform_modules,
+// so it needs its own check below rather than fitting this generic map.
+const PERMISSION_TO_MODULE_KEY: Partial<Record<PermissionKey, string>> = {
+  "discipline.read_any": "discipline",
+  "health.read_any": "health",
+  "library.read_any": "library",
+};
+
+// hostel.read_any's module state can't go through PERMISSION_TO_MODULE_KEY/
+// auth_school_module_enabled (see comment above) -- checked directly against
+// schools.boarding_enabled instead. Closing the same pre-existing gap flagged alongside
+// Discipline's own PR: this intent was permission-gated only until now.
+const BOARDING_PERMISSION: PermissionKey = "hostel.read_any";
+
 export async function askEducoreAI(question: string): Promise<AskAIResult> {
   const trimmed = question.trim();
   if (!trimmed) return { error: "Ask a question first." };
@@ -352,6 +369,34 @@ export async function askEducoreAI(question: string): Promise<AskAIResult> {
           answer_text: answer,
         });
         return { answer };
+      }
+      const moduleKey = PERMISSION_TO_MODULE_KEY[definition.permission];
+      if (moduleKey) {
+        const { data: moduleEnabled } = await supabase.rpc("auth_school_module_enabled", { p_key: moduleKey });
+        if (moduleEnabled === false) {
+          answer = `The ${PERMISSION_LABEL[definition.permission]} module is turned off for your school, so I can't answer that.`;
+          await supabase.from("ai_query_logs").insert({
+            school_id: schoolUser.school_id,
+            asked_by: schoolUser.id,
+            question_text: trimmed,
+            matched_intent: intent,
+            answer_text: answer,
+          });
+          return { answer };
+        }
+      } else if (definition.permission === BOARDING_PERMISSION) {
+        const { data: school } = await supabase.from("schools").select("boarding_enabled").eq("id", schoolUser.school_id).single();
+        if (school?.boarding_enabled === false) {
+          answer = `The ${PERMISSION_LABEL[definition.permission]} module is turned off for your school, so I can't answer that.`;
+          await supabase.from("ai_query_logs").insert({
+            school_id: schoolUser.school_id,
+            asked_by: schoolUser.id,
+            question_text: trimmed,
+            matched_intent: intent,
+            answer_text: answer,
+          });
+          return { answer };
+        }
       }
     }
     answer = await runIntent(supabase, intent);

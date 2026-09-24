@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ArrowDownRight, ArrowUpRight, CalendarCheck, CircleDollarSign, Database, Plus, Users, Wallet } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import { getCachedUser } from "@/lib/supabase/get-user";
 import { logout } from "@/app/login/actions";
 import { AppShell } from "@/components/app-shell/app-shell";
 import { StatusBadge } from "@/components/status-badge";
@@ -54,19 +55,20 @@ function Panel({ title, meta, children }: { title: string; meta?: string; childr
 
 export default async function DashboardPage() {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCachedUser();
   if (!user) redirect("/login");
 
   // Platform staff land on the Platform Admin Console (src/app/(admin)) instead -- a super
   // admin typically has no school_users row tied to a real school, so this dashboard would
   // otherwise render an empty/default view. Catches anyone navigating here directly (e.g. a
   // bookmark) even though login/actions.ts already sends them to /admin on sign-in.
-  const { data: isSuperAdmin } = await supabase.rpc("auth_is_super_admin");
-  if (isSuperAdmin) redirect("/admin");
-
+  // The super-admin check and both terms lookups used to be three extra sequential round trips in
+  // front of/behind this batch. None depends on another, so they now run in the same parallel
+  // batch (a platform admin's few extra reads are discarded by the redirect right below).
   const [
+    { data: isSuperAdmin },
+    { data: activeTerm },
+    { data: recentTerms },
     { data: schoolUser },
     { data: canSeeStudents },
     { data: canSeeAttendance },
@@ -79,10 +81,22 @@ export default async function DashboardPage() {
     { data: canSeeTransport },
     { data: canSeeDiscipline },
     { data: canSeeStaff },
+    { data: disciplineModuleEnabledData },
+    { data: healthModuleEnabledData },
   ] = await Promise.all([
+    supabase.rpc("auth_is_super_admin"),
+    supabase
+      .from("terms")
+      .select("id, academic_year_id, name, term_number, start_date, end_date, status")
+      .eq("status", "active")
+      .maybeSingle(),
+    supabase
+      .from("terms")
+      .select("id, name, term_number, start_date, end_date")
+      .order("start_date", { ascending: true }),
     supabase
       .from("school_users")
-      .select("id, full_name, status, roles(display_name), schools(name)")
+      .select("id, full_name, status, roles(display_name), schools(name, boarding_enabled)")
       .eq("auth_user_id", user.id)
       .maybeSingle(),
     supabase.rpc("auth_has_permission", { p_permission_key: "students.read" }),
@@ -96,287 +110,343 @@ export default async function DashboardPage() {
     supabase.rpc("auth_has_permission", { p_permission_key: "transport.read_any" }),
     supabase.rpc("auth_has_permission", { p_permission_key: "discipline.read_any" }),
     supabase.rpc("auth_has_permission", { p_permission_key: "staff.manage" }),
+    supabase.rpc("auth_school_module_enabled", { p_key: "discipline" }),
+    supabase.rpc("auth_school_module_enabled", { p_key: "health" }),
   ]);
+  if (isSuperAdmin) redirect("/admin");
   void canMarkAny;
+  // Module-gated in addition to the existing permission check, same "hidden everywhere"
+  // standard as the student-profile tab -- a school with Discipline disabled shouldn't see its
+  // open-cases KPI on the dashboard either, even for a user who'd otherwise have the permission.
+  const canSeeDisciplineModule = canSeeDiscipline === true && disciplineModuleEnabledData !== false;
+  // Closing a pre-existing gap flagged alongside Discipline's own PR (#431): these two widgets
+  // were permission-gated only, never module-gated, even though boarding_enabled/health's
+  // module toggle have existed since #314/#427 respectively. A school with either disabled
+  // could still see its KPI here if the viewer had the underlying permission.
+  const schoolBoardingEnabled = (schoolUser?.schools as unknown as { boarding_enabled: boolean } | null)?.boarding_enabled !== false;
+  const canSeeBoardingModule = canSeeBoarding === true && schoolBoardingEnabled;
+  const canSeeHealthModule = canSeeHealth === true && healthModuleEnabledData !== false;
 
   const roleName = (schoolUser?.roles as unknown as { display_name: string } | null)?.display_name;
   const schoolName = (schoolUser?.schools as unknown as { name: string } | null)?.name;
   const today = todayISO();
 
-  const { data: activeTerm } = await supabase
-    .from("terms")
-    .select("id, academic_year_id, name, term_number, start_date, end_date, status")
-    .eq("status", "active")
-    .maybeSingle();
-
-  const { data: recentTerms } = await supabase
-    .from("terms")
-    .select("id, name, term_number, start_date, end_date")
-    .order("start_date", { ascending: true });
   const last5Terms = (recentTerms ?? []).slice(-5);
 
   // --- Students (enrolled count + admission-date trend) ---
-  let enrolledCount = 0;
-  let admittedThisTerm = 0;
-  let enrollmentTrend: { term: string; students: number }[] = [];
-  if (canSeeStudents) {
-    // Previously fetched every student row the school has ever had (id, status, class, admission
-    // date) just to .filter().length three different ways in JS -- the same "grows forever" shape
-    // as the finance dashboard's unbounded invoice/payment fetch, but for enrollment history.
-    // Each of these three numbers is a plain count with a date/status predicate, so Postgres can
-    // compute it directly (head: true -> no rows returned, just the count) instead of shipping
-    // every row this school has ever enrolled over the wire to be counted in JavaScript. Same
-    // filters as before -- admission_date range is checked against ALL statuses, matching the
-    // original exactly: a student who later withdrew still counts toward the term they were
-    // originally admitted in, nothing here changes what gets displayed, only how it's computed.
-    const [{ count: enrolledCountRaw }, admittedResult, trendResults] = await Promise.all([
-      supabase.from("students").select("id", { count: "exact", head: true }).eq("status", "active"),
-      activeTerm
-        ? supabase
-            .from("students")
-            .select("id", { count: "exact", head: true })
-            .gte("admission_date", activeTerm.start_date)
-            .lte("admission_date", activeTerm.end_date)
-        : Promise.resolve({ count: 0 }),
-      Promise.all(
-        last5Terms.map((t) =>
-          supabase
-            .from("students")
-            .select("id", { count: "exact", head: true })
-            .gte("admission_date", t.start_date)
-            .lte("admission_date", t.end_date),
+  const section_canSeeStudents = (async () => {
+    let enrolledCount = 0;
+    let admittedThisTerm = 0;
+    let enrollmentTrend: { term: string; students: number }[] = [];
+    if (canSeeStudents) {
+      // Previously fetched every student row the school has ever had (id, status, class, admission
+      // date) just to .filter().length three different ways in JS -- the same "grows forever" shape
+      // as the finance dashboard's unbounded invoice/payment fetch, but for enrollment history.
+      // Each of these three numbers is a plain count with a date/status predicate, so Postgres can
+      // compute it directly (head: true -> no rows returned, just the count) instead of shipping
+      // every row this school has ever enrolled over the wire to be counted in JavaScript. Same
+      // filters as before -- admission_date range is checked against ALL statuses, matching the
+      // original exactly: a student who later withdrew still counts toward the term they were
+      // originally admitted in, nothing here changes what gets displayed, only how it's computed.
+      const [{ count: enrolledCountRaw }, admittedResult, trendResults] = await Promise.all([
+        supabase.from("students").select("id", { count: "exact", head: true }).eq("status", "active"),
+        activeTerm
+          ? supabase
+              .from("students")
+              .select("id", { count: "exact", head: true })
+              .gte("admission_date", activeTerm.start_date)
+              .lte("admission_date", activeTerm.end_date)
+          : Promise.resolve({ count: 0 }),
+        Promise.all(
+          last5Terms.map((t) =>
+            supabase
+              .from("students")
+              .select("id", { count: "exact", head: true })
+              .gte("admission_date", t.start_date)
+              .lte("admission_date", t.end_date),
+          ),
         ),
-      ),
-    ]);
-    enrolledCount = enrolledCountRaw ?? 0;
-    admittedThisTerm = admittedResult.count ?? 0;
-    enrollmentTrend = last5Terms.map((t, i) => ({ term: t.name, students: trendResults[i].count ?? 0 }));
-  }
+      ]);
+      enrolledCount = enrolledCountRaw ?? 0;
+      admittedThisTerm = admittedResult.count ?? 0;
+      enrollmentTrend = last5Terms.map((t, i) => ({ term: t.name, students: trendResults[i].count ?? 0 }));
+    }
+    return { enrolledCount, admittedThisTerm, enrollmentTrend };
+  })();
 
   // --- Attendance (today's rate + per-stream breakdown) ---
-  let attendanceRate = 0;
-  let presentToday = 0;
-  let rosterToday = 0;
-  let unmarkedStreamCount = 0;
-  let totalStreamCount = 0;
-  let attendanceByClass: { classroom: string; rate: number }[] = [];
-  if (canSeeAttendance) {
-    const [{ data: streams }, { data: todaysAttendance }, { data: activeRoster }] = await Promise.all([
-      supabase.from("streams").select("id, name, classes(name)"),
-      supabase
-        .from("student_attendance")
-        .select("student_id, stream_id, status")
-        .eq("attendance_date", today)
-        .eq("session", "class"),
-      // Only the currently-active roster is needed for this count -- the loop below discarded
-      // every other status anyway, so filtering server-side (status='active') instead of fetching
-      // every student the school has ever had, including years of withdrawn/graduated/transferred
-      // history, and throwing most of it away in JS. Deliberately independent of canSeeStudents: a
-      // class teacher who can mark attendance but doesn't have the broader students.read permission
-      // still needs her own roster count -- previously that case had its *own* separate unbounded
-      // fallback fetch (also fixed here, same underlying bug, same fix).
-      supabase.from("students").select("current_class_id").eq("status", "active"),
-    ]);
-
-    totalStreamCount = (streams ?? []).length;
-    const markedStreamIds = new Set((todaysAttendance ?? []).map((a) => a.stream_id));
-    unmarkedStreamCount = totalStreamCount - markedStreamIds.size;
-
-    const rosterByStream = new Map<string, number>();
-    for (const s of activeRoster ?? []) {
-      if (!s.current_class_id) continue;
-      rosterByStream.set(s.current_class_id, (rosterByStream.get(s.current_class_id) ?? 0) + 1);
-    }
-    rosterToday = Array.from(rosterByStream.values()).reduce((a, b) => a + b, 0);
-
-    const presentByStream = new Map<string, number>();
-    for (const a of todaysAttendance ?? []) {
-      if (a.status === "present" || a.status === "late") {
-        presentByStream.set(a.stream_id, (presentByStream.get(a.stream_id) ?? 0) + 1);
-      }
-    }
-    presentToday = Array.from(presentByStream.values()).reduce((a, b) => a + b, 0);
-    attendanceRate = rosterToday > 0 ? Math.round((presentToday / rosterToday) * 1000) / 10 : 0;
-
-    attendanceByClass = (streams ?? []).map((s) => {
-      const roster = rosterByStream.get(s.id) ?? 0;
-      const present = presentByStream.get(s.id) ?? 0;
-      const className = (s.classes as unknown as { name: string } | null)?.name ?? "";
-      return {
-        classroom: `${className} ${s.name}`.trim(),
-        rate: roster > 0 ? Math.round((present / roster) * 1000) / 10 : 0,
-      };
-    });
-  }
-
-  // --- Finance (term collection trend, outstanding balance, latest invoices) ---
-  let collected = 0;
-  let invoicedThisTerm = 0;
-  let collectionTrend: { week: string; invoiced: number; collected: number }[] = [];
-  let totalOutstanding = 0;
-  let studentsWithBalance = 0;
-  let latestInvoices: { id: string; student: string; amount: number; status: string }[] = [];
-  let pendingDiscounts = 0;
-  let pendingExpenses = 0;
-  if (canSeeFinance) {
-    // Three real scalability bugs fixed here (production readiness audit, Dashboard & frontend
-    // performance / Database scalability sections): invoices and payments were each fetched with
-    // NO limit and NO date/term filter -- every invoice and every payment the school has ever
-    // recorded, on every single dashboard load, for every staff member with finance access. The
-    // "latest 6 invoices" widget was fetching the school's *entire* invoice history just to
-    // `.slice(0, 6)` it in JS, and invoicedThisTerm/collected/collectionTrend were summing over
-    // that same full history in JS instead of letting Postgres filter by term_id/date range. At a
-    // school with a few years of history this is exactly the "millions of finance records" growth
-    // case the audit calls out -- unbounded today, and it gets slower every term forever. Fixed by
-    // pushing the term/date filter into the query (same result, bounded by term instead of by
-    // school lifetime) and giving the "latest invoices" widget its own properly limited query.
-    //
-    // Third bug (2026-09-14 production-readiness audit): this was still doing
-    // `.from("v_student_balances").select("balance")` with no filter -- one row PER STUDENT (each
-    // itself computed via 4 LATERAL aggregate subqueries) just to sum()/count() two numbers in JS.
-    // A DB-side aggregate RPC for exactly this (get_student_balance_summary(), migration
-    // 20260909053003) was already deployed five days ago but this page was never updated to call
-    // it -- the fix existed in the database and was simply never wired up. Switched to the RPC:
-    // same security boundary (the function is a plain, non-SECURITY-DEFINER SQL function over the
-    // already-RLS-scoped view, so it inherits the exact same access boundary the old JS-side query
-    // relied on), but the sum/count now happen once in Postgres instead of transferring one row per
-    // student to the app on every dashboard load.
-    const [{ data: balanceSummaryRows }, { data: latestInvoiceRows }, { data: discountRows }, { data: expenseRows }] =
-      await Promise.all([
-        supabase.rpc("get_student_balance_summary"),
+  const section_canSeeAttendance = (async () => {
+    let attendanceRate = 0;
+    let presentToday = 0;
+    let rosterToday = 0;
+    let unmarkedStreamCount = 0;
+    let totalStreamCount = 0;
+    let attendanceByClass: { classroom: string; rate: number }[] = [];
+    if (canSeeAttendance) {
+      const [{ data: streams }, { data: todaysAttendance }, { data: activeRoster }] = await Promise.all([
+        supabase.from("streams").select("id, name, classes(name)"),
         supabase
-          .from("invoices")
-          .select("id, total_amount, status, created_at, term_id, students(first_name, last_name)")
-          .order("created_at", { ascending: false })
-          .limit(6),
-        supabase.from("discounts").select("id").eq("status", "pending"),
-        supabase.from("expenses").select("id").eq("status", "pending"),
+          .from("student_attendance")
+          .select("student_id, stream_id, status")
+          .eq("attendance_date", today)
+          .eq("session", "class"),
+        // Only the currently-active roster is needed for this count -- the loop below discarded
+        // every other status anyway, so filtering server-side (status='active') instead of fetching
+        // every student the school has ever had, including years of withdrawn/graduated/transferred
+        // history, and throwing most of it away in JS. Deliberately independent of canSeeStudents: a
+        // class teacher who can mark attendance but doesn't have the broader students.read permission
+        // still needs her own roster count -- previously that case had its *own* separate unbounded
+        // fallback fetch (also fixed here, same underlying bug, same fix).
+        supabase.from("students").select("current_class_id").eq("status", "active"),
       ]);
 
-    // Only needed for the term-scoped aggregation below, and only when there is an active term --
-    // scoped by term_id / date range in SQL rather than fetched in full and filtered in JS.
-    const [{ data: termInvoiceRows }, { data: termPaymentRows }] = activeTerm
-      ? await Promise.all([
-          supabase.from("invoices").select("total_amount, created_at").eq("term_id", activeTerm.id),
-          supabase
-            .from("payments")
-            .select("amount, recorded_at")
-            .gte("recorded_at", activeTerm.start_date)
-            .lte("recorded_at", activeTerm.end_date),
-        ])
-      : [{ data: null }, { data: null }];
+      totalStreamCount = (streams ?? []).length;
+      const markedStreamIds = new Set((todaysAttendance ?? []).map((a) => a.stream_id));
+      unmarkedStreamCount = totalStreamCount - markedStreamIds.size;
 
-    const balanceSummary = balanceSummaryRows?.[0];
-    totalOutstanding = Number(balanceSummary?.total_outstanding ?? 0);
-    studentsWithBalance = Number(balanceSummary?.students_with_balance ?? 0);
-    pendingDiscounts = (discountRows ?? []).length;
-    pendingExpenses = (expenseRows ?? []).length;
+      const rosterByStream = new Map<string, number>();
+      for (const s of activeRoster ?? []) {
+        if (!s.current_class_id) continue;
+        rosterByStream.set(s.current_class_id, (rosterByStream.get(s.current_class_id) ?? 0) + 1);
+      }
+      rosterToday = Array.from(rosterByStream.values()).reduce((a, b) => a + b, 0);
 
-    latestInvoices = (latestInvoiceRows ?? []).map((inv) => {
-      const s = inv.students as unknown as { first_name: string; last_name: string } | null;
-      return {
-        id: inv.id,
-        student: `${s?.first_name ?? ""} ${s?.last_name ?? ""}`.trim(),
-        amount: Number(inv.total_amount),
-        status: inv.status,
-      };
-    });
+      const presentByStream = new Map<string, number>();
+      for (const a of todaysAttendance ?? []) {
+        if (a.status === "present" || a.status === "late") {
+          presentByStream.set(a.stream_id, (presentByStream.get(a.stream_id) ?? 0) + 1);
+        }
+      }
+      presentToday = Array.from(presentByStream.values()).reduce((a, b) => a + b, 0);
+      attendanceRate = rosterToday > 0 ? Math.round((presentToday / rosterToday) * 1000) / 10 : 0;
 
-    if (activeTerm) {
-      invoicedThisTerm = (termInvoiceRows ?? []).reduce((sum, inv) => sum + Number(inv.total_amount), 0);
-      collected = (termPaymentRows ?? []).reduce((sum, p) => sum + Number(p.amount), 0);
-
-      const buckets = weekBuckets(activeTerm.start_date, activeTerm.end_date);
-      collectionTrend = buckets.map((b) => {
-        const bucketInvoiced = (termInvoiceRows ?? [])
-          .filter((inv) => new Date(inv.created_at) >= b.start && new Date(inv.created_at) < b.end)
-          .reduce((sum, inv) => sum + Number(inv.total_amount), 0);
-        const bucketCollected = (termPaymentRows ?? [])
-          .filter((p) => new Date(p.recorded_at) >= b.start && new Date(p.recorded_at) < b.end)
-          .reduce((sum, p) => sum + Number(p.amount), 0);
+      attendanceByClass = (streams ?? []).map((s) => {
+        const roster = rosterByStream.get(s.id) ?? 0;
+        const present = presentByStream.get(s.id) ?? 0;
+        const className = (s.classes as unknown as { name: string } | null)?.name ?? "";
         return {
-          week: b.label,
-          invoiced: Math.round(bucketInvoiced / 1000) / 1000,
-          collected: Math.round(bucketCollected / 1000) / 1000,
+          classroom: `${className} ${s.name}`.trim(),
+          rate: roster > 0 ? Math.round((present / roster) * 1000) / 10 : 0,
         };
       });
     }
-  }
+    return { attendanceRate, presentToday, rosterToday, unmarkedStreamCount, totalStreamCount, attendanceByClass };
+  })();
+
+  // --- Finance (term collection trend, outstanding balance, latest invoices) ---
+  const section_canSeeFinance = (async () => {
+    let collected = 0;
+    let invoicedThisTerm = 0;
+    let collectionTrend: { week: string; invoiced: number; collected: number }[] = [];
+    let totalOutstanding = 0;
+    let studentsWithBalance = 0;
+    let latestInvoices: { id: string; student: string; amount: number; status: string }[] = [];
+    let pendingDiscounts = 0;
+    let pendingExpenses = 0;
+    if (canSeeFinance) {
+      // Three real scalability bugs fixed here (production readiness audit, Dashboard & frontend
+      // performance / Database scalability sections): invoices and payments were each fetched with
+      // NO limit and NO date/term filter -- every invoice and every payment the school has ever
+      // recorded, on every single dashboard load, for every staff member with finance access. The
+      // "latest 6 invoices" widget was fetching the school's *entire* invoice history just to
+      // `.slice(0, 6)` it in JS, and invoicedThisTerm/collected/collectionTrend were summing over
+      // that same full history in JS instead of letting Postgres filter by term_id/date range. At a
+      // school with a few years of history this is exactly the "millions of finance records" growth
+      // case the audit calls out -- unbounded today, and it gets slower every term forever. Fixed by
+      // pushing the term/date filter into the query (same result, bounded by term instead of by
+      // school lifetime) and giving the "latest invoices" widget its own properly limited query.
+      //
+      // Third bug (2026-09-14 production-readiness audit): this was still doing
+      // `.from("v_student_balances").select("balance")` with no filter -- one row PER STUDENT (each
+      // itself computed via 4 LATERAL aggregate subqueries) just to sum()/count() two numbers in JS.
+      // A DB-side aggregate RPC for exactly this (get_student_balance_summary(), migration
+      // 20260909053003) was already deployed five days ago but this page was never updated to call
+      // it -- the fix existed in the database and was simply never wired up. Switched to the RPC:
+      // same security boundary (the function is a plain, non-SECURITY-DEFINER SQL function over the
+      // already-RLS-scoped view, so it inherits the exact same access boundary the old JS-side query
+      // relied on), but the sum/count now happen once in Postgres instead of transferring one row per
+      // student to the app on every dashboard load.
+      const [{ data: balanceSummaryRows }, { data: latestInvoiceRows }, { data: discountRows }, { data: expenseRows }] =
+        await Promise.all([
+          supabase.rpc("get_student_balance_summary"),
+          supabase
+            .from("invoices")
+            .select("id, total_amount, status, created_at, term_id, students(first_name, last_name)")
+            .order("created_at", { ascending: false })
+            .limit(6),
+          supabase.from("discounts").select("id").eq("status", "pending"),
+          supabase.from("expenses").select("id").eq("status", "pending"),
+        ]);
+
+      // Only needed for the term-scoped aggregation below, and only when there is an active term --
+      // scoped by term_id / date range in SQL rather than fetched in full and filtered in JS.
+      const [{ data: termInvoiceRows }, { data: termPaymentRows }] = activeTerm
+        ? await Promise.all([
+            supabase.from("invoices").select("total_amount, created_at").eq("term_id", activeTerm.id),
+            supabase
+              .from("payments")
+              .select("amount, recorded_at")
+              .gte("recorded_at", activeTerm.start_date)
+              .lte("recorded_at", activeTerm.end_date),
+          ])
+        : [{ data: null }, { data: null }];
+
+      const balanceSummary = balanceSummaryRows?.[0];
+      totalOutstanding = Number(balanceSummary?.total_outstanding ?? 0);
+      studentsWithBalance = Number(balanceSummary?.students_with_balance ?? 0);
+      pendingDiscounts = (discountRows ?? []).length;
+      pendingExpenses = (expenseRows ?? []).length;
+
+      latestInvoices = (latestInvoiceRows ?? []).map((inv) => {
+        const s = inv.students as unknown as { first_name: string; last_name: string } | null;
+        return {
+          id: inv.id,
+          student: `${s?.first_name ?? ""} ${s?.last_name ?? ""}`.trim(),
+          amount: Number(inv.total_amount),
+          status: inv.status,
+        };
+      });
+
+      if (activeTerm) {
+        invoicedThisTerm = (termInvoiceRows ?? []).reduce((sum, inv) => sum + Number(inv.total_amount), 0);
+        collected = (termPaymentRows ?? []).reduce((sum, p) => sum + Number(p.amount), 0);
+
+        const buckets = weekBuckets(activeTerm.start_date, activeTerm.end_date);
+        collectionTrend = buckets.map((b) => {
+          const bucketInvoiced = (termInvoiceRows ?? [])
+            .filter((inv) => new Date(inv.created_at) >= b.start && new Date(inv.created_at) < b.end)
+            .reduce((sum, inv) => sum + Number(inv.total_amount), 0);
+          const bucketCollected = (termPaymentRows ?? [])
+            .filter((p) => new Date(p.recorded_at) >= b.start && new Date(p.recorded_at) < b.end)
+            .reduce((sum, p) => sum + Number(p.amount), 0);
+          return {
+            week: b.label,
+            invoiced: Math.round(bucketInvoiced / 1000) / 1000,
+            collected: Math.round(bucketCollected / 1000) / 1000,
+          };
+        });
+      }
+    }
+    return { collected, invoicedThisTerm, collectionTrend, totalOutstanding, studentsWithBalance, latestInvoices, pendingDiscounts, pendingExpenses };
+  })();
 
   // --- Boarding occupancy (beds available, dormitories at/over capacity) ---
-  let bedsAvailable = 0;
-  let bedsTotal = 0;
-  let dormsAtCapacity = 0;
-  if (canSeeBoarding) {
-    const [{ data: bedRows }, { data: activeBoardingAllocs }, { data: dormitories }, { data: rooms }] = await Promise.all([
-      supabase.from("beds").select("id, status"),
-      supabase.from("hostel_allocations").select("bed_id, hostel_room_id").eq("status", "active"),
-      supabase.from("dormitories").select("id, capacity"),
-      supabase.from("hostel_rooms").select("id, dormitory_id"),
-    ]);
-    bedsTotal = (bedRows ?? []).length;
-    const occupiedBedIds = new Set((activeBoardingAllocs ?? []).map((a) => a.bed_id).filter(Boolean));
-    bedsAvailable = (bedRows ?? []).filter((b) => b.status === "available" && !occupiedBedIds.has(b.id)).length;
+  const section_canSeeBoardingModule = (async () => {
+    let bedsAvailable = 0;
+    let bedsTotal = 0;
+    let dormsAtCapacity = 0;
+    if (canSeeBoardingModule) {
+      const [{ data: bedRows }, { data: activeBoardingAllocs }, { data: dormitories }, { data: rooms }] = await Promise.all([
+        supabase.from("beds").select("id, status"),
+        supabase.from("hostel_allocations").select("bed_id, hostel_room_id").eq("status", "active"),
+        supabase.from("dormitories").select("id, capacity"),
+        supabase.from("hostel_rooms").select("id, dormitory_id"),
+      ]);
+      bedsTotal = (bedRows ?? []).length;
+      const occupiedBedIds = new Set((activeBoardingAllocs ?? []).map((a) => a.bed_id).filter(Boolean));
+      bedsAvailable = (bedRows ?? []).filter((b) => b.status === "available" && !occupiedBedIds.has(b.id)).length;
 
-    const roomToDorm = new Map((rooms ?? []).map((r) => [r.id, r.dormitory_id]));
-    const occupiedByDorm = new Map<string, number>();
-    for (const a of activeBoardingAllocs ?? []) {
-      const dormId = roomToDorm.get(a.hostel_room_id);
-      if (!dormId) continue;
-      occupiedByDorm.set(dormId, (occupiedByDorm.get(dormId) ?? 0) + 1);
+      const roomToDorm = new Map((rooms ?? []).map((r) => [r.id, r.dormitory_id]));
+      const occupiedByDorm = new Map<string, number>();
+      for (const a of activeBoardingAllocs ?? []) {
+        const dormId = roomToDorm.get(a.hostel_room_id);
+        if (!dormId) continue;
+        occupiedByDorm.set(dormId, (occupiedByDorm.get(dormId) ?? 0) + 1);
+      }
+      dormsAtCapacity = (dormitories ?? []).filter(
+        (d) => d.capacity != null && (occupiedByDorm.get(d.id) ?? 0) >= d.capacity,
+      ).length;
     }
-    dormsAtCapacity = (dormitories ?? []).filter(
-      (d) => d.capacity != null && (occupiedByDorm.get(d.id) ?? 0) >= d.capacity,
-    ).length;
-  }
+    return { bedsAvailable, bedsTotal, dormsAtCapacity };
+  })();
 
   // --- Health (students currently in sick bay) ---
-  let sickBayCount = 0;
-  if (canSeeHealth) {
-    const { count } = await supabase
-      .from("sick_bay_visits")
-      .select("id", { count: "exact", head: true })
-      .is("check_out_at", null);
-    sickBayCount = count ?? 0;
-  }
+  const section_canSeeHealthModule = (async () => {
+    let sickBayCount = 0;
+    if (canSeeHealthModule) {
+      const { count } = await supabase
+        .from("sick_bay_visits")
+        .select("id", { count: "exact", head: true })
+        .is("check_out_at", null);
+      sickBayCount = count ?? 0;
+    }
+    return { sickBayCount };
+  })();
 
   // --- Inventory (items at/below reorder level) ---
-  let lowStockCount = 0;
-  if (canSeeInventory) {
-    const { data } = await supabase.from("inventory_items").select("quantity, reorder_level").not("reorder_level", "is", null);
-    lowStockCount = (data ?? []).filter((i) => i.reorder_level !== null && i.quantity <= i.reorder_level).length;
-  }
+  const section_canSeeInventory = (async () => {
+    let lowStockCount = 0;
+    if (canSeeInventory) {
+      const { data } = await supabase.from("inventory_items").select("quantity, reorder_level").not("reorder_level", "is", null);
+      lowStockCount = (data ?? []).filter((i) => i.reorder_level !== null && i.quantity <= i.reorder_level).length;
+    }
+    return { lowStockCount };
+  })();
 
   // --- Transport (fleet + routes at/over capacity) ---
-  let transportVehicleCount = 0;
-  let routesFull = 0;
-  if (canSeeTransport) {
-    const [{ count: vehicleCount }, { data: routeCapacity }] = await Promise.all([
-      supabase.from("transport_vehicles").select("id", { count: "exact", head: true }),
-      supabase.from("v_transport_route_capacity").select("available"),
-    ]);
-    transportVehicleCount = vehicleCount ?? 0;
-    routesFull = (routeCapacity ?? []).filter((r) => Number(r.available) <= 0).length;
-  }
+  const section_canSeeTransport = (async () => {
+    let transportVehicleCount = 0;
+    let routesFull = 0;
+    if (canSeeTransport) {
+      const [{ count: vehicleCount }, { data: routeCapacity }] = await Promise.all([
+        supabase.from("transport_vehicles").select("id", { count: "exact", head: true }),
+        supabase.from("v_transport_route_capacity").select("available"),
+      ]);
+      transportVehicleCount = vehicleCount ?? 0;
+      routesFull = (routeCapacity ?? []).filter((r) => Number(r.available) <= 0).length;
+    }
+    return { transportVehicleCount, routesFull };
+  })();
 
   // --- Discipline (open cases — Phase 15 built the case workflow this KPI needed) ---
-  let disciplineOpenCases = 0;
-  if (canSeeDiscipline) {
-    const { count } = await supabase
-      .from("discipline_cases")
-      .select("id", { count: "exact", head: true })
-      .in("status", ["open", "investigating", "pending_action"]);
-    disciplineOpenCases = count ?? 0;
-  }
+  const section_canSeeDisciplineModule = (async () => {
+    let disciplineOpenCases = 0;
+    if (canSeeDisciplineModule) {
+      const { count } = await supabase
+        .from("discipline_cases")
+        .select("id", { count: "exact", head: true })
+        .in("status", ["open", "investigating", "pending_action"]);
+      disciplineOpenCases = count ?? 0;
+    }
+    return { disciplineOpenCases };
+  })();
 
   // --- Staff attendance today ---
-  let staffPresentToday = 0;
-  let staffMarkedToday = 0;
-  if (canSeeStaff) {
-    const { data } = await supabase.from("staff_attendance").select("status").eq("attendance_date", today);
-    staffMarkedToday = data?.length ?? 0;
-    staffPresentToday = (data ?? []).filter((r) => r.status === "present").length;
-  }
+  const section_canSeeStaff = (async () => {
+    let staffPresentToday = 0;
+    let staffMarkedToday = 0;
+    if (canSeeStaff) {
+      const { data } = await supabase.from("staff_attendance").select("status").eq("attendance_date", today);
+      staffMarkedToday = data?.length ?? 0;
+      staffPresentToday = (data ?? []).filter((r) => r.status === "present").length;
+    }
+    return { staffPresentToday, staffMarkedToday };
+  })();
+
+  // Each section only reads the permission flags/terms above and owns its own variables, so they
+  // no longer wait on one another (was ~9 sequential stages of round trips). Same queries, same
+  // per-section logic -- only the scheduling changed.
+  const [
+    { enrolledCount, admittedThisTerm, enrollmentTrend },
+    { attendanceRate, presentToday, rosterToday, unmarkedStreamCount, totalStreamCount, attendanceByClass },
+    { collected, invoicedThisTerm, collectionTrend, totalOutstanding, studentsWithBalance, latestInvoices, pendingDiscounts, pendingExpenses },
+    { bedsAvailable, bedsTotal, dormsAtCapacity },
+    { sickBayCount },
+    { lowStockCount },
+    { transportVehicleCount, routesFull },
+    { disciplineOpenCases },
+    { staffPresentToday, staffMarkedToday },
+  ] = await Promise.all([
+    section_canSeeStudents,
+    section_canSeeAttendance,
+    section_canSeeFinance,
+    section_canSeeBoardingModule,
+    section_canSeeHealthModule,
+    section_canSeeInventory,
+    section_canSeeTransport,
+    section_canSeeDisciplineModule,
+    section_canSeeStaff,
+  ]);
 
   const collectedPct = invoicedThisTerm > 0 ? Math.round((collected / invoicedThisTerm) * 1000) / 10 : 0;
 
@@ -449,14 +519,14 @@ export default async function DashboardPage() {
         tone: "warning" as const,
         badge: "Pending",
       },
-    canSeeBoarding &&
+    canSeeBoardingModule &&
       dormsAtCapacity > 0 && {
         label: `${dormsAtCapacity} dormitor${dormsAtCapacity === 1 ? "y is" : "ies are"} at or over capacity`,
         owner: "Boarding wardens",
         tone: "warning" as const,
         badge: "At capacity",
       },
-    canSeeHealth &&
+    canSeeHealthModule &&
       sickBayCount > 0 && {
         label: `${sickBayCount} student${sickBayCount === 1 ? "" : "s"} currently in sick bay`,
         owner: "School nurse",
@@ -477,7 +547,7 @@ export default async function DashboardPage() {
         tone: "info" as const,
         badge: "Full",
       },
-    canSeeDiscipline &&
+    canSeeDisciplineModule &&
       disciplineOpenCases > 0 && {
         label: `${disciplineOpenCases} open disciplinary case${disciplineOpenCases === 1 ? "" : "s"}`,
         owner: "Discipline & Welfare office",
@@ -487,13 +557,13 @@ export default async function DashboardPage() {
   ].filter(Boolean) as { label: string; owner: string; tone: "danger" | "warning" | "info"; badge: string }[];
 
   const operations = [
-    canSeeBoarding &&
+    canSeeBoardingModule &&
       bedsTotal > 0 && {
         label: "Boarding beds available",
         value: `${bedsAvailable} / ${bedsTotal}`,
         note: dormsAtCapacity > 0 ? `${dormsAtCapacity} dormitory at capacity` : "no dormitory at capacity",
       },
-    canSeeHealth && {
+    canSeeHealthModule && {
       label: "Sick bay right now",
       value: String(sickBayCount),
       note: sickBayCount > 0 ? "students checked in" : "no active visits",
@@ -515,7 +585,7 @@ export default async function DashboardPage() {
         value: `${Math.round((100 * staffPresentToday) / staffMarkedToday)}%`,
         note: `${staffPresentToday} of ${staffMarkedToday} marked present`,
       },
-    canSeeDiscipline && {
+    canSeeDisciplineModule && {
       label: "Open discipline cases",
       value: String(disciplineOpenCases),
       note: disciplineOpenCases > 0 ? "open/investigating/pending action" : "no open cases",

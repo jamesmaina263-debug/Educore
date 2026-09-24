@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getCachedUser } from "@/lib/supabase/get-user";
 import { logout } from "@/app/login/actions";
 import Link from "next/link";
 import { AppShell } from "@/components/app-shell/app-shell";
@@ -20,9 +21,7 @@ export default async function StaffPage({
   const attendanceDate = dateParam || todayISO();
 
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCachedUser();
   if (!user) redirect("/login");
 
   const [{ data: schoolUser }, { data: canMark }, { data: staffRows }, { data: existingRows }] = await Promise.all([
