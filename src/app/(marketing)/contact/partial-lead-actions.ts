@@ -55,8 +55,9 @@ export async function saveDemoContactStep(formData: FormData): Promise<DemoConta
       parseAttributionFormData(formData),
       sourcePage,
     );
-  } catch {
+  } catch (err) {
     // Missing service-role key, network error, etc. -- never block the visitor.
+    console.error("saveDemoContactStep: unexpected error", err);
   }
 
   return { status: "saved" };
