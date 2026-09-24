@@ -1,14 +1,13 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getCachedUser } from "@/lib/supabase/get-user";
 import { logout } from "@/app/login/actions";
 import { AppShell } from "@/components/app-shell/app-shell";
 import { PtMeetingsSection, type SlotRow } from "@/components/pt-meetings/pt-meetings-section";
 
 export default async function PtMeetingsPage() {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCachedUser();
   if (!user) redirect("/login");
 
   const [{ data: schoolUser }, { data: canWriteAny }, { data: slotRows }] = await Promise.all([

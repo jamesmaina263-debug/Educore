@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { GO_TO_SHORTCUTS } from "@/lib/go-to-shortcuts";
 import { useCommandPalette } from "./command-palette-context";
 import { useOnlineStatus } from "@/hooks/use-online-status";
+import { useSchoolHref } from "./school-slug-context";
 
 const SEQUENCE_TIMEOUT_MS = 1200;
 
@@ -39,6 +40,7 @@ export function GoToShortcuts({ disabledHrefs = [] }: { disabledHrefs?: string[]
   const { open: paletteOpen } = useCommandPalette();
   const router = useRouter();
   const online = useOnlineStatus();
+  const toHref = useSchoolHref();
   const awaitingSecondKey = useRef(false);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -87,7 +89,7 @@ export function GoToShortcuts({ disabledHrefs = [] }: { disabledHrefs?: string[]
         if (!online) {
           window.location.href = match.href;
         } else {
-          router.push(match.href);
+          router.push(toHref(match.href));
         }
       }
     };
@@ -97,7 +99,7 @@ export function GoToShortcuts({ disabledHrefs = [] }: { disabledHrefs?: string[]
       document.removeEventListener("keydown", handleKeyDown);
       clearPending();
     };
-  }, [paletteOpen, router, online, disabledHrefs]);
+  }, [paletteOpen, router, online, disabledHrefs, toHref]);
 
   return null;
 }

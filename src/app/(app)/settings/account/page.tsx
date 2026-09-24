@@ -1,14 +1,11 @@
 import { redirect } from "next/navigation";
 import { loadSettingsContext } from "../_data";
-import { createClient } from "@/lib/supabase/server";
+import { getCachedUser } from "@/lib/supabase/get-user";
 import { ModulePageShell } from "@/components/app-shell/module-page-shell";
 import { AccountSecurityPanel } from "@/components/settings/account-security-panel";
 
 export default async function SettingsAccountPage() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCachedUser();
   if (!user) redirect("/login");
 
   const ctx = await loadSettingsContext();

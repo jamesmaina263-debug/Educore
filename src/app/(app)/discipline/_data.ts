@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getCachedUser } from "@/lib/supabase/get-user";
 import type { CaseRow, IncidentRow, SafeguardingRow, StaffOption, StudentOption, WelfareRow } from "@/components/discipline/discipline-welfare-section";
 
 export interface DisciplineContext {
@@ -26,9 +27,7 @@ export interface DisciplineContext {
 
 export async function loadDisciplineContext(): Promise<DisciplineContext> {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCachedUser();
   if (!user) redirect("/login");
 
   const { data: schoolUser } = await supabase
