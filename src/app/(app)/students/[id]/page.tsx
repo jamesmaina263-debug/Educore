@@ -38,7 +38,7 @@ export default async function StudentProfilePage({
 
   const { data: schoolUser } = await supabase
     .from("school_users")
-    .select("full_name, roles(display_name), schools(name)")
+    .select("full_name, roles(display_name), schools(name, boarding_enabled)")
     .eq("auth_user_id", user.id)
     .maybeSingle();
 
@@ -165,6 +165,7 @@ export default async function StudentProfilePage({
     { data: canEnrollBiometricData },
     { data: canRevokeBiometricData },
     { data: disciplineModuleEnabledData },
+    { data: transportModuleEnabledData },
   ] = await Promise.all([
     supabase.rpc("auth_has_permission", { p_permission_key: "students.write" }),
     supabase.rpc("auth_has_permission", { p_permission_key: "students.delete" }),
@@ -178,6 +179,7 @@ export default async function StudentProfilePage({
     supabase.rpc("auth_has_permission", { p_permission_key: "biometric.enroll" }),
     supabase.rpc("auth_has_permission", { p_permission_key: "biometric.revoke" }),
     supabase.rpc("auth_school_module_enabled", { p_key: "discipline" }),
+    supabase.rpc("auth_school_module_enabled", { p_key: "transport" }),
   ]);
   const canManageStudents = canManageStudentsData === true;
   const canDeleteStudents = canDeleteStudentsData === true;
@@ -192,6 +194,12 @@ export default async function StudentProfilePage({
   const canReadFinance = canReadFinanceData === true;
   const canIssueCertificates = canIssueCertificatesData === true;
   const canWriteDiscipline = canWriteDisciplineData === true && disciplineModuleEnabled;
+  // Both cards were previously shown unconditionally, with no permission OR module check at
+  // all -- a third location (after the dashboard KPI and AI intent, #435) with the same
+  // pre-existing gap. Fixed here alongside Transport's own gating since this is the exact file
+  // Transport's card needed touching anyway.
+  const transportModuleEnabled = transportModuleEnabledData !== false;
+  const boardingModuleEnabled = (schoolUser?.schools as unknown as { boarding_enabled: boolean } | null)?.boarding_enabled !== false;
   const canViewBiometric = canViewBiometricData === true;
   const canEnrollBiometric = canEnrollBiometricData === true;
   const canRevokeBiometric = canRevokeBiometricData === true;
@@ -411,21 +419,25 @@ export default async function StudentProfilePage({
                 <p className="text-xs text-muted-foreground">From Exams</p>
               </div>
 
-              <div className="panel p-4">
-                <p className="label-eyebrow">Boarding</p>
-                <p className="mt-1 text-lg font-semibold">
-                  {boarding ? `Room ${boarding.room_number}` : "Day scholar"}
-                </p>
-                <p className="text-xs text-muted-foreground">{boarding?.block ? `Block ${boarding.block}` : "From Boarding"}</p>
-              </div>
+              {boardingModuleEnabled && (
+                <div className="panel p-4">
+                  <p className="label-eyebrow">Boarding</p>
+                  <p className="mt-1 text-lg font-semibold">
+                    {boarding ? `Room ${boarding.room_number}` : "Day scholar"}
+                  </p>
+                  <p className="text-xs text-muted-foreground">{boarding?.block ? `Block ${boarding.block}` : "From Boarding"}</p>
+                </div>
+              )}
 
-              <div className="panel p-4">
-                <p className="label-eyebrow">Transport</p>
-                <p className="mt-1 text-lg font-semibold">
-                  {transport?.transport_routes?.name ?? "Not assigned"}
-                </p>
-                <p className="text-xs text-muted-foreground">{transport?.pickup_point ?? "From Transport"}</p>
-              </div>
+              {transportModuleEnabled && (
+                <div className="panel p-4">
+                  <p className="label-eyebrow">Transport</p>
+                  <p className="mt-1 text-lg font-semibold">
+                    {transport?.transport_routes?.name ?? "Not assigned"}
+                  </p>
+                  <p className="text-xs text-muted-foreground">{transport?.pickup_point ?? "From Transport"}</p>
+                </div>
+              )}
 
               {canReadDiscipline && (
                 <div className="panel p-4">
