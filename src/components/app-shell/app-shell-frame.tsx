@@ -19,11 +19,11 @@ import { useOnlineStatus } from "@/hooks/use-online-status";
 export function AppShellFrame({
   children,
   schoolName,
-  boardingEnabled = true,
+  disabledHrefs = [],
 }: {
   children: ReactNode;
   schoolName?: string;
-  boardingEnabled?: boolean;
+  disabledHrefs?: string[];
 }) {
   const { chrome } = useAppShellChrome();
   const online = useOnlineStatus();
@@ -44,7 +44,7 @@ export function AppShellFrame({
           >
             {schoolName ?? "EduCore"}
           </Link>
-          <SidebarNav boardingEnabled={boardingEnabled} />
+          <SidebarNav disabledHrefs={disabledHrefs} />
         </aside>
 
         <div className="flex min-w-0 flex-1 flex-col print:block print:w-full">
@@ -70,7 +70,7 @@ export function AppShellFrame({
           <main className="flex-1 overflow-y-auto p-6 print:overflow-visible print:p-0">{children}</main>
         </div>
       </div>
-      <CommandPalette boardingEnabled={boardingEnabled} />
+      <CommandPalette disabledHrefs={disabledHrefs} />
       <GoToShortcuts />
     </CommandPaletteProvider>
   );
