@@ -162,6 +162,7 @@ export default async function StudentProfilePage({
     { data: canViewBiometricData },
     { data: canEnrollBiometricData },
     { data: canRevokeBiometricData },
+    { data: disciplineModuleEnabledData },
   ] = await Promise.all([
     supabase.rpc("auth_has_permission", { p_permission_key: "students.write" }),
     supabase.rpc("auth_has_permission", { p_permission_key: "students.delete" }),
@@ -174,15 +175,21 @@ export default async function StudentProfilePage({
     supabase.rpc("auth_has_permission", { p_permission_key: "biometric.view" }),
     supabase.rpc("auth_has_permission", { p_permission_key: "biometric.enroll" }),
     supabase.rpc("auth_has_permission", { p_permission_key: "biometric.revoke" }),
+    supabase.rpc("auth_school_module_enabled", { p_key: "discipline" }),
   ]);
   const canManageStudents = canManageStudentsData === true;
   const canDeleteStudents = canDeleteStudentsData === true;
   const canUploadDocuments = canUploadDocumentsData === true;
   const canReadMedical = canReadMedicalData === true;
-  const canReadDiscipline = canReadDisciplineData === true;
+  // Module-gated in addition to the existing permission check -- a school with Discipline
+  // disabled shouldn't see discipline data surface on a student's profile even for a user who'd
+  // otherwise have discipline.read_any (same "hidden everywhere, not just its own route"
+  // standard as the sidebar/command-palette/shortcut/dashboard-widget/AI-intent gating).
+  const disciplineModuleEnabled = disciplineModuleEnabledData !== false;
+  const canReadDiscipline = canReadDisciplineData === true && disciplineModuleEnabled;
   const canReadFinance = canReadFinanceData === true;
   const canIssueCertificates = canIssueCertificatesData === true;
-  const canWriteDiscipline = canWriteDisciplineData === true;
+  const canWriteDiscipline = canWriteDisciplineData === true && disciplineModuleEnabled;
   const canViewBiometric = canViewBiometricData === true;
   const canEnrollBiometric = canEnrollBiometricData === true;
   const canRevokeBiometric = canRevokeBiometricData === true;
@@ -345,7 +352,7 @@ export default async function StudentProfilePage({
             <TabsTrigger value="medical">Medical</TabsTrigger>
             <TabsTrigger value="certificates">Certificates</TabsTrigger>
             <TabsTrigger value="growth">Growth</TabsTrigger>
-            <TabsTrigger value="discipline">Discipline</TabsTrigger>
+            {disciplineModuleEnabled && <TabsTrigger value="discipline">Discipline</TabsTrigger>}
             {canSeeBiometricTab && <TabsTrigger value="biometric">Biometric</TabsTrigger>}
           </TabsList>
 
@@ -496,9 +503,11 @@ export default async function StudentProfilePage({
             <GrowthTab summary={growthSummary} />
           </TabsContent>
 
-          <TabsContent value="discipline">
-            <DisciplineTab studentId={id} records={disciplineRecords} canWrite={canWriteDiscipline} />
-          </TabsContent>
+          {disciplineModuleEnabled && (
+            <TabsContent value="discipline">
+              <DisciplineTab studentId={id} records={disciplineRecords} canWrite={canWriteDiscipline} />
+            </TabsContent>
+          )}
 
           {canSeeBiometricTab && (
             <TabsContent value="biometric">

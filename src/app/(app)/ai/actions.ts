@@ -281,6 +281,14 @@ const PERMISSION_LABEL: Record<PermissionKey, string> = {
   "academics.read": "academics",
 };
 
+// Only permissions that correspond to a module currently wired into the school_modules system
+// (see #425/#427) get an entry here -- deliberately not every module-shaped permission (e.g.
+// hostel.read_any/health.read_any), since those modules' own AI-intent gating is a separate,
+// pre-existing gap noted alongside Discipline's own PR rather than silently expanded here.
+const PERMISSION_TO_MODULE_KEY: Partial<Record<PermissionKey, string>> = {
+  "discipline.read_any": "discipline",
+};
+
 export async function askEducoreAI(question: string): Promise<AskAIResult> {
   const trimmed = question.trim();
   if (!trimmed) return { error: "Ask a question first." };
@@ -352,6 +360,21 @@ export async function askEducoreAI(question: string): Promise<AskAIResult> {
           answer_text: answer,
         });
         return { answer };
+      }
+      const moduleKey = PERMISSION_TO_MODULE_KEY[definition.permission];
+      if (moduleKey) {
+        const { data: moduleEnabled } = await supabase.rpc("auth_school_module_enabled", { p_key: moduleKey });
+        if (moduleEnabled === false) {
+          answer = `The ${PERMISSION_LABEL[definition.permission]} module is turned off for your school, so I can't answer that.`;
+          await supabase.from("ai_query_logs").insert({
+            school_id: schoolUser.school_id,
+            asked_by: schoolUser.id,
+            question_text: trimmed,
+            matched_intent: intent,
+            answer_text: answer,
+          });
+          return { answer };
+        }
       }
     }
     answer = await runIntent(supabase, intent);

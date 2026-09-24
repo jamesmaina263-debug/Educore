@@ -71,7 +71,7 @@ export function AppShellFrame({
         </div>
       </div>
       <CommandPalette disabledHrefs={disabledHrefs} />
-      <GoToShortcuts />
+      <GoToShortcuts disabledHrefs={disabledHrefs} />
     </CommandPaletteProvider>
   );
 }
