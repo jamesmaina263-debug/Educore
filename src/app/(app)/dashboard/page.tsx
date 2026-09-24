@@ -80,10 +80,11 @@ export default async function DashboardPage() {
     { data: canSeeDiscipline },
     { data: canSeeStaff },
     { data: disciplineModuleEnabledData },
+    { data: healthModuleEnabledData },
   ] = await Promise.all([
     supabase
       .from("school_users")
-      .select("id, full_name, status, roles(display_name), schools(name)")
+      .select("id, full_name, status, roles(display_name), schools(name, boarding_enabled)")
       .eq("auth_user_id", user.id)
       .maybeSingle(),
     supabase.rpc("auth_has_permission", { p_permission_key: "students.read" }),
@@ -98,12 +99,20 @@ export default async function DashboardPage() {
     supabase.rpc("auth_has_permission", { p_permission_key: "discipline.read_any" }),
     supabase.rpc("auth_has_permission", { p_permission_key: "staff.manage" }),
     supabase.rpc("auth_school_module_enabled", { p_key: "discipline" }),
+    supabase.rpc("auth_school_module_enabled", { p_key: "health" }),
   ]);
   void canMarkAny;
   // Module-gated in addition to the existing permission check, same "hidden everywhere"
   // standard as the student-profile tab -- a school with Discipline disabled shouldn't see its
   // open-cases KPI on the dashboard either, even for a user who'd otherwise have the permission.
   const canSeeDisciplineModule = canSeeDiscipline === true && disciplineModuleEnabledData !== false;
+  // Closing a pre-existing gap flagged alongside Discipline's own PR (#431): these two widgets
+  // were permission-gated only, never module-gated, even though boarding_enabled/health's
+  // module toggle have existed since #314/#427 respectively. A school with either disabled
+  // could still see its KPI here if the viewer had the underlying permission.
+  const schoolBoardingEnabled = (schoolUser?.schools as unknown as { boarding_enabled: boolean } | null)?.boarding_enabled !== false;
+  const canSeeBoardingModule = canSeeBoarding === true && schoolBoardingEnabled;
+  const canSeeHealthModule = canSeeHealth === true && healthModuleEnabledData !== false;
 
   const roleName = (schoolUser?.roles as unknown as { display_name: string } | null)?.display_name;
   const schoolName = (schoolUser?.schools as unknown as { name: string } | null)?.name;
@@ -313,7 +322,7 @@ export default async function DashboardPage() {
   let bedsAvailable = 0;
   let bedsTotal = 0;
   let dormsAtCapacity = 0;
-  if (canSeeBoarding) {
+  if (canSeeBoardingModule) {
     const [{ data: bedRows }, { data: activeBoardingAllocs }, { data: dormitories }, { data: rooms }] = await Promise.all([
       supabase.from("beds").select("id, status"),
       supabase.from("hostel_allocations").select("bed_id, hostel_room_id").eq("status", "active"),
@@ -338,7 +347,7 @@ export default async function DashboardPage() {
 
   // --- Health (students currently in sick bay) ---
   let sickBayCount = 0;
-  if (canSeeHealth) {
+  if (canSeeHealthModule) {
     const { count } = await supabase
       .from("sick_bay_visits")
       .select("id", { count: "exact", head: true })
@@ -455,14 +464,14 @@ export default async function DashboardPage() {
         tone: "warning" as const,
         badge: "Pending",
       },
-    canSeeBoarding &&
+    canSeeBoardingModule &&
       dormsAtCapacity > 0 && {
         label: `${dormsAtCapacity} dormitor${dormsAtCapacity === 1 ? "y is" : "ies are"} at or over capacity`,
         owner: "Boarding wardens",
         tone: "warning" as const,
         badge: "At capacity",
       },
-    canSeeHealth &&
+    canSeeHealthModule &&
       sickBayCount > 0 && {
         label: `${sickBayCount} student${sickBayCount === 1 ? "" : "s"} currently in sick bay`,
         owner: "School nurse",
@@ -493,13 +502,13 @@ export default async function DashboardPage() {
   ].filter(Boolean) as { label: string; owner: string; tone: "danger" | "warning" | "info"; badge: string }[];
 
   const operations = [
-    canSeeBoarding &&
+    canSeeBoardingModule &&
       bedsTotal > 0 && {
         label: "Boarding beds available",
         value: `${bedsAvailable} / ${bedsTotal}`,
         note: dormsAtCapacity > 0 ? `${dormsAtCapacity} dormitory at capacity` : "no dormitory at capacity",
       },
-    canSeeHealth && {
+    canSeeHealthModule && {
       label: "Sick bay right now",
       value: String(sickBayCount),
       note: sickBayCount > 0 ? "students checked in" : "no active visits",
