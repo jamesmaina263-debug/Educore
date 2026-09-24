@@ -19,8 +19,8 @@ export const metadata: Metadata = {
   title: TITLE,
   description: DESCRIPTION,
   alternates: { canonical: "/school-attendance-management" },
-  openGraph: { title: TITLE, description: DESCRIPTION, url: "/school-attendance-management" },
-  twitter: { card: "summary_large_image", title: TITLE, description: DESCRIPTION },
+  openGraph: { title: TITLE, description: DESCRIPTION, url: "/school-attendance-management", images: ["/og-image.png"] },
+  twitter: { card: "summary_large_image", title: TITLE, description: DESCRIPTION, images: ["/og-image.png"] },
 };
 
 // Grounded in (app)/biometric-kiosk/page.tsx (guardian SMS on check-in,

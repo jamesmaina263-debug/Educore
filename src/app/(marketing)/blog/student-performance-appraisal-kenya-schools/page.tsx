@@ -17,8 +17,8 @@ export const metadata: Metadata = {
   title: TITLE,
   description: DESCRIPTION,
   alternates: { canonical: "/blog/student-performance-appraisal-kenya-schools" },
-  openGraph: { title: TITLE, description: DESCRIPTION, url: "/blog/student-performance-appraisal-kenya-schools" },
-  twitter: { card: "summary_large_image", title: TITLE, description: DESCRIPTION },
+  openGraph: { title: TITLE, description: DESCRIPTION, url: "/blog/student-performance-appraisal-kenya-schools", images: ["/og-image.png"] },
+  twitter: { card: "summary_large_image", title: TITLE, description: DESCRIPTION, images: ["/og-image.png"] },
 };
 
 // Every EduCore capability below verified against the codebase before writing, same sources as

@@ -18,8 +18,8 @@ export const metadata: Metadata = {
   title: TITLE,
   description: DESCRIPTION,
   alternates: { canonical: "/student-performance-appraisal" },
-  openGraph: { title: TITLE, description: DESCRIPTION, url: "/student-performance-appraisal" },
-  twitter: { card: "summary_large_image", title: TITLE, description: DESCRIPTION },
+  openGraph: { title: TITLE, description: DESCRIPTION, url: "/student-performance-appraisal", images: ["/og-image.png"] },
+  twitter: { card: "summary_large_image", title: TITLE, description: DESCRIPTION, images: ["/og-image.png"] },
 };
 
 // Grounded in the "Performance Appraisal Engine" directive as it actually appears in the codebase,

@@ -26,8 +26,8 @@ export const metadata: Metadata = {
   title: TITLE,
   description: DESCRIPTION,
   alternates: { canonical: "/blog/cbc-cbe-assessment-learner-performance-kenya" },
-  openGraph: { title: TITLE, description: DESCRIPTION, url: "/blog/cbc-cbe-assessment-learner-performance-kenya" },
-  twitter: { card: "summary_large_image", title: TITLE, description: DESCRIPTION },
+  openGraph: { title: TITLE, description: DESCRIPTION, url: "/blog/cbc-cbe-assessment-learner-performance-kenya", images: ["/og-image.png"] },
+  twitter: { card: "summary_large_image", title: TITLE, description: DESCRIPTION, images: ["/og-image.png"] },
 };
 
 // Every EduCore capability named below was verified directly against the

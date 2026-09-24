@@ -18,8 +18,8 @@ export const metadata: Metadata = {
   title: TITLE,
   description: DESCRIPTION,
   alternates: { canonical: "/cbc-school-management" },
-  openGraph: { title: TITLE, description: DESCRIPTION, url: "/cbc-school-management" },
-  twitter: { card: "summary_large_image", title: TITLE, description: DESCRIPTION },
+  openGraph: { title: TITLE, description: DESCRIPTION, url: "/cbc-school-management", images: ["/og-image.png"] },
+  twitter: { card: "summary_large_image", title: TITLE, description: DESCRIPTION, images: ["/og-image.png"] },
 };
 
 // Grounded directly in (app)/exams/_data.ts and the grading_scales /
