@@ -289,6 +289,7 @@ const PERMISSION_LABEL: Record<PermissionKey, string> = {
 const PERMISSION_TO_MODULE_KEY: Partial<Record<PermissionKey, string>> = {
   "discipline.read_any": "discipline",
   "health.read_any": "health",
+  "library.read_any": "library",
 };
 
 // hostel.read_any's module state can't go through PERMISSION_TO_MODULE_KEY/

@@ -32,11 +32,16 @@ export async function loadLibraryContext(): Promise<LibraryContext> {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const [{ data: schoolUser }, { data: canReadAny }, { data: canWrite }] = await Promise.all([
+  const [{ data: schoolUser }, { data: canReadAny }, { data: canWrite }, { data: moduleEnabled }] = await Promise.all([
     supabase.from("school_users").select("id, full_name, roles(display_name), schools(name)").eq("auth_user_id", user.id).maybeSingle(),
     supabase.rpc("auth_has_permission", { p_permission_key: "library.read_any" }),
     supabase.rpc("auth_has_permission", { p_permission_key: "library.write" }),
+    supabase.rpc("auth_school_module_enabled", { p_key: "library" }),
   ]);
+  // Same seam as health/discipline's own module check -- every /library/* page loads through
+  // this one function. Fails safe to true, so this only ever narrows access for a school
+  // explicitly toggled off.
+  if (moduleEnabled === false) redirect("/dashboard");
 
   const roleName = (schoolUser?.roles as unknown as { display_name: string } | null)?.display_name;
   const schoolName = (schoolUser?.schools as unknown as { name: string } | null)?.name ?? "EduCore";
