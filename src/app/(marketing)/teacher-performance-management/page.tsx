@@ -19,8 +19,8 @@ export const metadata: Metadata = {
   title: TITLE,
   description: DESCRIPTION,
   alternates: { canonical: "/teacher-performance-management" },
-  openGraph: { title: TITLE, description: DESCRIPTION, url: "/teacher-performance-management" },
-  twitter: { card: "summary_large_image", title: TITLE, description: DESCRIPTION },
+  openGraph: { title: TITLE, description: DESCRIPTION, url: "/teacher-performance-management", images: ["/og-image.png"] },
+  twitter: { card: "summary_large_image", title: TITLE, description: DESCRIPTION, images: ["/og-image.png"] },
 };
 
 // Grounded in (app)/performance/page.tsx + actions.ts, components/performance/performance-section.tsx,
