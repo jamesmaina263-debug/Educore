@@ -11,8 +11,7 @@ import { ArticleJsonLd } from "@/components/marketing/article-json-ld";
 import { BlogByline } from "@/components/marketing/blog-byline";
 
 const TITLE = "Teacher Performance Reviews for Kenyan Schools: Termly, Structured, and Kept Private — EduCore";
-const DESCRIPTION =
-  "Why teacher appraisal usually lives in a locked cabinet or a Principal's private notebook, and how EduCore keeps it structured instead — 1-5 competency scoring, an automatically computed rating, and visibility locked to the reviewer tier and the teacher being reviewed.";
+const DESCRIPTION = "Why teacher appraisal usually lives in a locked cabinet, and how EduCore keeps it structured — 1-5 scoring, an automatic rating, locked visibility.";
 
 export const metadata: Metadata = {
   title: TITLE,

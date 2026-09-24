@@ -13,8 +13,7 @@ import { cn } from "@/lib/utils";
 import { BreadcrumbJsonLd, HOME_CRUMB } from "@/components/marketing/breadcrumb-json-ld";
 
 const TITLE = "School Attendance Management System — EduCore Kenya";
-const DESCRIPTION =
-  "Biometric check-in with automatic guardian SMS, a stream-based register when there's no device, and a permission-gated correction workflow with a real audit trail. The school attendance management system built for Kenya.";
+const DESCRIPTION = "Biometric check-in with automatic guardian SMS, a paper-backed register when there's no device, and a permission-gated correction workflow.";
 
 export const metadata: Metadata = {
   title: TITLE,

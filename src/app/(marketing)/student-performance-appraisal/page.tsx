@@ -12,8 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { BreadcrumbJsonLd, HOME_CRUMB } from "@/components/marketing/breadcrumb-json-ld";
 
 const TITLE = "Student Performance Appraisal & Exam Merit Lists — EduCore Kenya";
-const DESCRIPTION =
-  "Merit lists and class rankings computed automatically at exam close, structured CBC rubrics, a remark bank, growth trends, and a class-wide performance dashboard — EduCore's Performance Appraisal Engine, built into the same exam data teachers already enter.";
+const DESCRIPTION = "Merit lists and class rankings computed automatically at exam close — structured CBC rubrics, a remark bank, growth trends, and a performance dashboard.";
 
 export const metadata: Metadata = {
   title: TITLE,
