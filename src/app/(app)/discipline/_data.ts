@@ -46,6 +46,7 @@ export async function loadDisciplineContext(): Promise<DisciplineContext> {
     { data: canWelfareReadAny },
     { data: canSafeguardingRead },
     { data: canSafeguardingWrite },
+    { data: moduleEnabled },
   ] = await Promise.all([
     supabase.rpc("auth_has_permission", { p_permission_key: "discipline.read_any" }),
     supabase.rpc("auth_has_permission", { p_permission_key: "discipline.write" }),
@@ -54,7 +55,12 @@ export async function loadDisciplineContext(): Promise<DisciplineContext> {
     supabase.rpc("auth_has_permission", { p_permission_key: "welfare.read_any" }),
     supabase.rpc("auth_has_permission", { p_permission_key: "safeguarding.read" }),
     supabase.rpc("auth_has_permission", { p_permission_key: "safeguarding.write" }),
+    supabase.rpc("auth_school_module_enabled", { p_key: "discipline" }),
   ]);
+  // Same seam as health/_data.ts's own module check -- every /discipline/* page loads through
+  // this one function. Fails safe to true (missing row/typo/core module), so this only ever
+  // narrows access for a school explicitly toggled off.
+  if (moduleEnabled === false) redirect("/dashboard");
 
   const permissions = {
     canReadAny: canReadAny === true,

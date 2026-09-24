@@ -26,14 +26,16 @@ export default async function AppRouteGroupLayout({ children }: { children: Reac
   // #425's own note) -- everything else reads the new module system.
   const disabledHrefs: string[] = [];
   if (user) {
-    const [{ data: schoolUser }, { data: healthEnabled }] = await Promise.all([
+    const [{ data: schoolUser }, { data: healthEnabled }, { data: disciplineEnabled }] = await Promise.all([
       supabase.from("school_users").select("schools(name, boarding_enabled)").eq("auth_user_id", user.id).maybeSingle(),
       supabase.rpc("auth_school_module_enabled", { p_key: "health" }),
+      supabase.rpc("auth_school_module_enabled", { p_key: "discipline" }),
     ]);
     const school = schoolUser?.schools as unknown as { name: string; boarding_enabled: boolean } | null;
     schoolName = school?.name;
     if (school?.boarding_enabled === false) disabledHrefs.push("/boarding");
     if (healthEnabled === false) disabledHrefs.push("/health");
+    if (disciplineEnabled === false) disabledHrefs.push("/discipline");
   }
 
   return (

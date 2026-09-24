@@ -79,6 +79,7 @@ export default async function DashboardPage() {
     { data: canSeeTransport },
     { data: canSeeDiscipline },
     { data: canSeeStaff },
+    { data: disciplineModuleEnabledData },
   ] = await Promise.all([
     supabase
       .from("school_users")
@@ -96,8 +97,13 @@ export default async function DashboardPage() {
     supabase.rpc("auth_has_permission", { p_permission_key: "transport.read_any" }),
     supabase.rpc("auth_has_permission", { p_permission_key: "discipline.read_any" }),
     supabase.rpc("auth_has_permission", { p_permission_key: "staff.manage" }),
+    supabase.rpc("auth_school_module_enabled", { p_key: "discipline" }),
   ]);
   void canMarkAny;
+  // Module-gated in addition to the existing permission check, same "hidden everywhere"
+  // standard as the student-profile tab -- a school with Discipline disabled shouldn't see its
+  // open-cases KPI on the dashboard either, even for a user who'd otherwise have the permission.
+  const canSeeDisciplineModule = canSeeDiscipline === true && disciplineModuleEnabledData !== false;
 
   const roleName = (schoolUser?.roles as unknown as { display_name: string } | null)?.display_name;
   const schoolName = (schoolUser?.schools as unknown as { name: string } | null)?.name;
@@ -361,7 +367,7 @@ export default async function DashboardPage() {
 
   // --- Discipline (open cases — Phase 15 built the case workflow this KPI needed) ---
   let disciplineOpenCases = 0;
-  if (canSeeDiscipline) {
+  if (canSeeDisciplineModule) {
     const { count } = await supabase
       .from("discipline_cases")
       .select("id", { count: "exact", head: true })
@@ -477,7 +483,7 @@ export default async function DashboardPage() {
         tone: "info" as const,
         badge: "Full",
       },
-    canSeeDiscipline &&
+    canSeeDisciplineModule &&
       disciplineOpenCases > 0 && {
         label: `${disciplineOpenCases} open disciplinary case${disciplineOpenCases === 1 ? "" : "s"}`,
         owner: "Discipline & Welfare office",
@@ -515,7 +521,7 @@ export default async function DashboardPage() {
         value: `${Math.round((100 * staffPresentToday) / staffMarkedToday)}%`,
         note: `${staffPresentToday} of ${staffMarkedToday} marked present`,
       },
-    canSeeDiscipline && {
+    canSeeDisciplineModule && {
       label: "Open discipline cases",
       value: String(disciplineOpenCases),
       note: disciplineOpenCases > 0 ? "open/investigating/pending action" : "no open cases",
