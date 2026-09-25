@@ -8,12 +8,14 @@ import {
   SCHEME_OF_WORK_PROMPT_VERSION,
   GEMINI_SCHEME_MODEL,
   buildSchemeOfWorkPrompt,
+  buildCurriculumContext,
   schemeOfWorkResponseSchema,
   parseSchemeOfWorkResponse,
   checkSchemeOfWorkQuality,
   weeksGenerated as countWeeksGenerated,
   type SchemeOfWorkDraft,
   type SchemeOfWorkDraftWeek,
+  type CurriculumSubStrandRow,
 } from "@/lib/ai/scheme-of-work";
 import { geminiGenerateContentUrl } from "@/lib/ai/report-card-comment";
 
@@ -54,6 +56,12 @@ export type GenerateSchemeResult =
       partial: boolean;
       weeksRequested: number;
       weeksGenerated: number;
+      /** How many of this school's own recorded curriculum sub-strands for
+       *  this subject were fed into the prompt as grounding -- 0 when the
+       *  school has none recorded, in which case generation behaved exactly
+       *  as it did before curriculum-awareness existed. Surfaced so
+       *  "curriculum-aware" is a visible fact, not an invisible claim. */
+      curriculumItemsUsed: number;
     };
 
 function isNonEmptyUuidLike(v: unknown): v is string {
@@ -173,7 +181,28 @@ export async function generateSchemeWithAI(input: GenerateSchemeInput): Promise<
     // than blocking a legitimate, permission-checked, idempotency-claimed request.
   }
 
-  // ---- 6. Build the prompt server-side, from validated DB fields only (never raw
+  // ---- 6. Look up this school's own recorded curriculum content for this
+  //         subject (curriculum_strands/curriculum_sub_strands -- populated,
+  //         if at all, via the CBC competency-marking feature). RLS already
+  //         scopes this to the caller's school; the explicit school_id filter
+  //         is just defense-in-depth. Never fatal: if this school has nothing
+  //         recorded, curriculumContext stays null and the prompt falls back
+  //         to exactly its pre-existing behavior. ----
+  const { data: strandsRaw } = await supabase
+    .from("curriculum_strands")
+    .select("name, curriculum_sub_strands(name, learning_outcomes, key_inquiry_questions, rubric_text, content_source)")
+    .eq("subject_id", input.subject_id)
+    .eq("school_id", schoolUser.school_id)
+    .order("level_order");
+
+  const curriculumContext = buildCurriculumContext(
+    (strandsRaw ?? []).map((s) => ({
+      name: s.name,
+      sub_strands: (s.curriculum_sub_strands ?? []) as CurriculumSubStrandRow[],
+    })),
+  );
+
+  // ---- 7. Build the prompt server-side, from validated DB fields only (never raw
   //         teacher free-text -- see the doc comment on buildSchemeOfWorkPrompt). ----
   const prompt = buildSchemeOfWorkPrompt({
     subjectName: subjectRow.name,
@@ -184,9 +213,10 @@ export async function generateSchemeWithAI(input: GenerateSchemeInput): Promise<
     totalWeeks: input.total_weeks,
     lessonsPerWeek: input.lessons_per_week,
     curriculumFramework: input.curriculum_framework,
+    curriculumContext: curriculumContext?.text ?? null,
   });
 
-  // ---- 7. Call Gemini. Same Vercel Hobby ~10s hard cap noted in
+  // ---- 8. Call Gemini. Same Vercel Hobby ~10s hard cap noted in
   //         draftCommentWithAI applies here -- a large scheme (many weeks x many
   //         lessons) is a known risk of hitting that cap; see the PR notes. ----
   let res: Response;
@@ -264,6 +294,7 @@ export async function generateSchemeWithAI(input: GenerateSchemeInput): Promise<
     partial,
     weeksRequested: input.total_weeks,
     weeksGenerated: generated,
+    curriculumItemsUsed: curriculumContext?.itemCount ?? 0,
   };
 }
 

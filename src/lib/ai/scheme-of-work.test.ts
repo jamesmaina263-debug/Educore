@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildSchemeOfWorkPrompt,
+  buildCurriculumContext,
   checkSchemeOfWorkQuality,
   parseSchemeOfWorkResponse,
   weeksGenerated,
@@ -42,6 +43,78 @@ describe("buildSchemeOfWorkPrompt", () => {
   it("says no framework was supplied when curriculumFramework is null", () => {
     const prompt = buildSchemeOfWorkPrompt({ ...base, curriculumFramework: null });
     expect(prompt).toContain("No specific curriculum framework was supplied");
+  });
+
+  it("grounds the prompt in curriculumContext when supplied, instead of the plain framework line", () => {
+    const prompt = buildSchemeOfWorkPrompt({
+      ...base,
+      curriculumContext: "- Numbers\n  - Place value: Learning outcomes: Learners can...",
+    });
+    expect(prompt).toContain("This school has recorded its own curriculum content (CBC) for Biology");
+    expect(prompt).toContain("Ground the scheme's topics, learning outcomes and assessment guidance in this recorded content");
+    expect(prompt).toContain("- Numbers\n  - Place value");
+    expect(prompt).not.toContain("Curriculum framework: CBC. Align topics");
+  });
+
+  it("falls back to the plain framework line when curriculumContext is null/omitted", () => {
+    const prompt = buildSchemeOfWorkPrompt({ ...base, curriculumContext: null });
+    expect(prompt).toContain("Curriculum framework: CBC. Align topics");
+    expect(prompt).not.toContain("This school has recorded its own curriculum content");
+  });
+});
+
+describe("buildCurriculumContext", () => {
+  it("returns null when there are no strands at all", () => {
+    expect(buildCurriculumContext([])).toBeNull();
+  });
+
+  it("returns null when every sub-strand is empty", () => {
+    const result = buildCurriculumContext([
+      { name: "Numbers", sub_strands: [{ name: "Place value", learning_outcomes: null, key_inquiry_questions: null, rubric_text: null, content_source: "school_authored" }] },
+    ]);
+    expect(result).toBeNull();
+  });
+
+  it("excludes content_source='draft' rows even when they have text", () => {
+    const result = buildCurriculumContext([
+      {
+        name: "Numbers",
+        sub_strands: [
+          { name: "Place value", learning_outcomes: "Learners can read and write numbers.", key_inquiry_questions: null, rubric_text: null, content_source: "draft" },
+        ],
+      },
+    ]);
+    expect(result).toBeNull();
+  });
+
+  it("includes school_authored and kicd_licensed rows and counts them", () => {
+    const result = buildCurriculumContext([
+      {
+        name: "Numbers",
+        sub_strands: [
+          { name: "Place value", learning_outcomes: "Learners can read and write numbers up to 1000.", key_inquiry_questions: "Why do the digits in 123 mean different things?", rubric_text: null, content_source: "kicd_licensed" },
+          { name: "Fractions", learning_outcomes: null, key_inquiry_questions: null, rubric_text: "EE: correctly compares and orders fractions.", content_source: "school_authored" },
+        ],
+      },
+    ]);
+    expect(result).not.toBeNull();
+    expect(result?.itemCount).toBe(2);
+    expect(result?.text).toContain("- Numbers");
+    expect(result?.text).toContain("- Place value");
+    expect(result?.text).toContain("Learning outcomes: Learners can read and write numbers up to 1000.");
+    expect(result?.text).toContain("Key inquiry questions: Why do the digits in 123 mean different things?");
+    expect(result?.text).toContain("- Fractions");
+    expect(result?.text).toContain("Assessment guidance: EE: correctly compares and orders fractions.");
+  });
+
+  it("skips a strand entirely when none of its sub-strands are usable, but still includes other strands", () => {
+    const result = buildCurriculumContext([
+      { name: "Empty Strand", sub_strands: [{ name: "Nothing here", learning_outcomes: null, key_inquiry_questions: null, rubric_text: null, content_source: "school_authored" }] },
+      { name: "Numbers", sub_strands: [{ name: "Place value", learning_outcomes: "Some outcome.", key_inquiry_questions: null, rubric_text: null, content_source: "school_authored" }] },
+    ]);
+    expect(result?.itemCount).toBe(1);
+    expect(result?.text).not.toContain("Empty Strand");
+    expect(result?.text).toContain("Numbers");
   });
 });
 

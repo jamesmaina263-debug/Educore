@@ -23,6 +23,87 @@ export interface SchemeOfWorkPromptInput {
   lessonsPerWeek: number;
   /** e.g. "CBC" -- only set when the school's own data says so; never invented. */
   curriculumFramework: string | null;
+  /**
+   * Pre-formatted text block built by buildCurriculumContext() from this
+   * school's own recorded curriculum_strands/curriculum_sub_strands rows
+   * for this subject (real data the school entered, e.g. via the CBC
+   * competency-marking feature) -- never fabricated, and null/omitted
+   * whenever the school has nothing usable recorded for this subject, in
+   * which case the prompt falls back to the plain curriculumFramework
+   * behavior exactly as before this field existed.
+   */
+  curriculumContext?: string | null;
+}
+
+/**
+ * Raw shape of one curriculum_sub_strands row as read from the DB, filtered
+ * down to what the prompt is allowed to see. content_source distinguishes
+ * confirmed-licensed/school-authored text (safe to feed to the AI and,
+ * downstream, to a teacher-facing scheme draft) from 'draft' rows, which
+ * the schema's own comment says "must not be shown to parents/exported
+ * until reclassified" -- buildCurriculumContext excludes 'draft' rows
+ * itself so callers can't accidentally leak one in.
+ */
+export interface CurriculumSubStrandRow {
+  name: string;
+  learning_outcomes: string | null;
+  key_inquiry_questions: string | null;
+  rubric_text: string | null;
+  content_source: string;
+}
+
+export interface CurriculumStrandRow {
+  name: string;
+  sub_strands: CurriculumSubStrandRow[];
+}
+
+export interface CurriculumContextResult {
+  /** Pre-formatted text block to interpolate into the prompt. */
+  text: string;
+  /** How many sub-strands actually contributed usable content -- surfaced
+   *  to the teacher so "curriculum-aware" isn't an invisible claim. */
+  itemCount: number;
+}
+
+/**
+ * Turns this school's own recorded curriculum_strands/curriculum_sub_strands
+ * for a subject into prompt-ready text. Returns null when there's nothing
+ * usable (no strands recorded for this subject at all -- true for most
+ * schools, since this data only exists where a school has opted into the
+ * CBC competency-marking feature -- or every sub-strand recorded is either
+ * empty or still content_source='draft').
+ *
+ * Deliberately excludes the separate structured-rubrics tables
+ * (rubrics/rubric_criteria/rubric_level_descriptors): curriculum_sub_strands
+ * .rubric_text already gives free-text assessment guidance per sub-strand,
+ * and pulling the fully structured, per-band rubric criteria would add a
+ * few more joins plus grading-scale-band name resolution for data that's
+ * rarer still (a school has to have gone past naming strands to building
+ * full structured rubrics). Left as a future enhancement if it turns out
+ * to matter in practice.
+ */
+export function buildCurriculumContext(strands: CurriculumStrandRow[]): CurriculumContextResult | null {
+  const lines: string[] = [];
+  let itemCount = 0;
+
+  for (const strand of strands) {
+    const usable = strand.sub_strands.filter(
+      (ss) => ss.content_source !== "draft" && (ss.learning_outcomes?.trim() || ss.key_inquiry_questions?.trim() || ss.rubric_text?.trim()),
+    );
+    if (usable.length === 0) continue;
+
+    lines.push(`- ${strand.name}`);
+    for (const ss of usable) {
+      itemCount += 1;
+      lines.push(`  - ${ss.name}`);
+      if (ss.learning_outcomes?.trim()) lines.push(`    Learning outcomes: ${ss.learning_outcomes.trim()}`);
+      if (ss.key_inquiry_questions?.trim()) lines.push(`    Key inquiry questions: ${ss.key_inquiry_questions.trim()}`);
+      if (ss.rubric_text?.trim()) lines.push(`    Assessment guidance: ${ss.rubric_text.trim()}`);
+    }
+  }
+
+  if (itemCount === 0) return null;
+  return { text: lines.join("\n"), itemCount };
 }
 
 /**
@@ -36,9 +117,16 @@ export interface SchemeOfWorkPromptInput {
  */
 export function buildSchemeOfWorkPrompt(input: SchemeOfWorkPromptInput): string {
   const stream = input.streamName ? ` (${input.streamName})` : "";
-  const framework = input.curriculumFramework
-    ? `Curriculum framework: ${input.curriculumFramework}. Align topics, learning outcomes and competencies to this framework where you can, but if you are not certain of the exact official syllabus wording, write outcomes in your own clear teaching language rather than inventing official-sounding curriculum codes or clauses.`
-    : "No specific curriculum framework was supplied -- write standard, level-appropriate content and do not claim it is drawn from any official syllabus.";
+
+  let framework: string;
+  if (input.curriculumContext) {
+    const frameworkNote = input.curriculumFramework ? ` (${input.curriculumFramework})` : "";
+    framework = `This school has recorded its own curriculum content${frameworkNote} for ${input.subjectName} in EduCore. Ground the scheme's topics, learning outcomes and assessment guidance in this recorded content rather than inventing generic material where it applies. You may still use your general teaching knowledge to fill in anything it doesn't cover, and to reach the requested number of weeks/lessons, but do not contradict it.\n\nSchool's recorded curriculum content for ${input.subjectName}:\n${input.curriculumContext}`;
+  } else if (input.curriculumFramework) {
+    framework = `Curriculum framework: ${input.curriculumFramework}. Align topics, learning outcomes and competencies to this framework where you can, but if you are not certain of the exact official syllabus wording, write outcomes in your own clear teaching language rather than inventing official-sounding curriculum codes or clauses.`;
+  } else {
+    framework = "No specific curriculum framework was supplied -- write standard, level-appropriate content and do not claim it is drawn from any official syllabus.";
+  }
 
   return `You are helping a Kenyan school teacher draft a Scheme of Work. Generate a complete, realistic teaching plan as structured data (the response schema is enforced separately; just follow it).
 
