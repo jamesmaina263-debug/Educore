@@ -400,3 +400,319 @@ export async function saveGeneratedScheme(input: SaveGeneratedSchemeInput): Prom
   revalidatePath("/academics/scheme-of-work");
   return { success: true, schemeId };
 }
+
+// ---------------------------------------------------------------------------
+// Manual fallback + shared editing actions.
+//
+// None of this depends on AI in any way -- per spec item 23/30, the module
+// must be fully usable with AI completely unavailable. This is that path:
+// create a scheme by hand, add/edit/delete/duplicate/complete entries one
+// at a time, then submit for review.
+// ---------------------------------------------------------------------------
+
+export interface CreateManualSchemeInput {
+  academic_year_id: string;
+  term_id: string;
+  class_id: string;
+  stream_id: string | null;
+  subject_id: string;
+  total_weeks: number;
+  lessons_per_week: number;
+}
+
+export async function createManualScheme(input: CreateManualSchemeInput): Promise<SaveGeneratedSchemeResult> {
+  if (
+    !isNonEmptyUuidLike(input.academic_year_id) ||
+    !isNonEmptyUuidLike(input.term_id) ||
+    !isNonEmptyUuidLike(input.class_id) ||
+    !isNonEmptyUuidLike(input.subject_id)
+  ) {
+    return { error: "Please select the academic year, term, class and subject." };
+  }
+  if (!Number.isInteger(input.total_weeks) || input.total_weeks <= 0 || input.total_weeks > 52) {
+    return { error: "Please enter a valid number of teaching weeks (1–52)." };
+  }
+  if (!Number.isInteger(input.lessons_per_week) || input.lessons_per_week <= 0 || input.lessons_per_week > 20) {
+    return { error: "Please enter a valid number of lessons per week (1–20)." };
+  }
+
+  const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "You must be signed in." };
+
+  const { data: schoolUser } = await supabase
+    .from("school_users")
+    .select("id, school_id")
+    .eq("auth_user_id", user.id)
+    .maybeSingle();
+  if (!schoolUser) return { error: "You must be signed in." };
+
+  const { data: created, error: createError } = await supabase
+    .from("schemes_of_work")
+    .insert({
+      school_id: schoolUser.school_id,
+      academic_year_id: input.academic_year_id,
+      term_id: input.term_id,
+      class_id: input.class_id,
+      stream_id: input.stream_id,
+      subject_id: input.subject_id,
+      teacher_id: schoolUser.id,
+      total_weeks: input.total_weeks,
+      lessons_per_week: input.lessons_per_week,
+      origin: "manual",
+      status: "draft",
+      created_by: schoolUser.id,
+    })
+    .select("id")
+    .single();
+
+  if (createError) {
+    if (createError.code === "23505") {
+      return { error: "A scheme already exists for this class, subject and term. Open it instead of creating a new one." };
+    }
+    return { error: "Something went wrong while creating the scheme. Please try again." };
+  }
+
+  revalidatePath("/academics/scheme-of-work");
+  return { success: true, schemeId: created.id };
+}
+
+export interface SchemeEntryInput {
+  scheme_id: string;
+  week_number: number;
+  lesson_number: number;
+  topic: string;
+  subtopic: string;
+  learning_outcomes: string;
+  content: string;
+  activities: string;
+  teaching_methods: string;
+  resources: string;
+  assessment_methods: string;
+  remarks: string;
+}
+
+export type EntryResult = { error: string } | { success: true; entryId: string };
+
+function validateEntryInput(input: SchemeEntryInput): string | null {
+  if (!isNonEmptyUuidLike(input.scheme_id)) return "Missing scheme.";
+  if (!Number.isInteger(input.week_number) || input.week_number <= 0 || input.week_number > 52) return "Invalid week number.";
+  if (!Number.isInteger(input.lesson_number) || input.lesson_number <= 0 || input.lesson_number > 20) return "Invalid lesson number.";
+  if (!input.topic?.trim()) return "A topic is required.";
+  return null;
+}
+
+export async function addSchemeEntry(input: SchemeEntryInput): Promise<EntryResult> {
+  const validationError = validateEntryInput(input);
+  if (validationError) return { error: validationError };
+
+  const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
+
+  const { data, error } = await supabase
+    .from("scheme_of_work_entries")
+    .insert({
+      scheme_id: input.scheme_id,
+      week_number: input.week_number,
+      lesson_number: input.lesson_number,
+      topic: input.topic.trim(),
+      subtopic: input.subtopic || null,
+      learning_outcomes: input.learning_outcomes || null,
+      content: input.content || null,
+      activities: input.activities || null,
+      teaching_methods: input.teaching_methods || null,
+      resources: input.resources || null,
+      assessment_methods: input.assessment_methods || null,
+      remarks: input.remarks || null,
+      source: "manual",
+    })
+    .select("id")
+    .single();
+
+  if (error) {
+    if (error.code === "23505") {
+      return { error: "There's already a lesson at that week and lesson number." };
+    }
+    return { error: "You don't have permission to edit this scheme, or something went wrong. Please try again." };
+  }
+
+  revalidatePath("/academics/scheme-of-work");
+  return { success: true, entryId: data.id };
+}
+
+export async function updateSchemeEntry(entryId: string, input: SchemeEntryInput): Promise<EntryResult> {
+  if (!isNonEmptyUuidLike(entryId)) return { error: "Missing entry." };
+  const validationError = validateEntryInput(input);
+  if (validationError) return { error: validationError };
+
+  const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
+
+  const { data, error } = await supabase
+    .from("scheme_of_work_entries")
+    .update({
+      week_number: input.week_number,
+      lesson_number: input.lesson_number,
+      topic: input.topic.trim(),
+      subtopic: input.subtopic || null,
+      learning_outcomes: input.learning_outcomes || null,
+      content: input.content || null,
+      activities: input.activities || null,
+      teaching_methods: input.teaching_methods || null,
+      resources: input.resources || null,
+      assessment_methods: input.assessment_methods || null,
+      remarks: input.remarks || null,
+    })
+    .eq("id", entryId)
+    .select("id")
+    .maybeSingle();
+
+  if (error) {
+    if (error.code === "23505") {
+      return { error: "There's already a lesson at that week and lesson number." };
+    }
+    return { error: "Something went wrong while saving. Please try again." };
+  }
+  if (!data) {
+    return { error: "You don't have permission to edit this entry, or it no longer exists." };
+  }
+
+  revalidatePath("/academics/scheme-of-work");
+  return { success: true, entryId: data.id };
+}
+
+export async function deleteSchemeEntry(entryId: string): Promise<{ error: string } | { success: true }> {
+  if (!isNonEmptyUuidLike(entryId)) return { error: "Missing entry." };
+
+  const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
+
+  const { data, error } = await supabase.from("scheme_of_work_entries").delete().eq("id", entryId).select("id").maybeSingle();
+  if (error) return { error: "Something went wrong while deleting. Please try again." };
+  if (!data) return { error: "You don't have permission to delete this entry, or it no longer exists." };
+
+  revalidatePath("/academics/scheme-of-work");
+  return { success: true };
+}
+
+export async function duplicateSchemeEntry(
+  entryId: string,
+  target: { week_number: number; lesson_number: number },
+): Promise<EntryResult> {
+  if (!isNonEmptyUuidLike(entryId)) return { error: "Missing entry." };
+
+  const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
+
+  const { data: source } = await supabase.from("scheme_of_work_entries").select("*").eq("id", entryId).maybeSingle();
+  if (!source) return { error: "You don't have permission to duplicate this entry, or it no longer exists." };
+
+  return addSchemeEntry({
+    scheme_id: source.scheme_id,
+    week_number: target.week_number,
+    lesson_number: target.lesson_number,
+    topic: source.topic ?? "",
+    subtopic: source.subtopic ?? "",
+    learning_outcomes: source.learning_outcomes ?? "",
+    content: source.content ?? "",
+    activities: source.activities ?? "",
+    teaching_methods: source.teaching_methods ?? "",
+    resources: source.resources ?? "",
+    assessment_methods: source.assessment_methods ?? "",
+    remarks: source.remarks ?? "",
+  });
+}
+
+export async function toggleEntryComplete(entryId: string, completed: boolean): Promise<EntryResult> {
+  if (!isNonEmptyUuidLike(entryId)) return { error: "Missing entry." };
+
+  const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
+
+  const { data, error } = await supabase
+    .from("scheme_of_work_entries")
+    .update({ completion_status: completed ? "completed" : "pending", completed_at: completed ? new Date().toISOString() : null })
+    .eq("id", entryId)
+    .select("id")
+    .maybeSingle();
+
+  if (error) return { error: "Something went wrong. Please try again." };
+  if (!data) return { error: "You don't have permission to edit this entry, or it no longer exists." };
+
+  revalidatePath("/academics/scheme-of-work");
+  return { success: true, entryId: data.id };
+}
+
+export async function submitScheme(schemeId: string): Promise<{ error: string } | { success: true }> {
+  if (!isNonEmptyUuidLike(schemeId)) return { error: "Missing scheme." };
+
+  const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "You must be signed in." };
+
+  const { data: schoolUser } = await supabase.from("school_users").select("id").eq("auth_user_id", user.id).maybeSingle();
+  if (!schoolUser) return { error: "You must be signed in." };
+
+  const { data, error } = await supabase
+    .from("schemes_of_work")
+    .update({ status: "submitted", submitted_at: new Date().toISOString(), submitted_by: schoolUser.id })
+    .eq("id", schemeId)
+    .select("id")
+    .maybeSingle();
+
+  if (error) return { error: "Something went wrong while submitting. Please try again." };
+  if (!data) return { error: "You don't have permission to submit this scheme, or it no longer exists." };
+
+  revalidatePath("/academics/scheme-of-work");
+  return { success: true };
+}
+
+export async function reviewScheme(
+  schemeId: string,
+  action: "approve" | "return",
+  comment: string | null,
+): Promise<{ error: string } | { success: true }> {
+  if (!isNonEmptyUuidLike(schemeId)) return { error: "Missing scheme." };
+  if (action === "return" && !comment?.trim()) {
+    return { error: "Please add a comment explaining what needs to change before returning it." };
+  }
+
+  const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "You must be signed in." };
+
+  const { data: canReview } = await supabase.rpc("auth_has_permission", { p_permission_key: "scheme_of_work.review" });
+  if (!canReview) return { error: "You don't have permission to review schemes." };
+
+  const { data: schoolUser } = await supabase.from("school_users").select("id").eq("auth_user_id", user.id).maybeSingle();
+  if (!schoolUser) return { error: "You must be signed in." };
+
+  const { data, error } = await supabase
+    .from("schemes_of_work")
+    .update(
+      action === "approve"
+        ? { status: "approved", reviewed_by: schoolUser.id, reviewed_at: new Date().toISOString(), review_comment: comment || null }
+        : { status: "draft", reviewed_by: schoolUser.id, reviewed_at: new Date().toISOString(), review_comment: comment },
+    )
+    .eq("id", schemeId)
+    .select("id")
+    .maybeSingle();
+
+  if (error) return { error: "Something went wrong while reviewing. Please try again." };
+  if (!data) return { error: "You don't have permission to review this scheme, or it no longer exists." };
+
+  revalidatePath("/academics/scheme-of-work");
+  return { success: true };
+}
