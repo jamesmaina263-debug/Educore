@@ -22,7 +22,7 @@ const STATUS_TONE: Record<string, "neutral" | "info" | "warning" | "success"> = 
 export default async function SchemeOfWorkPage({
   searchParams,
 }: {
-  searchParams: Promise<{ year?: string; term?: string; class?: string; subject?: string; teacher?: string; status?: string }>;
+  searchParams: Promise<{ year?: string; term?: string; class?: string; stream?: string; subject?: string; teacher?: string; status?: string }>;
 }) {
   const params = await searchParams;
   const user = await getCachedUser();
@@ -63,6 +63,7 @@ export default async function SchemeOfWorkPage({
               yearOptions={ctx.yearOptions}
               termOptions={ctx.termOptions}
               classOptions={ctx.classOptions}
+              streamOptions={ctx.streamOptions}
               subjectOptions={ctx.subjectOptions}
               teacherOptions={ctx.teacherOptions}
               statusOptions={ctx.statusOptions}
