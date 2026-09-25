@@ -98,5 +98,6 @@ export interface SchemeDetailContext {
   entries: SchemeEntryRow[];
   canEdit: boolean;
   canReview: boolean;
+  canGenerateAI: boolean;
   isOwner: boolean;
 }

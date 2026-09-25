@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { StatusBadge } from "@/components/status-badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Plus, Pencil, Copy, Trash2, Check, Move } from "lucide-react";
+import { Plus, Pencil, Copy, Trash2, Check, Move, Sparkles } from "lucide-react";
 import {
   addSchemeEntry,
   updateSchemeEntry,
@@ -19,8 +19,10 @@ import {
   submitScheme,
   startSchemeReview,
   reviewScheme,
+  assistSchemeEntry,
   type SchemeEntryInput,
 } from "@/app/(app)/academics/scheme-of-work/actions";
+import type { EntryAssistMode, EntryAssistDraft } from "@/lib/ai/scheme-of-work";
 import type { SchemeDetailContext, SchemeEntryRow } from "@/app/(app)/academics/scheme-of-work/_types";
 import { STATUS_LABELS } from "@/app/(app)/academics/scheme-of-work/_types";
 
@@ -56,11 +58,13 @@ export function SchemeEditor({
   entries,
   canEdit,
   canReview,
+  canGenerateAI,
 }: {
   scheme: Scheme;
   entries: SchemeEntryRow[];
   canEdit: boolean;
   canReview: boolean;
+  canGenerateAI: boolean;
 }) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
@@ -69,6 +73,10 @@ export function SchemeEditor({
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<SchemeEntryInput>(emptyForm(scheme.id, 1, 1));
+
+  const [assistPending, setAssistPending] = useState(false);
+  const [assistError, setAssistError] = useState<string | null>(null);
+  const [suggestion, setSuggestion] = useState<EntryAssistDraft | null>(null);
 
   const totalEntries = entries.length;
   const completedEntries = entries.filter((e) => e.completion_status === "completed").length;
@@ -90,6 +98,8 @@ export function SchemeEditor({
     setForm(emptyForm(scheme.id, week, Math.min(lessonsThisWeek + 1, scheme.lessons_per_week || 20)));
     setEditingId(null);
     setError(null);
+    setAssistError(null);
+    setSuggestion(null);
     setDialogOpen(true);
   }
 
@@ -112,7 +122,29 @@ export function SchemeEditor({
     });
     setEditingId(entry.id);
     setError(null);
+    setAssistError(null);
+    setSuggestion(null);
     setDialogOpen(true);
+  }
+
+  async function handleAssist(mode: EntryAssistMode) {
+    if (!editingId) return;
+    setAssistPending(true);
+    setAssistError(null);
+    const result = await assistSchemeEntry({ entry_id: editingId, mode, idempotency_key: crypto.randomUUID() });
+    setAssistPending(false);
+    if ("error" in result) return setAssistError(result.error);
+    setSuggestion(result.suggestion);
+  }
+
+  function applySuggestion() {
+    if (!suggestion) return;
+    setForm({ ...form, ...suggestion });
+    setSuggestion(null);
+  }
+
+  function discardSuggestion() {
+    setSuggestion(null);
   }
 
   async function handleDialogSave() {
@@ -122,6 +154,7 @@ export function SchemeEditor({
     setPending(false);
     if ("error" in result) return setError(result.error);
     setDialogOpen(false);
+    setSuggestion(null);
     router.refresh();
   }
 
@@ -355,6 +388,79 @@ export function SchemeEditor({
               <Label>Sub-topic</Label>
               <Input value={form.subtopic} onChange={(e) => setForm({ ...form, subtopic: e.target.value })} />
             </div>
+            {canGenerateAI && editingId && (
+              <div className="col-span-2 flex flex-col gap-2 rounded-md border border-dashed border-border bg-muted/30 p-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Sparkles className="size-4 text-muted-foreground" aria-hidden />
+                  <span className="text-sm font-medium">AI Assist</span>
+                  <div className="ml-auto flex flex-wrap gap-2">
+                    <Button type="button" variant="outline" size="sm" disabled={assistPending} onClick={() => handleAssist("improve")}>
+                      {assistPending ? "Working…" : "Improve"}
+                    </Button>
+                    <Button type="button" variant="outline" size="sm" disabled={assistPending} onClick={() => handleAssist("expand")}>
+                      {assistPending ? "Working…" : "Expand"}
+                    </Button>
+                    <Button type="button" variant="outline" size="sm" disabled={assistPending} onClick={() => handleAssist("generate_activities")}>
+                      {assistPending ? "Working…" : "Generate Activities"}
+                    </Button>
+                  </div>
+                </div>
+                {assistError && <p className="text-sm text-danger">{assistError}</p>}
+                {suggestion && (
+                  <div className="flex flex-col gap-2 rounded-md border border-border bg-background p-2">
+                    <p className="text-xs font-medium text-muted-foreground">Suggestion — review before applying:</p>
+                    <div className="flex flex-col gap-1 text-sm">
+                      <p>
+                        <span className="font-medium">Topic:</span> {suggestion.topic}
+                      </p>
+                      {suggestion.subtopic && (
+                        <p>
+                          <span className="font-medium">Sub-topic:</span> {suggestion.subtopic}
+                        </p>
+                      )}
+                      {suggestion.learning_outcomes && (
+                        <p>
+                          <span className="font-medium">Learning outcomes:</span> {suggestion.learning_outcomes}
+                        </p>
+                      )}
+                      {suggestion.content && (
+                        <p>
+                          <span className="font-medium">Content:</span> {suggestion.content}
+                        </p>
+                      )}
+                      {suggestion.activities && (
+                        <p>
+                          <span className="font-medium">Activities:</span> {suggestion.activities}
+                        </p>
+                      )}
+                      {suggestion.teaching_methods && (
+                        <p>
+                          <span className="font-medium">Teaching methods:</span> {suggestion.teaching_methods}
+                        </p>
+                      )}
+                      {suggestion.resources && (
+                        <p>
+                          <span className="font-medium">Resources:</span> {suggestion.resources}
+                        </p>
+                      )}
+                      {suggestion.assessment_methods && (
+                        <p>
+                          <span className="font-medium">Assessment:</span> {suggestion.assessment_methods}
+                        </p>
+                      )}
+                    </div>
+                    <div className="flex justify-end gap-2">
+                      <Button type="button" variant="outline" size="sm" onClick={discardSuggestion}>
+                        Discard
+                      </Button>
+                      <Button type="button" size="sm" onClick={applySuggestion}>
+                        Apply to Form
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
             <div className="col-span-2 flex flex-col gap-1">
               <Label>Learning outcomes</Label>
               <Textarea rows={2} value={form.learning_outcomes} onChange={(e) => setForm({ ...form, learning_outcomes: e.target.value })} />
