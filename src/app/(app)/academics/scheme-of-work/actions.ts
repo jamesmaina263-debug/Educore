@@ -6,16 +6,22 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { tagSentryRequestContext } from "@/lib/observability/sentry-context";
 import {
   SCHEME_OF_WORK_PROMPT_VERSION,
+  SCHEME_OF_WORK_ENTRY_ASSIST_PROMPT_VERSION,
   GEMINI_SCHEME_MODEL,
   buildSchemeOfWorkPrompt,
   buildCurriculumContext,
+  buildEntryAssistPrompt,
   schemeOfWorkResponseSchema,
+  entryAssistResponseSchema,
   parseSchemeOfWorkResponse,
+  parseEntryAssistResponse,
   checkSchemeOfWorkQuality,
   weeksGenerated as countWeeksGenerated,
   type SchemeOfWorkDraft,
   type SchemeOfWorkDraftWeek,
   type CurriculumSubStrandRow,
+  type EntryAssistMode,
+  type EntryAssistDraft,
 } from "@/lib/ai/scheme-of-work";
 import { geminiGenerateContentUrl } from "@/lib/ai/report-card-comment";
 
@@ -676,6 +682,241 @@ export async function duplicateSchemeEntry(
     references: source.references ?? "",
     remarks: source.remarks ?? "",
   });
+}
+
+// ---------------------------------------------------------------------------
+// assistSchemeEntry (gap #5)
+//
+// A scoped, single-entry counterpart to generateSchemeWithAI: no entry point
+// for AI exists once a scheme is saved (only on the create screen, before
+// anything is persisted). This lets a teacher ask for a targeted rewrite of
+// one already-saved lesson -- reusing the same permission check, rate limit,
+// idempotency/audit table, structured-output call and failure-category
+// taxonomy as the whole-scheme generator, at a smaller scope. Like
+// generateSchemeWithAI, this never writes to scheme_of_work_entries itself
+// -- it only returns a suggestion for the teacher to review; applying it
+// into the edit form and persisting it goes through the existing, unchanged
+// updateSchemeEntry on an explicit Save click.
+// ---------------------------------------------------------------------------
+
+export interface AssistSchemeEntryInput {
+  entry_id: string;
+  mode: EntryAssistMode;
+  /** Same one-per-click contract as GenerateSchemeInput.idempotency_key. */
+  idempotency_key: string;
+}
+
+export type AssistSchemeEntryResult = { error: string } | { success: true; requestId: string; suggestion: EntryAssistDraft };
+
+export async function assistSchemeEntry(input: AssistSchemeEntryInput): Promise<AssistSchemeEntryResult> {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) {
+    return { error: "AI generation isn't configured yet — GEMINI_API_KEY is missing from the server environment." };
+  }
+
+  if (!isNonEmptyUuidLike(input.entry_id) || !isNonEmptyUuidLike(input.idempotency_key)) {
+    return { error: "Missing lesson entry." };
+  }
+  if (input.mode !== "improve" && input.mode !== "expand" && input.mode !== "generate_activities") {
+    return { error: "Invalid AI Assist option." };
+  }
+
+  const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "You must be signed in." };
+
+  const { data: canGenerate } = await supabase.rpc("auth_has_permission", { p_permission_key: "scheme_of_work.generate_ai" });
+  if (!canGenerate) {
+    return { error: "You don't have permission to use AI Assist." };
+  }
+
+  const { data: schoolUser } = await supabase
+    .from("school_users")
+    .select("id, school_id")
+    .eq("auth_user_id", user.id)
+    .maybeSingle();
+  if (!schoolUser) return { error: "You must be signed in." };
+
+  // Entry + everything the prompt needs about its parent scheme, in one
+  // round trip. RLS on scheme_of_work_entries already scopes reads to
+  // entries the caller can see; the explicit school_id check below is
+  // defense-in-depth, same as generateSchemeWithAI's entity checks.
+  const { data: entryRow } = await supabase
+    .from("scheme_of_work_entries")
+    .select(
+      "id, topic, subtopic, learning_outcomes, content, activities, teaching_methods, resources, assessment_methods, scheme_id, schemes_of_work!inner(school_id, subject_id, subjects(name), classes(name), streams(name), terms(name, academic_years(name)))",
+    )
+    .eq("id", input.entry_id)
+    .maybeSingle();
+
+  if (!entryRow) {
+    return { error: "This lesson entry doesn't exist, or you don't have access to it." };
+  }
+
+  const scheme = entryRow.schemes_of_work as unknown as {
+    school_id: string;
+    subject_id: string;
+    subjects: { name: string } | null;
+    classes: { name: string } | null;
+    streams: { name: string } | null;
+    terms: { name: string; academic_years: { name: string } | null } | null;
+  };
+  if (scheme.school_id !== schoolUser.school_id) {
+    return { error: "This lesson entry doesn't exist, or you don't have access to it." };
+  }
+
+  // Idempotency: claim this request before doing anything cost-incurring.
+  // Reuses scheme_of_work_ai_requests -- weeks_requested is NOT NULL there
+  // for the whole-scheme case, so 0 is used here as an explicit "not
+  // applicable" sentinel; prompt_version is what actually distinguishes an
+  // entry-assist row from a full-generation row in the audit log.
+  const { error: idempotencyError } = await supabase.from("scheme_of_work_ai_requests").insert({
+    school_id: schoolUser.school_id,
+    scheme_id: entryRow.scheme_id,
+    requested_by: schoolUser.id,
+    idempotency_key: input.idempotency_key,
+    prompt_version: SCHEME_OF_WORK_ENTRY_ASSIST_PROMPT_VERSION,
+    weeks_requested: 0,
+  });
+  if (idempotencyError) {
+    if (idempotencyError.code === "23505") {
+      return { error: "This AI Assist request was already submitted. Please wait for it to finish, or try again." };
+    }
+    return { error: "Something went wrong. No existing lesson data was changed. Please try again." };
+  }
+
+  const { data: requestRow } = await supabase
+    .from("scheme_of_work_ai_requests")
+    .select("id")
+    .eq("requested_by", schoolUser.id)
+    .eq("idempotency_key", input.idempotency_key)
+    .single();
+  const requestId: string | undefined = requestRow?.id;
+
+  const startedAt = Date.now();
+  const markRequestFailed = async (failureCategory: string) => {
+    if (!requestId) return;
+    await supabase
+      .from("scheme_of_work_ai_requests")
+      .update({ status: "failed", failure_category: failureCategory, duration_ms: Date.now() - startedAt, completed_at: new Date().toISOString() })
+      .eq("id", requestId);
+  };
+
+  // Rate limit -- a separate bucket from ai-scheme-generation so bulk
+  // whole-scheme generation and per-entry assist don't share one quota.
+  try {
+    const adminClient = createAdminClient();
+    const { data: withinLimit } = await adminClient.rpc("increment_and_check_rate_limit", {
+      p_bucket: `ai-scheme-entry-assist:${user.id}`,
+      p_max_events: 30,
+      p_window_seconds: 3600,
+    });
+    if (withinLimit === false) {
+      await markRequestFailed("rate_limit");
+      return { error: "AI generation is temporarily busy. Please wait a moment and try again." };
+    }
+  } catch {
+    // Same fallthrough as generateSchemeWithAI: don't block a legitimate,
+    // permission-checked, idempotency-claimed request over admin-client config.
+  }
+
+  const { data: strandsRaw } = await supabase
+    .from("curriculum_strands")
+    .select("name, curriculum_sub_strands(name, learning_outcomes, key_inquiry_questions, rubric_text, content_source)")
+    .eq("subject_id", scheme.subject_id)
+    .eq("school_id", schoolUser.school_id)
+    .order("level_order");
+
+  const curriculumContext = buildCurriculumContext(
+    (strandsRaw ?? []).map((s) => ({
+      name: s.name,
+      sub_strands: (s.curriculum_sub_strands ?? []) as CurriculumSubStrandRow[],
+    })),
+  );
+
+  const prompt = buildEntryAssistPrompt({
+    mode: input.mode,
+    subjectName: scheme.subjects?.name ?? "the subject",
+    className: scheme.classes?.name ?? "the class",
+    streamName: scheme.streams?.name ?? null,
+    termName: scheme.terms?.name ?? "",
+    academicYearName: scheme.terms?.academic_years?.name ?? "",
+    curriculumContext: curriculumContext?.text ?? null,
+    entry: {
+      topic: entryRow.topic ?? "",
+      subtopic: entryRow.subtopic ?? "",
+      learning_outcomes: entryRow.learning_outcomes ?? "",
+      content: entryRow.content ?? "",
+      activities: entryRow.activities ?? "",
+      teaching_methods: entryRow.teaching_methods ?? "",
+      resources: entryRow.resources ?? "",
+      assessment_methods: entryRow.assessment_methods ?? "",
+    },
+  });
+
+  let res: Response;
+  try {
+    res = await fetch(geminiGenerateContentUrl(apiKey, GEMINI_SCHEME_MODEL), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: {
+          maxOutputTokens: 2000,
+          temperature: 0.4,
+          responseMimeType: "application/json",
+          responseSchema: entryAssistResponseSchema,
+        },
+      }),
+      signal: AbortSignal.timeout(8000),
+    });
+  } catch (e) {
+    const isTimeout = e instanceof Error && (e.name === "TimeoutError" || e.name === "AbortError");
+    await markRequestFailed(isTimeout ? "timeout" : "network");
+    return isTimeout
+      ? { error: "Generation timed out. The AI took too long to respond. No changes were made to your lesson." }
+      : { error: "Connection interrupted. We couldn't complete the AI request. Your existing work is safe. Please check your connection and try again." };
+  }
+
+  if (!res.ok) {
+    const body = await res.text();
+    console.error(`assistSchemeEntry: Gemini returned ${res.status} (request ${requestId}): ${body.slice(0, 500)}`);
+    if (res.status === 401 || res.status === 403) {
+      await markRequestFailed("auth_config");
+      return { error: "AI generation is currently unavailable. Please contact your school administrator if the problem continues." };
+    }
+    if (res.status === 429) {
+      await markRequestFailed("rate_limit");
+      return { error: "AI generation is temporarily busy. Please wait a moment and try again." };
+    }
+    if (res.status >= 500) {
+      await markRequestFailed("ai_unavailable");
+      return { error: "AI generation is temporarily unavailable. Your existing lesson data has not been affected. Please try again shortly." };
+    }
+    await markRequestFailed("server_error");
+    return { error: "Something went wrong. No existing lesson data was changed. Please try again." };
+  }
+
+  const data = await res.json();
+  const parsed = parseEntryAssistResponse(data);
+  if ("error" in parsed) {
+    console.error(`assistSchemeEntry: response failed validation (request ${requestId}): ${parsed.error}`, JSON.stringify(data).slice(0, 500));
+    await markRequestFailed(parsed.error.includes("no content") ? "empty_response" : "malformed_response");
+    return { error: "We couldn't prepare the suggestion correctly. The AI returned an unexpected result. Please try again." };
+  }
+
+  if (requestId) {
+    await supabase
+      .from("scheme_of_work_ai_requests")
+      .update({ status: "succeeded", weeks_generated: 0, duration_ms: Date.now() - startedAt, completed_at: new Date().toISOString() })
+      .eq("id", requestId);
+  }
+
+  return { success: true, requestId: requestId ?? "", suggestion: parsed.suggestion };
 }
 
 export async function toggleEntryComplete(entryId: string, completed: boolean): Promise<EntryResult> {
