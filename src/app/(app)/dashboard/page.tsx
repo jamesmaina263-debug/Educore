@@ -86,6 +86,7 @@ export default async function DashboardPage() {
     { data: canSeeStaff },
     { data: disciplineModuleEnabledData },
     { data: healthModuleEnabledData },
+    { data: transportModuleEnabledData },
   ] = await Promise.all([
     supabase.rpc("auth_is_super_admin"),
     supabase
@@ -115,6 +116,7 @@ export default async function DashboardPage() {
     supabase.rpc("auth_has_permission", { p_permission_key: "staff.manage" }),
     supabase.rpc("auth_school_module_enabled", { p_key: "discipline" }),
     supabase.rpc("auth_school_module_enabled", { p_key: "health" }),
+    supabase.rpc("auth_school_module_enabled", { p_key: "transport" }),
   ]);
   if (isSuperAdmin) redirect("/admin");
   void canMarkAny;
@@ -129,6 +131,9 @@ export default async function DashboardPage() {
   const schoolBoardingEnabled = (schoolUser?.schools as unknown as { boarding_enabled: boolean } | null)?.boarding_enabled !== false;
   const canSeeBoardingModule = canSeeBoarding === true && schoolBoardingEnabled;
   const canSeeHealthModule = canSeeHealth === true && healthModuleEnabledData !== false;
+  // Same fix shape as Boarding/Health (#435) -- the transport-routes KPI was permission-gated
+  // only, never module-gated.
+  const canSeeTransportModule = canSeeTransport === true && transportModuleEnabledData !== false;
 
   const roleName = (schoolUser?.roles as unknown as { display_name: string } | null)?.display_name;
   const schoolName = (schoolUser?.schools as unknown as { name: string } | null)?.name;
@@ -390,7 +395,7 @@ export default async function DashboardPage() {
   const section_canSeeTransport = (async () => {
     let transportVehicleCount = 0;
     let routesFull = 0;
-    if (canSeeTransport) {
+    if (canSeeTransportModule) {
       const [{ count: vehicleCount }, { data: routeCapacity }] = await Promise.all([
         supabase.from("transport_vehicles").select("id", { count: "exact", head: true }),
         supabase.from("v_transport_route_capacity").select("available"),
@@ -543,7 +548,7 @@ export default async function DashboardPage() {
         tone: "warning" as const,
         badge: "Low stock",
       },
-    canSeeTransport &&
+    canSeeTransportModule &&
       routesFull > 0 && {
         label: `${routesFull} transport route${routesFull === 1 ? "" : "s"} full (no seats available)`,
         owner: "Transport office",
@@ -576,7 +581,7 @@ export default async function DashboardPage() {
       value: String(lowStockCount),
       note: lowStockCount > 0 ? "items at/below reorder level" : "stock levels healthy",
     },
-    canSeeTransport &&
+    canSeeTransportModule &&
       transportVehicleCount > 0 && {
         label: "Transport fleet",
         value: String(transportVehicleCount),
