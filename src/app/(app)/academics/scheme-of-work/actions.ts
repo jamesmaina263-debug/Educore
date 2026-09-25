@@ -485,6 +485,7 @@ export interface SchemeEntryInput {
   scheme_id: string;
   week_number: number;
   lesson_number: number;
+  entry_date: string;
   topic: string;
   subtopic: string;
   learning_outcomes: string;
@@ -493,6 +494,7 @@ export interface SchemeEntryInput {
   teaching_methods: string;
   resources: string;
   assessment_methods: string;
+  references: string;
   remarks: string;
 }
 
@@ -503,6 +505,7 @@ function validateEntryInput(input: SchemeEntryInput): string | null {
   if (!Number.isInteger(input.week_number) || input.week_number <= 0 || input.week_number > 52) return "Invalid week number.";
   if (!Number.isInteger(input.lesson_number) || input.lesson_number <= 0 || input.lesson_number > 20) return "Invalid lesson number.";
   if (!input.topic?.trim()) return "A topic is required.";
+  if (input.entry_date?.trim() && Number.isNaN(Date.parse(input.entry_date))) return "Invalid entry date.";
   return null;
 }
 
@@ -519,6 +522,7 @@ export async function addSchemeEntry(input: SchemeEntryInput): Promise<EntryResu
       scheme_id: input.scheme_id,
       week_number: input.week_number,
       lesson_number: input.lesson_number,
+      entry_date: input.entry_date || null,
       topic: input.topic.trim(),
       subtopic: input.subtopic || null,
       learning_outcomes: input.learning_outcomes || null,
@@ -527,6 +531,7 @@ export async function addSchemeEntry(input: SchemeEntryInput): Promise<EntryResu
       teaching_methods: input.teaching_methods || null,
       resources: input.resources || null,
       assessment_methods: input.assessment_methods || null,
+      references: input.references || null,
       remarks: input.remarks || null,
       source: "manual",
     })
@@ -557,6 +562,7 @@ export async function updateSchemeEntry(entryId: string, input: SchemeEntryInput
     .update({
       week_number: input.week_number,
       lesson_number: input.lesson_number,
+      entry_date: input.entry_date || null,
       topic: input.topic.trim(),
       subtopic: input.subtopic || null,
       learning_outcomes: input.learning_outcomes || null,
@@ -565,6 +571,7 @@ export async function updateSchemeEntry(entryId: string, input: SchemeEntryInput
       teaching_methods: input.teaching_methods || null,
       resources: input.resources || null,
       assessment_methods: input.assessment_methods || null,
+      references: input.references || null,
       remarks: input.remarks || null,
     })
     .eq("id", entryId)
@@ -615,6 +622,10 @@ export async function duplicateSchemeEntry(
     scheme_id: source.scheme_id,
     week_number: target.week_number,
     lesson_number: target.lesson_number,
+    // entry_date is intentionally not copied: it's tied to the specific
+    // calendar date of the source lesson, which doesn't carry over to a
+    // different week/lesson slot. The teacher sets a new date if needed.
+    entry_date: "",
     topic: source.topic ?? "",
     subtopic: source.subtopic ?? "",
     learning_outcomes: source.learning_outcomes ?? "",
@@ -623,6 +634,7 @@ export async function duplicateSchemeEntry(
     teaching_methods: source.teaching_methods ?? "",
     resources: source.resources ?? "",
     assessment_methods: source.assessment_methods ?? "",
+    references: source.references ?? "",
     remarks: source.remarks ?? "",
   });
 }
