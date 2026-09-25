@@ -324,6 +324,7 @@ const BOARDING_PERMISSION: PermissionKey = "hostel.read_any";
 const INTENT_TO_MODULE_KEY: Partial<Record<Intent, string>> = {
   assignments_due_this_week: "homework",
   ungraded_submissions: "homework",
+  upcoming_pt_meetings: "pt_meetings",
 };
 
 export async function askEducoreAI(question: string): Promise<AskAIResult> {
