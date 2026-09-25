@@ -1,5 +1,6 @@
 import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getCachedUser } from "@/lib/supabase/get-user";
 import { logout } from "@/app/login/actions";
 import { AppShell } from "@/components/app-shell/app-shell";
 import { StatusBadge } from "@/components/status-badge";
@@ -20,6 +21,8 @@ import { getStudentGrowth } from "./growth-actions";
 import { GrowthTab } from "./growth-tab";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
+import { getSchoolSlug } from "@/lib/school-slug-server";
+import { withSchoolSlug } from "@/lib/school-slug-href";
 
 export default async function StudentProfilePage({
   params,
@@ -29,10 +32,9 @@ export default async function StudentProfilePage({
   const { id } = await params;
   const supabase = await createClient();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCachedUser();
   if (!user) redirect("/login");
+  const schoolSlug = await getSchoolSlug();
 
   const { data: schoolUser } = await supabase
     .from("school_users")
@@ -338,7 +340,7 @@ export default async function StudentProfilePage({
             <StudentDeleteControl studentId={id} fullName={fullName} />
           )}
           <Button asChild variant="outline" size="sm">
-            <Link href={`/students/${id}/id-card`} target="_blank">
+            <Link href={withSchoolSlug(schoolSlug, `/students/${id}/id-card`)} target="_blank">
               Print ID card
             </Link>
           </Button>

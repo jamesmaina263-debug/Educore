@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
+import { useSchoolHref } from "@/components/app-shell/school-slug-context";
 
 /** Same picker shape as ReportCardPicker, pointed at /exams/performance-dashboard instead. */
 export function PerformanceDashboardPicker({
@@ -16,12 +17,13 @@ export function PerformanceDashboardPicker({
   selectedClassId: string | null;
 }) {
   const router = useRouter();
+  const toHref = useSchoolHref();
 
   function go(examId: string | null, classId: string | null) {
     const params = new URLSearchParams();
     if (examId) params.set("exam", examId);
     if (classId) params.set("class", classId);
-    router.push(`/exams/performance-dashboard?${params.toString()}`);
+    router.push(toHref(`/exams/performance-dashboard?${params.toString()}`));
   }
 
   return (

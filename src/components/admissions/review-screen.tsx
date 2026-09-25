@@ -10,6 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { StatusBadge } from "@/components/status-badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
 import { DocumentPreviewButton } from "@/components/document-preview-dialog";
+import { useSchoolHref } from "@/components/app-shell/school-slug-context";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import {
   markUnderReviewAction,
@@ -119,6 +120,7 @@ export function ReviewScreen({
   streamOptions?: { id: string; label: string }[];
 }) {
   const router = useRouter();
+  const toHref = useSchoolHref();
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -406,7 +408,7 @@ export function ReviewScreen({
             )}
             {(application.status === "admission_pending" || application.status === "conditionally_accepted") && canWrite && (
               <Button size="sm" className="mt-3 ml-2" asChild>
-                <Link href={`/admissions/${application.id}/wizard`}>Continue Admission</Link>
+                <Link href={toHref(`/admissions/${application.id}/wizard`)}>Continue Admission</Link>
               </Button>
             )}
             {reconsiderable && canWrite && (

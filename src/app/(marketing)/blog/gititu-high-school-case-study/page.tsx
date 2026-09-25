@@ -37,16 +37,15 @@ const PUBLISHED_ON = "2026-09-20";
 
 const SLUG = "gititu-high-school-case-study";
 const PATH = `/blog/${SLUG}`;
-const TITLE = "Case Study: Gititu High School on Running End of Term From One System — EduCore";
-const DESCRIPTION =
-  "In his own words, the principal of Gititu High School describes end of term before and after moving marks, fees and student records into EduCore, what surprised the school, and what still needs improving.";
+const TITLE = "Gititu High School Case Study — EduCore";
+const DESCRIPTION = "In his own words, the principal of Gititu High School on end of term before and after EduCore, what surprised the school, and what's next.";
 
 export const metadata: Metadata = {
   title: TITLE,
   description: DESCRIPTION,
   alternates: { canonical: PATH },
-  openGraph: { title: TITLE, description: DESCRIPTION, url: PATH },
-  twitter: { card: "summary_large_image", title: TITLE, description: DESCRIPTION },
+  openGraph: { title: TITLE, description: DESCRIPTION, url: PATH, images: ["/og-image.png"] },
+  twitter: { card: "summary_large_image", title: TITLE, description: DESCRIPTION, images: ["/og-image.png"] },
   // Belt and braces while unapproved: never index a page that shouldn't exist yet.
   robots: APPROVED ? undefined : { index: false, follow: false },
 };

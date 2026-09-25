@@ -20,15 +20,14 @@ import { ArticleJsonLd } from "@/components/marketing/article-json-ld";
 import { BlogByline } from "@/components/marketing/blog-byline";
 
 const TITLE = "CBC/CBE Assessment & Learner Performance in Kenya — EduCore";
-const DESCRIPTION =
-  "How CBC/CBE competency-based assessment works in Kenya, the roles KICD and KNEC actually play, and how EduCore turns strand-level assessment records into real performance insight for schools.";
+const DESCRIPTION = "How CBC/CBE competency-based assessment works in Kenya, the roles KICD and KNEC play, and how EduCore turns strand-level records into insight.";
 
 export const metadata: Metadata = {
   title: TITLE,
   description: DESCRIPTION,
   alternates: { canonical: "/blog/cbc-cbe-assessment-learner-performance-kenya" },
-  openGraph: { title: TITLE, description: DESCRIPTION, url: "/blog/cbc-cbe-assessment-learner-performance-kenya" },
-  twitter: { card: "summary_large_image", title: TITLE, description: DESCRIPTION },
+  openGraph: { title: TITLE, description: DESCRIPTION, url: "/blog/cbc-cbe-assessment-learner-performance-kenya", images: ["/og-image.png"] },
+  twitter: { card: "summary_large_image", title: TITLE, description: DESCRIPTION, images: ["/og-image.png"] },
 };
 
 // Every EduCore capability named below was verified directly against the

@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getCachedUser } from "@/lib/supabase/get-user";
 import { logout } from "@/app/login/actions";
 import { AppShell } from "@/components/app-shell/app-shell";
 import { ParentsTable, type ParentRow } from "@/components/parents/parents-table";
@@ -8,9 +9,7 @@ import { deleteGuardianPermanentlyAction, mergeGuardianAccountsAction } from "./
 export default async function ParentsDirectoryPage() {
   const supabase = await createClient();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCachedUser();
   if (!user) redirect("/login");
 
   const { data: schoolUser } = await supabase

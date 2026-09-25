@@ -11,6 +11,7 @@ import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { reversePaymentAction } from "@/app/(app)/finance/actions";
 import { useServerTableParams } from "@/hooks/use-server-table-params";
+import { useSchoolHref } from "@/components/app-shell/school-slug-context";
 
 export interface PaymentListRow {
   id: string;
@@ -50,6 +51,7 @@ function PaymentsSectionInner({
   canReverse: boolean;
 }) {
   const router = useRouter();
+  const toHref = useSchoolHref();
   const { pageIndex, pageCount, onPageChange, search, onSearchChange } = useServerTableParams({
     totalCount,
     pageSize,
@@ -130,7 +132,7 @@ function PaymentsSectionInner({
               </TableCell>
               <TableCell className="font-mono text-xs">
                 {p.receipt_number ? (
-                  <Link href={`/finance/payments/${p.id}/receipt`} target="_blank" className="underline underline-offset-2 hover:text-primary">
+                  <Link href={toHref(`/finance/payments/${p.id}/receipt`)} target="_blank" className="underline underline-offset-2 hover:text-primary">
                     {p.receipt_number}
                   </Link>
                 ) : (

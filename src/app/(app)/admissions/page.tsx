@@ -1,6 +1,9 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getCachedUser } from "@/lib/supabase/get-user";
+import { getSchoolSlug } from "@/lib/school-slug-server";
+import { withSchoolSlug } from "@/lib/school-slug-href";
 import { logout } from "@/app/login/actions";
 import { AppShell } from "@/components/app-shell/app-shell";
 import { StatusBadge } from "@/components/status-badge";
@@ -101,10 +104,9 @@ export default async function AdmissionsPage({
 
   const supabase = await createClient();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCachedUser();
   if (!user) redirect("/login");
+  const schoolSlug = await getSchoolSlug();
 
   const [{ data: schoolUser }, { data: canReview }, { data: canWrite }, { data: canReadFinance }] = await Promise.all([
     supabase.from("school_users").select("full_name, roles(display_name), schools(name, slug, boarding_enabled)").eq("auth_user_id", user.id).maybeSingle(),
@@ -330,7 +332,7 @@ export default async function AdmissionsPage({
                         </td>
                         <td className="text-right">
                           <div className="flex items-center justify-end gap-3">
-                            <Link href={`/admissions/${d.id}/wizard`} className="text-[0.8125rem] font-medium text-primary hover:underline">
+                            <Link href={withSchoolSlug(schoolSlug, `/admissions/${d.id}/wizard`)} className="text-[0.8125rem] font-medium text-primary hover:underline">
                               Resume
                             </Link>
                             {canWrite && (

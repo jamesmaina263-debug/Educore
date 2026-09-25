@@ -1,11 +1,14 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getCachedUser } from "@/lib/supabase/get-user";
 import { logout } from "@/app/login/actions";
 import Link from "next/link";
 import { AppShell } from "@/components/app-shell/app-shell";
 import { Button } from "@/components/ui/button";
 import { StaffRegisterForm, type StaffRosterRow } from "@/components/staff/staff-register-form";
 import { StaffDatePicker } from "@/components/staff/staff-date-picker";
+import { getSchoolSlug } from "@/lib/school-slug-server";
+import { withSchoolSlug } from "@/lib/school-slug-href";
 
 function todayISO() {
   return new Date().toISOString().slice(0, 10);
@@ -20,10 +23,9 @@ export default async function StaffPage({
   const attendanceDate = dateParam || todayISO();
 
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCachedUser();
   if (!user) redirect("/login");
+  const schoolSlug = await getSchoolSlug();
 
   const [{ data: schoolUser }, { data: canMark }, { data: staffRows }, { data: existingRows }] = await Promise.all([
     supabase
@@ -79,7 +81,7 @@ export default async function StaffPage({
           </div>
           <div className="flex items-center gap-2">
             <Button variant="outline" size="sm" asChild>
-              <Link href="/staff">← Staff directory</Link>
+              <Link href={withSchoolSlug(schoolSlug, "/staff")}>← Staff directory</Link>
             </Button>
             <StaffDatePicker date={attendanceDate} />
           </div>

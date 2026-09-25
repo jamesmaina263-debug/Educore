@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { StatusBadge } from "@/components/status-badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
+import { useSchoolHref } from "@/components/app-shell/school-slug-context";
 
 export interface MedicalItemRow {
   id: string;
@@ -63,6 +64,7 @@ export function InventorySection({
   myStockRequests: MyStockRequestRow[];
 }) {
   const router = useRouter();
+  const toHref = useSchoolHref();
   const [open, setOpen] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -249,7 +251,7 @@ export function InventorySection({
       <p className="text-sm text-muted-foreground">
         Your own stock, separate from Main Store — it only grows when you accept a transfer
         below. Full stock history (including Main Store&apos;s own) is on the{" "}
-        <a href="/inventory" className="underline">
+        <a href={toHref("/inventory")} className="underline">
           Inventory
         </a>{" "}
         page.
