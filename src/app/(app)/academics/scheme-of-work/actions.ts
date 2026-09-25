@@ -13,9 +13,14 @@ import {
   parseSchemeOfWorkResponse,
   checkSchemeOfWorkQuality,
   weeksGenerated as countWeeksGenerated,
+  buildEntryAssistPrompt,
+  entryAssistResponseSchema,
+  parseEntryAssistResponse,
   type SchemeOfWorkDraft,
   type SchemeOfWorkDraftWeek,
   type CurriculumSubStrandRow,
+  type EntryAssistMode,
+  type EntryAssistCurrentFields,
 } from "@/lib/ai/scheme-of-work";
 import { geminiGenerateContentUrl } from "@/lib/ai/report-card-comment";
 
@@ -296,6 +301,146 @@ export async function generateSchemeWithAI(input: GenerateSchemeInput): Promise<
     weeksGenerated: generated,
     curriculumItemsUsed: curriculumContext?.itemCount ?? 0,
   };
+}
+
+// ---------------------------------------------------------------------------
+// aiAssistEntry (spec item 6 / gap #5)
+//
+// The per-entry sibling of generateSchemeWithAI: works on one already-saved
+// lesson at a time, from the editor (scheme-editor.tsx), not just the
+// create screen. Same permission/rate-limit/structured-output/error-
+// handling discipline, deliberately lighter in a couple of places:
+//
+// - No scheme_of_work_ai_requests row / idempotency key. That table's
+//   shape (weeks_requested, weeks_generated) is specific to whole-scheme
+//   generation, and unlike generateSchemeWithAI this action never writes
+//   to the database at all -- a duplicate concurrent call can't create a
+//   duplicate scheme or entry, only waste an AI call. The client disables
+//   the triggering button while a request is pending (spec item 13's
+//   "disable/debounce the button" is sufficient here); rate limiting
+//   below still caps abuse regardless.
+// - Ownership isn't re-checked with a manual query beyond the schemes_of_work
+//   select below being RLS-scoped: same pattern as addSchemeEntry/
+//   updateSchemeEntry, which rely on RLS for the actual write, but this
+//   action never writes, so its only DB touch is the read used to derive
+//   subject/class/term names for the prompt -- RLS on schemes_of_work already
+//   confirms the caller can see this scheme before any name is used.
+// ---------------------------------------------------------------------------
+
+export interface AiAssistEntryInput {
+  scheme_id: string;
+  mode: EntryAssistMode;
+  /** The teacher's own current, possibly-unsaved draft text for this entry
+   *  -- sent as the content the AI is asked to work on, not as instructions
+   *  to the model (see the doc comment on buildEntryAssistPrompt). */
+  current: EntryAssistCurrentFields;
+}
+
+export type AiAssistEntryResult = { error: string } | { success: true; fields: Partial<EntryAssistCurrentFields> };
+
+const ENTRY_ASSIST_MODES: EntryAssistMode[] = ["improve", "expand", "generate_activities"];
+
+export async function aiAssistEntry(input: AiAssistEntryInput): Promise<AiAssistEntryResult> {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) {
+    return { error: "AI generation isn't configured yet — GEMINI_API_KEY is missing from the server environment." };
+  }
+
+  if (!isNonEmptyUuidLike(input.scheme_id)) return { error: "Missing scheme." };
+  if (!ENTRY_ASSIST_MODES.includes(input.mode)) return { error: "Invalid AI Assist action." };
+  if (!input.current?.topic?.trim()) return { error: "Add a topic before using AI Assist." };
+
+  const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "You must be signed in." };
+
+  const { data: canGenerate } = await supabase.rpc("auth_has_permission", { p_permission_key: "scheme_of_work.generate_ai" });
+  if (!canGenerate) return { error: "You don't have permission to use AI Assist." };
+
+  // RLS-scoped: returns null if this scheme doesn't exist or isn't visible
+  // to the caller, which doubles as the authorization check for this read.
+  const { data: schemeRow } = await supabase
+    .from("schemes_of_work")
+    .select("subjects(name), classes(name), streams(name), terms(name, academic_years(name))")
+    .eq("id", input.scheme_id)
+    .maybeSingle();
+  if (!schemeRow) return { error: "Scheme not found." };
+
+  try {
+    const adminClient = createAdminClient();
+    const { data: withinLimit } = await adminClient.rpc("increment_and_check_rate_limit", {
+      p_bucket: `ai-scheme-assist:${user.id}`,
+      p_max_events: 30,
+      p_window_seconds: 3600,
+    });
+    if (withinLimit === false) {
+      return { error: "AI generation is temporarily busy. Please wait a moment and try again." };
+    }
+  } catch {
+    // If the admin client isn't configured in this environment, fall through rather
+    // than blocking a legitimate, permission-checked request.
+  }
+
+  const term = schemeRow.terms as unknown as { name: string; academic_years: { name: string } | null } | null;
+  const prompt = buildEntryAssistPrompt({
+    mode: input.mode,
+    subjectName: (schemeRow.subjects as unknown as { name: string } | null)?.name ?? "the subject",
+    className: (schemeRow.classes as unknown as { name: string } | null)?.name ?? "the class",
+    streamName: (schemeRow.streams as unknown as { name: string } | null)?.name ?? null,
+    termName: term ? `${term.name}, ${term.academic_years?.name ?? ""}` : "this term",
+    current: input.current,
+  });
+
+  let res: Response;
+  try {
+    res = await fetch(geminiGenerateContentUrl(apiKey, GEMINI_SCHEME_MODEL), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: {
+          maxOutputTokens: 2000,
+          temperature: 0.5,
+          responseMimeType: "application/json",
+          responseSchema: entryAssistResponseSchema(input.mode),
+        },
+      }),
+      signal: AbortSignal.timeout(8000),
+    });
+  } catch (e) {
+    const isTimeout = e instanceof Error && (e.name === "TimeoutError" || e.name === "AbortError");
+    return isTimeout
+      ? { error: "Generation timed out. The AI took too long to respond. Your entry was not changed." }
+      : { error: "Connection interrupted. We couldn't complete the AI request. Your entry was not changed. Please check your connection and try again." };
+  }
+
+  if (!res.ok) {
+    const body = await res.text();
+    console.error(`aiAssistEntry: Gemini returned ${res.status}: ${body.slice(0, 500)}`);
+    if (res.status === 401 || res.status === 403) {
+      return { error: "AI generation is currently unavailable. Please contact your school administrator if the problem continues." };
+    }
+    if (res.status === 429) {
+      return { error: "AI generation is temporarily busy. Please wait a moment and try again." };
+    }
+    if (res.status >= 500) {
+      return { error: "AI generation is temporarily unavailable. Your entry was not changed. Please try again shortly." };
+    }
+    return { error: "Something went wrong. Your entry was not changed. Please try again." };
+  }
+
+  const data = await res.json();
+  const parsed = parseEntryAssistResponse(input.mode, data);
+  if ("error" in parsed) {
+    console.error(`aiAssistEntry: response failed validation: ${parsed.error}`, JSON.stringify(data).slice(0, 500));
+    return { error: "We couldn't generate a suggestion. The AI returned an unexpected result. Please try again." };
+  }
+
+  return { success: true, fields: parsed.fields };
 }
 
 // ---------------------------------------------------------------------------

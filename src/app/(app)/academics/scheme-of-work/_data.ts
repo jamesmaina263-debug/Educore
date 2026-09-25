@@ -245,10 +245,11 @@ export async function loadSchemeDetail(schemeId: string): Promise<SchemeDetailCo
   const user = await getCachedUser();
   if (!user) redirect("/login");
 
-  const [{ data: schoolUser }, { data: canWriteAny }, { data: canReview }] = await Promise.all([
+  const [{ data: schoolUser }, { data: canWriteAny }, { data: canReview }, { data: canGenerateAI }] = await Promise.all([
     supabase.from("school_users").select("id, full_name, roles(display_name), schools(name)").eq("auth_user_id", user.id).maybeSingle(),
     supabase.rpc("auth_has_permission", { p_permission_key: "scheme_of_work.write_any" }),
     supabase.rpc("auth_has_permission", { p_permission_key: "scheme_of_work.review" }),
+    supabase.rpc("auth_has_permission", { p_permission_key: "scheme_of_work.generate_ai" }),
   ]);
 
   const roleName = (schoolUser?.roles as unknown as { display_name: string } | null)?.display_name;
@@ -264,7 +265,7 @@ export async function loadSchemeDetail(schemeId: string): Promise<SchemeDetailCo
     .maybeSingle();
 
   if (!schemeRow) {
-    return { ...base, scheme: null, entries: [], canEdit: false, canReview: false, isOwner: false };
+    return { ...base, scheme: null, entries: [], canEdit: false, canReview: false, canGenerateAI: false, isOwner: false };
   }
 
   const { data: entriesRaw } = await supabase
@@ -296,6 +297,7 @@ export async function loadSchemeDetail(schemeId: string): Promise<SchemeDetailCo
     entries: entriesRaw ?? [],
     canEdit: isOwner || !!canWriteAny,
     canReview: !!canReview,
+    canGenerateAI: !!canGenerateAI,
     isOwner,
   };
 }

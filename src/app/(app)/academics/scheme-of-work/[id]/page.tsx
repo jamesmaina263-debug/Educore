@@ -24,7 +24,7 @@ export default async function SchemeDetailPage({ params }: { params: Promise<{ i
       userRole={ctx.userRole}
       onSignOut={logout}
     >
-      <SchemeEditor scheme={ctx.scheme} entries={ctx.entries} canEdit={ctx.canEdit} canReview={ctx.canReview} />
+      <SchemeEditor scheme={ctx.scheme} entries={ctx.entries} canEdit={ctx.canEdit} canReview={ctx.canReview} canGenerateAI={ctx.canGenerateAI} />
     </AppShell>
   );
 }

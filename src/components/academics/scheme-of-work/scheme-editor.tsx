@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { StatusBadge } from "@/components/status-badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Plus, Pencil, Copy, Trash2, Check } from "lucide-react";
+import { Plus, Pencil, Copy, Trash2, Check, Sparkles } from "lucide-react";
 import {
   addSchemeEntry,
   updateSchemeEntry,
@@ -18,10 +18,12 @@ import {
   submitScheme,
   startSchemeReview,
   reviewScheme,
+  aiAssistEntry,
   type SchemeEntryInput,
 } from "@/app/(app)/academics/scheme-of-work/actions";
 import type { SchemeDetailContext, SchemeEntryRow } from "@/app/(app)/academics/scheme-of-work/_types";
 import { STATUS_LABELS } from "@/app/(app)/academics/scheme-of-work/_types";
+import type { EntryAssistMode, EntryAssistCurrentFields } from "@/lib/ai/scheme-of-work";
 
 const STATUS_TONE: Record<string, "neutral" | "info" | "warning" | "success"> = {
   draft: "neutral",
@@ -55,11 +57,13 @@ export function SchemeEditor({
   entries,
   canEdit,
   canReview,
+  canGenerateAI,
 }: {
   scheme: Scheme;
   entries: SchemeEntryRow[];
   canEdit: boolean;
   canReview: boolean;
+  canGenerateAI: boolean;
 }) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
@@ -68,6 +72,10 @@ export function SchemeEditor({
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<SchemeEntryInput>(emptyForm(scheme.id, 1, 1));
+
+  const [aiPending, setAiPending] = useState<EntryAssistMode | null>(null);
+  const [aiError, setAiError] = useState<string | null>(null);
+  const [aiSuggestions, setAiSuggestions] = useState<Partial<EntryAssistCurrentFields> | null>(null);
 
   const totalEntries = entries.length;
   const completedEntries = entries.filter((e) => e.completion_status === "completed").length;
@@ -89,6 +97,8 @@ export function SchemeEditor({
     setForm(emptyForm(scheme.id, week, Math.min(lessonsThisWeek + 1, scheme.lessons_per_week || 20)));
     setEditingId(null);
     setError(null);
+    setAiError(null);
+    setAiSuggestions(null);
     setDialogOpen(true);
   }
 
@@ -111,7 +121,57 @@ export function SchemeEditor({
     });
     setEditingId(entry.id);
     setError(null);
+    setAiError(null);
+    setAiSuggestions(null);
     setDialogOpen(true);
+  }
+
+  async function handleAiAssist(mode: EntryAssistMode) {
+    setAiPending(mode);
+    setAiError(null);
+    const result = await aiAssistEntry({
+      scheme_id: scheme.id,
+      mode,
+      current: {
+        topic: form.topic,
+        subtopic: form.subtopic,
+        learning_outcomes: form.learning_outcomes,
+        content: form.content,
+        activities: form.activities,
+        teaching_methods: form.teaching_methods,
+        resources: form.resources,
+        assessment_methods: form.assessment_methods,
+      },
+    });
+    setAiPending(null);
+    if ("error" in result) return setAiError(result.error);
+    setAiSuggestions(result.fields);
+  }
+
+  function applySuggestion(field: keyof EntryAssistCurrentFields) {
+    setForm((prev) => (aiSuggestions?.[field] ? { ...prev, [field]: aiSuggestions[field] } : prev));
+    setAiSuggestions((prev) => {
+      if (!prev) return prev;
+      const next = { ...prev };
+      delete next[field];
+      return next;
+    });
+  }
+
+  function suggestionBox(field: keyof EntryAssistCurrentFields) {
+    const value = aiSuggestions?.[field];
+    if (!value) return null;
+    return (
+      <div className="rounded-md border border-primary/30 bg-primary/5 p-2 text-xs">
+        <p className="mb-1 flex items-center gap-1 font-medium text-primary">
+          <Sparkles className="size-3" aria-hidden /> AI suggestion
+        </p>
+        <p className="whitespace-pre-wrap text-muted-foreground">{value}</p>
+        <Button type="button" size="sm" variant="outline" className="mt-1.5 h-6 px-2 text-xs" onClick={() => applySuggestion(field)}>
+          Use this
+        </Button>
+      </div>
+    );
   }
 
   async function handleDialogSave() {
@@ -314,6 +374,36 @@ export function SchemeEditor({
           <DialogHeader>
             <DialogTitle>{editingId ? "Edit Lesson" : "Add Lesson"}</DialogTitle>
           </DialogHeader>
+          {canGenerateAI && (
+            <div className="flex flex-col gap-2 rounded-md border border-dashed border-border p-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="flex items-center gap-1 text-xs font-medium text-muted-foreground">
+                  <Sparkles className="size-3.5" aria-hidden /> AI Assist:
+                </span>
+                <Button type="button" size="sm" variant="outline" disabled={!form.topic.trim() || aiPending !== null} onClick={() => handleAiAssist("improve")}>
+                  {aiPending === "improve" ? "Improving…" : "Improve"}
+                </Button>
+                <Button type="button" size="sm" variant="outline" disabled={!form.topic.trim() || aiPending !== null} onClick={() => handleAiAssist("expand")}>
+                  {aiPending === "expand" ? "Expanding…" : "Expand"}
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  disabled={!form.topic.trim() || aiPending !== null}
+                  onClick={() => handleAiAssist("generate_activities")}
+                >
+                  {aiPending === "generate_activities" ? "Generating…" : "Generate activities"}
+                </Button>
+                {aiSuggestions && Object.keys(aiSuggestions).length > 0 && (
+                  <Button type="button" size="sm" variant="ghost" onClick={() => setAiSuggestions(null)}>
+                    Dismiss suggestions
+                  </Button>
+                )}
+              </div>
+              {aiError && <p className="text-xs text-danger">{aiError}</p>}
+            </div>
+          )}
           <div className="grid grid-cols-2 gap-3">
             <div className="flex flex-col gap-1">
               <Label>Week</Label>
@@ -338,26 +428,32 @@ export function SchemeEditor({
             <div className="col-span-2 flex flex-col gap-1">
               <Label>Learning outcomes</Label>
               <Textarea rows={2} value={form.learning_outcomes} onChange={(e) => setForm({ ...form, learning_outcomes: e.target.value })} />
+              {suggestionBox("learning_outcomes")}
             </div>
             <div className="col-span-2 flex flex-col gap-1">
               <Label>Content</Label>
               <Textarea rows={2} value={form.content} onChange={(e) => setForm({ ...form, content: e.target.value })} />
+              {suggestionBox("content")}
             </div>
             <div className="flex flex-col gap-1">
               <Label>Learning activities</Label>
               <Textarea rows={2} value={form.activities} onChange={(e) => setForm({ ...form, activities: e.target.value })} />
+              {suggestionBox("activities")}
             </div>
             <div className="flex flex-col gap-1">
               <Label>Teaching methods</Label>
               <Textarea rows={2} value={form.teaching_methods} onChange={(e) => setForm({ ...form, teaching_methods: e.target.value })} />
+              {suggestionBox("teaching_methods")}
             </div>
             <div className="flex flex-col gap-1">
               <Label>Resources</Label>
               <Textarea rows={2} value={form.resources} onChange={(e) => setForm({ ...form, resources: e.target.value })} />
+              {suggestionBox("resources")}
             </div>
             <div className="flex flex-col gap-1">
               <Label>Assessment method</Label>
               <Textarea rows={2} value={form.assessment_methods} onChange={(e) => setForm({ ...form, assessment_methods: e.target.value })} />
+              {suggestionBox("assessment_methods")}
             </div>
             <div className="col-span-2 flex flex-col gap-1">
               <Label>References</Label>

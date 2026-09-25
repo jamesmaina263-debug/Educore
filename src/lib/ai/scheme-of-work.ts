@@ -370,3 +370,130 @@ export function checkSchemeOfWorkQuality(draft: SchemeOfWorkDraft, totalWeeks: n
 
   return warnings;
 }
+
+// ---------------------------------------------------------------------------
+// Per-entry "AI Assist" (spec item 6 / gap #5) -- a small, scoped sibling of
+// buildSchemeOfWorkPrompt above, working on one already-saved lesson at a
+// time instead of a whole scheme. Same model, same structured-output/
+// parse/validate discipline, same "never auto-saves" contract (the server
+// action returns a suggestion; only the teacher's own Save click in
+// scheme-editor.tsx persists anything).
+//
+// Note on what's "instruction" vs "data" here, since it looks different
+// from buildSchemeOfWorkPrompt's doc comment above: this prompt
+// deliberately DOES embed the teacher's own free-typed current field
+// values -- that's the whole point of an editing assistant (it has to see
+// the draft to improve it). What stays entirely app-controlled is the
+// output contract: which fields can come back is fixed per mode by
+// entryAssistResponseSchema()/ENTRY_ASSIST_FIELDS below, not by anything
+// in the teacher's text, and nothing the model returns is written
+// anywhere until the teacher explicitly applies a suggested field in the
+// UI and then explicitly saves the entry through the existing
+// addSchemeEntry/updateSchemeEntry path.
+// ---------------------------------------------------------------------------
+
+export type EntryAssistMode = "improve" | "expand" | "generate_activities";
+
+/** Which of a lesson's editable fields each mode is allowed to suggest new
+ *  text for. Also doubles as the Gemini structured-output contract (see
+ *  entryAssistResponseSchema) and the parse allow-list (see
+ *  parseEntryAssistResponse) -- one list, three uses, so a mode can't
+ *  accidentally return (or accept) a field it wasn't asked about. */
+export const ENTRY_ASSIST_FIELDS: Record<EntryAssistMode, readonly (keyof EntryAssistCurrentFields)[]> = {
+  improve: ["learning_outcomes", "content", "activities", "teaching_methods", "resources", "assessment_methods"],
+  expand: ["learning_outcomes", "content", "activities"],
+  generate_activities: ["activities"],
+};
+
+const ENTRY_ASSIST_INSTRUCTIONS: Record<EntryAssistMode, string> = {
+  improve:
+    "Improve the quality and clarity of this single lesson's learning outcomes, content, learning activities, teaching methods, resources and assessment method. Make each one more specific and better written, and better aligned with the topic. Do not change the lesson's topic, sub-topic, or its fundamental scope.",
+  expand:
+    "Expand this single lesson with more depth and detail, appropriate for the class level. Build on what is already there -- add more substance to the learning outcomes, content and learning activities -- rather than changing the lesson's direction.",
+  generate_activities:
+    "Generate a fresh, varied set of learning activities for this single lesson, appropriate for its topic, subject and class level. Avoid generic filler -- make the activities concrete and specific to this lesson's topic and content.",
+};
+
+export interface EntryAssistCurrentFields {
+  topic: string;
+  subtopic: string;
+  learning_outcomes: string;
+  content: string;
+  activities: string;
+  teaching_methods: string;
+  resources: string;
+  assessment_methods: string;
+}
+
+export interface EntryAssistPromptInput {
+  mode: EntryAssistMode;
+  subjectName: string;
+  className: string;
+  streamName: string | null;
+  termName: string;
+  current: EntryAssistCurrentFields;
+}
+
+export function buildEntryAssistPrompt(input: EntryAssistPromptInput): string {
+  const stream = input.streamName ? ` (${input.streamName})` : "";
+  const c = input.current;
+
+  return `You are helping a Kenyan school teacher improve a single lesson within an existing Scheme of Work for ${input.subjectName}, ${input.className}${stream}, ${input.termName}. You are only working on this one lesson -- not generating a full scheme.
+
+Current lesson draft:
+Topic: ${c.topic || "(not set)"}
+Sub-topic: ${c.subtopic || "(not set)"}
+Learning outcomes: ${c.learning_outcomes || "(not set)"}
+Content: ${c.content || "(not set)"}
+Learning activities: ${c.activities || "(not set)"}
+Teaching methods: ${c.teaching_methods || "(not set)"}
+Resources: ${c.resources || "(not set)"}
+Assessment method: ${c.assessment_methods || "(not set)"}
+
+Task: ${ENTRY_ASSIST_INSTRUCTIONS[input.mode]}
+
+Return only the field(s) the response schema asks for. This is a draft suggestion the teacher will review before accepting -- be concrete and realistic, not vague or generic.`;
+}
+
+export function entryAssistResponseSchema(mode: EntryAssistMode) {
+  const properties: Record<string, { type: "STRING" }> = {};
+  for (const field of ENTRY_ASSIST_FIELDS[mode]) properties[field] = { type: "STRING" };
+  return {
+    type: "OBJECT",
+    properties,
+    required: [...ENTRY_ASSIST_FIELDS[mode]],
+  } as const;
+}
+
+export type EntryAssistParseResult = { fields: Partial<EntryAssistCurrentFields> } | { error: string };
+
+export function parseEntryAssistResponse(mode: EntryAssistMode, data: unknown): EntryAssistParseResult {
+  const text = (data as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> })?.candidates?.[0]
+    ?.content?.parts?.[0]?.text;
+  if (!text || !text.trim()) {
+    return { error: "The AI returned no content." };
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    return { error: "The AI response wasn't valid JSON." };
+  }
+
+  if (typeof parsed !== "object" || parsed === null) {
+    return { error: "The AI response was not a valid object." };
+  }
+
+  const obj = parsed as Record<string, unknown>;
+  const fields: Partial<EntryAssistCurrentFields> = {};
+  for (const field of ENTRY_ASSIST_FIELDS[mode]) {
+    const value = asString(obj[field]);
+    if (!value) {
+      return { error: "The AI response was missing expected content." };
+    }
+    fields[field] = value;
+  }
+
+  return { fields };
+}
