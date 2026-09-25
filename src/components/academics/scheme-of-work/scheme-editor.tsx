@@ -16,6 +16,7 @@ import {
   duplicateSchemeEntry,
   toggleEntryComplete,
   submitScheme,
+  startSchemeReview,
   reviewScheme,
   type SchemeEntryInput,
 } from "@/app/(app)/academics/scheme-of-work/actions";
@@ -27,7 +28,6 @@ const STATUS_TONE: Record<string, "neutral" | "info" | "warning" | "success"> = 
   in_progress: "info",
   submitted: "info",
   under_review: "warning",
-  reviewed: "info",
   approved: "success",
 };
 
@@ -165,6 +165,14 @@ export function SchemeEditor({
     router.refresh();
   }
 
+  async function handleStartReview() {
+    setPending(true);
+    const result = await startSchemeReview(scheme.id);
+    setPending(false);
+    if ("error" in result) return setError(result.error);
+    router.refresh();
+  }
+
   async function handleReview(action: "approve" | "return") {
     let comment: string | null = null;
     if (action === "return") {
@@ -221,6 +229,11 @@ export function SchemeEditor({
           </Button>
         )}
         {canReview && scheme.status === "submitted" && (
+          <Button type="button" variant="outline" disabled={pending} onClick={handleStartReview}>
+            Start Review
+          </Button>
+        )}
+        {canReview && (scheme.status === "submitted" || scheme.status === "under_review") && (
           <>
             <Button type="button" disabled={pending} onClick={() => handleReview("approve")}>
               Approve

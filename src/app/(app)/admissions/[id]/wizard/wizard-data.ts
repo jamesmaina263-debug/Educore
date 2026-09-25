@@ -46,6 +46,10 @@ export interface WizardStepData {
   // explicitly doesn't offer boarding. Used to hide the boarding/day choice on Admission
   // Details and to skip the Boarding step regardless of a stale boarding_preference value.
   boardingModuleEnabled: boolean;
+  // Same idea, but sourced from the platform_modules/school_modules system (Transport is
+  // toggleable there) rather than a dedicated schools column. Used to skip the Transport step
+  // regardless of a stale transport_required value, mirroring boardingModuleEnabled exactly.
+  transportModuleEnabled: boolean;
 }
 
 export async function loadWizardStepData(supabase: SupabaseClient, applicationId: string, schoolId: string): Promise<WizardStepData> {
@@ -59,6 +63,7 @@ export async function loadWizardStepData(supabase: SupabaseClient, applicationId
     { data: requirements },
     { data: mpesaSettings },
     { data: school },
+    { data: transportModuleEnabledData },
   ] = await Promise.all([
     supabase
       .from("applications")
@@ -73,6 +78,7 @@ export async function loadWizardStepData(supabase: SupabaseClient, applicationId
     supabase.from("application_document_requirements").select("category, label, required").eq("school_id", schoolId).order("display_order"),
     supabase.from("mpesa_settings").select("is_active").maybeSingle(),
     supabase.from("schools").select("boarding_enabled").eq("id", schoolId).maybeSingle(),
+    supabase.rpc("auth_school_module_enabled", { p_key: "transport" }),
   ]);
 
   const studentId = application?.resulting_student_id ?? null;
@@ -178,5 +184,6 @@ export async function loadWizardStepData(supabase: SupabaseClient, applicationId
     status: application?.status ?? "draft",
     enrollmentResult,
     boardingModuleEnabled: school?.boarding_enabled ?? true,
+    transportModuleEnabled: transportModuleEnabledData ?? true,
   };
 }

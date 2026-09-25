@@ -59,7 +59,7 @@ export default async function AdmissionWizardPage({ params }: { params: Promise<
     { id: "documents", label: "Documents", applicable: true, note: "" },
     { id: "academics", label: "Academic Placement", applicable: true, note: "" },
     { id: "boarding", label: "Boarding", applicable: wizardData.boardingModuleEnabled && application.boarding_preference !== "day", note: "" },
-    { id: "transport", label: "Transport", applicable: application.transport_required !== false, note: "" },
+    { id: "transport", label: "Transport", applicable: wizardData.transportModuleEnabled && application.transport_required !== false, note: "" },
     { id: "health", label: "Health", applicable: true, note: "" },
     { id: "finance", label: "Finance", applicable: true, note: "" },
     { id: "review", label: "Final Review", applicable: true, note: "Editable summary of every step before committing, plus the admission checklist. Built in Phase 13." },
