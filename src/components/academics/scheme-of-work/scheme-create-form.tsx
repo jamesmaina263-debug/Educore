@@ -34,6 +34,7 @@ export function SchemeCreateForm({ options }: { options: CreateSchemeOptions }) 
   const [warnings, setWarnings] = useState<string[]>([]);
   const [partial, setPartial] = useState(false);
   const [weeksGenerated, setWeeksGenerated] = useState(0);
+  const [curriculumItemsUsed, setCurriculumItemsUsed] = useState(0);
   const [requestId, setRequestId] = useState<string | null>(null);
 
   const streamsForClass = options.streamOptions.filter((s) => s.class_id === classId);
@@ -87,6 +88,7 @@ export function SchemeCreateForm({ options }: { options: CreateSchemeOptions }) 
     setWarnings(result.warnings);
     setPartial(result.partial);
     setWeeksGenerated(result.weeksGenerated);
+    setCurriculumItemsUsed(result.curriculumItemsUsed);
     setRequestId(result.requestId || null);
   }
 
@@ -283,6 +285,12 @@ export function SchemeCreateForm({ options }: { options: CreateSchemeOptions }) 
               <TriangleAlert className="mt-0.5 size-4 shrink-0" aria-hidden />
               The generated scheme is incomplete. We prepared only {weeksGenerated} of the requested {totalWeeks} weeks. You can
               save what was generated and add the rest manually, or regenerate.
+            </p>
+          )}
+
+          {curriculumItemsUsed > 0 && (
+            <p className="text-sm text-muted-foreground">
+              Grounded in {curriculumItemsUsed} curriculum {curriculumItemsUsed === 1 ? "item" : "items"} your school has recorded for this subject.
             </p>
           )}
 
