@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { StatusBadge } from "@/components/status-badge";
+import { useSchoolHref } from "@/components/app-shell/school-slug-context";
 import {
   checkFeeThresholdsAction,
   updateDraftBodyAction,
@@ -46,6 +47,7 @@ export function FeeAlertsSection({
   canWrite: boolean;
 }) {
   const [pending, startTransition] = useTransition();
+  const toHref = useSchoolHref();
   const [checking, setChecking] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -83,7 +85,7 @@ export function FeeAlertsSection({
     return (
       <div className="panel border-dashed p-6 text-sm text-muted-foreground">
         No fee alert threshold is set for this school yet. Configure one under{" "}
-        <a href="/finance/configuration" className="underline">Finance &rarr; Configuration</a> to start drafting
+        <a href={toHref("/finance/configuration")} className="underline">Finance &rarr; Configuration</a> to start drafting
         arrears reminders.
       </div>
     );

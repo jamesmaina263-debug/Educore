@@ -1,3 +1,6 @@
+import { getSchoolSlug } from "@/lib/school-slug-server";
+import { withSchoolSlug } from "@/lib/school-slug-href";
+
 export interface MedicalRecordListRow {
   student_id: string;
   student_name: string;
@@ -6,7 +9,8 @@ export interface MedicalRecordListRow {
   restricted: boolean;
 }
 
-export function MedicalRecordsSection({ rows }: { rows: MedicalRecordListRow[] }) {
+export async function MedicalRecordsSection({ rows }: { rows: MedicalRecordListRow[] }) {
+  const schoolSlug = await getSchoolSlug();
   const restricted = rows.length > 0 && rows[0].restricted;
   return (
     <div className="flex flex-col gap-4">
@@ -37,7 +41,7 @@ export function MedicalRecordsSection({ rows }: { rows: MedicalRecordListRow[] }
                 <td>{r.restricted ? "Restricted" : r.has_record ? "Yes" : "Not yet recorded"}</td>
                 <td className="text-danger">{r.restricted ? "Restricted" : r.has_conditions_or_allergies ? "Conditions/allergies on file" : ""}</td>
                 <td>
-                  <a href={`/students/${r.student_id}`} className="text-sm underline">
+                  <a href={withSchoolSlug(schoolSlug, `/students/${r.student_id}`)} className="text-sm underline">
                     View profile
                   </a>
                 </td>
