@@ -10,6 +10,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { StatusBadge } from "@/components/status-badge";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
+import { useSchoolHref } from "@/components/app-shell/school-slug-context";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { createExam, closeExam, reopenExam } from "@/app/(app)/exams/actions";
 
@@ -53,6 +54,7 @@ export function ExamsSection({
   hasGradingScale: boolean;
 }) {
   const router = useRouter();
+  const toHref = useSchoolHref();
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
@@ -270,7 +272,7 @@ export function ExamsSection({
                       {e.status === "open" ? (
                         <>
                           <Button asChild size="sm" variant="outline">
-                            <Link href={`/exams/${e.id}`}>Enter marks</Link>
+                            <Link href={toHref(`/exams/${e.id}`)}>Enter marks</Link>
                           </Button>
                           {canWrite && (
                             <Button size="sm" variant="ghost" disabled={pending} onClick={() => handleClose(e.id)}>
@@ -281,10 +283,10 @@ export function ExamsSection({
                       ) : (
                         <>
                           <Button asChild size="sm" variant="outline">
-                            <Link href={`/exams/${e.id}`}>View marks</Link>
+                            <Link href={toHref(`/exams/${e.id}`)}>View marks</Link>
                           </Button>
                           <Button asChild size="sm" variant="outline">
-                            <Link href={`/exams/report-cards?exam=${e.id}`}>Report cards</Link>
+                            <Link href={toHref(`/exams/report-cards?exam=${e.id}`)}>Report cards</Link>
                           </Button>
                           {canWrite && (
                             <Button size="sm" variant="ghost" disabled={pending} onClick={() => handleReopen(e.id)}>
