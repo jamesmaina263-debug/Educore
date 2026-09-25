@@ -6,6 +6,8 @@ import { logout } from "@/app/login/actions";
 import { AppShell } from "@/components/app-shell/app-shell";
 import { Button } from "@/components/ui/button";
 import { StaffTable, type StaffRow } from "@/components/staff/staff-table";
+import { getSchoolSlug } from "@/lib/school-slug-server";
+import { withSchoolSlug } from "@/lib/school-slug-href";
 
 const PAGE_SIZE = 20;
 
@@ -22,6 +24,7 @@ export default async function StaffDirectoryPage({
 
   const user = await getCachedUser();
   if (!user) redirect("/login");
+  const schoolSlug = await getSchoolSlug();
 
   const { data: schoolUser } = await supabase
     .from("school_users")
@@ -78,11 +81,11 @@ export default async function StaffDirectoryPage({
           </div>
           <div className="flex items-center gap-2">
             <Button variant="outline" asChild>
-              <Link href="/staff/attendance">Attendance register</Link>
+              <Link href={withSchoolSlug(schoolSlug, "/staff/attendance")}>Attendance register</Link>
             </Button>
             {canManage === true && (
               <Button asChild>
-                <Link href="/settings/staff">Add staff member</Link>
+                <Link href={withSchoolSlug(schoolSlug, "/settings/staff")}>Add staff member</Link>
               </Button>
             )}
           </div>

@@ -19,15 +19,14 @@ import { ArticleJsonLd } from "@/components/marketing/article-json-ld";
 import { BlogByline } from "@/components/marketing/blog-byline";
 
 const TITLE = "Parent Communication: WhatsApp & SMS for Kenyan Schools — EduCore";
-const DESCRIPTION =
-  "Why the class WhatsApp group breaks down as a school grows, and how EduCore handles parent communication instead — structured teacher-to-parent items, a two-way WhatsApp assistant, targeted announcements, and fee alerts a human always approves first.";
+const DESCRIPTION = "Why the class WhatsApp group breaks down as a school grows, and how EduCore handles parent communication instead — structured, two-way, approved.";
 
 export const metadata: Metadata = {
   title: TITLE,
   description: DESCRIPTION,
   alternates: { canonical: "/blog/parent-communication-whatsapp-sms-kenya-schools" },
-  openGraph: { title: TITLE, description: DESCRIPTION, url: "/blog/parent-communication-whatsapp-sms-kenya-schools" },
-  twitter: { card: "summary_large_image", title: TITLE, description: DESCRIPTION },
+  openGraph: { title: TITLE, description: DESCRIPTION, url: "/blog/parent-communication-whatsapp-sms-kenya-schools", images: ["/og-image.png"] },
+  twitter: { card: "summary_large_image", title: TITLE, description: DESCRIPTION, images: ["/og-image.png"] },
 };
 
 // Every EduCore capability below was verified against the codebase before

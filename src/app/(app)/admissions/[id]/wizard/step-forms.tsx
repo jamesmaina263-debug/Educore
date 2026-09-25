@@ -44,6 +44,7 @@ import { queueMutation } from "@/lib/offline/queue";
 import { AdmissionsOfflineBanner } from "@/components/admissions/offline-banner";
 import { MpesaPushTrigger } from "@/components/finance/mpesa-push-trigger";
 import { DocumentPreviewButton } from "@/components/document-preview-dialog";
+import { useSchoolHref } from "@/components/app-shell/school-slug-context";
 
 // Shared shell every step form renders inside, matching the wizard panel's existing look.
 function StepPanel({ title, hint, children }: { title: string; hint?: string; children: React.ReactNode }) {
@@ -1346,6 +1347,7 @@ export function CompleteStep({
   onCompleted: (result: EnrollmentResult) => void;
 }) {
   const [result, setResult] = useState<EnrollmentResult | null>(alreadyEnrolled);
+  const toHref = useSchoolHref();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [sent, setSent] = useState(false);
@@ -1410,15 +1412,15 @@ export function CompleteStep({
         </div>
       )}
       <div className="flex flex-wrap gap-2">
-        <Button asChild size="sm"><Link href={`/students/${result.student_id}`}>View Student</Link></Button>
-        <Button asChild size="sm" variant="outline"><Link href={`/students/${result.student_id}/id-card`}>Print Student Details</Link></Button>
+        <Button asChild size="sm"><Link href={toHref(`/students/${result.student_id}`)}>View Student</Link></Button>
+        <Button asChild size="sm" variant="outline"><Link href={toHref(`/students/${result.student_id}/id-card`)}>Print Student Details</Link></Button>
         {result.invoice_id && (
-          <Button asChild size="sm" variant="outline"><Link href="/finance">View Fee Statement</Link></Button>
+          <Button asChild size="sm" variant="outline"><Link href={toHref("/finance")}>View Fee Statement</Link></Button>
         )}
         <Button size="sm" variant="outline" onClick={sendConfirmation} disabled={pending}>
           {sent ? "Sent" : pending ? "Sending…" : "Send Parent Confirmation"}
         </Button>
-        <Button asChild size="sm" variant="outline"><Link href="/admissions">Start New Admission</Link></Button>
+        <Button asChild size="sm" variant="outline"><Link href={toHref("/admissions")}>Start New Admission</Link></Button>
       </div>
     </StepPanel>
   );

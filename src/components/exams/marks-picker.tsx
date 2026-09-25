@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
+import { useSchoolHref } from "@/components/app-shell/school-slug-context";
 
 export function MarksPicker({
   examOptions,
@@ -19,13 +20,14 @@ export function MarksPicker({
   selectedSubjectId: string | null;
 }) {
   const router = useRouter();
+  const toHref = useSchoolHref();
 
   function go(examIdParam: string | null, classId: string | null, subjectId: string | null) {
     const params = new URLSearchParams();
     if (examIdParam) params.set("exam", examIdParam);
     if (classId) params.set("class", classId);
     if (subjectId) params.set("subject", subjectId);
-    router.push(`/exams/marks?${params.toString()}`);
+    router.push(toHref(`/exams/marks?${params.toString()}`));
   }
 
   return (
