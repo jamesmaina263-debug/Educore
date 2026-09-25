@@ -1,11 +1,14 @@
 import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { getCachedUser } from "@/lib/supabase/get-user";
 import { logout } from "@/app/login/actions";
 import { AppShell } from "@/components/app-shell/app-shell";
 import { Button } from "@/components/ui/button";
 import { WizardShell, type WizardStep } from "./wizard-shell";
 import { loadWizardStepData } from "./wizard-data";
+import { getSchoolSlug } from "@/lib/school-slug-server";
+import { withSchoolSlug } from "@/lib/school-slug-href";
 
 // Both entry points converge here (Brief 4.16.1): a walk-in draft, or an online application the
 // officer has already Accepted (status = admission_pending) or Conditionally Accepted. Anything
@@ -16,10 +19,9 @@ export default async function AdmissionWizardPage({ params }: { params: Promise<
   const { id } = await params;
   const supabase = await createClient();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCachedUser();
   if (!user) redirect("/login");
+  const schoolSlug = await getSchoolSlug();
 
   const [{ data: schoolUser }, { data: canWrite }] = await Promise.all([
     supabase.from("school_users").select("full_name, roles(display_name), schools(name)").eq("auth_user_id", user.id).maybeSingle(),
@@ -79,7 +81,7 @@ export default async function AdmissionWizardPage({ params }: { params: Promise<
       <div className="mb-4 flex items-center justify-between">
         <h1 className="text-lg font-semibold">Onboarding — {applicantLabel}</h1>
         <Button asChild variant="outline" size="sm">
-          <Link href={`/admissions/${id}`}>Back to application</Link>
+          <Link href={withSchoolSlug(schoolSlug, `/admissions/${id}`)}>Back to application</Link>
         </Button>
       </div>
       <WizardShell

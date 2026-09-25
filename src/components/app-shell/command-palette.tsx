@@ -13,11 +13,13 @@ import {
 import { navItems } from "./nav-items";
 import { useCommandPalette } from "./command-palette-context";
 import { useOnlineStatus } from "@/hooks/use-online-status";
+import { useSchoolHref } from "./school-slug-context";
 
 export function CommandPalette({ disabledHrefs = [] }: { disabledHrefs?: string[] }) {
   const { open, setOpen } = useCommandPalette();
   const router = useRouter();
   const online = useOnlineStatus();
+  const toHref = useSchoolHref();
 
   const items =
     disabledHrefs.length === 0
@@ -35,9 +37,9 @@ export function CommandPalette({ disabledHrefs = [] }: { disabledHrefs?: string[
         window.location.href = href;
         return;
       }
-      router.push(href);
+      router.push(toHref(href));
     },
-    [online, router, setOpen],
+    [online, router, setOpen, toHref],
   );
 
   return (

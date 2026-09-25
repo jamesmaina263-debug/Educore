@@ -12,15 +12,14 @@ import { Badge } from "@/components/ui/badge";
 import { BreadcrumbJsonLd, HOME_CRUMB } from "@/components/marketing/breadcrumb-json-ld";
 
 const TITLE = "Student Performance Appraisal & Exam Merit Lists — EduCore Kenya";
-const DESCRIPTION =
-  "Merit lists and class rankings computed automatically at exam close, structured CBC rubrics, a remark bank, growth trends, and a class-wide performance dashboard — EduCore's Performance Appraisal Engine, built into the same exam data teachers already enter.";
+const DESCRIPTION = "Merit lists and class rankings computed automatically at exam close — structured CBC rubrics, a remark bank, growth trends, and a performance dashboard.";
 
 export const metadata: Metadata = {
   title: TITLE,
   description: DESCRIPTION,
   alternates: { canonical: "/student-performance-appraisal" },
-  openGraph: { title: TITLE, description: DESCRIPTION, url: "/student-performance-appraisal" },
-  twitter: { card: "summary_large_image", title: TITLE, description: DESCRIPTION },
+  openGraph: { title: TITLE, description: DESCRIPTION, url: "/student-performance-appraisal", images: ["/og-image.png"] },
+  twitter: { card: "summary_large_image", title: TITLE, description: DESCRIPTION, images: ["/og-image.png"] },
 };
 
 // Grounded in the "Performance Appraisal Engine" directive as it actually appears in the codebase,

@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getCachedUser } from "@/lib/supabase/get-user";
 import type { StreamOption, TermOption, IndicatorOption, BandOption, RosterRatingRow } from "@/lib/academics/competency-appraisal-types";
 
 export type { StreamOption, TermOption, IndicatorOption, BandOption, RosterRatingRow };
@@ -27,9 +28,7 @@ export async function loadCompetencyAppraisalContext(
   indicatorParam?: string,
 ): Promise<CompetencyAppraisalContext> {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCachedUser();
   if (!user) redirect("/login");
 
   const [{ data: schoolUser }, { data: canWriteAny }, { data: canWrite }] = await Promise.all([
