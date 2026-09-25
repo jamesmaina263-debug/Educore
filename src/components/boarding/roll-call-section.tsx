@@ -9,6 +9,7 @@ import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@
 import { useOfflineSync } from "@/hooks/use-offline-sync";
 import { queueMutation } from "@/lib/offline/queue";
 import { BoardingOfflineBanner } from "./offline-banner";
+import { useSchoolHref } from "@/components/app-shell/school-slug-context";
 
 export interface BoardingStudentRow {
   student_id: string;
@@ -40,6 +41,7 @@ export function RollCallSection({
   canWrite: boolean;
 }) {
   const router = useRouter();
+  const toHref = useSchoolHref();
   const { online, pendingCount, failed, syncing, sync, discard } = useOfflineSync("boarding");
   const [statuses, setStatuses] = useState<Record<string, RollCallStatus>>(
     Object.fromEntries(students.map((s) => [s.student_id, s.existing_status ?? "present"])),
@@ -49,11 +51,11 @@ export function RollCallSection({
   const [saved, setSaved] = useState(false);
 
   function changeDate(newDate: string) {
-    router.push(`/boarding/roll-call?date=${newDate}&session=${session}`);
+    router.push(toHref(`/boarding/roll-call?date=${newDate}&session=${session}`));
   }
 
   function changeSession(newSession: string) {
-    router.push(`/boarding/roll-call?date=${date}&session=${newSession}`);
+    router.push(toHref(`/boarding/roll-call?date=${date}&session=${newSession}`));
   }
 
   function markAllPresent() {

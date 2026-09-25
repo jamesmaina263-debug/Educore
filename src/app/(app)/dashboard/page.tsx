@@ -3,6 +3,8 @@ import { redirect } from "next/navigation";
 import { ArrowDownRight, ArrowUpRight, CalendarCheck, CircleDollarSign, Database, Plus, Users, Wallet } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { getCachedUser } from "@/lib/supabase/get-user";
+import { getSchoolSlug } from "@/lib/school-slug-server";
+import { withSchoolSlug } from "@/lib/school-slug-href";
 import { logout } from "@/app/login/actions";
 import { AppShell } from "@/components/app-shell/app-shell";
 import { StatusBadge } from "@/components/status-badge";
@@ -57,6 +59,7 @@ export default async function DashboardPage() {
   const supabase = await createClient();
   const user = await getCachedUser();
   if (!user) redirect("/login");
+  const schoolSlug = await getSchoolSlug();
 
   // Platform staff land on the Platform Admin Console (src/app/(admin)) instead -- a super
   // admin typically has no school_users row tied to a real school, so this dashboard would
@@ -609,7 +612,7 @@ export default async function DashboardPage() {
             </p>
           </div>
           {canRecordPayment && (
-            <Link href="/finance/payments">
+            <Link href={withSchoolSlug(schoolSlug, "/finance/payments")}>
               <Button size="sm">
                 <Plus className="size-4" aria-hidden /> Record payment
               </Button>
@@ -757,7 +760,7 @@ export default async function DashboardPage() {
 
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           {canSeeAttendance && (
-            <Link href="/attendance" className="panel-interactive flex items-center gap-3 px-4 py-3">
+            <Link href={withSchoolSlug(schoolSlug, "/attendance")} className="panel-interactive flex items-center gap-3 px-4 py-3">
               <span className="grid size-8 place-items-center rounded-md bg-primary-subtle text-primary">
                 <CalendarCheck className="size-4" aria-hidden />
               </span>
@@ -770,7 +773,7 @@ export default async function DashboardPage() {
             </Link>
           )}
           {canSeeFinance && (
-            <Link href="/finance/student-accounts" className="panel-interactive flex items-center gap-3 px-4 py-3">
+            <Link href={withSchoolSlug(schoolSlug, "/finance/student-accounts")} className="panel-interactive flex items-center gap-3 px-4 py-3">
               <span className="grid size-8 place-items-center rounded-md bg-primary-subtle text-primary">
                 <Wallet className="size-4" aria-hidden />
               </span>

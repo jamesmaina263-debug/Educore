@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { updateBranding } from "@/app/(app)/settings/actions";
 import { setActiveTerm } from "@/app/(app)/academics/actions";
+import { useSchoolHref } from "@/components/app-shell/school-slug-context";
 
 export interface TermOption {
   id: string;
@@ -46,6 +47,7 @@ function formatDate(iso: string) {
 
 export function GeneralSettingsPanel({ initial, canWrite }: { initial: GeneralSettingsData; canWrite: boolean }) {
   const router = useRouter();
+  const toHref = useSchoolHref();
   const [name, setName] = useState(initial.name);
   const [email, setEmail] = useState(initial.email);
   const [kraPin, setKraPin] = useState(initial.kra_pin);
@@ -156,7 +158,7 @@ export function GeneralSettingsPanel({ initial, canWrite }: { initial: GeneralSe
           {initial.terms.length === 0 ? (
             <p className="text-sm text-muted-foreground">
               No terms set up yet.{" "}
-              <Link href="/academics" className="underline">
+              <Link href={toHref("/academics")} className="underline">
                 Set up the academic year in Academics
               </Link>
               .
@@ -176,7 +178,7 @@ export function GeneralSettingsPanel({ initial, canWrite }: { initial: GeneralSe
                 <p className="flex h-9 items-center text-[0.875rem]">{selectedTerm ? formatDate(selectedTerm.end_date) : "—"}</p>
               </Field>
               <p className="text-[0.75rem] text-muted-foreground">
-                <Link href="/academics" className="underline">
+                <Link href={toHref("/academics")} className="underline">
                   Manage academic years, terms and rollover
                 </Link>
               </p>

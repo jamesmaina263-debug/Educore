@@ -13,15 +13,14 @@ import { cn } from "@/lib/utils";
 import { BreadcrumbJsonLd, HOME_CRUMB } from "@/components/marketing/breadcrumb-json-ld";
 
 const TITLE = "School Attendance Management System — EduCore Kenya";
-const DESCRIPTION =
-  "Biometric check-in with automatic guardian SMS, a stream-based register when there's no device, and a permission-gated correction workflow with a real audit trail. The school attendance management system built for Kenya.";
+const DESCRIPTION = "Biometric check-in with automatic guardian SMS, a paper-backed register when there's no device, and a permission-gated correction workflow.";
 
 export const metadata: Metadata = {
   title: TITLE,
   description: DESCRIPTION,
   alternates: { canonical: "/school-attendance-management" },
-  openGraph: { title: TITLE, description: DESCRIPTION, url: "/school-attendance-management" },
-  twitter: { card: "summary_large_image", title: TITLE, description: DESCRIPTION },
+  openGraph: { title: TITLE, description: DESCRIPTION, url: "/school-attendance-management", images: ["/og-image.png"] },
+  twitter: { card: "summary_large_image", title: TITLE, description: DESCRIPTION, images: ["/og-image.png"] },
 };
 
 // Grounded in (app)/biometric-kiosk/page.tsx (guardian SMS on check-in,

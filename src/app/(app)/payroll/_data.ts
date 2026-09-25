@@ -33,12 +33,17 @@ export async function loadPayrollContext(): Promise<PayrollContext> {
   const user = await getCachedUser();
   if (!user) redirect("/login");
 
-  const [{ data: schoolUser }, { data: canReadAny }, { data: canWrite }, { data: canApprove }] = await Promise.all([
+  const [{ data: schoolUser }, { data: canReadAny }, { data: canWrite }, { data: canApprove }, { data: moduleEnabled }] = await Promise.all([
     supabase.from("school_users").select("id, full_name, roles(display_name), schools(name, kra_pin)").eq("auth_user_id", user.id).maybeSingle(),
     supabase.rpc("auth_has_permission", { p_permission_key: "payroll.read_any" }),
     supabase.rpc("auth_has_permission", { p_permission_key: "payroll.write" }),
     supabase.rpc("auth_has_permission", { p_permission_key: "payroll.approve" }),
+    supabase.rpc("auth_school_module_enabled", { p_key: "payroll" }),
   ]);
+  // Same seam as health/discipline/library's own module check -- every /payroll/* page loads
+  // through this one function. Fails safe to true, so this only ever narrows access for a
+  // school explicitly toggled off.
+  if (moduleEnabled === false) redirect("/dashboard");
 
   const roleName = (schoolUser?.roles as unknown as { display_name: string } | null)?.display_name;
   const school = schoolUser?.schools as unknown as { name: string; kra_pin: string | null } | null;

@@ -14,9 +14,8 @@ import { TRIAL_HREF, TRIAL_CTA_SHORT } from "@/lib/marketing/trial";
 const SLUG = "boarding-school-management-kenya";
 const PATH = `/blog/${SLUG}`;
 const PUBLISHED_ON = "2026-09-21";
-const TITLE = "Boarding School Management in Kenya: Safety Standards, Roll Call and the Records That Matter — EduCore";
-const DESCRIPTION =
-  "What the Ministry's Safety Standards Manual expects of a boarding school, the records that back those standards up, how to handle exeats and visitors, and what software can and cannot do.";
+const TITLE = "Boarding School Management in Kenya — EduCore";
+const DESCRIPTION = "What the Ministry's Safety Standards Manual expects of a boarding school, the records that back it up, and what software can and cannot do.";
 const NATION_ARTICLE =
   "https://nation.africa/kenya/news/history-of-school-fire-tragedies-and-what-the-safety-guidelines-say-5477284";
 const KNA_ARTICLE = "https://www.kenyanews.go.ke/tragedy-and-neglect-school-fires-and-the-unlearned-safety-lessons/";
@@ -25,8 +24,8 @@ export const metadata: Metadata = {
   title: TITLE,
   description: DESCRIPTION,
   alternates: { canonical: PATH },
-  openGraph: { title: TITLE, description: DESCRIPTION, url: PATH },
-  twitter: { card: "summary_large_image", title: TITLE, description: DESCRIPTION },
+  openGraph: { title: TITLE, description: DESCRIPTION, url: PATH, images: ["/og-image.png"] },
+  twitter: { card: "summary_large_image", title: TITLE, description: DESCRIPTION, images: ["/og-image.png"] },
 };
 
 // Sourcing (researched Sep 2026). NOTE: the Ministry of Education's Safety

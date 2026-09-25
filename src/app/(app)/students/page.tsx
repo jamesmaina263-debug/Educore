@@ -6,6 +6,8 @@ import { logout } from "@/app/login/actions";
 import { AppShell } from "@/components/app-shell/app-shell";
 import { StudentsTable, type StudentRow } from "@/components/students/students-table";
 import { escapePostgrestOrValue } from "@/lib/postgrest-filter";
+import { getSchoolSlug } from "@/lib/school-slug-server";
+import { withSchoolSlug } from "@/lib/school-slug-href";
 
 const PAGE_SIZE = 20;
 const ENROLLED_STATUSES = ["active", "enrolled", "withdrawn", "transferred", "graduated"];
@@ -24,6 +26,7 @@ export default async function StudentsPage({
 
   const user = await getCachedUser();
   if (!user) redirect("/login");
+  const schoolSlug = await getSchoolSlug();
 
   const { data: schoolUser } = await supabase
     .from("school_users")
@@ -129,7 +132,7 @@ export default async function StudentsPage({
               entire Admissions pipeline. New students exist because an
               application was admitted; this page only ever displays that
               result, and the only way to start one is /admissions. */}
-          <Link href="/admissions" className="text-sm text-primary underline underline-offset-2">
+          <Link href={withSchoolSlug(schoolSlug, "/admissions")} className="text-sm text-primary underline underline-offset-2">
             Add a student via Admissions →
           </Link>
         </div>
