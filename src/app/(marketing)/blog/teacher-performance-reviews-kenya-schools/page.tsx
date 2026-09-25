@@ -10,7 +10,7 @@ import { BreadcrumbJsonLd, HOME_CRUMB } from "@/components/marketing/breadcrumb-
 import { ArticleJsonLd } from "@/components/marketing/article-json-ld";
 import { BlogByline } from "@/components/marketing/blog-byline";
 
-const TITLE = "Teacher Performance Reviews for Kenyan Schools: Termly, Structured, and Kept Private — EduCore";
+const TITLE = "Teacher Performance Reviews for Kenyan Schools — EduCore";
 const DESCRIPTION = "Why teacher appraisal usually lives in a locked cabinet, and how EduCore keeps it structured — 1-5 scoring, an automatic rating, locked visibility.";
 
 export const metadata: Metadata = {

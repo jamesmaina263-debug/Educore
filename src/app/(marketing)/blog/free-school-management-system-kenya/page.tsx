@@ -14,7 +14,7 @@ import { TRIAL_HREF, TRIAL_CTA_SHORT } from "@/lib/marketing/trial";
 const SLUG = "free-school-management-system-kenya";
 const PATH = `/blog/${SLUG}`;
 const PUBLISHED_ON = "2026-09-20";
-const TITLE = "Free School Management Software in Kenya: What \"Free\" Actually Covers — EduCore";
+const TITLE = "Free School Management Software in Kenya — EduCore";
 const DESCRIPTION = "Free platforms, open-source editions, and capped free tiers all get called free. Where the real costs show up, and when free is the right call.";
 
 export const metadata: Metadata = {

@@ -13,7 +13,7 @@ import { BlogByline } from "@/components/marketing/blog-byline";
 const SLUG = "data-protection-act-kenya-schools-guide";
 const PATH = `/blog/${SLUG}`;
 const PUBLISHED_ON = "2026-09-20";
-const TITLE = "The Data Protection Act for Kenyan Schools: A Practical Guide — EduCore";
+const TITLE = "Data Protection Act for Kenyan Schools — EduCore";
 const DESCRIPTION = "What Kenya's Data Protection Act asks of schools: ODPC registration, parental consent, biometric data, the 72-hour breach rule, vendor questions.";
 const ODPC_EDUCATION_NOTE = "https://www.odpc.go.ke/wp-content/uploads/2024/02/ODPC-Guidance-Note-for-the-Education-Sector.pdf";
 const ODPC_CHILDREN_NOTE =
