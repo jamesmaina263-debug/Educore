@@ -100,6 +100,13 @@ export default async function PortalPage({ searchParams }: { searchParams: Promi
     )
     .eq("stream_id", selected.current_class_id)
     .order("due_date", { ascending: false });
+  // Same "hidden everywhere" standard as every staff-side gating -- Homework's portal section
+  // had no permission or module check at all before this, unlike anything on the staff side
+  // (which always had at least a permission check even before module gating existed). Checked
+  // via the generic auth_school_module_enabled RPC rather than needing school_id explicitly,
+  // consistent with every staff-side gate too.
+  const { data: homeworkModuleEnabledData } = await supabase.rpc("auth_school_module_enabled", { p_key: "homework" });
+  const homeworkModuleEnabled = homeworkModuleEnabledData !== false;
   const assignments: PortalAssignmentRow[] = (assignmentRows ?? []).map((a) => {
     const subject = a.subjects as unknown as { name: string } | null;
     const taskAttachments = (a.assignment_attachments ?? []) as { id: string; file_name: string; storage_path: string; file_size: number | null }[];
@@ -498,10 +505,12 @@ export default async function PortalPage({ searchParams }: { searchParams: Promi
         )}
       </div>
 
-      <div className="panel p-4">
-        <p className="label-eyebrow mb-2">Homework</p>
-        <PortalHomeworkSection studentId={selected.id} assignments={assignments} />
-      </div>
+      {homeworkModuleEnabled && (
+        <div className="panel p-4">
+          <p className="label-eyebrow mb-2">Homework</p>
+          <PortalHomeworkSection studentId={selected.id} assignments={assignments} />
+        </div>
+      )}
 
       {roleName === "parent" && (
         <div className="panel p-4">
