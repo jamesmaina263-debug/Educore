@@ -37,6 +37,7 @@ const emptyForm = (schemeId: string, week: number, lesson: number): SchemeEntryI
   scheme_id: schemeId,
   week_number: week,
   lesson_number: lesson,
+  entry_date: "",
   topic: "",
   subtopic: "",
   learning_outcomes: "",
@@ -45,6 +46,7 @@ const emptyForm = (schemeId: string, week: number, lesson: number): SchemeEntryI
   teaching_methods: "",
   resources: "",
   assessment_methods: "",
+  references: "",
   remarks: "",
 });
 
@@ -95,6 +97,7 @@ export function SchemeEditor({
       scheme_id: scheme.id,
       week_number: entry.week_number,
       lesson_number: entry.lesson_number,
+      entry_date: entry.entry_date ?? "",
       topic: entry.topic,
       subtopic: entry.subtopic ?? "",
       learning_outcomes: entry.learning_outcomes ?? "",
@@ -103,6 +106,7 @@ export function SchemeEditor({
       teaching_methods: entry.teaching_methods ?? "",
       resources: entry.resources ?? "",
       assessment_methods: entry.assessment_methods ?? "",
+      references: entry.references ?? "",
       remarks: entry.remarks ?? "",
     });
     setEditingId(entry.id);
@@ -257,10 +261,16 @@ export function SchemeEditor({
                       <p className="font-medium">
                         Lesson {entry.lesson_number}: {entry.topic}
                         {entry.subtopic ? ` — ${entry.subtopic}` : ""}
+                        {entry.entry_date && (
+                          <span className="ml-2 font-normal text-muted-foreground">
+                            ({new Date(`${entry.entry_date}T00:00:00`).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" })})
+                          </span>
+                        )}
                       </p>
                       {entry.learning_outcomes && <p className="text-muted-foreground">Outcomes: {entry.learning_outcomes}</p>}
                       {entry.activities && <p className="text-muted-foreground">Activities: {entry.activities}</p>}
                       {entry.assessment_methods && <p className="text-muted-foreground">Assessment: {entry.assessment_methods}</p>}
+                      {entry.references && <p className="text-muted-foreground">References: {entry.references}</p>}
                     </div>
                     {canEdit && (
                       <div className="flex shrink-0 gap-1">
@@ -301,6 +311,10 @@ export function SchemeEditor({
               <Input type="number" min={1} value={form.lesson_number} onChange={(e) => setForm({ ...form, lesson_number: Number(e.target.value) })} />
             </div>
             <div className="col-span-2 flex flex-col gap-1">
+              <Label>Date (optional)</Label>
+              <Input type="date" value={form.entry_date} onChange={(e) => setForm({ ...form, entry_date: e.target.value })} />
+            </div>
+            <div className="col-span-2 flex flex-col gap-1">
               <Label>Topic</Label>
               <Input value={form.topic} onChange={(e) => setForm({ ...form, topic: e.target.value })} />
             </div>
@@ -331,6 +345,10 @@ export function SchemeEditor({
             <div className="flex flex-col gap-1">
               <Label>Assessment method</Label>
               <Textarea rows={2} value={form.assessment_methods} onChange={(e) => setForm({ ...form, assessment_methods: e.target.value })} />
+            </div>
+            <div className="col-span-2 flex flex-col gap-1">
+              <Label>References</Label>
+              <Textarea rows={2} value={form.references} onChange={(e) => setForm({ ...form, references: e.target.value })} />
             </div>
             <div className="col-span-2 flex flex-col gap-1">
               <Label>Remarks</Label>

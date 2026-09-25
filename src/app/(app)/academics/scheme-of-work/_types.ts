@@ -63,6 +63,7 @@ export interface SchemeEntryRow {
   id: string;
   week_number: number;
   lesson_number: number;
+  entry_date: string | null;
   topic: string;
   subtopic: string | null;
   learning_outcomes: string | null;
@@ -71,6 +72,7 @@ export interface SchemeEntryRow {
   teaching_methods: string | null;
   resources: string | null;
   assessment_methods: string | null;
+  references: string | null;
   remarks: string | null;
   completion_status: string;
   source: string;
