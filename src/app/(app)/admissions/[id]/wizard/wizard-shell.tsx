@@ -11,6 +11,7 @@ import {
 } from "./step-forms";
 import type { WizardStepData } from "./wizard-data";
 import type { EnrollmentResult } from "./actions";
+import { useSchoolHref } from "@/components/app-shell/school-slug-context";
 
 export interface WizardStep {
   id: string;
@@ -36,6 +37,7 @@ export function WizardShell({
   data: WizardStepData;
 }) {
   const router = useRouter();
+  const toHref = useSchoolHref();
   const applicableSteps = steps.filter((s) => s.applicable);
   const clampedInitial = Math.min(initialStep, applicableSteps.length - 1);
   const [currentIndex, setCurrentIndex] = useState(Math.max(clampedInitial, 0));
@@ -106,7 +108,7 @@ export function WizardShell({
         setError(result.error);
         return;
       }
-      router.push("/admissions");
+      router.push(toHref("/admissions"));
     });
   }
 
@@ -211,7 +213,7 @@ export function WizardShell({
             <Button
               type="button"
               disabled={pending}
-              onClick={() => (isLast ? router.push("/admissions") : goTo(currentIndex + 1))}
+              onClick={() => (isLast ? router.push(toHref("/admissions")) : goTo(currentIndex + 1))}
             >
               {isLast ? "Save and exit" : "Next"}
             </Button>
