@@ -684,6 +684,45 @@ export async function duplicateSchemeEntry(
   });
 }
 
+// Repositions an entry to a different week/lesson slot in place, touching
+// only week_number/lesson_number -- unlike duplicateSchemeEntry (which
+// inserts a new row) this updates the existing row, so its id, source,
+// completion_status and all lesson content are preserved untouched. Same
+// unique-constraint-conflict handling as updateSchemeEntry/addSchemeEntry.
+export async function moveSchemeEntry(
+  entryId: string,
+  target: { week_number: number; lesson_number: number },
+): Promise<EntryResult> {
+  if (!isNonEmptyUuidLike(entryId)) return { error: "Missing entry." };
+  if (!Number.isInteger(target.week_number) || target.week_number <= 0 || target.week_number > 52) {
+    return { error: "Invalid week number." };
+  }
+  if (!Number.isInteger(target.lesson_number) || target.lesson_number <= 0 || target.lesson_number > 20) {
+    return { error: "Invalid lesson number." };
+  }
+
+  const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
+
+  const { data, error } = await supabase
+    .from("scheme_of_work_entries")
+    .update({ week_number: target.week_number, lesson_number: target.lesson_number })
+    .eq("id", entryId)
+    .select("id")
+    .maybeSingle();
+
+  if (error) {
+    if (error.code === "23505") {
+      return { error: "There's already a lesson at that week and lesson number." };
+    }
+    return { error: "Something went wrong while moving. Please try again." };
+  }
+  if (!data) return { error: "You don't have permission to edit this entry, or it no longer exists." };
+
+  revalidatePath("/academics/scheme-of-work");
+  return { success: true, entryId: data.id };
+}
+
 // ---------------------------------------------------------------------------
 // assistSchemeEntry (gap #5)
 //

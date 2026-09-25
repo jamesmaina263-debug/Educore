@@ -8,12 +8,13 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { StatusBadge } from "@/components/status-badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Plus, Pencil, Copy, Trash2, Check, Sparkles } from "lucide-react";
+import { Plus, Pencil, Copy, Trash2, Check, Move, Sparkles } from "lucide-react";
 import {
   addSchemeEntry,
   updateSchemeEntry,
   deleteSchemeEntry,
   duplicateSchemeEntry,
+  moveSchemeEntry,
   toggleEntryComplete,
   submitScheme,
   startSchemeReview,
@@ -181,6 +182,22 @@ export function SchemeEditor({
     router.refresh();
   }
 
+  async function handleMove(entry: SchemeEntryRow) {
+    const weekInput = window.prompt("Move to which week?", String(entry.week_number));
+    if (!weekInput) return;
+    const lessonInput = window.prompt("Which lesson number in that week?", String(entry.lesson_number));
+    if (!lessonInput) return;
+    const week_number = Number(weekInput);
+    const lesson_number = Number(lessonInput);
+    if (!Number.isInteger(week_number) || !Number.isInteger(lesson_number)) return setError("Week and lesson must be numbers.");
+    if (week_number === entry.week_number && lesson_number === entry.lesson_number) return;
+    setPending(true);
+    const result = await moveSchemeEntry(entry.id, { week_number, lesson_number });
+    setPending(false);
+    if ("error" in result) return setError(result.error);
+    router.refresh();
+  }
+
   async function handleToggleComplete(entry: SchemeEntryRow) {
     setPending(true);
     const result = await toggleEntryComplete(entry.id, entry.completion_status !== "completed");
@@ -325,6 +342,9 @@ export function SchemeEditor({
                         </Button>
                         <Button type="button" variant="ghost" size="icon" title="Edit" onClick={() => openEdit(entry)}>
                           <Pencil className="size-4" aria-hidden />
+                        </Button>
+                        <Button type="button" variant="ghost" size="icon" title="Move" disabled={pending} onClick={() => handleMove(entry)}>
+                          <Move className="size-4" aria-hidden />
                         </Button>
                         <Button type="button" variant="ghost" size="icon" title="Duplicate" disabled={pending} onClick={() => handleDuplicate(entry)}>
                           <Copy className="size-4" aria-hidden />
