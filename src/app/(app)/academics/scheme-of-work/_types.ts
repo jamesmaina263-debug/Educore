@@ -31,7 +31,6 @@ export const STATUS_LABELS: Record<string, string> = {
   in_progress: "In Progress",
   submitted: "Submitted",
   under_review: "Under Review",
-  reviewed: "Reviewed",
   approved: "Approved",
 };
 

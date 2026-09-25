@@ -545,6 +545,14 @@ export async function addSchemeEntry(input: SchemeEntryInput): Promise<EntryResu
     return { error: "You don't have permission to edit this scheme, or something went wrong. Please try again." };
   }
 
+  // First lesson added to a fresh scheme: draft -> in_progress. Guarded on
+  // the current status so this is a no-op once the scheme has moved past
+  // draft (submitted/under_review/approved schemes can still get entries
+  // added by write_any holders without being silently reset). Deliberately
+  // fire-and-forget on error -- the entry itself already saved successfully,
+  // and a missed status flip is cosmetic, not data loss.
+  await supabase.from("schemes_of_work").update({ status: "in_progress" }).eq("id", input.scheme_id).eq("status", "draft");
+
   revalidatePath("/academics/scheme-of-work");
   return { success: true, entryId: data.id };
 }
@@ -682,6 +690,39 @@ export async function submitScheme(schemeId: string): Promise<{ error: string } 
 
   if (error) return { error: "Something went wrong while submitting. Please try again." };
   if (!data) return { error: "You don't have permission to submit this scheme, or it no longer exists." };
+
+  revalidatePath("/academics/scheme-of-work");
+  return { success: true };
+}
+
+// Lets a reviewer explicitly claim a submitted scheme, same pattern as
+// markUnderReviewAction in admissions/actions.ts. Guarded to only advance
+// from "submitted" so it can't clobber a scheme another reviewer already
+// approved/returned in the meantime.
+export async function startSchemeReview(schemeId: string): Promise<{ error: string } | { success: true }> {
+  if (!isNonEmptyUuidLike(schemeId)) return { error: "Missing scheme." };
+
+  const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "You must be signed in." };
+
+  const { data: canReview } = await supabase.rpc("auth_has_permission", { p_permission_key: "scheme_of_work.review" });
+  if (!canReview) return { error: "You don't have permission to review schemes." };
+
+  const { data, error } = await supabase
+    .from("schemes_of_work")
+    .update({ status: "under_review" })
+    .eq("id", schemeId)
+    .eq("status", "submitted")
+    .select("id")
+    .maybeSingle();
+
+  if (error) return { error: "Something went wrong. Please try again." };
+  if (!data) return { error: "This scheme isn't awaiting review, or it no longer exists." };
 
   revalidatePath("/academics/scheme-of-work");
   return { success: true };

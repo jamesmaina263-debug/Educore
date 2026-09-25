@@ -15,7 +15,6 @@ const STATUS_TONE: Record<string, "neutral" | "info" | "warning" | "success"> = 
   in_progress: "info",
   submitted: "info",
   under_review: "warning",
-  reviewed: "info",
   approved: "success",
 };
 
