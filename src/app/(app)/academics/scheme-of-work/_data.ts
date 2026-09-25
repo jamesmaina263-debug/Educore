@@ -25,16 +25,18 @@ export interface SchemeOfWorkDashboardContext {
   yearOptions: FilterOption[];
   termOptions: FilterOption[];
   classOptions: FilterOption[];
+  streamOptions: FilterOption[];
   subjectOptions: FilterOption[];
   teacherOptions: FilterOption[];
   statusOptions: FilterOption[];
-  filters: { year?: string; term?: string; class?: string; subject?: string; teacher?: string; status?: string };
+  filters: { year?: string; term?: string; class?: string; stream?: string; subject?: string; teacher?: string; status?: string };
 }
 
 export async function loadSchemeOfWorkDashboard(searchParams: {
   year?: string;
   term?: string;
   class?: string;
+  stream?: string;
   subject?: string;
   teacher?: string;
   status?: string;
@@ -64,6 +66,7 @@ export async function loadSchemeOfWorkDashboard(searchParams: {
     yearOptions: [],
     termOptions: [],
     classOptions: [],
+    streamOptions: [],
     subjectOptions: [],
     teacherOptions: [],
     statusOptions: Object.entries(STATUS_LABELS).map(([id, label]) => ({ id, label })),
@@ -75,23 +78,25 @@ export async function loadSchemeOfWorkDashboard(searchParams: {
   let query = supabase
     .from("schemes_of_work")
     .select(
-      "id, status, origin, total_weeks, lessons_per_week, updated_at, academic_year_id, term_id, class_id, subject_id, teacher_id, subjects(name), classes(name), streams(name), school_users(full_name), terms(name, academic_years(name))",
+      "id, status, origin, total_weeks, lessons_per_week, updated_at, academic_year_id, term_id, class_id, stream_id, subject_id, teacher_id, subjects(name), classes(name), streams(name), school_users(full_name), terms(name, academic_years(name))",
     )
     .order("updated_at", { ascending: false });
 
   if (searchParams.year) query = query.eq("academic_year_id", searchParams.year);
   if (searchParams.term) query = query.eq("term_id", searchParams.term);
   if (searchParams.class) query = query.eq("class_id", searchParams.class);
+  if (searchParams.stream) query = query.eq("stream_id", searchParams.stream);
   if (searchParams.subject) query = query.eq("subject_id", searchParams.subject);
   if (searchParams.teacher) query = query.eq("teacher_id", searchParams.teacher);
   if (searchParams.status) query = query.eq("status", searchParams.status);
 
-  const [{ data: schemeRows }, { data: yearsRaw }, { data: termsRaw }, { data: classesRaw }, { data: subjectsRaw }, { data: teachersRaw }] =
+  const [{ data: schemeRows }, { data: yearsRaw }, { data: termsRaw }, { data: classesRaw }, { data: streamsRaw }, { data: subjectsRaw }, { data: teachersRaw }] =
     await Promise.all([
       query,
       supabase.from("academic_years").select("id, name").order("start_date", { ascending: false }),
       supabase.from("terms").select("id, name, academic_years(name)").order("start_date", { ascending: false }),
       supabase.from("classes").select("id, name").order("level_order"),
+      supabase.from("streams").select("id, name, class_id, classes(name)").order("name"),
       supabase.from("subjects").select("id, name").order("name"),
       canWriteAny
         ? supabase.from("school_users").select("id, full_name").order("full_name")
@@ -140,6 +145,10 @@ export async function loadSchemeOfWorkDashboard(searchParams: {
       label: `${(t.academic_years as unknown as { name: string } | null)?.name ?? ""} — ${t.name}`,
     })),
     classOptions: (classesRaw ?? []).map((c) => ({ id: c.id, label: c.name })),
+    streamOptions: (streamsRaw ?? []).map((s) => ({
+      id: s.id,
+      label: `${(s.classes as unknown as { name: string } | null)?.name ?? ""} — ${s.name}`,
+    })),
     subjectOptions: (subjectsRaw ?? []).map((s) => ({ id: s.id, label: s.name })),
     teacherOptions: (teachersRaw ?? []).map((t) => ({ id: t.id, label: t.full_name })),
   };

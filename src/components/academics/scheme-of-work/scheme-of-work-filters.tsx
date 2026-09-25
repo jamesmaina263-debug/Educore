@@ -8,10 +8,11 @@ interface Props {
   yearOptions: FilterOption[];
   termOptions: FilterOption[];
   classOptions: FilterOption[];
+  streamOptions: FilterOption[];
   subjectOptions: FilterOption[];
   teacherOptions: FilterOption[];
   statusOptions: FilterOption[];
-  filters: { year?: string; term?: string; class?: string; subject?: string; teacher?: string; status?: string };
+  filters: { year?: string; term?: string; class?: string; stream?: string; subject?: string; teacher?: string; status?: string };
   showTeacherFilter: boolean;
 }
 
@@ -21,6 +22,7 @@ export function SchemeOfWorkFilters({
   yearOptions,
   termOptions,
   classOptions,
+  streamOptions,
   subjectOptions,
   teacherOptions,
   statusOptions,
@@ -42,6 +44,7 @@ export function SchemeOfWorkFilters({
     { key: "year", label: "Academic Year", options: yearOptions },
     { key: "term", label: "Term", options: termOptions },
     { key: "class", label: "Class", options: classOptions },
+    { key: "stream", label: "Stream", options: streamOptions },
     { key: "subject", label: "Subject", options: subjectOptions },
     ...(showTeacherFilter ? [{ key: "teacher" as const, label: "Teacher", options: teacherOptions }] : []),
     { key: "status", label: "Status", options: statusOptions },
