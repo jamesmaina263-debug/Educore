@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest";
 import {
   buildSchemeOfWorkPrompt,
   buildCurriculumContext,
+  buildEntryAssistPrompt,
   checkSchemeOfWorkQuality,
   parseSchemeOfWorkResponse,
+  parseEntryAssistResponse,
   weeksGenerated,
   type SchemeOfWorkDraft,
 } from "./scheme-of-work";
@@ -292,5 +294,133 @@ describe("checkSchemeOfWorkQuality", () => {
     expect(warnings.some((w) => w.includes("no learning outcomes"))).toBe(true);
     expect(warnings.some((w) => w.includes("no learning activities"))).toBe(true);
     expect(warnings.some((w) => w.includes("no assessment method"))).toBe(true);
+  });
+});
+
+describe("buildEntryAssistPrompt", () => {
+  const baseEntry = {
+    topic: "Photosynthesis",
+    subtopic: "Light reactions",
+    learning_outcomes: "Explain the light-dependent reactions.",
+    content: "Overview of chlorophyll and electron transport.",
+    activities: "Diagram labelling in pairs.",
+    teaching_methods: "Lecture and discussion.",
+    resources: "Textbook, chart.",
+    assessment_methods: "Oral questions.",
+  };
+  const base = {
+    subjectName: "Biology",
+    className: "Form 2",
+    streamName: "Form 2 East",
+    termName: "Term 1",
+    academicYearName: "2026",
+    entry: baseEntry,
+  };
+
+  it("includes the mode-specific instruction for each mode", () => {
+    expect(buildEntryAssistPrompt({ ...base, mode: "improve" })).toContain("Improve and tighten this lesson entry");
+    expect(buildEntryAssistPrompt({ ...base, mode: "expand" })).toContain("Expand this lesson entry");
+    expect(buildEntryAssistPrompt({ ...base, mode: "generate_activities" })).toContain("Only replace the 'activities' field");
+  });
+
+  it("includes the current entry's field values", () => {
+    const prompt = buildEntryAssistPrompt({ ...base, mode: "improve" });
+    expect(prompt).toContain("Photosynthesis");
+    expect(prompt).toContain("Light reactions");
+    expect(prompt).toContain("Explain the light-dependent reactions.");
+    expect(prompt).toContain("Oral questions.");
+  });
+
+  it("includes subject/class/stream/term context", () => {
+    const prompt = buildEntryAssistPrompt({ ...base, mode: "improve" });
+    expect(prompt).toContain("Biology");
+    expect(prompt).toContain("Form 2 (Form 2 East)");
+    expect(prompt).toContain("Term 1");
+  });
+
+  it("grounds in curriculumContext when supplied", () => {
+    const prompt = buildEntryAssistPrompt({ ...base, mode: "improve", curriculumContext: "- Cell Biology\n  - Photosynthesis" });
+    expect(prompt).toContain("recorded its own curriculum content");
+    expect(prompt).toContain("- Cell Biology");
+  });
+
+  it("omits curriculum grounding when curriculumContext is null", () => {
+    const prompt = buildEntryAssistPrompt({ ...base, mode: "improve", curriculumContext: null });
+    expect(prompt).not.toContain("recorded its own curriculum content");
+  });
+
+  it("tells the model not to invent official curriculum codes", () => {
+    const prompt = buildEntryAssistPrompt({ ...base, mode: "improve" });
+    expect(prompt).toContain("Do not invent specific official curriculum codes");
+  });
+
+  it("shows '(none given)' for empty entry fields instead of a blank line", () => {
+    const prompt = buildEntryAssistPrompt({ ...base, mode: "improve", entry: { ...baseEntry, subtopic: "", content: "" } });
+    expect(prompt).toContain("Sub-topic: (none given)");
+    expect(prompt).toContain("Content: (none given)");
+  });
+});
+
+describe("parseEntryAssistResponse", () => {
+  const wellFormed = {
+    candidates: [
+      {
+        content: {
+          parts: [
+            {
+              text: JSON.stringify({
+                topic: "Photosynthesis",
+                subtopic: "Light reactions",
+                learning_outcomes: "Explain the light-dependent reactions.",
+                content: "Overview of chlorophyll and electron transport.",
+                activities: "Diagram labelling in pairs; simulation.",
+                teaching_methods: "Lecture and discussion.",
+                resources: "Textbook, chart.",
+                assessment_methods: "Oral questions.",
+              }),
+            },
+          ],
+        },
+      },
+    ],
+  };
+
+  it("parses a well-formed response into a suggestion", () => {
+    const result = parseEntryAssistResponse(wellFormed);
+    expect("suggestion" in result).toBe(true);
+    if ("suggestion" in result) {
+      expect(result.suggestion.topic).toBe("Photosynthesis");
+      expect(result.suggestion.activities).toBe("Diagram labelling in pairs; simulation.");
+    }
+  });
+
+  it("errors when there is no text at all", () => {
+    expect(parseEntryAssistResponse({})).toEqual({ error: "The AI returned no content." });
+    expect(parseEntryAssistResponse(null)).toEqual({ error: "The AI returned no content." });
+  });
+
+  it("errors when the text is not valid JSON", () => {
+    const bad = { candidates: [{ content: { parts: [{ text: "not json" }] } }] };
+    expect(parseEntryAssistResponse(bad)).toEqual({ error: "The AI response wasn't valid JSON." });
+  });
+
+  it("errors when the response is not an object", () => {
+    const bad = { candidates: [{ content: { parts: [{ text: JSON.stringify("just a string") }] } }] };
+    expect(parseEntryAssistResponse(bad)).toEqual({ error: "The AI response had an unexpected structure." });
+  });
+
+  it("errors when topic is missing", () => {
+    const bad = { candidates: [{ content: { parts: [{ text: JSON.stringify({ activities: "Something" }) }] } }] };
+    expect(parseEntryAssistResponse(bad)).toEqual({ error: "The AI response was missing a topic." });
+  });
+
+  it("defaults missing optional fields to empty strings rather than throwing", () => {
+    const minimal = { candidates: [{ content: { parts: [{ text: JSON.stringify({ topic: "Photosynthesis" }) }] } }] };
+    const result = parseEntryAssistResponse(minimal);
+    expect("suggestion" in result).toBe(true);
+    if ("suggestion" in result) {
+      expect(result.suggestion.subtopic).toBe("");
+      expect(result.suggestion.assessment_methods).toBe("");
+    }
   });
 });

@@ -370,3 +370,147 @@ export function checkSchemeOfWorkQuality(draft: SchemeOfWorkDraft, totalWeeks: n
 
   return warnings;
 }
+
+// ---------------------------------------------------------------------------
+// Per-entry AI Assist (gap #5): a scoped, single-entry regeneration for an
+// already-saved lesson, rather than the whole-scheme generator above. Shares
+// the model, the Gemini call pattern, the structured-output approach and the
+// error taxonomy with generateSchemeWithAI -- deliberately not a second AI
+// integration, just a second, smaller prompt/schema/parser trio plus a
+// dedicated prompt version so it's distinguishable in the audit log
+// (scheme_of_work_ai_requests.prompt_version).
+// ---------------------------------------------------------------------------
+
+export const SCHEME_OF_WORK_ENTRY_ASSIST_PROMPT_VERSION = "scheme_of_work_entry_assist_prompt_v1";
+
+export type EntryAssistMode = "improve" | "expand" | "generate_activities";
+
+export interface EntryAssistPromptInput {
+  mode: EntryAssistMode;
+  subjectName: string;
+  className: string;
+  streamName: string | null;
+  termName: string;
+  academicYearName: string;
+  /** Same school-recorded curriculum text as buildSchemeOfWorkPrompt, reused
+   *  as-is -- null whenever the school has nothing usable recorded. */
+  curriculumContext?: string | null;
+  entry: {
+    topic: string;
+    subtopic: string;
+    learning_outcomes: string;
+    content: string;
+    activities: string;
+    teaching_methods: string;
+    resources: string;
+    assessment_methods: string;
+  };
+}
+
+const ENTRY_ASSIST_MODE_INSTRUCTION: Record<EntryAssistMode, string> = {
+  improve:
+    "Improve and tighten this lesson entry for clarity, specificity and professional teaching language, without changing its fundamental topic or subject matter. Rewrite any vague or generic field so it is concrete and specific to this exact lesson. Return the full entry, with every field revised as needed.",
+  expand:
+    "Expand this lesson entry with more depth and detail -- richer content, a fuller set of specific learning activities, more specific teaching methods and resources -- while keeping the same topic and staying realistic for a single lesson. Return the full entry, with every field expanded as useful.",
+  generate_activities:
+    "Keep the topic, subtopic, learning outcomes, content, teaching methods, resources and assessment method below exactly as given, unchanged. Only replace the 'activities' field, with a new, richer, more varied and specific set of learning activities appropriate to this topic and class level.",
+};
+
+/** Same rule as buildSchemeOfWorkPrompt (spec item 19): every interpolated
+ *  value is either school academics data already validated to exist/belong
+ *  to the caller's school, or the currently-saved entry's own field values
+ *  -- fed back to the model as data to revise, never as instructions. */
+export function buildEntryAssistPrompt(input: EntryAssistPromptInput): string {
+  const stream = input.streamName ? ` (${input.streamName})` : "";
+  const grounding = input.curriculumContext
+    ? `This school has recorded its own curriculum content for ${input.subjectName} in EduCore. Stay consistent with it where relevant, and do not contradict it:\n${input.curriculumContext}\n\n`
+    : "";
+
+  return `You are helping a Kenyan school teacher refine a single lesson entry within a Scheme of Work. ${ENTRY_ASSIST_MODE_INSTRUCTION[input.mode]}
+
+Subject: ${input.subjectName}
+Class: ${input.className}${stream}
+Term: ${input.termName}, Academic Year: ${input.academicYearName}
+
+${grounding}Current lesson entry:
+Topic: ${input.entry.topic}
+Sub-topic: ${input.entry.subtopic || "(none given)"}
+Learning outcomes: ${input.entry.learning_outcomes || "(none given)"}
+Content: ${input.entry.content || "(none given)"}
+Learning activities: ${input.entry.activities || "(none given)"}
+Teaching methods: ${input.entry.teaching_methods || "(none given)"}
+Resources: ${input.entry.resources || "(none given)"}
+Assessment method: ${input.entry.assessment_methods || "(none given)"}
+
+Do not invent specific official curriculum codes, clause numbers, or exact KICD/KNEC syllabus references. If you are not certain of the exact official wording, write in plain teaching language instead. This is a suggestion for the teacher to review and edit, not a claim of official authority.`;
+}
+
+export const entryAssistResponseSchema = {
+  type: "OBJECT",
+  properties: {
+    topic: { type: "STRING" },
+    subtopic: { type: "STRING" },
+    learning_outcomes: { type: "STRING" },
+    content: { type: "STRING" },
+    activities: { type: "STRING" },
+    teaching_methods: { type: "STRING" },
+    resources: { type: "STRING" },
+    assessment_methods: { type: "STRING" },
+  },
+  required: ["topic", "learning_outcomes", "activities", "assessment_methods"],
+} as const;
+
+export interface EntryAssistDraft {
+  topic: string;
+  subtopic: string;
+  learning_outcomes: string;
+  content: string;
+  activities: string;
+  teaching_methods: string;
+  resources: string;
+  assessment_methods: string;
+}
+
+export type EntryAssistParseResult = { suggestion: EntryAssistDraft } | { error: string };
+
+/** Mirrors parseSchemeOfWorkResponse's rules (spec items 8/9/18) at the
+ *  scale of a single object instead of a weeks[] array: never throws, and a
+ *  missing topic is treated as a malformed response, never silently
+ *  defaulted to an empty string and returned as if valid. */
+export function parseEntryAssistResponse(data: unknown): EntryAssistParseResult {
+  const text = (data as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> })?.candidates?.[0]
+    ?.content?.parts?.[0]?.text;
+  if (!text || !text.trim()) {
+    return { error: "The AI returned no content." };
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    return { error: "The AI response wasn't valid JSON." };
+  }
+
+  if (typeof parsed !== "object" || parsed === null) {
+    return { error: "The AI response had an unexpected structure." };
+  }
+
+  const p = parsed as Record<string, unknown>;
+  const topic = asString(p.topic);
+  if (!topic) {
+    return { error: "The AI response was missing a topic." };
+  }
+
+  return {
+    suggestion: {
+      topic,
+      subtopic: asString(p.subtopic),
+      learning_outcomes: asString(p.learning_outcomes),
+      content: asString(p.content),
+      activities: asString(p.activities),
+      teaching_methods: asString(p.teaching_methods),
+      resources: asString(p.resources),
+      assessment_methods: asString(p.assessment_methods),
+    },
+  };
+}
