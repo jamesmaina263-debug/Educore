@@ -5,6 +5,13 @@ import { AppShell } from "@/components/app-shell/app-shell";
 import { SchemeCreateForm } from "@/components/academics/scheme-of-work/scheme-create-form";
 import { loadCreateSchemeOptions } from "../_data";
 
+// generateSchemeWithAI (invoked from this page's form) can now run several
+// sequential Gemini calls for a large scheme (see chunkWeekRanges in
+// src/lib/ai/scheme-of-work.ts) -- raised from the platform's default so a
+// multi-chunk generation isn't cut off mid-request. Available on Vercel's
+// Hobby plan without a plan upgrade.
+export const maxDuration = 60;
+
 export default async function NewSchemeOfWorkPage() {
   const user = await getCachedUser();
   if (!user) redirect("/login");

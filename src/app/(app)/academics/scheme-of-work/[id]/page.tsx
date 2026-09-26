@@ -5,6 +5,11 @@ import { AppShell } from "@/components/app-shell/app-shell";
 import { SchemeEditor } from "@/components/academics/scheme-of-work/scheme-editor";
 import { loadSchemeDetail } from "../_data";
 
+// assistSchemeEntry (invoked from SchemeEditor's AI Assist action on this
+// page) had the same too-tight timeout risk generateSchemeWithAI did -- see
+// that function's comment in scheme-of-work/actions.ts. Raised alongside it.
+export const maxDuration = 60;
+
 export default async function SchemeDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const user = await getCachedUser();
