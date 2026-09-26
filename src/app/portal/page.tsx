@@ -160,6 +160,10 @@ export default async function PortalPage({ searchParams }: { searchParams: Promi
       bookedCountBySlot.set(c.slot_id, c.booked_count);
     }
   }
+  // Same "hidden everywhere" standard as Homework's portal section -- this one was already
+  // role-gated to parents, but had no module check at all until now.
+  const { data: ptMeetingsModuleEnabledData } = await supabase.rpc("auth_school_module_enabled", { p_key: "pt_meetings" });
+  const ptMeetingsModuleEnabled = ptMeetingsModuleEnabledData !== false;
   const ptSlots: PortalSlotRow[] = (slotRows ?? []).map((s) => {
     const teacher = s.school_users as unknown as { full_name: string } | null;
     const bookings = (s.pt_meeting_bookings ?? []) as { id: string; status: string; student_id: string }[];
@@ -512,7 +516,7 @@ export default async function PortalPage({ searchParams }: { searchParams: Promi
         </div>
       )}
 
-      {roleName === "parent" && (
+      {roleName === "parent" && ptMeetingsModuleEnabled && (
         <div className="panel p-4">
           <p className="label-eyebrow mb-2">Parent-teacher meetings</p>
           <PortalPtMeetingsSection studentId={selected.id} slots={ptSlots} />
