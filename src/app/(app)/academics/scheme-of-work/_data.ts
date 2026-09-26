@@ -111,7 +111,11 @@ export async function loadSchemeOfWorkDashboard(searchParams: {
       supabase.from("streams").select("id, name, class_id, classes(name)").order("name"),
       supabase.from("subjects").select("id, name").order("name"),
       canWriteAny
-        ? supabase.from("school_users").select("id, full_name").order("full_name")
+        ? supabase
+            .from("school_users")
+            .select("id, full_name, roles!inner(name)")
+            .not("roles.name", "in", "(parent,student,super_admin)")
+            .order("full_name")
         : Promise.resolve({ data: schoolUser ? [{ id: schoolUser.id, full_name: schoolUser.full_name }] : [] }),
     ]);
 
