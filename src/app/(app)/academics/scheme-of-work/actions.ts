@@ -16,6 +16,8 @@ import {
   parseSchemeOfWorkResponse,
   parseEntryAssistResponse,
   checkSchemeOfWorkQuality,
+  chunkWeekRanges,
+  summarizePreviousWeeks,
   weeksGenerated as countWeeksGenerated,
   type SchemeOfWorkDraft,
   type SchemeOfWorkDraftWeek,
@@ -208,77 +210,121 @@ export async function generateSchemeWithAI(input: GenerateSchemeInput): Promise<
     })),
   );
 
-  // ---- 7. Build the prompt server-side, from validated DB fields only (never raw
-  //         teacher free-text -- see the doc comment on buildSchemeOfWorkPrompt). ----
-  const prompt = buildSchemeOfWorkPrompt({
-    subjectName: subjectRow.name,
-    className: classRow.name,
-    streamName: streamResult.data?.name ?? null,
-    termName: termRow.name,
-    academicYearName: yearRow.name,
-    totalWeeks: input.total_weeks,
-    lessonsPerWeek: input.lessons_per_week,
-    curriculumFramework: input.curriculum_framework,
-    curriculumContext: curriculumContext?.text ?? null,
-  });
+  // ---- 7 & 8. Generate the scheme, in one or more Gemini calls.
+  //
+  //         Previously this was a single fetch covering every week at once,
+  //         with an 8s client-side timeout well under Vercel's own function
+  //         cap -- a real production request (5 weeks x 4 lessons/week, 20
+  //         entries) exceeded that and timed out, returning nothing. Two
+  //         fixes, applied together: (a) the per-call timeout below is much
+  //         more generous, and (b) large schemes are now split into several
+  //         smaller calls (chunkWeekRanges), so no single call is ever asked
+  //         to produce more than MAX_ENTRIES_PER_GENERATION_CALL lesson
+  //         entries regardless of how large the whole scheme is. A scheme
+  //         that fits in one chunk (the common case) still makes exactly one
+  //         call, unchanged in shape from before.
+  //
+  //         If a later chunk fails after earlier ones already succeeded,
+  //         that's treated the same as the model returning a partial
+  //         response (see weeksGenerated/checkSchemeOfWorkQuality below) --
+  //         whatever was generated is kept and returned to the teacher,
+  //         rather than the whole request failing over one slow chunk. Only
+  //         a failure on the very first chunk (nothing generated yet) is
+  //         reported as an outright error, same as before this change.
+  const GEMINI_CALL_TIMEOUT_MS = 45000;
+  const ranges = chunkWeekRanges(input.total_weeks, input.lessons_per_week);
 
-  // ---- 8. Call Gemini. Same Vercel Hobby ~10s hard cap noted in
-  //         draftCommentWithAI applies here -- a large scheme (many weeks x many
-  //         lessons) is a known risk of hitting that cap; see the PR notes. ----
-  let res: Response;
-  try {
-    res = await fetch(geminiGenerateContentUrl(apiKey, GEMINI_SCHEME_MODEL), {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: {
-          maxOutputTokens: 8000,
-          temperature: 0.4,
-          responseMimeType: "application/json",
-          responseSchema: schemeOfWorkResponseSchema,
-        },
-      }),
-      signal: AbortSignal.timeout(8000),
+  const accumulatedWeeks: SchemeOfWorkDraftWeek[] = [];
+  let firstChunkFailure: GenerateSchemeResult | null = null;
+
+  for (const range of ranges) {
+    const prompt = buildSchemeOfWorkPrompt({
+      subjectName: subjectRow.name,
+      className: classRow.name,
+      streamName: streamResult.data?.name ?? null,
+      termName: termRow.name,
+      academicYearName: yearRow.name,
+      totalWeeks: input.total_weeks,
+      lessonsPerWeek: input.lessons_per_week,
+      curriculumFramework: input.curriculum_framework,
+      curriculumContext: curriculumContext?.text ?? null,
+      weekRange: range,
+      previousWeeksSummary: summarizePreviousWeeks(accumulatedWeeks),
     });
-  } catch (e) {
-    const isTimeout = e instanceof Error && (e.name === "TimeoutError" || e.name === "AbortError");
-    await markRequestFailed(isTimeout ? "timeout" : "network");
-    return isTimeout
-      ? { error: "Generation timed out. The AI took too long to respond. No changes were made to your existing scheme." }
-      : { error: "Connection interrupted. We couldn't complete the AI request. Your existing work is safe. Please check your connection and try again." };
+
+    let res: Response;
+    try {
+      res = await fetch(geminiGenerateContentUrl(apiKey, GEMINI_SCHEME_MODEL), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: {
+            maxOutputTokens: 8000,
+            temperature: 0.4,
+            responseMimeType: "application/json",
+            responseSchema: schemeOfWorkResponseSchema,
+          },
+        }),
+        signal: AbortSignal.timeout(GEMINI_CALL_TIMEOUT_MS),
+      });
+    } catch (e) {
+      const isTimeout = e instanceof Error && (e.name === "TimeoutError" || e.name === "AbortError");
+      if (accumulatedWeeks.length === 0) {
+        await markRequestFailed(isTimeout ? "timeout" : "network");
+        firstChunkFailure = isTimeout
+          ? { error: "Generation timed out. The AI took too long to respond. No changes were made to your existing scheme." }
+          : { error: "Connection interrupted. We couldn't complete the AI request. Your existing work is safe. Please check your connection and try again." };
+      }
+      break;
+    }
+
+    if (!res.ok) {
+      const body = await res.text();
+      console.error(`generateSchemeWithAI: Gemini returned ${res.status} for weeks ${range.startWeek}-${range.endWeek} (request ${requestId}): ${body.slice(0, 500)}`);
+      if (accumulatedWeeks.length === 0) {
+        if (res.status === 401 || res.status === 403) {
+          await markRequestFailed("auth_config");
+          firstChunkFailure = { error: "AI generation is currently unavailable. Please contact your school administrator if the problem continues." };
+        } else if (res.status === 429) {
+          await markRequestFailed("rate_limit");
+          firstChunkFailure = { error: "AI generation is temporarily busy. Please wait a moment and try again." };
+        } else if (res.status >= 500) {
+          await markRequestFailed("ai_unavailable");
+          firstChunkFailure = { error: "AI generation is temporarily unavailable. Your existing scheme data has not been affected. Please try again shortly." };
+        } else {
+          await markRequestFailed("server_error");
+          firstChunkFailure = { error: "Something went wrong while preparing your scheme. No existing scheme data was changed. Please try again." };
+        }
+      }
+      break;
+    }
+
+    const data = await res.json();
+    const parsedChunk = parseSchemeOfWorkResponse(data);
+    if ("error" in parsedChunk) {
+      console.error(
+        `generateSchemeWithAI: response failed validation for weeks ${range.startWeek}-${range.endWeek} (request ${requestId}): ${parsedChunk.error}`,
+        JSON.stringify(data).slice(0, 500),
+      );
+      if (accumulatedWeeks.length === 0) {
+        await markRequestFailed(parsedChunk.error.includes("no content") || parsedChunk.error.includes("no weeks") ? "empty_response" : "malformed_response");
+        firstChunkFailure = { error: "We couldn't prepare the scheme correctly. The AI returned an unexpected result. Please try generating it again." };
+      }
+      break;
+    }
+
+    accumulatedWeeks.push(...parsedChunk.draft.weeks);
   }
 
-  if (!res.ok) {
-    const body = await res.text();
-    console.error(`generateSchemeWithAI: Gemini returned ${res.status} (request ${requestId}): ${body.slice(0, 500)}`);
-    if (res.status === 401 || res.status === 403) {
-      await markRequestFailed("auth_config");
-      return { error: "AI generation is currently unavailable. Please contact your school administrator if the problem continues." };
-    }
-    if (res.status === 429) {
-      await markRequestFailed("rate_limit");
-      return { error: "AI generation is temporarily busy. Please wait a moment and try again." };
-    }
-    if (res.status >= 500) {
-      await markRequestFailed("ai_unavailable");
-      return { error: "AI generation is temporarily unavailable. Your existing scheme data has not been affected. Please try again shortly." };
-    }
-    await markRequestFailed("server_error");
-    return { error: "Something went wrong while preparing your scheme. No existing scheme data was changed. Please try again." };
+  if (accumulatedWeeks.length === 0) {
+    return firstChunkFailure ?? { error: "Something went wrong while preparing your scheme. No existing scheme data was changed. Please try again." };
   }
 
-  const data = await res.json();
-  const parsed = parseSchemeOfWorkResponse(data);
-  if ("error" in parsed) {
-    console.error(`generateSchemeWithAI: response failed validation (request ${requestId}): ${parsed.error}`, JSON.stringify(data).slice(0, 500));
-    await markRequestFailed(parsed.error.includes("no content") || parsed.error.includes("no weeks") ? "empty_response" : "malformed_response");
-    return { error: "We couldn't prepare the scheme correctly. The AI returned an unexpected result. Please try generating it again." };
-  }
-
-  const generated = countWeeksGenerated(parsed.draft);
+  const draft: SchemeOfWorkDraft = { weeks: accumulatedWeeks };
+  const generated = countWeeksGenerated(draft);
   const partial = generated < input.total_weeks;
-  const warnings = checkSchemeOfWorkQuality(parsed.draft, input.total_weeks, input.lessons_per_week);
+  const warnings = checkSchemeOfWorkQuality(draft, input.total_weeks, input.lessons_per_week);
 
   if (requestId) {
     await supabase
@@ -295,7 +341,7 @@ export async function generateSchemeWithAI(input: GenerateSchemeInput): Promise<
   return {
     success: true,
     requestId: requestId ?? "",
-    draft: parsed.draft,
+    draft,
     warnings,
     partial,
     weeksRequested: input.total_weeks,
@@ -911,7 +957,10 @@ export async function assistSchemeEntry(input: AssistSchemeEntryInput): Promise<
           responseSchema: entryAssistResponseSchema,
         },
       }),
-      signal: AbortSignal.timeout(8000),
+      // Raised from 8s alongside generateSchemeWithAI's fix -- see that
+      // function's comment. A single entry is much smaller than a whole
+      // scheme so was less exposed, but the same timeout risk applies.
+      signal: AbortSignal.timeout(30000),
     });
   } catch (e) {
     const isTimeout = e instanceof Error && (e.name === "TimeoutError" || e.name === "AbortError");

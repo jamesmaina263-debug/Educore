@@ -7,6 +7,9 @@ import {
   parseSchemeOfWorkResponse,
   parseEntryAssistResponse,
   weeksGenerated,
+  chunkWeekRanges,
+  summarizePreviousWeeks,
+  MAX_ENTRIES_PER_GENERATION_CALL,
   type SchemeOfWorkDraft,
 } from "./scheme-of-work";
 
@@ -62,6 +65,83 @@ describe("buildSchemeOfWorkPrompt", () => {
     const prompt = buildSchemeOfWorkPrompt({ ...base, curriculumContext: null });
     expect(prompt).toContain("Curriculum framework: CBC. Align topics");
     expect(prompt).not.toContain("This school has recorded its own curriculum content");
+  });
+
+  it("covers the full scheme by default (no weekRange)", () => {
+    const prompt = buildSchemeOfWorkPrompt(base);
+    expect(prompt).toContain("exactly 13 weeks, numbered 1 to 13");
+    expect(prompt).not.toContain("You are generating ONLY weeks");
+  });
+
+  it("scopes to a week range and flags it as a chunk when weekRange is given", () => {
+    const prompt = buildSchemeOfWorkPrompt({ ...base, weekRange: { startWeek: 6, endWeek: 10 } });
+    expect(prompt).toContain("You are generating ONLY weeks 6 to 10");
+    expect(prompt).toContain("exactly 5 weeks, numbered 6 to 10");
+    expect(prompt).not.toContain("You are generating ONLY weeks 1 to 13");
+  });
+
+  it("does not add chunk framing when weekRange covers the whole scheme", () => {
+    const prompt = buildSchemeOfWorkPrompt({ ...base, weekRange: { startWeek: 1, endWeek: 13 } });
+    expect(prompt).not.toContain("You are generating ONLY weeks");
+  });
+
+  it("includes previousWeeksSummary as topics to avoid repeating", () => {
+    const prompt = buildSchemeOfWorkPrompt({
+      ...base,
+      weekRange: { startWeek: 6, endWeek: 10 },
+      previousWeeksSummary: "Week 1: Cell structure\nWeek 2: Cell division",
+    });
+    expect(prompt).toContain("do not repeat these");
+    expect(prompt).toContain("Week 1: Cell structure");
+  });
+});
+
+describe("chunkWeekRanges", () => {
+  it("returns a single range covering the whole scheme when it fits in one call", () => {
+    // 3 weeks x 4 lessons/week = 12 entries, within MAX_ENTRIES_PER_GENERATION_CALL (16)
+    expect(chunkWeekRanges(3, 4)).toEqual([{ startWeek: 1, endWeek: 3 }]);
+  });
+
+  it("splits a large scheme into multiple bounded ranges", () => {
+    // 20 weeks x 4 lessons/week -- weeksPerChunk = floor(16/4) = 4
+    expect(chunkWeekRanges(20, 4)).toEqual([
+      { startWeek: 1, endWeek: 4 },
+      { startWeek: 5, endWeek: 8 },
+      { startWeek: 9, endWeek: 12 },
+      { startWeek: 13, endWeek: 16 },
+      { startWeek: 17, endWeek: 20 },
+    ]);
+  });
+
+  it("never produces a chunk smaller than 1 week even with a high lessons_per_week", () => {
+    const ranges = chunkWeekRanges(3, 20);
+    expect(ranges).toEqual([{ startWeek: 1, endWeek: 1 }, { startWeek: 2, endWeek: 2 }, { startWeek: 3, endWeek: 3 }]);
+  });
+
+  it("covers every week exactly once with no gaps or overlaps", () => {
+    const ranges = chunkWeekRanges(37, 5);
+    const covered = new Set<number>();
+    for (const r of ranges) {
+      for (let w = r.startWeek; w <= r.endWeek; w++) covered.add(w);
+    }
+    expect(covered.size).toBe(37);
+    for (const r of ranges) {
+      expect((r.endWeek - r.startWeek + 1) * 5).toBeLessThanOrEqual(MAX_ENTRIES_PER_GENERATION_CALL);
+    }
+  });
+});
+
+describe("summarizePreviousWeeks", () => {
+  it("returns null for no weeks", () => {
+    expect(summarizePreviousWeeks([])).toBeNull();
+  });
+
+  it("summarizes topics (with subtopic when present), ordered by week", () => {
+    const summary = summarizePreviousWeeks([
+      { week: 2, entries: [{ lesson: 1, topic: "Cell division", subtopic: "Mitosis", learning_outcomes: "", content: "", activities: "", methods: "", resources: "", assessment: "" }] },
+      { week: 1, entries: [{ lesson: 1, topic: "Cell structure", subtopic: "", learning_outcomes: "", content: "", activities: "", methods: "", resources: "", assessment: "" }] },
+    ]);
+    expect(summary).toBe("Week 1: Cell structure\nWeek 2: Cell division (Mitosis)");
   });
 });
 

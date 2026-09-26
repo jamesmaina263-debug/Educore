@@ -33,6 +33,23 @@ export interface SchemeOfWorkPromptInput {
    * behavior exactly as before this field existed.
    */
   curriculumContext?: string | null;
+  /**
+   * When generating a large scheme in multiple smaller Gemini calls (see
+   * chunkWeekRanges below), the specific week range this particular call
+   * should produce -- e.g. weeks 6-10 of a 20-week scheme. Omitted (the
+   * default) reproduces the original single-call prompt exactly, covering
+   * weeks 1..totalWeeks, so behavior for the common (small-scheme) case is
+   * unchanged.
+   */
+  weekRange?: { startWeek: number; endWeek: number };
+  /**
+   * Short topic summary of weeks already generated in earlier chunks of the
+   * same scheme (from summarizePreviousWeeks), so this chunk continues the
+   * progression and doesn't repeat a topic already covered. Null/omitted for
+   * the first chunk of a chunked generation, and always omitted for a
+   * non-chunked request.
+   */
+  previousWeeksSummary?: string | null;
 }
 
 /**
@@ -118,6 +135,11 @@ export function buildCurriculumContext(strands: CurriculumStrandRow[]): Curricul
 export function buildSchemeOfWorkPrompt(input: SchemeOfWorkPromptInput): string {
   const stream = input.streamName ? ` (${input.streamName})` : "";
 
+  const startWeek = input.weekRange?.startWeek ?? 1;
+  const endWeek = input.weekRange?.endWeek ?? input.totalWeeks;
+  const weekCount = endWeek - startWeek + 1;
+  const isChunk = startWeek !== 1 || endWeek !== input.totalWeeks;
+
   let framework: string;
   if (input.curriculumContext) {
     const frameworkNote = input.curriculumFramework ? ` (${input.curriculumFramework})` : "";
@@ -128,9 +150,16 @@ export function buildSchemeOfWorkPrompt(input: SchemeOfWorkPromptInput): string 
     framework = "No specific curriculum framework was supplied -- write standard, level-appropriate content and do not claim it is drawn from any official syllabus.";
   }
 
+  const chunkPreamble = isChunk
+    ? `This scheme has ${input.totalWeeks} teaching weeks in total, being generated in parts. You are generating ONLY weeks ${startWeek} to ${endWeek} of it right now (${weekCount} week${weekCount === 1 ? "" : "s"}). Do not generate any other weeks.\n\n`
+    : "";
+  const continuation = input.previousWeeksSummary
+    ? `\n- Topics already covered in earlier weeks of this same scheme (do not repeat these; continue the subject's logical progression from here):\n${input.previousWeeksSummary}\n`
+    : "";
+
   return `You are helping a Kenyan school teacher draft a Scheme of Work. Generate a complete, realistic teaching plan as structured data (the response schema is enforced separately; just follow it).
 
-Subject: ${input.subjectName}
+${chunkPreamble}Subject: ${input.subjectName}
 Class: ${input.className}${stream}
 Term: ${input.termName}, Academic Year: ${input.academicYearName}
 Number of teaching weeks: ${input.totalWeeks}
@@ -138,9 +167,9 @@ Lessons per week: ${input.lessonsPerWeek}
 ${framework}
 
 Requirements:
-- Produce exactly ${input.totalWeeks} weeks, numbered 1 to ${input.totalWeeks} in order, with no gaps or repeats.
+- Produce exactly ${weekCount} week${weekCount === 1 ? "" : "s"}, numbered ${startWeek} to ${endWeek} in order, with no gaps or repeats.
 - Each week must have exactly ${input.lessonsPerWeek} lesson entries, numbered 1 to ${input.lessonsPerWeek}.
-- Distribute subject content logically across the weeks: build a real progression, do not repeat the same topic in multiple weeks, do not leave any week's topic near-identical to another week's, and cover a realistic breadth of the subject for this class level and term length -- not just one narrow theme stretched thin.
+- Distribute subject content logically across the weeks: build a real progression, do not repeat the same topic in multiple weeks, do not leave any week's topic near-identical to another week's, and cover a realistic breadth of the subject for this class level and term length -- not just one narrow theme stretched thin.${continuation}
 - Each lesson needs its own topic, subtopic, learning outcomes, content summary, learning activities, teaching/learning methods, resources, and an assessment method. Keep each field concrete and specific to that lesson, not generic filler repeated everywhere.
 - Vary the assessment methods and activities across the scheme rather than repeating the same one every lesson.
 - Do not invent specific official curriculum codes, clause numbers, or exact KICD/KNEC syllabus references. If you are not certain of the exact official wording, write in plain teaching language instead.
@@ -298,6 +327,69 @@ export function parseSchemeOfWorkResponse(data: unknown): SchemeOfWorkParseResul
 // ---------------------------------------------------------------------------
 export function weeksGenerated(draft: SchemeOfWorkDraft): number {
   return new Set(draft.weeks.map((w) => w.week)).size;
+}
+
+// ---------------------------------------------------------------------------
+// Chunked generation (large schemes). A single Gemini call asked to produce
+// many weeks x many lessons in one response risks taking longer than any
+// reasonable timeout -- this is exactly the production failure this was
+// built to fix (a 5-week x 4-lesson request, 20 entries, timed out at the
+// previous 8s cap). Splitting a large request into several smaller calls,
+// each bounded to a modest number of lesson entries, keeps every individual
+// call's expected response size (and so its response time) small and
+// predictable regardless of how large the whole scheme is. If a later chunk
+// still fails, the caller keeps whatever earlier chunks already succeeded
+// and returns it as a partial draft -- the existing partial/warnings path
+// already surfaces that to the teacher -- rather than losing the entire
+// request to one slow chunk.
+// ---------------------------------------------------------------------------
+
+/**
+ * Upper bound on lesson entries requested per Gemini call. Chosen well
+ * below the 20-entry request that timed out in production, leaving real
+ * headroom even with the raised per-call timeout. Small schemes (the
+ * common case) stay well under this and are never chunked at all.
+ */
+export const MAX_ENTRIES_PER_GENERATION_CALL = 16;
+
+export interface WeekRange {
+  startWeek: number;
+  endWeek: number;
+}
+
+/**
+ * Splits [1, totalWeeks] into contiguous ranges of at most
+ * MAX_ENTRIES_PER_GENERATION_CALL/lessonsPerWeek weeks each (minimum 1 week
+ * per range -- a high lessons_per_week is the teacher's explicit choice, not
+ * something to silently split mid-week). A scheme that already fits in one
+ * range returns a single range covering the whole scheme. Pure and
+ * unit-testable independent of any network/DB call.
+ */
+export function chunkWeekRanges(totalWeeks: number, lessonsPerWeek: number): WeekRange[] {
+  const weeksPerChunk = Math.max(1, Math.floor(MAX_ENTRIES_PER_GENERATION_CALL / Math.max(1, lessonsPerWeek)));
+  const ranges: WeekRange[] = [];
+  for (let start = 1; start <= totalWeeks; start += weeksPerChunk) {
+    ranges.push({ startWeek: start, endWeek: Math.min(start + weeksPerChunk - 1, totalWeeks) });
+  }
+  return ranges;
+}
+
+/**
+ * Builds a short "already covered" text block from previously generated
+ * weeks, so a later chunk's prompt can keep the subject's progression and
+ * avoid repeating a topic -- without re-sending every prior field (which
+ * would grow the prompt roughly proportionally to how many chunks have run
+ * so far). Only topic (+ subtopic when present) per lesson: enough context
+ * to steer away from repeats without ballooning the prompt.
+ */
+export function summarizePreviousWeeks(weeks: SchemeOfWorkDraftWeek[]): string | null {
+  if (weeks.length === 0) return null;
+  const sorted = [...weeks].sort((a, b) => a.week - b.week);
+  const lines = sorted.map((w) => {
+    const topics = w.entries.map((e) => (e.subtopic ? `${e.topic} (${e.subtopic})` : e.topic)).join("; ");
+    return `Week ${w.week}: ${topics}`;
+  });
+  return lines.join("\n");
 }
 
 // ---------------------------------------------------------------------------
