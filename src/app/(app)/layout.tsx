@@ -32,7 +32,7 @@ export default async function AppRouteGroupLayout({ children }: { children: Reac
   // #425's own note) -- everything else reads the new module system.
   const disabledHrefs: string[] = [];
   if (user) {
-    const [{ data: schoolUser }, { data: healthEnabled }, { data: disciplineEnabled }, { data: libraryEnabled }, { data: payrollEnabled }, { data: transportEnabled }, { data: homeworkEnabled }, { data: ptMeetingsEnabled }, { data: inventoryEnabled }] = await Promise.all([
+    const [{ data: schoolUser }, { data: healthEnabled }, { data: disciplineEnabled }, { data: libraryEnabled }, { data: payrollEnabled }, { data: transportEnabled }, { data: homeworkEnabled }, { data: ptMeetingsEnabled }, { data: inventoryEnabled }, { data: schemeOfWorkEnabled }] = await Promise.all([
       supabase.from("school_users").select("schools(name, boarding_enabled)").eq("auth_user_id", user.id).maybeSingle(),
       supabase.rpc("auth_school_module_enabled", { p_key: "health" }),
       supabase.rpc("auth_school_module_enabled", { p_key: "discipline" }),
@@ -42,6 +42,7 @@ export default async function AppRouteGroupLayout({ children }: { children: Reac
       supabase.rpc("auth_school_module_enabled", { p_key: "homework" }),
       supabase.rpc("auth_school_module_enabled", { p_key: "pt_meetings" }),
       supabase.rpc("auth_school_module_enabled", { p_key: "inventory" }),
+      supabase.rpc("auth_school_module_enabled", { p_key: "scheme_of_work" }),
     ]);
     const school = schoolUser?.schools as unknown as { name: string; boarding_enabled: boolean } | null;
     schoolName = school?.name;
@@ -54,6 +55,7 @@ export default async function AppRouteGroupLayout({ children }: { children: Reac
     if (homeworkEnabled === false) disabledHrefs.push("/homework");
     if (ptMeetingsEnabled === false) disabledHrefs.push("/pt-meetings");
     if (inventoryEnabled === false) disabledHrefs.push("/inventory");
+    if (schemeOfWorkEnabled === false) disabledHrefs.push("/academics/scheme-of-work");
   }
 
   return (
