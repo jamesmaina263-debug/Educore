@@ -2,12 +2,21 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 // ---------------------------------------------------------------------------
 // Closes part of the "no automated tests exist for the server actions or RLS
-// policies" verification gap flagged across Phases 1-3. Scope, stated
-// plainly rather than left implicit:
+// policies" verification gap flagged across Phases 1-3. This file merges two
+// independent passes at that gap (this branch, and PR #457's
+// moveSchemeEntry-focused tests) rather than picking one over the other --
+// PR #457's call-shape assertions (exact .update() payload, "from() never
+// called" on validation failure) are a level of rigor worth keeping, folded
+// into the broader mock/coverage here. Scope, stated plainly:
 //
 // - COVERS: input-validation guard clauses (the checks that run before any
-//   Supabase call), and the signed-in/permission-check branches, using a
-//   lightweight hand-rolled Supabase mock (see makeSupabaseMock below) --
+//   Supabase call) across every exported action in this file; the signed-in/
+//   permission-check branches for a representative subset of actions; the
+//   exact database call shape for moveSchemeEntry specifically (which
+//   columns actually get written, and that nothing is touched when
+//   validation fails); and how addSchemeEntry/updateSchemeEntry/
+//   moveSchemeEntry react to what an RLS-blocked write looks like. All via
+//   a lightweight hand-rolled Supabase mock (see makeSupabaseMock below) --
 //   no real database involved.
 // - DOES NOT COVER: RLS policies themselves. Whether Postgres actually
 //   enforces the tenant/ownership boundaries these actions rely on (e.g.
@@ -21,12 +30,12 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 //   shape in production.
 // - Only a representative subset of actions gets the signed-in/permission
 //   mock treatment (generateSchemeWithAI, assistSchemeEntry,
-//   startSchemeReview, reviewScheme, addSchemeEntry, updateSchemeEntry),
-//   not all ~15 exported actions in this file -- most of the remaining ones
-//   follow the identical two-line "get user -> check permission" shape, so
-//   the marginal value of repeating the same mock structure ~15 times over
-//   is low relative to its cost. Flagging as a reasonable place to stop,
-//   not an oversight.
+//   startSchemeReview, reviewScheme, addSchemeEntry, updateSchemeEntry,
+//   moveSchemeEntry), not all ~15 exported actions in this file -- most of
+//   the remaining ones follow the identical two-line "get user -> check
+//   permission" shape, so the marginal value of repeating the same mock
+//   structure ~15 times over is low relative to its cost. Flagging as a
+//   reasonable place to stop, not an oversight.
 // ---------------------------------------------------------------------------
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
@@ -56,24 +65,28 @@ import {
 } from "./actions";
 
 type ChainResult = { data?: unknown; error?: unknown };
+type RecordedCall = { table: string; op: string; args: unknown[] };
 
 /**
  * A minimal stand-in for a supabase-js query builder: every chainable method
- * (select/eq/order/insert/update/delete/upsert) returns the same object, and
- * either an explicit terminal call (.single()/.maybeSingle()) or awaiting
- * the chain directly (supabase-js's query builder is itself thenable, and a
- * few call sites here await .insert(...) without a terminal call) resolves
- * to the one fixed result this chain was built with.
+ * (select/eq/order/insert/update/delete/upsert) returns the same object,
+ * records its own call (table + op + args) into the shared `calls` array so
+ * tests can assert on exactly what was sent to the database, and either an
+ * explicit terminal call (.single()/.maybeSingle()) or awaiting the chain
+ * directly (supabase-js's query builder is itself thenable, and a few call
+ * sites here await .insert(...) without a terminal call) resolves to the one
+ * fixed result this chain was built with.
  */
-function makeChain(result: ChainResult = { data: null, error: null }) {
+function makeChain(table: string, calls: RecordedCall[], result: ChainResult = { data: null, error: null }) {
+  const record = (op: string, args: unknown[]) => calls.push({ table, op, args });
   const chain: Record<string, unknown> = {
-    select: () => chain,
-    eq: () => chain,
-    order: () => chain,
-    insert: () => chain,
-    update: () => chain,
-    delete: () => chain,
-    upsert: () => chain,
+    select: (...args: unknown[]) => (record("select", args), chain),
+    eq: (...args: unknown[]) => (record("eq", args), chain),
+    order: (...args: unknown[]) => (record("order", args), chain),
+    insert: (...args: unknown[]) => (record("insert", args), chain),
+    update: (...args: unknown[]) => (record("update", args), chain),
+    delete: (...args: unknown[]) => (record("delete", args), chain),
+    upsert: (...args: unknown[]) => (record("upsert", args), chain),
     maybeSingle: async () => result,
     single: async () => result,
     then: (resolve: (v: ChainResult) => void) => resolve(result),
@@ -84,19 +97,26 @@ function makeChain(result: ChainResult = { data: null, error: null }) {
 /**
  * Builds a fake supabase client covering exactly the surface actions.ts
  * uses: auth.getUser(), rpc(name), and from(table) dispatched by table name
- * to a fixed per-table result. Good enough for the signed-in/permission/
- * not-found branches this file tests; not a general-purpose Supabase mock.
+ * to a fixed per-table result. `from` is a vi.fn() spy and every chain call
+ * is recorded into `calls`, so tests can assert both "which tables/columns
+ * were touched" and "was the database touched at all". Good enough for the
+ * branches this file tests; not a general-purpose Supabase mock.
  */
 function makeSupabaseMock(config: { user?: { id: string } | null; rpc?: Record<string, unknown>; tables?: Record<string, ChainResult> }) {
+  const calls: RecordedCall[] = [];
+  const from = vi.fn((table: string) => makeChain(table, calls, config.tables?.[table]));
   return {
     auth: { getUser: async () => ({ data: { user: config.user ?? null } }) },
     rpc: async (name: string) => ({ data: config.rpc?.[name] }),
-    from: (table: string) => makeChain(config.tables?.[table]),
+    from,
+    calls,
   };
 }
 
 function mockSupabase(config: Parameters<typeof makeSupabaseMock>[0]) {
-  vi.mocked(createClient).mockResolvedValue(makeSupabaseMock(config) as unknown as Awaited<ReturnType<typeof createClient>>);
+  const client = makeSupabaseMock(config);
+  vi.mocked(createClient).mockResolvedValue(client as unknown as Awaited<ReturnType<typeof createClient>>);
+  return client;
 }
 
 afterEach(() => {
@@ -319,21 +339,9 @@ describe("reviewScheme", () => {
   });
 });
 
-describe("submitScheme / moveSchemeEntry / deleteSchemeEntry / duplicateSchemeEntry: id presence", () => {
+describe("submitScheme / deleteSchemeEntry / duplicateSchemeEntry: id presence", () => {
   it("submitScheme rejects a missing schemeId", async () => {
     expect(await submitScheme("")).toEqual({ error: "Missing scheme." });
-  });
-
-  it("moveSchemeEntry rejects a missing entryId", async () => {
-    expect(await moveSchemeEntry("", { week_number: 1, lesson_number: 1 })).toEqual({ error: "Missing entry." });
-  });
-
-  it.each([0, -1, 53])("moveSchemeEntry rejects an invalid target week_number: %s", async (week_number) => {
-    expect(await moveSchemeEntry("entry-1", { week_number, lesson_number: 1 })).toEqual({ error: "Invalid week number." });
-  });
-
-  it.each([0, -1, 21])("moveSchemeEntry rejects an invalid target lesson_number: %s", async (lesson_number) => {
-    expect(await moveSchemeEntry("entry-1", { week_number: 1, lesson_number })).toEqual({ error: "Invalid lesson number." });
   });
 
   it("deleteSchemeEntry rejects a missing entryId", async () => {
@@ -342,6 +350,62 @@ describe("submitScheme / moveSchemeEntry / deleteSchemeEntry / duplicateSchemeEn
 
   it("duplicateSchemeEntry rejects a missing entryId", async () => {
     expect(await duplicateSchemeEntry("", { week_number: 1, lesson_number: 1 })).toEqual({ error: "Missing entry." });
+  });
+});
+
+// Folded in from PR #457 (gap #6), translated onto this file's shared mock
+// harness: exact call-shape assertions (which columns actually get written;
+// that the database is never touched when validation fails) on top of the
+// error-message coverage this file already had for the same shapes via
+// addSchemeEntry/updateSchemeEntry below.
+describe("moveSchemeEntry", () => {
+  it("rejects a missing entry id without touching the database", async () => {
+    const client = mockSupabase({});
+    const result = await moveSchemeEntry("", { week_number: 2, lesson_number: 1 });
+    expect(result).toEqual({ error: "Missing entry." });
+    expect(client.from).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [{ week_number: 0, lesson_number: 1 }, "Invalid week number."],
+    [{ week_number: 53, lesson_number: 1 }, "Invalid week number."],
+    [{ week_number: 1.5, lesson_number: 1 }, "Invalid week number."],
+    [{ week_number: 2, lesson_number: 0 }, "Invalid lesson number."],
+    [{ week_number: 2, lesson_number: 21 }, "Invalid lesson number."],
+  ])("rejects an out-of-range target %o without touching the database", async (target, message) => {
+    const client = mockSupabase({});
+    const result = await moveSchemeEntry("entry-1", target);
+    expect(result).toEqual({ error: message });
+    expect(client.from).not.toHaveBeenCalled();
+  });
+
+  it("updates only week_number/lesson_number on success, leaving every other column untouched", async () => {
+    const client = mockSupabase({ tables: { scheme_of_work_entries: { data: { id: "entry-1" }, error: null } } });
+    const result = await moveSchemeEntry("entry-1", { week_number: 4, lesson_number: 2 });
+    expect(result).toEqual({ success: true, entryId: "entry-1" });
+
+    const update = client.calls.find((c) => c.op === "update");
+    expect(update?.args[0]).toEqual({ week_number: 4, lesson_number: 2 });
+    const eqTarget = client.calls.find((c) => c.op === "eq");
+    expect(eqTarget?.args).toEqual(["id", "entry-1"]);
+  });
+
+  it("surfaces the existing-slot conflict as a friendly message", async () => {
+    mockSupabase({ tables: { scheme_of_work_entries: { data: null, error: { code: "23505", message: "duplicate key" } } } });
+    const result = await moveSchemeEntry("entry-1", { week_number: 4, lesson_number: 2 });
+    expect(result).toEqual({ error: "There's already a lesson at that week and lesson number." });
+  });
+
+  it("reports a generic failure for any other database error", async () => {
+    mockSupabase({ tables: { scheme_of_work_entries: { data: null, error: { code: "XX000", message: "boom" } } } });
+    const result = await moveSchemeEntry("entry-1", { week_number: 4, lesson_number: 2 });
+    expect(result).toEqual({ error: "Something went wrong while moving. Please try again." });
+  });
+
+  it("treats a no-op update (RLS-hidden or already-deleted row) as no permission / not found", async () => {
+    mockSupabase({ tables: { scheme_of_work_entries: { data: null, error: null } } });
+    const result = await moveSchemeEntry("entry-1", { week_number: 4, lesson_number: 2 });
+    expect(result).toEqual({ error: "You don't have permission to edit this entry, or it no longer exists." });
   });
 });
 
