@@ -281,6 +281,23 @@ const PERMISSION_LABEL: Record<PermissionKey, string> = {
   "academics.read": "academics",
 };
 
+// Extracted after the third near-identical inline block (permission-denied, module-disabled,
+// boarding-special-case) -- write once, reuse for the fourth (intent-level module check below)
+// and future ones, rather than hand-copying the log-and-return shape again.
+async function declineAndLog(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  params: { schoolId: string; askedBy: string; question: string; intent: Intent; answer: string },
+): Promise<AskAIResult> {
+  await supabase.from("ai_query_logs").insert({
+    school_id: params.schoolId,
+    asked_by: params.askedBy,
+    question_text: params.question,
+    matched_intent: params.intent,
+    answer_text: params.answer,
+  });
+  return { answer: params.answer };
+}
+
 // Permissions that correspond to a module wired into the school_modules system (see
 // #425/#427/#431), so the module check can reuse auth_school_module_enabled directly.
 // hostel.read_any/boarding is deliberately NOT here -- Boarding still lives on its own
@@ -295,9 +312,19 @@ const PERMISSION_TO_MODULE_KEY: Partial<Record<PermissionKey, string>> = {
 
 // hostel.read_any's module state can't go through PERMISSION_TO_MODULE_KEY/
 // auth_school_module_enabled (see comment above) -- checked directly against
-// schools.boarding_enabled instead. Closing the same pre-existing gap flagged alongside
-// Discipline's own PR: this intent was permission-gated only until now.
+// schools.boarding_enabled instead.
 const BOARDING_PERMISSION: PermissionKey = "hostel.read_any";
+
+// For intents whose permission key isn't module-specific (assignments_due_this_week/
+// ungraded_submissions both use the shared academics.read, which many non-homework intents
+// also use -- mapping academics.read itself to "homework" in PERMISSION_TO_MODULE_KEY would
+// wrongly gate all of them) or that have no permission at all (upcoming_pt_meetings is
+// permission: null today, answerable by anyone). Keyed by intent rather than permission, and
+// checked unconditionally below -- independent of whether definition.permission is set.
+const INTENT_TO_MODULE_KEY: Partial<Record<Intent, string>> = {
+  assignments_due_this_week: "homework",
+  ungraded_submissions: "homework",
+};
 
 export async function askEducoreAI(question: string): Promise<AskAIResult> {
   const trimmed = question.trim();
@@ -362,42 +389,32 @@ export async function askEducoreAI(question: string): Promise<AskAIResult> {
       });
       if (!hasModulePermission) {
         answer = `You don't have access to ${PERMISSION_LABEL[definition.permission]} data, so I can't answer that.`;
-        await supabase.from("ai_query_logs").insert({
-          school_id: schoolUser.school_id,
-          asked_by: schoolUser.id,
-          question_text: trimmed,
-          matched_intent: intent,
-          answer_text: answer,
-        });
-        return { answer };
+        return declineAndLog(supabase, { schoolId: schoolUser.school_id, askedBy: schoolUser.id, question: trimmed, intent, answer });
       }
       const moduleKey = PERMISSION_TO_MODULE_KEY[definition.permission];
       if (moduleKey) {
         const { data: moduleEnabled } = await supabase.rpc("auth_school_module_enabled", { p_key: moduleKey });
         if (moduleEnabled === false) {
           answer = `The ${PERMISSION_LABEL[definition.permission]} module is turned off for your school, so I can't answer that.`;
-          await supabase.from("ai_query_logs").insert({
-            school_id: schoolUser.school_id,
-            asked_by: schoolUser.id,
-            question_text: trimmed,
-            matched_intent: intent,
-            answer_text: answer,
-          });
-          return { answer };
+          return declineAndLog(supabase, { schoolId: schoolUser.school_id, askedBy: schoolUser.id, question: trimmed, intent, answer });
         }
       } else if (definition.permission === BOARDING_PERMISSION) {
         const { data: school } = await supabase.from("schools").select("boarding_enabled").eq("id", schoolUser.school_id).single();
         if (school?.boarding_enabled === false) {
           answer = `The ${PERMISSION_LABEL[definition.permission]} module is turned off for your school, so I can't answer that.`;
-          await supabase.from("ai_query_logs").insert({
-            school_id: schoolUser.school_id,
-            asked_by: schoolUser.id,
-            question_text: trimmed,
-            matched_intent: intent,
-            answer_text: answer,
-          });
-          return { answer };
+          return declineAndLog(supabase, { schoolId: schoolUser.school_id, askedBy: schoolUser.id, question: trimmed, intent, answer });
         }
+      }
+    }
+    // Runs independent of definition.permission -- covers intents whose permission isn't
+    // module-specific (assignments_due_this_week/ungraded_submissions) and intents with no
+    // permission at all (upcoming_pt_meetings). See INTENT_TO_MODULE_KEY's own comment.
+    const intentModuleKey = INTENT_TO_MODULE_KEY[intent];
+    if (intentModuleKey) {
+      const { data: moduleEnabled } = await supabase.rpc("auth_school_module_enabled", { p_key: intentModuleKey });
+      if (moduleEnabled === false) {
+        answer = `That module is turned off for your school, so I can't answer that.`;
+        return declineAndLog(supabase, { schoolId: schoolUser.school_id, askedBy: schoolUser.id, question: trimmed, intent, answer });
       }
     }
     answer = await runIntent(supabase, intent);

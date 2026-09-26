@@ -10,7 +10,7 @@ export default async function HomeworkPage() {
   const user = await getCachedUser();
   if (!user) redirect("/login");
 
-  const [{ data: schoolUser }, { data: canWriteAny }, { data: streams }, { data: subjects }, { data: assignmentRows }] =
+  const [{ data: schoolUser }, { data: canWriteAny }, { data: streams }, { data: subjects }, { data: assignmentRows }, { data: moduleEnabled }] =
     await Promise.all([
       supabase.from("school_users").select("id, full_name, roles(display_name), schools(name)").eq("auth_user_id", user.id).maybeSingle(),
       supabase.rpc("auth_has_permission", { p_permission_key: "academics.write" }),
@@ -22,7 +22,12 @@ export default async function HomeworkPage() {
           "id, title, description, due_date, stream_id, subject_id, teacher_id, streams(name, classes(name)), subjects(name), assignment_submissions(id, status), assignment_attachments(id, file_name, storage_path, file_size)",
         )
         .order("due_date", { ascending: false }),
+      supabase.rpc("auth_school_module_enabled", { p_key: "homework" }),
     ]);
+  // Same seam as every other gated module. No _data.ts or layout.tsx existed for Homework
+  // before this (see the new layout.tsx alongside this file), so this redirect is the only
+  // guard for /homework itself. Fails safe to true.
+  if (moduleEnabled === false) redirect("/dashboard");
 
   const roleName = (schoolUser?.roles as unknown as { display_name: string } | null)?.display_name;
   const schoolName = (schoolUser?.schools as unknown as { name: string } | null)?.name;
