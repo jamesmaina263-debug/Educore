@@ -1,0 +1,63 @@
+name: Scheme of Work RLS behavior check
+
+# Runs supabase/tests/scheme_of_work_rls.sql -- a behavioral test (real
+# fixtures, real role impersonation via the request.jwt.claims GUC, real
+# deployed policies) for the scheme_of_work / scheme_of_work_entries RLS
+# policies specifically. This is a companion to rls-coverage-check.yml, not
+# a replacement: that workflow checks a structural property (RLS is on +
+# policies reference the tenant-scoping helpers) for every school_id table
+# generically; this one checks that scheme_of_work's policies actually
+# produce the right allow/deny decisions for the specific cases that matter
+# (tenant isolation, row ownership, the write_any override, insert-time
+# ownership). See the .sql file's own header for the full rationale.
+#
+# Triggered on changes that could plausibly affect this behavior (any new
+# migration, or the test file itself) rather than every PR, plus a daily
+# schedule as a safety net against drift introduced outside the normal
+# migration flow (this repo's own history includes migrations applied
+# directly to Supabase and reconciled into git afterwards -- see
+# migration-drift-check.yml's cron comment for why that risk is taken
+# seriously here).
+#
+# The script itself opens with `begin;` and ends with `rollback;`, plus an
+# independent tripwire that fails loudly if any fixture row is ever found
+# to have persisted -- nothing it does is ever kept, in this database or
+# any other it might run against.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "supabase/migrations/**"
+      - "supabase/tests/scheme_of_work_rls.sql"
+      - ".github/workflows/scheme-of-work-rls-check.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "supabase/migrations/**"
+      - "supabase/tests/scheme_of_work_rls.sql"
+      - ".github/workflows/scheme-of-work-rls-check.yml"
+  schedule:
+    - cron: "0 3 * * *"
+  workflow_dispatch: {}
+
+jobs:
+  rls-behavior-check:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check SUPABASE_DB_URL is set
+        run: |
+          if [ -z "${{ secrets.SUPABASE_DB_URL }}" ]; then
+            echo "SUPABASE_DB_URL repo secret is not set -- same secret migration-drift-check.yml and nightly-backup.yml use. Failing loudly instead of skipping silently."
+            exit 1
+          fi
+
+      - name: Install postgresql-client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+
+      - name: Run scheme_of_work RLS behavioral test
+        run: psql "${{ secrets.SUPABASE_DB_URL }}" -v ON_ERROR_STOP=1 -f supabase/tests/scheme_of_work_rls.sql
