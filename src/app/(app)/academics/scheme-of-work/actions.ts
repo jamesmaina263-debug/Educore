@@ -24,6 +24,7 @@ import {
   type EntryAssistDraft,
 } from "@/lib/ai/scheme-of-work";
 import { geminiGenerateContentUrl } from "@/lib/ai/report-card-comment";
+import { validateEntryInput, type SchemeEntryInput } from "./_validation";
 
 // ---------------------------------------------------------------------------
 // generateSchemeWithAI
@@ -518,33 +519,9 @@ export async function createManualScheme(input: CreateManualSchemeInput): Promis
   return { success: true, schemeId: created.id };
 }
 
-export interface SchemeEntryInput {
-  scheme_id: string;
-  week_number: number;
-  lesson_number: number;
-  entry_date: string;
-  topic: string;
-  subtopic: string;
-  learning_outcomes: string;
-  content: string;
-  activities: string;
-  teaching_methods: string;
-  resources: string;
-  assessment_methods: string;
-  references: string;
-  remarks: string;
-}
+export type { SchemeEntryInput };
 
 export type EntryResult = { error: string } | { success: true; entryId: string };
-
-function validateEntryInput(input: SchemeEntryInput): string | null {
-  if (!isNonEmptyUuidLike(input.scheme_id)) return "Missing scheme.";
-  if (!Number.isInteger(input.week_number) || input.week_number <= 0 || input.week_number > 52) return "Invalid week number.";
-  if (!Number.isInteger(input.lesson_number) || input.lesson_number <= 0 || input.lesson_number > 20) return "Invalid lesson number.";
-  if (!input.topic?.trim()) return "A topic is required.";
-  if (input.entry_date?.trim() && Number.isNaN(Date.parse(input.entry_date))) return "Invalid entry date.";
-  return null;
-}
 
 export async function addSchemeEntry(input: SchemeEntryInput): Promise<EntryResult> {
   const validationError = validateEntryInput(input);
