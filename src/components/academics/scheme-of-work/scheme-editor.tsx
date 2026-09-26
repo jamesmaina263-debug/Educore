@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { StatusBadge } from "@/components/status-badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Plus, Pencil, Copy, Trash2, Check, Move, Sparkles } from "lucide-react";
+import { Plus, Pencil, Copy, Trash2, Check, Move, Sparkles, Printer } from "lucide-react";
 import {
   addSchemeEntry,
   updateSchemeEntry,
@@ -298,6 +299,11 @@ export function SchemeEditor({
             <Plus className="mr-1 size-4" aria-hidden /> Add Week {nextWeekNumber}
           </Button>
         )}
+        <Button type="button" variant="outline" asChild>
+          <Link href={`/academics/scheme-of-work/${scheme.id}/print`} target="_blank">
+            <Printer className="mr-1 size-4" aria-hidden /> Print / PDF
+          </Link>
+        </Button>
       </div>
 
       <div className="flex flex-col gap-3">
