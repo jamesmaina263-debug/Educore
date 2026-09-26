@@ -87,6 +87,7 @@ export default async function DashboardPage() {
     { data: disciplineModuleEnabledData },
     { data: healthModuleEnabledData },
     { data: transportModuleEnabledData },
+    { data: inventoryModuleEnabledData },
   ] = await Promise.all([
     supabase.rpc("auth_is_super_admin"),
     supabase
@@ -117,6 +118,7 @@ export default async function DashboardPage() {
     supabase.rpc("auth_school_module_enabled", { p_key: "discipline" }),
     supabase.rpc("auth_school_module_enabled", { p_key: "health" }),
     supabase.rpc("auth_school_module_enabled", { p_key: "transport" }),
+    supabase.rpc("auth_school_module_enabled", { p_key: "inventory" }),
   ]);
   if (isSuperAdmin) redirect("/admin");
   void canMarkAny;
@@ -134,6 +136,9 @@ export default async function DashboardPage() {
   // Same fix shape as Boarding/Health (#435) -- the transport-routes KPI was permission-gated
   // only, never module-gated.
   const canSeeTransportModule = canSeeTransport === true && transportModuleEnabledData !== false;
+  // Same fix shape as Boarding/Health/Transport above -- the low-stock-inventory KPI was
+  // permission-gated only, never module-gated, even though Inventory's own toggle exists.
+  const canSeeInventoryModule = canSeeInventory === true && inventoryModuleEnabledData !== false;
 
   const roleName = (schoolUser?.roles as unknown as { display_name: string } | null)?.display_name;
   const schoolName = (schoolUser?.schools as unknown as { name: string } | null)?.name;
@@ -384,7 +389,7 @@ export default async function DashboardPage() {
   // --- Inventory (items at/below reorder level) ---
   const section_canSeeInventory = (async () => {
     let lowStockCount = 0;
-    if (canSeeInventory) {
+    if (canSeeInventoryModule) {
       const { data } = await supabase.from("inventory_items").select("quantity, reorder_level").not("reorder_level", "is", null);
       lowStockCount = (data ?? []).filter((i) => i.reorder_level !== null && i.quantity <= i.reorder_level).length;
     }
@@ -541,7 +546,7 @@ export default async function DashboardPage() {
         tone: "info" as const,
         badge: "In sick bay",
       },
-    canSeeInventory &&
+    canSeeInventoryModule &&
       lowStockCount > 0 && {
         label: `${lowStockCount} inventory item${lowStockCount === 1 ? "" : "s"} at or below reorder level`,
         owner: "Inventory office",
@@ -576,7 +581,7 @@ export default async function DashboardPage() {
       value: String(sickBayCount),
       note: sickBayCount > 0 ? "students checked in" : "no active visits",
     },
-    canSeeInventory && {
+    canSeeInventoryModule && {
       label: "Inventory alerts",
       value: String(lowStockCount),
       note: lowStockCount > 0 ? "items at/below reorder level" : "stock levels healthy",
