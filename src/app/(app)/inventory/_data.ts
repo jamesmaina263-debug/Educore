@@ -37,12 +37,19 @@ export async function loadInventoryContext(): Promise<InventoryContext> {
   const user = await getCachedUser();
   if (!user) redirect("/login");
 
-  const [{ data: schoolUser }, { data: canReadAny }, { data: canWrite }, { data: canApprove }] = await Promise.all([
+  const [{ data: schoolUser }, { data: canReadAny }, { data: canWrite }, { data: canApprove }, { data: moduleEnabled }] = await Promise.all([
     supabase.from("school_users").select("id, full_name, roles(display_name), schools(name)").eq("auth_user_id", user.id).maybeSingle(),
     supabase.rpc("auth_has_permission", { p_permission_key: "inventory.read_any" }),
     supabase.rpc("auth_has_permission", { p_permission_key: "inventory.write" }),
     supabase.rpc("auth_has_permission", { p_permission_key: "inventory.procurement.approve" }),
+    supabase.rpc("auth_school_module_enabled", { p_key: "inventory" }),
   ]);
+  // Per-school module switch (school_modules, default enabled -- see school_module_enabled) --
+  // a school that's had Inventory turned off gets redirected out of every /inventory/* page here,
+  // at the one place all of them load through, same as health/_data.ts's redirect. moduleEnabled
+  // fails safe to true (missing row, typo, or a core module), so this can only ever narrow access
+  // for a school explicitly toggled off, never lock anyone out unexpectedly.
+  if (moduleEnabled === false) redirect("/dashboard");
 
   const roleName = (schoolUser?.roles as unknown as { display_name: string } | null)?.display_name;
   const schoolName = (schoolUser?.schools as unknown as { name: string } | null)?.name ?? "EduCore";
