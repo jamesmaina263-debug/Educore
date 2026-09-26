@@ -83,7 +83,14 @@ export async function loadSchemeOfWorkDashboard(searchParams: {
   let query = supabase
     .from("schemes_of_work")
     .select(
-      "id, status, origin, total_weeks, lessons_per_week, updated_at, academic_year_id, term_id, class_id, stream_id, subject_id, teacher_id, subjects(name), classes(name), streams(name), school_users(full_name), terms(name, academic_years(name))",
+      // school_users is disambiguated with !schemes_of_work_teacher_id_fkey
+      // because schemes_of_work has four FKs into school_users (teacher_id,
+      // submitted_by, reviewed_by, created_by) -- a bare school_users(...)
+      // embed is ambiguous to PostgREST and errors, which this call was
+      // silently swallowing (only `data` was read, never `error`), so a
+      // school's very first real scheme always 404'd. Same fix as the
+      // already-correct embed in [id]/print/page.tsx.
+      "id, status, origin, total_weeks, lessons_per_week, updated_at, academic_year_id, term_id, class_id, stream_id, subject_id, teacher_id, subjects(name), classes(name), streams(name), school_users!schemes_of_work_teacher_id_fkey(full_name), terms(name, academic_years(name))",
     )
     .order("updated_at", { ascending: false });
 
@@ -266,7 +273,9 @@ export async function loadSchemeDetail(schemeId: string): Promise<SchemeDetailCo
   const { data: schemeRow } = await supabase
     .from("schemes_of_work")
     .select(
-      "id, status, origin, total_weeks, lessons_per_week, teacher_id, review_comment, subjects(name), classes(name), streams(name), school_users(full_name), terms(name, academic_years(name))",
+      // Same school_users!schemes_of_work_teacher_id_fkey disambiguation as
+      // loadSchemeOfWorkDashboard above -- see the comment there.
+      "id, status, origin, total_weeks, lessons_per_week, teacher_id, review_comment, subjects(name), classes(name), streams(name), school_users!schemes_of_work_teacher_id_fkey(full_name), terms(name, academic_years(name))",
     )
     .eq("id", schemeId)
     .maybeSingle();
