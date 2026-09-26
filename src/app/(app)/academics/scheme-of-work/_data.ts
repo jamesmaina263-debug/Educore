@@ -45,12 +45,19 @@ export async function loadSchemeOfWorkDashboard(searchParams: {
   const user = await getCachedUser();
   if (!user) redirect("/login");
 
-  const [{ data: schoolUser }, { data: canRead }, { data: canWrite }, { data: canWriteAny }] = await Promise.all([
+  const [{ data: schoolUser }, { data: canRead }, { data: canWrite }, { data: canWriteAny }, { data: moduleEnabled }] = await Promise.all([
     supabase.from("school_users").select("id, full_name, roles(display_name), schools(name)").eq("auth_user_id", user.id).maybeSingle(),
     supabase.rpc("auth_has_permission", { p_permission_key: "scheme_of_work.read" }),
     supabase.rpc("auth_has_permission", { p_permission_key: "scheme_of_work.write" }),
     supabase.rpc("auth_has_permission", { p_permission_key: "scheme_of_work.write_any" }),
+    supabase.rpc("auth_school_module_enabled", { p_key: "scheme_of_work" }),
   ]);
+  // Per-school module switch (school_modules, default enabled -- see school_module_enabled) --
+  // a school that's had Scheme of Work turned off gets redirected out here, the one place this
+  // whole route loads through, same as health/_data.ts's redirect. moduleEnabled fails safe to
+  // true (missing row, typo, or a core module), so this can only ever narrow access for a school
+  // explicitly toggled off, never lock anyone out unexpectedly.
+  if (moduleEnabled === false) redirect("/dashboard");
 
   const roleName = (schoolUser?.roles as unknown as { display_name: string } | null)?.display_name;
   const schoolName = (schoolUser?.schools as unknown as { name: string } | null)?.name;
