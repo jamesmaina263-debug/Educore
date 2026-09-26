@@ -60,7 +60,12 @@ export async function loadSchemeOfWorkDashboard(searchParams: {
     userRole: roleName,
     schoolName,
     canRead: !!canRead,
-    canWrite: !!canWrite,
+    // write_any implies write (mirrors the OR already in every RLS write
+    // policy on schemes_of_work/scheme_of_work_entries -- see the schema
+    // migration) so a write_any-only role, like school_owner, still sees
+    // the "New Scheme" entry point rather than being silently locked out
+    // of a scheme they can, at the database layer, already create.
+    canWrite: !!canWrite || !!canWriteAny,
     canWriteAny: !!canWriteAny,
     schemes: [],
     yearOptions: [],
@@ -163,9 +168,10 @@ export async function loadCreateSchemeOptions(): Promise<CreateSchemeOptions> {
   const user = await getCachedUser();
   if (!user) redirect("/login");
 
-  const [{ data: schoolUser }, { data: canWrite }, { data: canGenerateAI }] = await Promise.all([
+  const [{ data: schoolUser }, { data: canWrite }, { data: canWriteAny }, { data: canGenerateAI }] = await Promise.all([
     supabase.from("school_users").select("id, full_name, roles(display_name), schools(name)").eq("auth_user_id", user.id).maybeSingle(),
     supabase.rpc("auth_has_permission", { p_permission_key: "scheme_of_work.write" }),
+    supabase.rpc("auth_has_permission", { p_permission_key: "scheme_of_work.write_any" }),
     supabase.rpc("auth_has_permission", { p_permission_key: "scheme_of_work.generate_ai" }),
   ]);
 
@@ -222,7 +228,8 @@ export async function loadCreateSchemeOptions(): Promise<CreateSchemeOptions> {
     userName: schoolUser?.full_name ?? user.email ?? "Account",
     userRole: roleName,
     schoolName,
-    canWrite: !!canWrite,
+    // Same write_any-implies-write reasoning as loadSchemeOfWorkDashboard.
+    canWrite: !!canWrite || !!canWriteAny,
     canGenerateAI: !!canGenerateAI,
     yearOptions: (yearsRaw ?? []).map((y) => ({ id: y.id, label: y.name })),
     termOptions: (termsRaw ?? []).map((t) => ({
