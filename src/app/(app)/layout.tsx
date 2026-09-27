@@ -56,6 +56,9 @@ export default async function AppRouteGroupLayout({ children }: { children: Reac
     if (ptMeetingsEnabled === false) disabledHrefs.push("/pt-meetings");
     if (inventoryEnabled === false) disabledHrefs.push("/inventory");
     if (schemeOfWorkEnabled === false) disabledHrefs.push("/academics/scheme-of-work");
+    // Curriculum Content upload/review exists only to ground Scheme of Work
+    // AI generation -- hide it under the same toggle.
+    if (schemeOfWorkEnabled === false) disabledHrefs.push("/academics/curriculum");
   }
 
   return (

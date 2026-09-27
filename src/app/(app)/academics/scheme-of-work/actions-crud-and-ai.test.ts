@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 // ---------------------------------------------------------------------------
 // Why this file didn't already exist (Phase 4 "verification gaps" item):
@@ -255,6 +255,85 @@ describe("generateSchemeWithAI permission check", () => {
     const result = await generateSchemeWithAI(validGenerateInput);
     expect(result).toEqual({ error: "You don't have permission to generate a scheme with AI." });
     process.env.GEMINI_API_KEY = originalKey;
+  });
+});
+
+// Phase 1 (curriculum-grounding investigation): no recorded curriculum
+// content for the subject must refuse outright, never fall back to a
+// silently-ungrounded draft (previously curriculumItemsUsed just came back
+// 0 with no error). Reaches all the way past the entity-lookup and
+// idempotency-claim steps -- every one of those must succeed, exactly as a
+// real request would, for this to actually exercise the new check rather
+// than short-circuiting on something else.
+describe("generateSchemeWithAI / assistSchemeEntry refuse without curriculum grounding (Phase 1)", () => {
+  const originalKey = process.env.GEMINI_API_KEY;
+  beforeEach(() => {
+    process.env.GEMINI_API_KEY = "test-key";
+  });
+  afterEach(() => {
+    process.env.GEMINI_API_KEY = originalKey;
+  });
+
+  it("generateSchemeWithAI refuses when the subject has no recorded curriculum content", async () => {
+    mockCreateClient.mockResolvedValue(
+      fakeClient({
+        user: { id: "u1" },
+        rpc: { auth_has_permission: true },
+        from: {
+          school_users: chain({ data: { id: "su1", school_id: "sch1" } }),
+          academic_years: chain({ data: { name: "2026" } }),
+          terms: chain({ data: { name: "Term 1" } }),
+          classes: chain({ data: { name: "Grade 5" } }),
+          subjects: chain({ data: { name: "Mathematics" } }),
+          scheme_of_work_ai_requests: chain({ data: null, error: null }),
+          curriculum_strands: chain({ data: [] }),
+        },
+      }),
+    );
+    const result = await generateSchemeWithAI(validGenerateInput);
+    expect(result).toEqual({
+      error: "No curriculum content recorded for Mathematics. Record curriculum content for this subject first, or create this scheme manually.",
+    });
+  });
+
+  it("assistSchemeEntry refuses when the entry's subject has no recorded curriculum content", async () => {
+    mockCreateClient.mockResolvedValue(
+      fakeClient({
+        user: { id: "u1" },
+        rpc: { auth_has_permission: true },
+        from: {
+          school_users: chain({ data: { id: "su1", school_id: "sch1" } }),
+          scheme_of_work_entries: chain({
+            data: {
+              id: "entry-1",
+              topic: "Fractions",
+              subtopic: "",
+              learning_outcomes: "",
+              content: "",
+              activities: "",
+              teaching_methods: "",
+              resources: "",
+              assessment_methods: "",
+              scheme_id: "scheme-1",
+              schemes_of_work: {
+                school_id: "sch1",
+                subject_id: "subj1",
+                subjects: { name: "Mathematics" },
+                classes: { name: "Grade 5" },
+                streams: null,
+                terms: { name: "Term 1", academic_years: { name: "2026" } },
+              },
+            },
+          }),
+          scheme_of_work_ai_requests: chain({ data: null, error: null }),
+          curriculum_strands: chain({ data: [] }),
+        },
+      }),
+    );
+    const result = await assistSchemeEntry({ entry_id: "entry-1", mode: "improve", idempotency_key: "k" });
+    expect(result).toEqual({
+      error: "No curriculum content recorded for Mathematics. Record curriculum content for this subject first, or edit this entry manually.",
+    });
   });
 });
 
