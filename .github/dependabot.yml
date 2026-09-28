@@ -16,6 +16,14 @@ updates:
         update-types: ["minor", "patch"]
     labels:
       - "dependencies"
+    ignore:
+      # v9 is a redesigned API (feature-based tables); bumping it breaks the
+      # build in src/components/ui/data-table.tsx, which backs the staff,
+      # students, parents and applications tables. Needs a deliberate
+      # migration, not a drive-by bump. Remove this rule when that is planned.
+      # Minor/patch updates on v8 still come through as normal.
+      - dependency-name: "@tanstack/react-table"
+        update-types: ["version-update:semver-major"]
 
   # GitHub Actions versions pinned in .github/workflows/*.yml (e.g.
   # actions/checkout@v4). Same weekly cadence, kept separate from the npm
