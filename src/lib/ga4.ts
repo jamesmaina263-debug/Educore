@@ -476,3 +476,94 @@ export async function getRealtimeVisitorCount(): Promise<number | null> {
     return null;
   }
 }
+
+export type FunnelDetailRow = {
+  source: string;
+  page: string;
+  device: string;
+  location: string;
+  eventName?: string;
+  count: number;
+};
+
+function formatLocation(city: string | undefined, country: string | undefined): string {
+  const c = city && city !== "(not set)" ? city : "";
+  const k = country && country !== "(not set)" ? country : "";
+  return [c, k].filter(Boolean).join(", ") || "(unknown)";
+}
+
+// Row-level drill-down behind the funnel's "Engaged Visitors" stage: each row is a
+// distinct source / landing page / device / city combination with its engaged-session
+// count. Anonymous by design -- GA4 never exposes a person, only aggregates.
+export async function getEngagedSessionDetail(
+  dateRange: GaDateRangeInput,
+  limit = 25,
+): Promise<FunnelDetailRow[] | null> {
+  const result = await runReport({
+    dateRanges: toDateRange(dateRange),
+    dimensions: [
+      { name: "sessionSource" },
+      { name: "sessionMedium" },
+      { name: "landingPage" },
+      { name: "deviceCategory" },
+      { name: "city" },
+      { name: "country" },
+    ],
+    metrics: [{ name: "engagedSessions" }],
+    metricFilter: {
+      filter: { fieldName: "engagedSessions", numericFilter: { operation: "GREATER_THAN", value: { int64Value: "0" } } },
+    },
+    orderBys: [{ metric: { metricName: "engagedSessions" }, desc: true }],
+    limit,
+  });
+  if (!result?.rows) return result ? [] : null;
+  return result.rows.map((row) => {
+    const d = row.dimensionValues ?? [];
+    return {
+      source: `${d[0]?.value || "(none)"} / ${d[1]?.value || "(none)"}`,
+      page: d[2]?.value || "(none)",
+      device: d[3]?.value || "(none)",
+      location: formatLocation(d[4]?.value, d[5]?.value),
+      count: Number(row.metricValues?.[0]?.value ?? 0),
+    };
+  });
+}
+
+// Row-level drill-down behind the funnel's "CTA Clicks" stage. Matches the same events the
+// stage sums (every event name containing "CTA": Contact/Trial/WhatsApp/Email CTA Click),
+// broken down by the page the click happened on plus the session's source, device and city.
+export async function getCtaClickDetail(
+  dateRange: GaDateRangeInput,
+  limit = 25,
+): Promise<FunnelDetailRow[] | null> {
+  const result = await runReport({
+    dateRanges: toDateRange(dateRange),
+    dimensions: [
+      { name: "eventName" },
+      { name: "pagePath" },
+      { name: "sessionSource" },
+      { name: "sessionMedium" },
+      { name: "deviceCategory" },
+      { name: "city" },
+      { name: "country" },
+    ],
+    metrics: [{ name: "eventCount" }],
+    dimensionFilter: {
+      filter: { fieldName: "eventName", stringFilter: { matchType: "CONTAINS", value: "CTA" } },
+    },
+    orderBys: [{ metric: { metricName: "eventCount" }, desc: true }],
+    limit,
+  });
+  if (!result?.rows) return result ? [] : null;
+  return result.rows.map((row) => {
+    const d = row.dimensionValues ?? [];
+    return {
+      eventName: d[0]?.value || "(none)",
+      page: d[1]?.value || "(none)",
+      source: `${d[2]?.value || "(none)"} / ${d[3]?.value || "(none)"}`,
+      device: d[4]?.value || "(none)",
+      location: formatLocation(d[5]?.value, d[6]?.value),
+      count: Number(row.metricValues?.[0]?.value ?? 0),
+    };
+  });
+}

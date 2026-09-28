@@ -27,6 +27,8 @@ import {
   isGa4Configured,
   getOverviewStats,
   getEngagedVisitors,
+  getEngagedSessionDetail,
+  getCtaClickDetail,
   getTimeseries,
   getTopPages,
   getLandingPages,
@@ -145,6 +147,8 @@ export default async function AdminAnalyticsPage({
     realtimeVisitors,
     keyEventsSeries,
     channelPerformance,
+    engagedDetail,
+    ctaDetail,
   ] = gaConfigured
     ? await Promise.all([
         getOverviewStats(gaRange),
@@ -169,8 +173,10 @@ export default async function AdminAnalyticsPage({
         getRealtimeVisitorCount(),
         getKeyEventsTimeseries(gaRange, KEY_EVENT_NAMES, granularity),
         getChannelPerformance(gaRange, 10),
+        getEngagedSessionDetail(gaRange),
+        getCtaClickDetail(gaRange),
       ])
-    : [null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null];
+    : [null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null];
 
   // Search Console -- a separate config check and a separate, smaller
   // Promise.all than GA4's, since it's a distinct data source (see
@@ -204,8 +210,36 @@ export default async function AdminAnalyticsPage({
       label: "Engaged Visitors",
       value: engagedVisitors,
       note: "GA4 engaged sessions (10s+ engaged, 2+ pageviews, or a conversion) — a session count, not unique users",
+      detail: engagedDetail
+        ? {
+            columns: [
+              { key: "source", header: "Source / medium" },
+              { key: "page", header: "Landing page" },
+              { key: "device", header: "Device" },
+              { key: "location", header: "Location" },
+              { key: "count", header: "Engaged sessions" },
+            ],
+            rows: engagedDetail,
+          }
+        : null,
     },
-    { label: "CTA Clicks", value: ctaClicks ?? null },
+    {
+      label: "CTA Clicks",
+      value: ctaClicks ?? null,
+      detail: ctaDetail
+        ? {
+            columns: [
+              { key: "eventName", header: "CTA" },
+              { key: "page", header: "Clicked on page" },
+              { key: "source", header: "Source / medium" },
+              { key: "device", header: "Device" },
+              { key: "location", header: "Location" },
+              { key: "count", header: "Clicks" },
+            ],
+            rows: ctaDetail,
+          }
+        : null,
+    },
     { label: "Demo Form Started", value: demoFormStarted },
     // Counted from the database, not GA4, so unlike the stages around it this includes
     // visitors GA4 can't see (declined cookies, blockers) -- it can exceed "Demo Form Started".
