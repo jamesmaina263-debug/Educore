@@ -43,20 +43,22 @@ export default async function AdminActivityLogPage() {
               <tr>
                 <th>Action</th>
                 <th>Detail</th>
-                <th>By</th>
+                <th>Person</th>
+                <th>Login</th>
                 <th>When</th>
               </tr>
             </thead>
             <tbody>
               {rows.length === 0 ? (
                 <tr>
-                  <td colSpan={4} className="p-4 text-sm text-muted-foreground">
+                  <td colSpan={5} className="p-4 text-sm text-muted-foreground">
                     Nothing logged yet.
                   </td>
                 </tr>
               ) : (
                 rows.map((r) => {
-                  const detailText = Object.entries((r.detail as Record<string, unknown>) ?? {})
+                  const { operator, ...restDetail } = (r.detail as Record<string, unknown>) ?? {};
+                  const detailText = Object.entries(restDetail)
                     .map(([k, v]) => `${k}: ${v}`)
                     .join(" · ");
                   return (
@@ -65,6 +67,7 @@ export default async function AdminActivityLogPage() {
                       <td className="max-w-96 truncate text-muted-foreground" title={detailText}>
                         {detailText || "—"}
                       </td>
+                      <td className="font-medium">{typeof operator === "string" ? operator : "—"}</td>
                       <td className="text-muted-foreground">{r.actor_email ?? "—"}</td>
                       <td className="whitespace-nowrap text-muted-foreground">
                         {new Date(r.created_at).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" })}

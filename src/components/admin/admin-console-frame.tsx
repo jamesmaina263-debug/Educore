@@ -128,10 +128,13 @@ function AdminSidebarNav({ pathname, onNavigate }: { pathname: string; onNavigat
 export function AdminConsoleFrame({
   children,
   userName,
+  operatorName,
   onSignOut,
 }: {
   children: ReactNode;
   userName: string;
+  /** Which person is using the shared admin login this session (see lib/admin-operator.ts). */
+  operatorName?: string;
   onSignOut: () => void;
 }) {
   const pathname = usePathname();
@@ -184,7 +187,7 @@ export function AdminConsoleFrame({
                 <button className="ml-1 flex items-center gap-2 rounded-md p-1 pr-2 hover:bg-muted">
                   <Avatar className="size-7">
                     <AvatarFallback className="text-xs">
-                      {userName
+                      {(operatorName ?? userName)
                         .split(" ")
                         .map((p) => p[0])
                         .slice(0, 2)
@@ -192,14 +195,22 @@ export function AdminConsoleFrame({
                         .toUpperCase()}
                     </AvatarFallback>
                   </Avatar>
-                  <span className="hidden text-sm font-medium sm:inline">{userName}</span>
+                  <span className="hidden text-sm font-medium sm:inline">{operatorName ?? userName}</span>
                 </button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
                 <DropdownMenuLabel>
-                  <span className="font-medium">{userName}</span>
+                  <span className="block font-medium">{operatorName ?? userName}</span>
+                  {operatorName ? (
+                    <span className="block text-xs font-normal text-muted-foreground">Signed in via {userName}</span>
+                  ) : null}
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
+                {operatorName ? (
+                  <DropdownMenuItem asChild>
+                    <Link href="/admin/who">Switch person</Link>
+                  </DropdownMenuItem>
+                ) : null}
                 <DropdownMenuItem onSelect={handleSignOut}>Sign out</DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
