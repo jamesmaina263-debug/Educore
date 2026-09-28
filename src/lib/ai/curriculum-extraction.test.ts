@@ -138,3 +138,14 @@ describe("findMatchingStrandId", () => {
     expect(findMatchingStrandId(existing, "Algebra")).toBeNull();
   });
 });
+
+describe("buildCurriculumExtractionPrompt origin", () => {
+  it("keeps the school wording by default", () => {
+    expect(buildCurriculumExtractionPrompt("Maths", "x")).toContain("a Kenyan school's own uploaded curriculum document");
+  });
+  it("uses neutral wording for platform documents", () => {
+    const p = buildCurriculumExtractionPrompt("Maths", "x", "platform");
+    expect(p).toContain("an official curriculum design document");
+    expect(p).not.toContain("school's own");
+  });
+});
