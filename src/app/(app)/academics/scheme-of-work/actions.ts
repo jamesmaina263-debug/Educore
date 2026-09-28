@@ -210,6 +210,21 @@ export async function generateSchemeWithAI(input: GenerateSchemeInput): Promise<
     })),
   );
 
+  // ---- 6b. Refuse rather than silently generate an ungrounded draft.
+  //          Previously, no recorded curriculum content just meant
+  //          curriculumContext stayed null and the prompt fell back to
+  //          generic framework guidance with no indication to the teacher
+  //          that nothing was actually grounded. Now that Phase 2A gives
+  //          schools a real way to record that content (upload their own
+  //          curriculum document), a silent ungrounded draft is no longer
+  //          the right default -- it's a clear, actionable stop instead.
+  if (!curriculumContext) {
+    await markRequestFailed("no_curriculum_grounding");
+    return {
+      error: `No curriculum content recorded for ${subjectRow.name}. Record curriculum content for this subject first, or create this scheme manually.`,
+    };
+  }
+
   // ---- 7 & 8. Generate the scheme, in one or more Gemini calls.
   //
   //         Previously this was a single fetch covering every week at once,
@@ -922,6 +937,16 @@ export async function assistSchemeEntry(input: AssistSchemeEntryInput): Promise<
       sub_strands: (s.curriculum_sub_strands ?? []) as CurriculumSubStrandRow[],
     })),
   );
+
+  // Same refusal as generateSchemeWithAI (Phase 1) -- no usable recorded
+  // curriculum content for this subject means no grounded suggestion, not a
+  // silently-ungrounded one.
+  if (!curriculumContext) {
+    await markRequestFailed("no_curriculum_grounding");
+    return {
+      error: `No curriculum content recorded for ${scheme.subjects?.name ?? "this subject"}. Record curriculum content for this subject first, or edit this entry manually.`,
+    };
+  }
 
   const prompt = buildEntryAssistPrompt({
     mode: input.mode,
