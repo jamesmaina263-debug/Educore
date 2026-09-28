@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { AdminKicdContentPanel, type KicdSourceRow } from "@/components/admin/admin-kicd-content-panel";
+import { AdminKicdContentPanel, type KicdSourceRow, type KicdLearningAreaRow, type CatalogueOption } from "@/components/admin/admin-kicd-content-panel";
 
 export default async function AdminKicdContentPage() {
   const supabase = await createClient();
@@ -11,6 +11,11 @@ export default async function AdminKicdContentPage() {
 
   const { data: isSuperAdmin } = await supabase.rpc("auth_is_super_admin");
   if (isSuperAdmin !== true) redirect("/dashboard");
+
+  const [{ data: areas }, { data: catalogue }] = await Promise.all([
+    supabase.from("kicd_learning_areas").select("id, name, catalogue_id").order("name"),
+    supabase.from("subject_catalogue").select("id, name").order("name"),
+  ]);
 
   const { data } = await supabase
     .from("kicd_content_sources")
@@ -27,10 +32,17 @@ export default async function AdminKicdContentPage() {
           Import official curriculum documents as shared content for all schools. Every import needs a licence reference and
           attribution, starts <strong>unpublished</strong>, and only becomes visible after you review it and publish it. Withdrawing a
           source hides it from every school immediately. Content imported by a school&apos;s own management is private to that school
-          and is labelled below; you can still withdraw it. Schools don&apos;t use this content for AI grounding yet.
+          and is labelled below; you can still withdraw it. Published <strong>platform-wide</strong> content (not tied to a school)
+          grounds AI Scheme of Work drafts for classes with a KICD grade set, in subjects whose catalogue entry is linked to the
+          learning area below. A school&apos;s own reviewed content always takes precedence. Schools&apos; own private KICD imports
+          don&apos;t ground generation yet.
         </p>
       </div>
-      <AdminKicdContentPanel sources={(data ?? []) as unknown as KicdSourceRow[]} />
+      <AdminKicdContentPanel
+        sources={(data ?? []) as unknown as KicdSourceRow[]}
+        learningAreas={(areas ?? []) as KicdLearningAreaRow[]}
+        catalogue={(catalogue ?? []) as CatalogueOption[]}
+      />
     </div>
   );
 }

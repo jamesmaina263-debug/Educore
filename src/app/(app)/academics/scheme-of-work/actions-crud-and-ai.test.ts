@@ -296,6 +296,69 @@ describe("generateSchemeWithAI / assistSchemeEntry refuse without curriculum gro
     });
   });
 
+  const kicdTables = {
+    kicd_learning_areas: chain({ data: [{ id: "la1" }] }),
+    kicd_strands: chain({
+      data: [
+        {
+          name: "Numbers",
+          level_order: 0,
+          kicd_sub_strands: [{ name: "Whole Numbers", learning_outcomes: "Count to 100", key_inquiry_questions: null, rubric_text: null }],
+        },
+      ],
+    }),
+  };
+
+  it("generateSchemeWithAI is grounded by published shared KICD content when the school has none (proceeds to the AI call)", async () => {
+    const fetchMock = vi.fn().mockRejectedValue(new Error("network down"));
+    vi.stubGlobal("fetch", fetchMock);
+    mockCreateClient.mockResolvedValue(
+      fakeClient({
+        user: { id: "u1" },
+        rpc: { auth_has_permission: true },
+        from: {
+          school_users: chain({ data: { id: "su1", school_id: "sch1" } }),
+          academic_years: chain({ data: { name: "2026" } }),
+          terms: chain({ data: { name: "Term 1" } }),
+          classes: chain({ data: { name: "Grade 6", kicd_grade: "G6" } }),
+          subjects: chain({ data: { name: "Mathematics", catalogue_id: "cat1" } }),
+          scheme_of_work_ai_requests: chain({ data: null, error: null }),
+          curriculum_strands: chain({ data: [] }),
+          ...kicdTables,
+        },
+      }),
+    );
+    const result = await generateSchemeWithAI(validGenerateInput);
+    expect(fetchMock).toHaveBeenCalled();
+    expect(JSON.stringify(result)).not.toContain("No curriculum content recorded");
+    // The KICD sub-strand made it into the prompt sent to the model.
+    expect(String(fetchMock.mock.calls[0][1].body)).toContain("Count to 100");
+    vi.unstubAllGlobals();
+  });
+
+  it("still refuses when the class has no KICD grade, even if shared content exists", async () => {
+    mockCreateClient.mockResolvedValue(
+      fakeClient({
+        user: { id: "u1" },
+        rpc: { auth_has_permission: true },
+        from: {
+          school_users: chain({ data: { id: "su1", school_id: "sch1" } }),
+          academic_years: chain({ data: { name: "2026" } }),
+          terms: chain({ data: { name: "Term 1" } }),
+          classes: chain({ data: { name: "Grade 6", kicd_grade: null } }),
+          subjects: chain({ data: { name: "Mathematics", catalogue_id: "cat1" } }),
+          scheme_of_work_ai_requests: chain({ data: null, error: null }),
+          curriculum_strands: chain({ data: [] }),
+          ...kicdTables,
+        },
+      }),
+    );
+    const result = await generateSchemeWithAI(validGenerateInput);
+    expect(result).toEqual({
+      error: "No curriculum content recorded for Mathematics. Record curriculum content for this subject first, or create this scheme manually.",
+    });
+  });
+
   it("assistSchemeEntry refuses when the entry's subject has no recorded curriculum content", async () => {
     mockCreateClient.mockResolvedValue(
       fakeClient({
