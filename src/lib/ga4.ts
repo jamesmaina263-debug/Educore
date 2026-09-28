@@ -369,7 +369,10 @@ export async function getGoalBreakdown(dateRange: GaDateRangeInput): Promise<Goa
     dimensions: [{ name: "eventName" }],
     metrics: [{ name: "eventCount" }, { name: "totalUsers" }],
     orderBys: [{ metric: { metricName: "eventCount" }, desc: true }],
-    limit: 15,
+    // Was 15. Auto-collected events (page_view, scroll, user_engagement, ...) can crowd
+    // low-volume custom funnel events like "Demo Form Started" out of a top-15 cut, making
+    // them look untracked. 100 is far above the number of distinct event names this site emits.
+    limit: 100,
   });
   if (!result?.rows) return null;
   return result.rows
