@@ -17,6 +17,13 @@ export type BlogPostSummary = {
 
 export const BLOG_POSTS: BlogPostSummary[] = [
   {
+    slug: "cbc-scheme-of-work-kenya-how-to-write",
+    title: "How to Write a CBC Scheme of Work in Kenya: Columns, Example and Common Mistakes — EduCore",
+    description:
+      "What a CBC scheme of work is, the columns most Kenyan schools use, a worked example row, how it differs from a lesson plan, and the mistakes that get schemes sent back.",
+    publishedOn: "2026-09-28",
+  },
+  {
     slug: "teacher-performance-reviews-kenya-schools",
     title: "Teacher Performance Reviews for Kenyan Schools: Termly, Structured, and Kept Private",
     description:
