@@ -19,6 +19,7 @@ import {
   Flag,
   Blocks,
   Menu,
+  FileUp,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -79,6 +80,7 @@ const NAV_GROUPS: AdminNavGroup[] = [
       { href: "/admin/system-health", label: "System Health", icon: HeartPulse },
       { href: "/admin/feature-flags", label: "Feature Flags", icon: Flag },
       { href: "/admin/modules", label: "Modules", icon: Blocks },
+      { href: "/admin/kicd-content", label: "KICD Content", icon: FileUp },
       { href: "/admin/activity-log", label: "Activity Log", icon: ScrollText },
       { href: "/admin/demo-reset", label: "Demo Reset", icon: RotateCcw },
     ],

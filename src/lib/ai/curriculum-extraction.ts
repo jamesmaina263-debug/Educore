@@ -1,3 +1,5 @@
+import { geminiGenerateContentUrl } from "@/lib/ai/report-card-comment";
+
 // Pure helpers for the curriculum-PDF extraction pipeline (Phase 2A of the
 // curriculum-grounding investigation). Split out of the server action the
 // same way scheme-of-work.ts is split out of academics/scheme-of-work/
@@ -71,8 +73,16 @@ export interface CurriculumExtractionResult {
  * never invent strands/outcomes/questions that aren't there, and flag
  * anything uncertain rather than guessing silently.
  */
-export function buildCurriculumExtractionPrompt(subjectName: string, documentText: string): string {
-  return `You are helping extract structured curriculum content from a Kenyan school's own uploaded curriculum document for the subject "${subjectName}".
+export function buildCurriculumExtractionPrompt(
+  subjectName: string,
+  documentText: string,
+  /** "school" (default, unchanged wording) = a school's own uploaded document;
+   *  "platform" = an official curriculum document imported by a platform admin. */
+  origin: "school" | "platform" = "school",
+): string {
+  const documentDescription =
+    origin === "platform" ? "an official curriculum design document" : "a Kenyan school's own uploaded curriculum document";
+  return `You are helping extract structured curriculum content from ${documentDescription} for the subject "${subjectName}".
 
 The document's text (extracted from a PDF; formatting/page breaks may be imperfect) is below, delimited by triple quotes. Read it and identify the curriculum Strands and, within each, the Sub-Strands, exactly as the document itself lays them out.
 
@@ -203,4 +213,62 @@ export function findMatchingStrandId(existingStrands: { id: string; name: string
   const normalized = extractedName.trim().toLowerCase();
   const match = existingStrands.find((s) => s.name.trim().toLowerCase() === normalized);
   return match?.id ?? null;
+}
+
+export type CurriculumExtractionRunResult =
+  | { result: CurriculumExtractionResult; truncated: boolean }
+  | { error: string; failureCategory: string };
+
+/**
+ * Sends already-extracted document text to Gemini and returns the parsed
+ * structure. Same request shape, timeout and failure categories as the
+ * school upload flow (academics/curriculum/actions.ts), packaged for callers
+ * that don't need that action's storage/permission handling (the platform
+ * KICD import). Never throws; failures come back as { error, failureCategory }
+ * with a message that is safe to show to the operator.
+ */
+export async function runCurriculumExtraction(opts: {
+  apiKey: string;
+  label: string;
+  documentText: string;
+  origin: "school" | "platform";
+}): Promise<CurriculumExtractionRunResult> {
+  const { text, truncated } = truncateDocumentText(opts.documentText);
+  let res: Response;
+  try {
+    res = await fetch(geminiGenerateContentUrl(opts.apiKey, GEMINI_CURRICULUM_EXTRACTION_MODEL), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: buildCurriculumExtractionPrompt(opts.label, text, opts.origin) }] }],
+        generationConfig: {
+          maxOutputTokens: 8000,
+          temperature: 0.2,
+          responseMimeType: "application/json",
+          responseSchema: curriculumExtractionResponseSchema,
+        },
+      }),
+      signal: AbortSignal.timeout(45000),
+    });
+  } catch (e) {
+    const isTimeout = e instanceof Error && (e.name === "TimeoutError" || e.name === "AbortError");
+    return isTimeout
+      ? { error: "Extraction timed out. Please try again.", failureCategory: "timeout" }
+      : { error: "Connection interrupted. Please try again.", failureCategory: "network" };
+  }
+  if (!res.ok) {
+    console.error(`runCurriculumExtraction: Gemini returned ${res.status}`);
+    if (res.status === 401 || res.status === 403) return { error: "AI extraction is currently unavailable (check the API key).", failureCategory: "auth_config" };
+    if (res.status === 429) return { error: "AI extraction is temporarily busy. Please try again shortly.", failureCategory: "rate_limit" };
+    return { error: "Something went wrong while extracting. Please try again.", failureCategory: res.status >= 500 ? "ai_unavailable" : "server_error" };
+  }
+  const parsed = parseCurriculumExtractionResponse(await res.json());
+  if ("error" in parsed) {
+    const noStructure = parsed.error === "No usable curriculum structure was found in this document.";
+    return {
+      error: noStructure ? parsed.error : "We couldn't extract curriculum content correctly. Please try again.",
+      failureCategory: noStructure ? "no_structure_found" : parsed.error.includes("no content") ? "empty_response" : "malformed_response",
+    };
+  }
+  return { result: parsed.result, truncated };
 }
