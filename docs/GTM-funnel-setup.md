@@ -1,36 +1,26 @@
-# GTM setup: make the admin funnel rows populate
+# GTM funnel events: status and verification
 
-Container: **GTM-MGV2XHBB**. The site already pushes these events to `dataLayer`; GTM just needs to forward them to GA4.
+Container `GTM-MGV2XHBB` (Version 13, live since 2026-09-21) already forwards the site's funnel events to GA4
+(property tag `G-ELJYHRD57M`). One GA4 Event tag + one Custom Event trigger exists per event:
 
-## Events to forward
-| Event name (exact, case-sensitive) | Feeds funnel row |
+| Event (exact name) | Feeds admin funnel row |
 |---|---|
-| Contact CTA Click | CTA Clicks |
-| WhatsApp CTA Click | CTA Clicks |
-| Email CTA Click | CTA Clicks |
-| Trial CTA Click | CTA Clicks |
+| Contact CTA Click / WhatsApp CTA Click / Email CTA Click / Trial CTA Click | CTA Clicks |
 | Demo Form Started | Demo Form Started |
-| Demo Form Contact Step Completed | (not on funnel yet; useful in GA4) |
+| Demo Form Contact Step Completed | (GA4 only; "Contact Details Saved" comes from the database) |
 | Demo Request Submitted | Demo Request Submitted / key event |
 
-## Steps (one tag per event, or one tag for all)
+Do NOT add duplicate tags or triggers for these: it would double-count events.
 
-**Option A: single tag (fastest)**
-1. GTM > Triggers > New > type **Custom Event**.
-   - Event name: `^(Contact CTA Click|WhatsApp CTA Click|Email CTA Click|Trial CTA Click|Demo Form Started|Demo Form Contact Step Completed|Demo Request Submitted)$`
-   - Tick **Use regex matching**. Name it `CE - Funnel events`.
-2. GTM > Tags > New > **Google Analytics: GA4 Event**.
-   - Configuration tag / Measurement ID: your existing GA4 config (same one the page_view uses).
-   - Event Name: `{{Event}}` (built-in variable; enable it under Variables > Configure if missing).
-   - Optional event parameters: `cta_location` = `{{DLV - cta_location}}`, `cta_label` = `{{DLV - cta_label}}` (Data Layer Variables with those names).
-   - Trigger: `CE - Funnel events`.
-3. **Preview** the container on your site (Tag Assistant). Click a "Book a Demo" link and focus a form field. Confirm the tag fires for `Contact CTA Click` and `Demo Form Started`.
-4. **Submit** the container version, then check GA4 > Admin > DebugView / Realtime for the events.
-5. GA4 > Admin > Key events: mark `Demo Request Submitted` (and `sign_up`) as key events.
+## Verify after any GTM change
+1. GTM > Preview > enter the live site URL.
+2. Click a "Book a Demo" link and focus a field in the demo form.
+3. In Tag Assistant confirm `Contact CTA Click` and `Demo Form Started` appear, with their GA4 Event tags under "Tags Fired".
+4. Submit the container version, then allow several hours for the GA4 Data API to reflect new events.
 
-**Option B:** one tag per event with a plain Custom Event trigger each. Same result, more clicks.
-
-## Caveats
-- Consent: the marketing layout sets consent defaults (`ConsentDefaults`). Visitors who decline analytics cookies won't send these events, so GA4 numbers will be lower than real traffic. The database-backed rows (Contact Details Saved, Demo Request Submitted fallback) are not affected.
-- GA4 Data API results lag hours behind. Test events may take several hours to show on the admin dashboard.
-- The dashboard's "Demo Request Submitted" row prefers the GA4 count and only falls back to the database count if GA4 has none. Once GA4 has the event, the GA4 number (which can undercount) replaces the database one. If you want the database count to always win, change `demoFormSubmitted ?? demoRequestCount` in `admin/analytics/page.tsx` to `demoRequestCount`.
+## Interpreting the admin funnel
+- Zeros on low-traffic periods are real, not a bug. Compare with the 30d / 90d range.
+- "Contact Details Saved" and the demo request count come from the database and update immediately.
+- Visitors who decline cookies send no GA4 events, so GA4 rows undercount.
+- The Demo Request Submitted row prefers the GA4 count when present. To always show the database count, change
+  `demoFormSubmitted ?? demoRequestCount` to `demoRequestCount` in `src/app/(admin)/admin/analytics/page.tsx`.
