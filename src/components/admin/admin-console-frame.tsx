@@ -195,7 +195,16 @@ export function AdminConsoleFrame({
                         .toUpperCase()}
                     </AvatarFallback>
                   </Avatar>
-                  <span className="hidden text-sm font-medium sm:inline">{operatorName ?? userName}</span>
+                  <span className="hidden text-sm font-medium sm:inline">
+                    {operatorName ? (
+                      <>
+                        <span className="font-normal text-muted-foreground">Operating as </span>
+                        {operatorName}
+                      </>
+                    ) : (
+                      userName
+                    )}
+                  </span>
                 </button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
