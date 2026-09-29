@@ -483,6 +483,8 @@ export type FunnelDetailRow = {
   device: string;
   location: string;
   eventName?: string;
+  ctaLabel?: string;
+  ctaLocation?: string;
   count: number;
 };
 
@@ -531,7 +533,8 @@ export async function getEngagedSessionDetail(
 
 // Row-level drill-down behind the funnel's "CTA Clicks" stage. Matches the same events the
 // stage sums (every event name containing "CTA": Contact/Trial/WhatsApp/Email CTA Click),
-// broken down by the page the click happened on plus the session's source, device and city.
+// broken down by which button was clicked (cta_label/cta_location custom dimensions, sent
+// on every CTA Click event via GTM) plus the page it happened on and device.
 export async function getCtaClickDetail(
   dateRange: GaDateRangeInput,
   limit = 25,
@@ -540,12 +543,10 @@ export async function getCtaClickDetail(
     dateRanges: toDateRange(dateRange),
     dimensions: [
       { name: "eventName" },
+      { name: "customEvent:cta_label" },
+      { name: "customEvent:cta_location" },
       { name: "pagePath" },
-      { name: "sessionSource" },
-      { name: "sessionMedium" },
       { name: "deviceCategory" },
-      { name: "city" },
-      { name: "country" },
     ],
     metrics: [{ name: "eventCount" }],
     dimensionFilter: {
@@ -559,10 +560,12 @@ export async function getCtaClickDetail(
     const d = row.dimensionValues ?? [];
     return {
       eventName: d[0]?.value || "(none)",
-      page: d[1]?.value || "(none)",
-      source: `${d[2]?.value || "(none)"} / ${d[3]?.value || "(none)"}`,
+      ctaLabel: d[1]?.value || "(not set)",
+      ctaLocation: d[2]?.value || "(not set)",
+      page: d[3]?.value || "(none)",
       device: d[4]?.value || "(none)",
-      location: formatLocation(d[5]?.value, d[6]?.value),
+      source: "",
+      location: "",
       count: Number(row.metricValues?.[0]?.value ?? 0),
     };
   });
