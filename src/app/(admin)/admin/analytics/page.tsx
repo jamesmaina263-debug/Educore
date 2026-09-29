@@ -236,10 +236,10 @@ export default async function AdminAnalyticsPage({
         ? {
             columns: [
               { key: "eventName", header: "CTA" },
+              { key: "ctaLabel", header: "Button" },
+              { key: "ctaLocation", header: "Section" },
               { key: "page", header: "Clicked on page" },
-              { key: "source", header: "Source / medium" },
               { key: "device", header: "Device" },
-              { key: "location", header: "Location" },
               { key: "count", header: "Clicks" },
             ],
             rows: ctaDetail,
