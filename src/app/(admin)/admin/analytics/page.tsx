@@ -188,9 +188,15 @@ export default async function AdminAnalyticsPage({
       ])
     : [null, null, null, null, null];
 
-  const ctaClicks = goals
-    ?.filter((g) => g.goal.includes("CTA") || g.goal.includes("WhatsApp") || g.goal.includes("Email"))
-    .reduce((sum, g) => sum + g.events, 0);
+  // ctaClickRows backs the "CTA clicks by type" breakdown card below; ctaClicks
+  // (the funnel's single combined number) is derived from the same filter so
+  // the two can never drift out of sync. Deliberately still goals?.filter(...)
+  // here, not (goals ?? []).filter(...) -- goals === null (GA4 query failed)
+  // must stay `undefined`/"Not tracked yet", distinct from a real empty [].
+  const ctaClickRows = goals?.filter(
+    (g) => g.goal.includes("CTA") || g.goal.includes("WhatsApp") || g.goal.includes("Email"),
+  );
+  const ctaClicks = ctaClickRows?.reduce((sum, g) => sum + g.events, 0);
   const demoFormStarted = goals?.find((g) => g.goal === "Demo Form Started")?.events ?? null;
   const demoFormSubmitted = goals?.find((g) => g.goal === "Demo Request Submitted")?.events ?? null;
 
@@ -434,7 +440,18 @@ export default async function AdminAnalyticsPage({
         )}
       </div>
 
-      <ConversionFunnel stages={funnelStages} />
+      <div className="grid gap-3 lg:grid-cols-2">
+        <ConversionFunnel stages={funnelStages} />
+        {/* Same event rows already summed into the funnel's single "CTA
+            Clicks" number above -- broken out per CTA so it's visible right
+            next to the funnel, without needing to scroll to "Top events
+            (GA4)" and toggle Engaged-only off to find it there. */}
+        <BreakdownList
+          title="CTA clicks by type"
+          rows={(ctaClickRows ?? []).map((r) => ({ label: r.goal, value: r.events }))}
+          valueLabel="Clicks"
+        />
+      </div>
 
       <div className="panel p-4">
         <p className="mb-2 text-sm font-medium">Demo requests by status ({label.toLowerCase()})</p>
