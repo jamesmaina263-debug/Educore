@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { fetchSharedKicdStrands, mergeCurriculumStrands } from "@/lib/ai/kicd-grounding";
 import { tagSentryRequestContext } from "@/lib/observability/sentry-context";
 import {
   SCHEME_OF_WORK_PROMPT_VERSION,
@@ -203,11 +204,19 @@ export async function generateSchemeWithAI(input: GenerateSchemeInput): Promise<
     .eq("school_id", schoolUser.school_id)
     .order("level_order");
 
+  // Shared, published KICD content for this class's confirmed KICD grade and
+  // this subject's catalogue entry (kicd-grounding.ts) -- merged under the
+  // school's own reviewed content, which wins on conflicts. Never fatal.
+  const sharedKicdStrands = await fetchSharedKicdStrands(supabase, { classId: input.class_id, subjectId: input.subject_id });
+
   const curriculumContext = buildCurriculumContext(
-    (strandsRaw ?? []).map((s) => ({
-      name: s.name,
-      sub_strands: (s.curriculum_sub_strands ?? []) as CurriculumSubStrandRow[],
-    })),
+    mergeCurriculumStrands(
+      (strandsRaw ?? []).map((s) => ({
+        name: s.name,
+        sub_strands: (s.curriculum_sub_strands ?? []) as CurriculumSubStrandRow[],
+      })),
+      sharedKicdStrands,
+    ),
   );
 
   // ---- 6b. Refuse rather than silently generate an ungrounded draft.
@@ -848,7 +857,7 @@ export async function assistSchemeEntry(input: AssistSchemeEntryInput): Promise<
   const { data: entryRow } = await supabase
     .from("scheme_of_work_entries")
     .select(
-      "id, topic, subtopic, learning_outcomes, content, activities, teaching_methods, resources, assessment_methods, scheme_id, schemes_of_work!inner(school_id, subject_id, subjects(name), classes(name), streams(name), terms(name, academic_years(name)))",
+      "id, topic, subtopic, learning_outcomes, content, activities, teaching_methods, resources, assessment_methods, scheme_id, schemes_of_work!inner(school_id, subject_id, class_id, subjects(name), classes(name), streams(name), terms(name, academic_years(name)))",
     )
     .eq("id", input.entry_id)
     .maybeSingle();
@@ -860,6 +869,7 @@ export async function assistSchemeEntry(input: AssistSchemeEntryInput): Promise<
   const scheme = entryRow.schemes_of_work as unknown as {
     school_id: string;
     subject_id: string;
+    class_id: string | null;
     subjects: { name: string } | null;
     classes: { name: string } | null;
     streams: { name: string } | null;
@@ -931,11 +941,16 @@ export async function assistSchemeEntry(input: AssistSchemeEntryInput): Promise<
     .eq("school_id", schoolUser.school_id)
     .order("level_order");
 
+  const sharedKicdStrands = await fetchSharedKicdStrands(supabase, { classId: scheme.class_id, subjectId: scheme.subject_id });
+
   const curriculumContext = buildCurriculumContext(
-    (strandsRaw ?? []).map((s) => ({
-      name: s.name,
-      sub_strands: (s.curriculum_sub_strands ?? []) as CurriculumSubStrandRow[],
-    })),
+    mergeCurriculumStrands(
+      (strandsRaw ?? []).map((s) => ({
+        name: s.name,
+        sub_strands: (s.curriculum_sub_strands ?? []) as CurriculumSubStrandRow[],
+      })),
+      sharedKicdStrands,
+    ),
   );
 
   // Same refusal as generateSchemeWithAI (Phase 1) -- no usable recorded

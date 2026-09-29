@@ -15,6 +15,7 @@ import {
   updateKicdSubStrand,
   deleteKicdSubStrand,
   deleteKicdSource,
+  setKicdLearningAreaCatalogue,
 } from "@/app/(admin)/admin/kicd-content/actions";
 
 export type KicdSubStrandRow = {
@@ -44,9 +45,20 @@ export type KicdSourceRow = {
   kicd_strands: KicdStrandRow[];
 };
 
+export type KicdLearningAreaRow = { id: string; name: string; catalogue_id: string | null };
+export type CatalogueOption = { id: string; name: string };
+
 type Result = { error: string } | { success: true };
 
-export function AdminKicdContentPanel({ sources }: { sources: KicdSourceRow[] }) {
+export function AdminKicdContentPanel({
+  sources,
+  learningAreas,
+  catalogue,
+}: {
+  sources: KicdSourceRow[];
+  learningAreas: KicdLearningAreaRow[];
+  catalogue: CatalogueOption[];
+}) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -136,6 +148,38 @@ export function AdminKicdContentPanel({ sources }: { sources: KicdSourceRow[] })
           </Button>
         </div>
       </div>
+
+      {learningAreas.length > 0 && (
+        <div className="panel flex flex-col gap-2 p-4">
+          <p className="text-sm font-medium">Learning area → school subject link</p>
+          <p className="text-xs text-muted-foreground">
+            Schools only receive a learning area&apos;s content in subjects linked to the same catalogue entry. Unlinked learning areas
+            ground nothing.
+          </p>
+          {learningAreas.map((a) => (
+            <div key={a.id} className="flex flex-wrap items-center justify-between gap-2">
+              <span className="text-sm">{a.name}</span>
+              <Select
+                value={a.catalogue_id ?? "none"}
+                onValueChange={(v) => run(() => setKicdLearningAreaCatalogue(a.id, v === "none" ? null : v))}
+                disabled={pending}
+              >
+                <SelectTrigger className="w-64" aria-label={`Catalogue subject for ${a.name}`}>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Not linked</SelectItem>
+                  {catalogue.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>
+                      {c.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          ))}
+        </div>
+      )}
 
       {error && <p className="panel border-destructive/40 p-3 text-sm text-destructive">{error}</p>}
       {notice && <p className="panel p-3 text-sm">{notice}</p>}
