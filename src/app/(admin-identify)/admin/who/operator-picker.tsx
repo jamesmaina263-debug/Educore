@@ -6,8 +6,8 @@ import { UserRound, ArrowLeft } from "lucide-react";
 import { AuthLayout } from "@/components/shared/auth-layout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ADMIN_OPERATORS, ADMIN_OPERATOR_EMAILS, type AdminOperator } from "@/lib/admin-operator";
-import { requestOperatorCode, confirmOperatorCode } from "./otp-actions";
+import { ADMIN_OPERATORS, ADMIN_OPERATOR_EMAILS, operatorRequiresOtp, type AdminOperator } from "@/lib/admin-operator";
+import { requestOperatorCode, confirmOperatorCode, identifyOperatorWithoutCode } from "./otp-actions";
 import { maskEmail } from "./mask-email";
 
 export function OperatorPicker({ next, current }: { next: string; current: AdminOperator | null }) {
@@ -21,6 +21,22 @@ export function OperatorPicker({ next, current }: { next: string; current: Admin
   function pick(name: AdminOperator) {
     setError(null);
     setOperator(name);
+
+    // James is exempt from the emailed code (his request, 2026-09-29) -- everyone else still
+    // goes through request -> enter-code below. operatorRequiresOtp() is only a UI shortcut
+    // here; identifyOperatorWithoutCode() re-checks server-side and refuses anyone not exempt.
+    if (!operatorRequiresOtp(name)) {
+      startTransition(async () => {
+        const result = await identifyOperatorWithoutCode(name, next);
+        if ("error" in result) {
+          setError(result.error);
+          return;
+        }
+        router.push(result.next);
+      });
+      return;
+    }
+
     startTransition(async () => {
       const result = await requestOperatorCode(name);
       if ("error" in result) {
@@ -107,8 +123,9 @@ export function OperatorPicker({ next, current }: { next: string; current: Admin
         <div className="space-y-1.5">
           <h1 className="text-lg font-semibold tracking-tight">Who are you logging in as?</h1>
           <p className="text-sm text-muted-foreground">
-            The admin console uses one shared login. Pick your name, then confirm with the code we
-            email you, so what you do here is recorded against you in the activity log.
+            The admin console uses one shared login. Pick your name so what you do here is
+            recorded against you in the activity log. Ben and Boniface confirm with an emailed
+            code first.
           </p>
         </div>
 
