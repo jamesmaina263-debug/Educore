@@ -22,6 +22,16 @@ export const ADMIN_OPERATOR_EMAILS: Record<AdminOperator, string> = {
 // these RPCs and the same email addresses could theoretically also be a parent's.
 export const ADMIN_OPERATOR_OTP_PURPOSE = "platform_admin_operator";
 
+// James asked (2026-09-29) to skip the emailed-code step for himself only -- Ben and Boniface
+// still must verify. This is the single place that decision lives; otp-actions.ts's bypass
+// action is the only code path that reads it, so changing this list is the only change needed
+// to add/remove someone from the exemption.
+const ADMIN_OPERATOR_OTP_EXEMPT: ReadonlySet<AdminOperator> = new Set(["James"]);
+
+export function operatorRequiresOtp(operator: AdminOperator): boolean {
+  return !ADMIN_OPERATOR_OTP_EXEMPT.has(operator);
+}
+
 export const ADMIN_OPERATOR_COOKIE = "edu_admin_operator";
 
 // Long enough for a working day, short enough that a forgotten session doesn't keep

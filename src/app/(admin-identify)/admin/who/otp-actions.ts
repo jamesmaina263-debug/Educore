@@ -8,6 +8,7 @@ import {
   ADMIN_OPERATOR_EMAILS,
   ADMIN_OPERATOR_OTP_PURPOSE,
   isAdminOperator,
+  operatorRequiresOtp,
   safeAdminNextPath,
   type AdminOperator,
 } from "@/lib/admin-operator";
@@ -93,5 +94,24 @@ export async function confirmOperatorCode(
   // Re-sanitized here (page.tsx already ran the raw searchParam through safeAdminNextPath before
   // handing it to the client component) so the redirect target this action hands back is never
   // dependent on trusting the client round-trip.
+  return { success: true, next: safeAdminNextPath(next) };
+}
+
+// Skips the emailed code entirely for an OTP-exempt operator (currently just James, per his
+// 2026-09-29 request -- see the ADMIN_OPERATOR_OTP_EXEMPT comment in lib/admin-operator.ts for
+// why and how to change who's exempt). The operatorRequiresOtp() check below is what actually
+// enforces this server-side: the picker UI only ever calls this for an exempt name, but even a
+// hand-crafted call with operator="Ben" is refused here regardless of what the client sends.
+export async function identifyOperatorWithoutCode(
+  operator: AdminOperator,
+  next: string,
+): Promise<ConfirmResult> {
+  if (!isAdminOperator(operator)) return { error: "Unrecognized person." };
+  if (operatorRequiresOtp(operator)) return { error: "This person must verify with an emailed code." };
+
+  const supabase = await requireSuperAdminSession();
+  if (!supabase) return { error: "Your session has expired. Please sign in again." };
+
+  setAdminOperatorCookie(await cookies(), operator);
   return { success: true, next: safeAdminNextPath(next) };
 }

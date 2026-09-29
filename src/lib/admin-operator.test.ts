@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ADMIN_OPERATORS, isAdminOperator, safeAdminNextPath } from "./admin-operator";
+import { ADMIN_OPERATORS, isAdminOperator, operatorRequiresOtp, safeAdminNextPath } from "./admin-operator";
 
 describe("isAdminOperator", () => {
   it("accepts every configured operator", () => {
@@ -31,5 +31,18 @@ describe("safeAdminNextPath", () => {
   });
   it("never bounces back to the picker itself", () => {
     expect(safeAdminNextPath("/admin/who")).toBe("/admin");
+  });
+});
+
+describe("operatorRequiresOtp", () => {
+  it("exempts only James from the emailed code", () => {
+    expect(operatorRequiresOtp("James")).toBe(false);
+    expect(operatorRequiresOtp("Ben")).toBe(true);
+    expect(operatorRequiresOtp("Boniface")).toBe(true);
+  });
+
+  it("keeps the exemption to exactly one of the configured operators", () => {
+    const exempt = ADMIN_OPERATORS.filter((name) => !operatorRequiresOtp(name));
+    expect(exempt).toEqual(["James"]);
   });
 });
