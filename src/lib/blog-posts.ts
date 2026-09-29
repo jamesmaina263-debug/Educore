@@ -17,6 +17,13 @@ export type BlogPostSummary = {
 
 export const BLOG_POSTS: BlogPostSummary[] = [
   {
+    slug: "kicd-curriculum-design-strands-sub-strands-explained",
+    title: "KICD Curriculum Designs Explained: Strands, Sub-Strands and Learning Outcomes — EduCore",
+    description:
+      "How to read a KICD curriculum design: what strands, sub-strands, specific learning outcomes, key inquiry questions, core competencies and PCIs mean, and how to turn them into a term plan.",
+    publishedOn: "2026-09-28",
+  },
+  {
     slug: "cbc-scheme-of-work-kenya-how-to-write",
     title: "How to Write a CBC Scheme of Work in Kenya: Columns, Example and Common Mistakes — EduCore",
     description:
