@@ -15,7 +15,7 @@ export default async function AdminKicdContentPage() {
   const { data } = await supabase
     .from("kicd_content_sources")
     .select(
-      "id, name, licence_reference, licence_scope, attribution, source_document, is_enabled, created_at, kicd_strands(id, name, grade, kicd_learning_areas(name), kicd_sub_strands(id, name, learning_outcomes, key_inquiry_questions, rubric_text))",
+      "id, name, licence_reference, licence_scope, attribution, source_document, is_enabled, created_at, schools(name), kicd_strands(id, name, grade, kicd_learning_areas(name), kicd_sub_strands(id, name, learning_outcomes, key_inquiry_questions, rubric_text))",
     )
     .order("created_at", { ascending: false });
 
@@ -26,7 +26,8 @@ export default async function AdminKicdContentPage() {
         <p className="text-sm text-muted-foreground">
           Import official curriculum documents as shared content for all schools. Every import needs a licence reference and
           attribution, starts <strong>unpublished</strong>, and only becomes visible after you review it and publish it. Withdrawing a
-          source hides it from every school immediately. Schools don&apos;t use this content for AI grounding yet.
+          source hides it from every school immediately. Content imported by a school&apos;s own management is private to that school
+          and is labelled below; you can still withdraw it. Schools don&apos;t use this content for AI grounding yet.
         </p>
       </div>
       <AdminKicdContentPanel sources={(data ?? []) as unknown as KicdSourceRow[]} />

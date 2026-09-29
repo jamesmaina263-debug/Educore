@@ -14,13 +14,16 @@ type Call = { table: string; op: string; args: unknown[] };
 
 // Per-table result queues consumed in call order; every chained op is
 // recorded in `calls` so tests can assert what was written.
-function fakeClient(opts: { superAdmin?: boolean; user?: boolean; tables?: Record<string, unknown[]> }) {
+function fakeClient(opts: { superAdmin?: boolean; canManage?: boolean; user?: boolean; tables?: Record<string, unknown[]> }) {
   const calls: Call[] = [];
   const queues: Record<string, unknown[]> = {};
   for (const [k, v] of Object.entries(opts.tables ?? {})) queues[k] = [...v];
   const client = {
     auth: { getUser: async () => ({ data: { user: opts.user === false ? null : { id: "u1" } } }) },
-    rpc: async (name: string) => ({ data: name === "auth_is_super_admin" ? (opts.superAdmin ?? true) : null, error: null }),
+    rpc: async (name: string) => ({
+      data: name === "auth_is_super_admin" ? (opts.superAdmin ?? true) : name === "auth_has_permission" ? (opts.canManage ?? false) : null,
+      error: null,
+    }),
     from: (table: string) => {
       const next = () => Promise.resolve((queues[table] ?? []).shift() ?? { data: null, error: null });
       const chain: Record<string, unknown> = {};
@@ -79,9 +82,9 @@ describe("importKicdDocument", () => {
     expect(await importKicdDocument(form({}, null))).toEqual({ error: "No file provided." });
   });
 
-  it("refuses anyone who is not a platform admin", async () => {
+  it("refuses anyone who is neither a platform admin nor school management", async () => {
     mockCreateClient.mockResolvedValue(fakeClient({ superAdmin: false }).client);
-    expect(await importKicdDocument(form())).toEqual({ error: "Only platform admins can manage shared KICD content." });
+    expect(await importKicdDocument(form())).toEqual({ error: "You don't have permission to manage KICD content." });
   });
 
   it("imports as an UNPUBLISHED source, with the licence details, and logs it", async () => {
@@ -147,9 +150,9 @@ describe("importKicdDocument", () => {
 describe("setKicdSourceEnabled", () => {
   beforeEach(() => mockLog.mockReset());
 
-  it("refuses non-admins", async () => {
+  it("refuses users without academics.write", async () => {
     mockCreateClient.mockResolvedValue(fakeClient({ superAdmin: false }).client);
-    expect(await setKicdSourceEnabled("s", true)).toEqual({ error: "Only platform admins can manage shared KICD content." });
+    expect(await setKicdSourceEnabled("s", true)).toEqual({ error: "You don't have permission to manage KICD content." });
   });
   it("refuses to publish an empty source", async () => {
     mockCreateClient.mockResolvedValue(fakeClient({ tables: { kicd_strands: [{ data: [], error: null }] } }).client);
@@ -195,5 +198,70 @@ describe("sub-strand edits", () => {
     expect(await deleteKicdSubStrand("x")).toEqual({ success: true });
     mockCreateClient.mockResolvedValue(fakeClient({ tables: { kicd_sub_strands: [{ data: [], error: null }] } }).client);
     expect(await deleteKicdSubStrand("x")).toEqual({ error: "Sub-strand not found." });
+  });
+});
+
+describe("school management (academics.write, own school only)", () => {
+  const key = process.env.GEMINI_API_KEY;
+  beforeEach(() => {
+    process.env.GEMINI_API_KEY = "k";
+    mockCreateClient.mockReset();
+    mockLog.mockReset();
+  });
+  afterEach(() => {
+    process.env.GEMINI_API_KEY = key;
+    vi.unstubAllGlobals();
+  });
+
+  it("imports a source private to the manager's own school, unpublished, without writing the platform log", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(geminiOk(extraction)));
+    const { client, calls } = fakeClient({
+      superAdmin: false,
+      canManage: true,
+      tables: {
+        school_users: [{ data: { id: "su1", school_id: "school-A" }, error: null }],
+        kicd_learning_areas: [{ data: null, error: null }, { data: { id: "la1" }, error: null }],
+        kicd_content_sources: [{ data: { id: "src1" }, error: null }],
+        kicd_strands: [{ data: [{ id: "s1", name: "Numbers" }], error: null }],
+        kicd_sub_strands: [{ error: null }],
+      },
+    });
+    mockCreateClient.mockResolvedValue(client);
+    expect(await importKicdDocument(form())).toEqual({ success: true, sourceId: "src1", strands: 1, subStrands: 1, truncated: false });
+    const sourceInsert = calls.find((c) => c.table === "kicd_content_sources" && c.op === "insert")!;
+    expect(sourceInsert.args[0]).toMatchObject({ is_enabled: false, school_id: "school-A", created_by: "su1" });
+    expect(mockLog).not.toHaveBeenCalled();
+  });
+
+  it("platform admin imports stay platform-wide (school_id null)", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(geminiOk(extraction)));
+    const { client, calls } = fakeClient({
+      tables: {
+        kicd_learning_areas: [{ data: null, error: null }, { data: { id: "la1" }, error: null }],
+        kicd_content_sources: [{ data: { id: "src1" }, error: null }],
+        kicd_strands: [{ data: [{ id: "s1", name: "Numbers" }], error: null }],
+        kicd_sub_strands: [{ error: null }],
+      },
+    });
+    mockCreateClient.mockResolvedValue(client);
+    await importKicdDocument(form());
+    const sourceInsert = calls.find((c) => c.table === "kicd_content_sources" && c.op === "insert")!;
+    expect(sourceInsert.args[0]).toMatchObject({ school_id: null, created_by: null });
+  });
+
+  it("refuses a manager whose account has no school", async () => {
+    mockCreateClient.mockResolvedValue(fakeClient({ superAdmin: false, canManage: true, tables: { school_users: [{ data: null, error: null }] } }).client);
+    expect(await setKicdSourceEnabled("s", false)).toEqual({ error: "Your account isn't attached to a school." });
+  });
+
+  it("publishing another school's or a platform source reports not found (RLS returns no rows)", async () => {
+    mockCreateClient.mockResolvedValue(
+      fakeClient({
+        superAdmin: false,
+        canManage: true,
+        tables: { school_users: [{ data: { id: "su1", school_id: "school-A" }, error: null }], kicd_content_sources: [{ data: [], error: null }] },
+      }).client,
+    );
+    expect(await setKicdSourceEnabled("other", false)).toEqual({ error: "Source not found." });
   });
 });
