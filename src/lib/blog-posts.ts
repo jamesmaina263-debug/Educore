@@ -17,6 +17,13 @@ export type BlogPostSummary = {
 
 export const BLOG_POSTS: BlogPostSummary[] = [
   {
+    slug: "senior-school-pathways-kenya-stem-social-sciences-arts-sports",
+    title: "Senior School Pathways in Kenya: STEM, Social Sciences, Arts & Sports Science Explained — EduCore",
+    description:
+      "What the three CBC Senior School pathways cover, their tracks and subjects, how learners are placed, and how schools can guide a Grade 9 learner's choice.",
+    publishedOn: "2026-09-29",
+  },
+  {
     slug: "kicd-curriculum-design-strands-sub-strands-explained",
     title: "KICD Curriculum Designs Explained: Strands, Sub-Strands and Learning Outcomes — EduCore",
     description:
