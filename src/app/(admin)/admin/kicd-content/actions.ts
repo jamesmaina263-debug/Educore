@@ -7,7 +7,8 @@ import { logAdminAction } from "@/lib/log-admin-action";
 import { runCurriculumExtraction } from "@/lib/ai/curriculum-extraction";
 import { isKicdGrade } from "@/lib/kicd-grade";
 
-// Platform-admin import of shared (EduCore-wide) KICD curriculum content.
+// Import/manage KICD curriculum content: platform-wide (platform admins) or private to one
+// school (that school's management) -- see requireKicdManager and migration 20260928140000.
 // Phase 2B, PR 2 of 3 -- nothing reads the shared tables for grounding yet
 // (PR 3), so importing/publishing has no effect on any school until then.
 //
@@ -23,7 +24,12 @@ import { isKicdGrade } from "@/lib/kicd-grade";
 type ActionResult = { error: string } | { success: true };
 const MAX_UPLOAD_BYTES = 20 * 1024 * 1024;
 
-async function requireSuperAdmin() {
+// Who may manage KICD content: platform admins (platform-wide content, schoolId = null) and
+// school management -- anyone holding academics.write (school_owner / principal /
+// deputy_principal) -- for THEIR OWN school's content (schoolId = their school). RLS
+// (kicd_can_manage_source) enforces the same boundary in the database, so this check is a
+// friendly early refusal, not the only guard.
+async function requireKicdManager() {
   const supabase = await createClient();
   await tagSentryRequestContext(supabase);
   const {
@@ -31,8 +37,29 @@ async function requireSuperAdmin() {
   } = await supabase.auth.getUser();
   if (!user) return { supabase, ok: false as const, error: "You must be signed in." };
   const { data: isSuperAdmin } = await supabase.rpc("auth_is_super_admin");
-  if (isSuperAdmin !== true) return { supabase, ok: false as const, error: "Only platform admins can manage shared KICD content." };
-  return { supabase, ok: true as const };
+  if (isSuperAdmin === true) return { supabase, ok: true as const, isPlatform: true as const, schoolId: null, schoolUserId: null };
+  const { data: canManage } = await supabase.rpc("auth_has_permission", { p_permission_key: "academics.write" });
+  if (canManage !== true) return { supabase, ok: false as const, error: "You don't have permission to manage KICD content." };
+  const { data: schoolUser } = await supabase.from("school_users").select("id, school_id").eq("auth_user_id", user.id).maybeSingle();
+  if (!schoolUser?.school_id) return { supabase, ok: false as const, error: "Your account isn't attached to a school." };
+  return {
+    supabase,
+    ok: true as const,
+    isPlatform: false as const,
+    schoolId: schoolUser.school_id as string,
+    schoolUserId: schoolUser.id as string,
+  };
+}
+
+// Platform admin actions go to the platform activity log; school-management actions don't
+// (that log is the platform staff's own trail, and its RPC is platform-admin only).
+function logIfPlatform(auth: { isPlatform: boolean; supabase: Parameters<typeof logAdminAction>[0] }, action: string, detail: Record<string, unknown>) {
+  if (auth.isPlatform) void logAdminAction(auth.supabase, action, detail);
+}
+
+function revalidateKicdPages() {
+  revalidatePath("/admin/kicd-content");
+  revalidatePath("/academics/kicd-content");
 }
 
 export type ImportKicdResult =
@@ -62,7 +89,7 @@ export async function importKicdDocument(formData: FormData): Promise<ImportKicd
   if (file.type !== "application/pdf") return { error: "Please upload a PDF file." };
   if (file.size > MAX_UPLOAD_BYTES) return { error: "That file is larger than the 20MB limit." };
 
-  const auth = await requireSuperAdmin();
+  const auth = await requireKicdManager();
   if (!auth.ok) return { error: auth.error };
   const { supabase } = auth;
 
@@ -113,6 +140,8 @@ export async function importKicdDocument(formData: FormData): Promise<ImportKicd
       attribution,
       source_document: file.name,
       is_enabled: false, // unpublished until reviewed -- see header comment
+      school_id: auth.schoolId, // null = platform-wide; set = private to that school
+      created_by: auth.schoolUserId,
     })
     .select("id")
     .single();
@@ -150,7 +179,7 @@ export async function importKicdDocument(formData: FormData): Promise<ImportKicd
     return { error: subError.message };
   }
 
-  void logAdminAction(supabase, "import_kicd_document", {
+  logIfPlatform(auth, "import_kicd_document", {
     source_id: sourceId,
     source_name: sourceName,
     licence_reference: licenceReference,
@@ -159,13 +188,13 @@ export async function importKicdDocument(formData: FormData): Promise<ImportKicd
     strands: strands.length,
     sub_strands: subRows.length,
   });
-  revalidatePath("/admin/kicd-content");
+  revalidateKicdPages();
   return { success: true, sourceId, strands: strands.length, subStrands: subRows.length, truncated: extraction.truncated };
 }
 
 export async function setKicdSourceEnabled(sourceId: string, enabled: boolean): Promise<ActionResult> {
   if (typeof sourceId !== "string" || !sourceId) return { error: "Missing source." };
-  const auth = await requireSuperAdmin();
+  const auth = await requireKicdManager();
   if (!auth.ok) return { error: auth.error };
   const { supabase } = auth;
 
@@ -176,8 +205,8 @@ export async function setKicdSourceEnabled(sourceId: string, enabled: boolean): 
   const { data, error } = await supabase.from("kicd_content_sources").update({ is_enabled: enabled }).eq("id", sourceId).select("id");
   if (error) return { error: error.message };
   if (!data || data.length === 0) return { error: "Source not found." };
-  void logAdminAction(supabase, enabled ? "publish_kicd_source" : "withdraw_kicd_source", { source_id: sourceId });
-  revalidatePath("/admin/kicd-content");
+  logIfPlatform(auth, enabled ? "publish_kicd_source" : "withdraw_kicd_source", { source_id: sourceId });
+  revalidateKicdPages();
   return { success: true };
 }
 
@@ -188,7 +217,7 @@ export async function updateKicdSubStrand(
   if (typeof subStrandId !== "string" || !subStrandId) return { error: "Missing sub-strand." };
   const name = fields.name?.trim();
   if (!name) return { error: "Name is required." };
-  const auth = await requireSuperAdmin();
+  const auth = await requireKicdManager();
   if (!auth.ok) return { error: auth.error };
   const { supabase } = auth;
   const { data, error } = await supabase
@@ -203,21 +232,21 @@ export async function updateKicdSubStrand(
     .select("id");
   if (error) return { error: error.code === "23505" ? "Another sub-strand in this strand already has that name." : error.message };
   if (!data || data.length === 0) return { error: "Sub-strand not found." };
-  void logAdminAction(supabase, "edit_kicd_sub_strand", { sub_strand_id: subStrandId });
-  revalidatePath("/admin/kicd-content");
+  logIfPlatform(auth, "edit_kicd_sub_strand", { sub_strand_id: subStrandId });
+  revalidateKicdPages();
   return { success: true };
 }
 
 export async function deleteKicdSubStrand(subStrandId: string): Promise<ActionResult> {
   if (typeof subStrandId !== "string" || !subStrandId) return { error: "Missing sub-strand." };
-  const auth = await requireSuperAdmin();
+  const auth = await requireKicdManager();
   if (!auth.ok) return { error: auth.error };
   const { supabase } = auth;
   const { data, error } = await supabase.from("kicd_sub_strands").delete().eq("id", subStrandId).select("id");
   if (error) return { error: error.message };
   if (!data || data.length === 0) return { error: "Sub-strand not found." };
-  void logAdminAction(supabase, "delete_kicd_sub_strand", { sub_strand_id: subStrandId });
-  revalidatePath("/admin/kicd-content");
+  logIfPlatform(auth, "delete_kicd_sub_strand", { sub_strand_id: subStrandId });
+  revalidateKicdPages();
   return { success: true };
 }
 
@@ -225,7 +254,7 @@ export async function deleteKicdSubStrand(subStrandId: string): Promise<ActionRe
  *  content is never deleted out from under schools by a single click. */
 export async function deleteKicdSource(sourceId: string): Promise<ActionResult> {
   if (typeof sourceId !== "string" || !sourceId) return { error: "Missing source." };
-  const auth = await requireSuperAdmin();
+  const auth = await requireKicdManager();
   if (!auth.ok) return { error: auth.error };
   const { supabase } = auth;
   const { data: source } = await supabase.from("kicd_content_sources").select("id, is_enabled").eq("id", sourceId).maybeSingle();
@@ -234,7 +263,7 @@ export async function deleteKicdSource(sourceId: string): Promise<ActionResult> 
   await supabase.from("kicd_strands").delete().eq("source_id", sourceId);
   const { error } = await supabase.from("kicd_content_sources").delete().eq("id", sourceId);
   if (error) return { error: error.message };
-  void logAdminAction(supabase, "delete_kicd_source", { source_id: sourceId });
-  revalidatePath("/admin/kicd-content");
+  logIfPlatform(auth, "delete_kicd_source", { source_id: sourceId });
+  revalidateKicdPages();
   return { success: true };
 }

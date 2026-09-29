@@ -5,6 +5,7 @@ import { getCachedUser } from "@/lib/supabase/get-user";
 import { logout } from "@/app/login/actions";
 import { AppShell } from "@/components/app-shell/app-shell";
 import { KICD_GRADES, isKicdGrade, kicdGradeLabel } from "@/lib/kicd-grade";
+import { AdminKicdContentPanel, type KicdSourceRow } from "@/components/admin/admin-kicd-content-panel";
 
 interface SubStrandRow {
   id: string;
@@ -32,11 +33,14 @@ interface SourceRow {
   kicd_strands: StrandRow[];
 }
 
-// Read-only reference view of the platform-published KICD content for school leaders.
-// Only sources with is_enabled = true are shown. This filter is explicit (not left to RLS)
-// because a platform super-admin's RLS also returns unpublished/withdrawn sources.
-// Gated on academics.write (school_owner / principal / deputy_principal) -- there is no
-// write path here at all; importing/publishing stays in the platform admin console.
+// KICD content for school management (academics.write: school_owner / principal /
+// deputy_principal). Two parts:
+//  1. Manage -- the school's OWN KICD content (school_id = this school): import, review/edit,
+//     publish, withdraw, discard. Private to this school; RLS (kicd_can_manage_source) stops
+//     it touching any other school's or the platform-wide content.
+//  2. Browse -- read-only view of the platform-wide content published by EduCore
+//     (school_id is null, is_enabled = true). The filters are explicit (not left to RLS)
+//     because a platform super-admin's RLS also returns unpublished/withdrawn sources.
 export default async function KicdContentBrowsePage({
   searchParams,
 }: {
@@ -50,13 +54,25 @@ export default async function KicdContentBrowsePage({
   if (!user) redirect("/login");
 
   const [{ data: schoolUser }, { data: canWrite }] = await Promise.all([
-    supabase.from("school_users").select("full_name, roles(display_name), schools(name)").eq("auth_user_id", user.id).maybeSingle(),
+    supabase.from("school_users").select("full_name, school_id, roles(display_name), schools(name)").eq("auth_user_id", user.id).maybeSingle(),
     supabase.rpc("auth_has_permission", { p_permission_key: "academics.write" }),
   ]);
 
   const roleName = (schoolUser?.roles as unknown as { display_name: string } | null)?.display_name;
   const schoolName = (schoolUser?.schools as unknown as { name: string } | null)?.name;
   const canView = canWrite === true;
+
+  let ownSources: KicdSourceRow[] = [];
+  if (canView && schoolUser?.school_id) {
+    const { data: own } = await supabase
+      .from("kicd_content_sources")
+      .select(
+        "id, name, licence_reference, licence_scope, attribution, source_document, is_enabled, created_at, kicd_strands(id, name, grade, kicd_learning_areas(name), kicd_sub_strands(id, name, learning_outcomes, key_inquiry_questions, rubric_text))",
+      )
+      .eq("school_id", schoolUser.school_id)
+      .order("created_at", { ascending: false });
+    ownSources = (own ?? []) as unknown as KicdSourceRow[];
+  }
 
   let sources: SourceRow[] = [];
   if (canView) {
@@ -66,6 +82,7 @@ export default async function KicdContentBrowsePage({
         "id, name, attribution, licence_reference, kicd_strands(id, name, grade, level_order, kicd_learning_areas(name, display_order), kicd_sub_strands(id, name, level_order, learning_outcomes, key_inquiry_questions, rubric_text))",
       )
       .eq("is_enabled", true)
+      .is("school_id", null)
       .order("created_at", { ascending: false });
     if (selectedGrade) query = query.eq("kicd_strands.grade", selectedGrade);
     const { data } = await query;
@@ -87,7 +104,8 @@ export default async function KicdContentBrowsePage({
         <div>
           <h1 className="text-lg font-semibold">KICD Content</h1>
           <p className="text-sm text-muted-foreground">
-            Official KICD curriculum content published by EduCore for all schools. This is a read-only reference — content is managed centrally.
+            Import and manage your school&apos;s own KICD curriculum content, and browse the official content EduCore publishes for all
+            schools.
           </p>
         </div>
 
@@ -97,6 +115,21 @@ export default async function KicdContentBrowsePage({
           </p>
         ) : (
           <>
+            <section className="flex flex-col gap-2">
+              <div>
+                <h2 className="text-base font-semibold">Your school&apos;s KICD content</h2>
+                <p className="text-sm text-muted-foreground">
+                  Every import needs a licence reference and attribution, starts <strong>unpublished</strong>, and is only visible to your
+                  school once you review and publish it. Only your school&apos;s management can see or change it.
+                </p>
+              </div>
+              <AdminKicdContentPanel sources={ownSources} />
+            </section>
+
+            <div>
+              <h2 className="text-base font-semibold">Published by EduCore</h2>
+              <p className="text-sm text-muted-foreground">Read-only reference content shared with all schools.</p>
+            </div>
             <div className="flex flex-wrap items-center gap-2 text-sm">
               <span className="text-muted-foreground">Grade:</span>
               <Link

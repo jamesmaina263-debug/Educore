@@ -40,6 +40,7 @@ export type KicdSourceRow = {
   source_document: string | null;
   is_enabled: boolean;
   created_at: string;
+  schools?: { name: string } | null;
   kicd_strands: KicdStrandRow[];
 };
 
@@ -150,6 +151,7 @@ export function AdminKicdContentPanel({ sources }: { sources: KicdSourceRow[] })
                 <p className="text-xs text-muted-foreground">
                   Licence: {s.licence_reference} · {s.attribution}
                   {s.source_document ? ` · ${s.source_document}` : ""}
+                  {s.schools?.name ? ` · Private to ${s.schools.name}` : ""}
                 </p>
               </div>
               <div className="flex items-center gap-2">
