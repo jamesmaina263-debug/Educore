@@ -9,6 +9,19 @@ export const ADMIN_OPERATORS = ["James", "Ben", "Boniface"] as const;
 
 export type AdminOperator = (typeof ADMIN_OPERATORS)[number];
 
+// Fixed work email for each operator -- the code always goes here, never to an address the
+// person types in, so picking "Ben" and verifying with your own inbox is not possible.
+export const ADMIN_OPERATOR_EMAILS: Record<AdminOperator, string> = {
+  James: "james.maina@educoreafrica.com",
+  Ben: "ben.kimuyu@educoreafrica.com",
+  Boniface: "boniface.k@educoreafrica.com",
+};
+
+// Distinct purpose string for generate_otp/verify_otp (supabase/migrations/*_otp*.sql) so this
+// never collides with, or is affected by rate limits from, parent-login OTP codes that also use
+// these RPCs and the same email addresses could theoretically also be a parent's.
+export const ADMIN_OPERATOR_OTP_PURPOSE = "platform_admin_operator";
+
 export const ADMIN_OPERATOR_COOKIE = "edu_admin_operator";
 
 // Long enough for a working day, short enough that a forgotten session doesn't keep
