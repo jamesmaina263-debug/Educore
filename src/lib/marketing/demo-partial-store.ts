@@ -46,10 +46,14 @@ export async function saveIncompleteLead(
       .eq("email", contact.email)
       .eq("status", "incomplete")
       .maybeSingle();
-    if (existing.error) return false;
+    if (existing.error) {
+      console.error("saveIncompleteLead: lookup failed", existing.error);
+      return false;
+    }
 
     if (existing.data) {
       const { error } = await refreshExisting();
+      if (error) console.error("saveIncompleteLead: refresh failed", error);
       return !error;
     }
 
@@ -58,10 +62,13 @@ export async function saveIncompleteLead(
     // Two near-simultaneous step-1 submits for the same email: the other one won the insert.
     if (error.code === UNIQUE_VIOLATION) {
       const retry = await refreshExisting();
+      if (retry.error) console.error("saveIncompleteLead: post-conflict refresh failed", retry.error);
       return !retry.error;
     }
+    console.error("saveIncompleteLead: insert failed", error);
     return false;
-  } catch {
+  } catch (err) {
+    console.error("saveIncompleteLead: unexpected error", err);
     return false;
   }
 }
@@ -81,7 +88,8 @@ export async function markIncompleteLeadCompleted(
       .update({ status: "completed", completed_at: now, updated_at: now })
       .eq("email", email)
       .eq("status", "incomplete");
-  } catch {
+  } catch (err) {
     // Leaving a lead "incomplete" after they finished is cosmetic, never worth failing the submit.
+    console.error("markIncompleteLeadCompleted: unexpected error", err);
   }
 }

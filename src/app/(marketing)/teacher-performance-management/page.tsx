@@ -12,15 +12,14 @@ import { Badge } from "@/components/ui/badge";
 import { BreadcrumbJsonLd, HOME_CRUMB } from "@/components/marketing/breadcrumb-json-ld";
 
 const TITLE = "Teacher Performance Management System — EduCore Kenya";
-const DESCRIPTION =
-  "Termly and annual teacher reviews with structured 1-5 competency scoring, an overall rating computed automatically, and visibility locked to the reviewer tier and the reviewed teacher only. A human-judgment record, not an AI score.";
+const DESCRIPTION = "Termly and annual teacher reviews with structured 1-5 scoring and an automatic rating, visible only to the reviewer tier and the teacher reviewed.";
 
 export const metadata: Metadata = {
   title: TITLE,
   description: DESCRIPTION,
   alternates: { canonical: "/teacher-performance-management" },
-  openGraph: { title: TITLE, description: DESCRIPTION, url: "/teacher-performance-management" },
-  twitter: { card: "summary_large_image", title: TITLE, description: DESCRIPTION },
+  openGraph: { title: TITLE, description: DESCRIPTION, url: "/teacher-performance-management", images: ["/og-image.png"] },
+  twitter: { card: "summary_large_image", title: TITLE, description: DESCRIPTION, images: ["/og-image.png"] },
 };
 
 // Grounded in (app)/performance/page.tsx + actions.ts, components/performance/performance-section.tsx,

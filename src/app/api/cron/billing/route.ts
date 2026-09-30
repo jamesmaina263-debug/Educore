@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isValidCronRequest } from "@/lib/cron-auth";
 import { sendSecurityAlert } from "@/lib/security-alert";
+import { withTransientAuthRetry } from "@/lib/supabase/retry-transient-auth";
 
 export const dynamic = "force-dynamic";
 
@@ -30,10 +31,16 @@ export async function GET(request: Request) {
   // Each RPC runs as the service_role JWT, which start_trial_subscription and
   // friends explicitly allow alongside auth_is_super_admin() — see the
   // billing migration comments.
+  //
+  // Each call is individually wrapped so a transient gateway auth blip on one RPC (see
+  // retry-transient-auth.ts) doesn't fail the other two, and retries in place without
+  // disturbing the concurrency.
   const [expiredTrials, overdueInvoices, suspendedSchools] = await Promise.all([
-    adminClient.rpc("expire_trials"),
-    adminClient.rpc("mark_invoices_overdue"),
-    adminClient.rpc("suspend_schools_with_overdue_invoices", { p_grace_days: 7 }),
+    withTransientAuthRetry(() => adminClient.rpc("expire_trials")),
+    withTransientAuthRetry(() => adminClient.rpc("mark_invoices_overdue")),
+    withTransientAuthRetry(() =>
+      adminClient.rpc("suspend_schools_with_overdue_invoices", { p_grace_days: 7 }),
+    ),
   ]);
 
   const errors = [expiredTrials.error, overdueInvoices.error, suspendedSchools.error].filter(

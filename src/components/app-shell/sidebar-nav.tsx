@@ -7,6 +7,7 @@ import { ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useOnlineStatus } from "@/hooks/use-online-status";
 import { navGroups, type NavItem } from "./nav-items";
+import { useSchoolHref, useStripSlug } from "./school-slug-context";
 
 function isActive(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(`${href}/`);
@@ -24,9 +25,10 @@ function NavRow({
   onNavigate?: () => void;
 }) {
   const Icon = item.icon;
+  const toHref = useSchoolHref();
   return (
     <Link
-      href={item.href}
+      href={toHref(item.href)}
       onClick={(e) => {
         // Next's normal <Link> click does a client-side transition, which
         // fetches the destination's RSC payload straight from the server --
@@ -57,14 +59,19 @@ function NavRow({
   );
 }
 
-export function SidebarNav({ onNavigate, boardingEnabled = true }: { onNavigate?: () => void; boardingEnabled?: boolean }) {
-  const pathname = usePathname();
+export function SidebarNav({ onNavigate, disabledHrefs = [] }: { onNavigate?: () => void; disabledHrefs?: string[] }) {
+  const toHref = useSchoolHref();
+  const stripSlug = useStripSlug();
+  // Active-link matching compares against bare hrefs; strip the slug so it works whether the
+  // router reports the visible (slugged) or the rewritten (bare) pathname.
+  const pathname = stripSlug(usePathname());
   const online = useOnlineStatus();
   const [manuallyOpen, setManuallyOpen] = useState<Record<string, boolean>>({});
 
-  const groups = boardingEnabled
-    ? navGroups
-    : navGroups.map((group) => ({ ...group, items: group.items.filter((item) => item.href !== "/boarding") }));
+  const groups =
+    disabledHrefs.length === 0
+      ? navGroups
+      : navGroups.map((group) => ({ ...group, items: group.items.filter((item) => !disabledHrefs.includes(item.href)) }));
 
   return (
     <nav className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-2">
@@ -113,7 +120,7 @@ export function SidebarNav({ onNavigate, boardingEnabled = true }: { onNavigate?
                       return (
                         <Link
                           key={child.href}
-                          href={child.href}
+                          href={toHref(child.href)}
                           onClick={(e) => {
                             // Same offline-forces-hard-navigation reasoning
                             // as NavRow above.

@@ -1,5 +1,6 @@
 import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getCachedUser } from "@/lib/supabase/get-user";
 import { logout } from "@/app/login/actions";
 import { AppShell } from "@/components/app-shell/app-shell";
 import { StatusBadge } from "@/components/status-badge";
@@ -20,6 +21,8 @@ import { getStudentGrowth } from "./growth-actions";
 import { GrowthTab } from "./growth-tab";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
+import { getSchoolSlug } from "@/lib/school-slug-server";
+import { withSchoolSlug } from "@/lib/school-slug-href";
 
 export default async function StudentProfilePage({
   params,
@@ -29,14 +32,13 @@ export default async function StudentProfilePage({
   const { id } = await params;
   const supabase = await createClient();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCachedUser();
   if (!user) redirect("/login");
+  const schoolSlug = await getSchoolSlug();
 
   const { data: schoolUser } = await supabase
     .from("school_users")
-    .select("full_name, roles(display_name), schools(name)")
+    .select("full_name, roles(display_name), schools(name, boarding_enabled)")
     .eq("auth_user_id", user.id)
     .maybeSingle();
 
@@ -147,17 +149,60 @@ export default async function StudentProfilePage({
     .order("incident_date", { ascending: false });
   const disciplineRecords: DisciplineRow[] = disciplineRows ?? [];
 
-  const canManageStudents = (await supabase.rpc("auth_has_permission", { p_permission_key: "students.write" })).data === true;
-  const canDeleteStudents = (await supabase.rpc("auth_has_permission", { p_permission_key: "students.delete" })).data === true;
-  const canUploadDocuments = (await supabase.rpc("auth_has_permission", { p_permission_key: "students.documents.write" })).data === true;
-  const canReadMedical = (await supabase.rpc("auth_has_permission", { p_permission_key: "students.medical.read" })).data === true;
-  const canReadDiscipline = (await supabase.rpc("auth_has_permission", { p_permission_key: "discipline.read_any" })).data === true;
-  const canReadFinance = (await supabase.rpc("auth_has_permission", { p_permission_key: "finance.read" })).data === true;
-  const canIssueCertificates = (await supabase.rpc("auth_has_permission", { p_permission_key: "certificates.write" })).data === true;
-  const canWriteDiscipline = (await supabase.rpc("auth_has_permission", { p_permission_key: "discipline.write" })).data === true;
-  const canViewBiometric = (await supabase.rpc("auth_has_permission", { p_permission_key: "biometric.view" })).data === true;
-  const canEnrollBiometric = (await supabase.rpc("auth_has_permission", { p_permission_key: "biometric.enroll" })).data === true;
-  const canRevokeBiometric = (await supabase.rpc("auth_has_permission", { p_permission_key: "biometric.revoke" })).data === true;
+  // These 11 checks are independent of each other -- none depends on another's result -- so
+  // running them one at a time was 11 sequential network round-trips to Supabase on every
+  // visit to this page. Batching them cuts that to the time of the single slowest check.
+  const [
+    { data: canManageStudentsData },
+    { data: canDeleteStudentsData },
+    { data: canUploadDocumentsData },
+    { data: canReadMedicalData },
+    { data: canReadDisciplineData },
+    { data: canReadFinanceData },
+    { data: canIssueCertificatesData },
+    { data: canWriteDisciplineData },
+    { data: canViewBiometricData },
+    { data: canEnrollBiometricData },
+    { data: canRevokeBiometricData },
+    { data: disciplineModuleEnabledData },
+    { data: transportModuleEnabledData },
+  ] = await Promise.all([
+    supabase.rpc("auth_has_permission", { p_permission_key: "students.write" }),
+    supabase.rpc("auth_has_permission", { p_permission_key: "students.delete" }),
+    supabase.rpc("auth_has_permission", { p_permission_key: "students.documents.write" }),
+    supabase.rpc("auth_has_permission", { p_permission_key: "students.medical.read" }),
+    supabase.rpc("auth_has_permission", { p_permission_key: "discipline.read_any" }),
+    supabase.rpc("auth_has_permission", { p_permission_key: "finance.read" }),
+    supabase.rpc("auth_has_permission", { p_permission_key: "certificates.write" }),
+    supabase.rpc("auth_has_permission", { p_permission_key: "discipline.write" }),
+    supabase.rpc("auth_has_permission", { p_permission_key: "biometric.view" }),
+    supabase.rpc("auth_has_permission", { p_permission_key: "biometric.enroll" }),
+    supabase.rpc("auth_has_permission", { p_permission_key: "biometric.revoke" }),
+    supabase.rpc("auth_school_module_enabled", { p_key: "discipline" }),
+    supabase.rpc("auth_school_module_enabled", { p_key: "transport" }),
+  ]);
+  const canManageStudents = canManageStudentsData === true;
+  const canDeleteStudents = canDeleteStudentsData === true;
+  const canUploadDocuments = canUploadDocumentsData === true;
+  const canReadMedical = canReadMedicalData === true;
+  // Module-gated in addition to the existing permission check -- a school with Discipline
+  // disabled shouldn't see discipline data surface on a student's profile even for a user who'd
+  // otherwise have discipline.read_any (same "hidden everywhere, not just its own route"
+  // standard as the sidebar/command-palette/shortcut/dashboard-widget/AI-intent gating).
+  const disciplineModuleEnabled = disciplineModuleEnabledData !== false;
+  const canReadDiscipline = canReadDisciplineData === true && disciplineModuleEnabled;
+  const canReadFinance = canReadFinanceData === true;
+  const canIssueCertificates = canIssueCertificatesData === true;
+  const canWriteDiscipline = canWriteDisciplineData === true && disciplineModuleEnabled;
+  // Both cards were previously shown unconditionally, with no permission OR module check at
+  // all -- a third location (after the dashboard KPI and AI intent, #435) with the same
+  // pre-existing gap. Fixed here alongside Transport's own gating since this is the exact file
+  // Transport's card needed touching anyway.
+  const transportModuleEnabled = transportModuleEnabledData !== false;
+  const boardingModuleEnabled = (schoolUser?.schools as unknown as { boarding_enabled: boolean } | null)?.boarding_enabled !== false;
+  const canViewBiometric = canViewBiometricData === true;
+  const canEnrollBiometric = canEnrollBiometricData === true;
+  const canRevokeBiometric = canRevokeBiometricData === true;
   const canSeeBiometricTab = canViewBiometric || canEnrollBiometric || canRevokeBiometric;
 
   const { data: biometricProfileRow } = await supabase
@@ -303,7 +348,7 @@ export default async function StudentProfilePage({
             <StudentDeleteControl studentId={id} fullName={fullName} />
           )}
           <Button asChild variant="outline" size="sm">
-            <Link href={`/students/${id}/id-card`} target="_blank">
+            <Link href={withSchoolSlug(schoolSlug, `/students/${id}/id-card`)} target="_blank">
               Print ID card
             </Link>
           </Button>
@@ -317,7 +362,7 @@ export default async function StudentProfilePage({
             <TabsTrigger value="medical">Medical</TabsTrigger>
             <TabsTrigger value="certificates">Certificates</TabsTrigger>
             <TabsTrigger value="growth">Growth</TabsTrigger>
-            <TabsTrigger value="discipline">Discipline</TabsTrigger>
+            {disciplineModuleEnabled && <TabsTrigger value="discipline">Discipline</TabsTrigger>}
             {canSeeBiometricTab && <TabsTrigger value="biometric">Biometric</TabsTrigger>}
           </TabsList>
 
@@ -374,21 +419,25 @@ export default async function StudentProfilePage({
                 <p className="text-xs text-muted-foreground">From Exams</p>
               </div>
 
-              <div className="panel p-4">
-                <p className="label-eyebrow">Boarding</p>
-                <p className="mt-1 text-lg font-semibold">
-                  {boarding ? `Room ${boarding.room_number}` : "Day scholar"}
-                </p>
-                <p className="text-xs text-muted-foreground">{boarding?.block ? `Block ${boarding.block}` : "From Boarding"}</p>
-              </div>
+              {boardingModuleEnabled && (
+                <div className="panel p-4">
+                  <p className="label-eyebrow">Boarding</p>
+                  <p className="mt-1 text-lg font-semibold">
+                    {boarding ? `Room ${boarding.room_number}` : "Day scholar"}
+                  </p>
+                  <p className="text-xs text-muted-foreground">{boarding?.block ? `Block ${boarding.block}` : "From Boarding"}</p>
+                </div>
+              )}
 
-              <div className="panel p-4">
-                <p className="label-eyebrow">Transport</p>
-                <p className="mt-1 text-lg font-semibold">
-                  {transport?.transport_routes?.name ?? "Not assigned"}
-                </p>
-                <p className="text-xs text-muted-foreground">{transport?.pickup_point ?? "From Transport"}</p>
-              </div>
+              {transportModuleEnabled && (
+                <div className="panel p-4">
+                  <p className="label-eyebrow">Transport</p>
+                  <p className="mt-1 text-lg font-semibold">
+                    {transport?.transport_routes?.name ?? "Not assigned"}
+                  </p>
+                  <p className="text-xs text-muted-foreground">{transport?.pickup_point ?? "From Transport"}</p>
+                </div>
+              )}
 
               {canReadDiscipline && (
                 <div className="panel p-4">
@@ -468,9 +517,11 @@ export default async function StudentProfilePage({
             <GrowthTab summary={growthSummary} />
           </TabsContent>
 
-          <TabsContent value="discipline">
-            <DisciplineTab studentId={id} records={disciplineRecords} canWrite={canWriteDiscipline} />
-          </TabsContent>
+          {disciplineModuleEnabled && (
+            <TabsContent value="discipline">
+              <DisciplineTab studentId={id} records={disciplineRecords} canWrite={canWriteDiscipline} />
+            </TabsContent>
+          )}
 
           {canSeeBiometricTab && (
             <TabsContent value="biometric">

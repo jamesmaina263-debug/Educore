@@ -1,14 +1,13 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getCachedUser } from "@/lib/supabase/get-user";
 import { logout } from "@/app/login/actions";
 import { AppShell } from "@/components/app-shell/app-shell";
 import { ConnectSection, type ConnectItemRow, type ConnectStudentOption } from "@/components/connect/connect-section";
 
 export default async function ConnectPage() {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCachedUser();
   if (!user) redirect("/login");
 
   const [{ data: schoolUser }, { data: canCreate }] = await Promise.all([

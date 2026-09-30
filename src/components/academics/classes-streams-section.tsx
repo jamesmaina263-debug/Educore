@@ -20,13 +20,15 @@ import {
   DialogFooter,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { createClassLevel, createStream, updateStreamClassTeacher, updateStreamCapacity } from "@/app/(app)/academics/actions";
+import { createClassLevel, createStream, updateStreamClassTeacher, updateStreamCapacity, updateClassKicdGrade } from "@/app/(app)/academics/actions";
+import { KICD_GRADES, kicdGradeLabel } from "@/lib/kicd-grade";
 
 export interface ClassRow {
   id: string;
   academic_year_id: string;
   name: string;
   level_order: number;
+  kicd_grade: string | null;
 }
 
 export interface StreamRow {
@@ -129,6 +131,15 @@ export function ClassesStreamsSection({
     router.refresh();
   }
 
+  async function handleKicdGradeChange(classId: string, value: string) {
+    setPending(true);
+    setError(null);
+    const result = await updateClassKicdGrade(classId, value === "none" ? null : value);
+    setPending(false);
+    if ("error" in result) setError(result.error);
+    else router.refresh();
+  }
+
   async function handleReassignTeacher(streamId: string, teacherId: string) {
     setPending(true);
     const result = await updateStreamClassTeacher(streamId, teacherId === "none" ? null : teacherId);
@@ -214,7 +225,28 @@ export function ClassesStreamsSection({
               return (
                 <div key={c.id} className="panel p-4">
                   <div className="mb-2 flex items-center justify-between">
-                    <p className="text-sm font-medium">{c.name}</p>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="text-sm font-medium">{c.name}</p>
+                      {canWrite ? (
+                        <Select value={c.kicd_grade ?? "none"} onValueChange={(v) => handleKicdGradeChange(c.id, v)} disabled={pending}>
+                          <SelectTrigger className="h-7 w-40 text-xs" aria-label={`KICD grade for ${c.name}`}>
+                            <SelectValue placeholder="KICD grade" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="none">KICD grade: not set</SelectItem>
+                            {KICD_GRADES.map((g) => (
+                              <SelectItem key={g.value} value={g.value}>
+                                KICD: {g.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">
+                          {kicdGradeLabel(c.kicd_grade) ? `KICD: ${kicdGradeLabel(c.kicd_grade)}` : "KICD grade not set"}
+                        </span>
+                      )}
+                    </div>
                     {canWrite && (
                       <Dialog
                         open={streamDialogOpen === c.id}

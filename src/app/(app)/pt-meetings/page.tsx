@@ -1,17 +1,16 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getCachedUser } from "@/lib/supabase/get-user";
 import { logout } from "@/app/login/actions";
 import { AppShell } from "@/components/app-shell/app-shell";
 import { PtMeetingsSection, type SlotRow } from "@/components/pt-meetings/pt-meetings-section";
 
 export default async function PtMeetingsPage() {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCachedUser();
   if (!user) redirect("/login");
 
-  const [{ data: schoolUser }, { data: canWriteAny }, { data: slotRows }] = await Promise.all([
+  const [{ data: schoolUser }, { data: canWriteAny }, { data: slotRows }, { data: moduleEnabled }] = await Promise.all([
     supabase.from("school_users").select("id, full_name, roles(display_name), schools(name)").eq("auth_user_id", user.id).maybeSingle(),
     supabase.rpc("auth_has_permission", { p_permission_key: "academics.write" }),
     supabase
@@ -19,7 +18,11 @@ export default async function PtMeetingsPage() {
       .select("id, teacher_id, slot_date, start_time, end_time, location, capacity, school_users(full_name), pt_meeting_bookings(id, status, students(first_name, last_name))")
       .order("slot_date", { ascending: true })
       .order("start_time", { ascending: true }),
+    supabase.rpc("auth_school_module_enabled", { p_key: "pt_meetings" }),
   ]);
+  // Same seam as every other gated module. No _data.ts exists for PT-Meetings, so this is the
+  // one place a request for /pt-meetings lands.
+  if (moduleEnabled === false) redirect("/dashboard");
 
   const roleName = (schoolUser?.roles as unknown as { display_name: string } | null)?.display_name;
   const schoolName = (schoolUser?.schools as unknown as { name: string } | null)?.name;

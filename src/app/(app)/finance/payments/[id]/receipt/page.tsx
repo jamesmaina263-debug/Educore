@@ -1,5 +1,6 @@
 import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getCachedUser } from "@/lib/supabase/get-user";
 import { getPaymentReceipt } from "@/lib/finance/receipt";
 import { ReceiptDocument } from "@/components/finance/receipt-document";
 
@@ -13,9 +14,7 @@ export default async function PaymentReceiptPage({ params }: { params: Promise<{
   const { id } = await params;
   const supabase = await createClient();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCachedUser();
   if (!user) redirect("/login");
 
   const receipt = await getPaymentReceipt(supabase, id);

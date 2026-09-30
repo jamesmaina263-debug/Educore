@@ -4,15 +4,14 @@ import { Section } from "@/components/marketing/section";
 import { BreadcrumbJsonLd, HOME_CRUMB } from "@/components/marketing/breadcrumb-json-ld";
 
 const TITLE = "Privacy Policy — EduCore";
-const DESCRIPTION =
-  "How EduCore Technologies Ltd collects, stores, and uses personal data across this website and the EduCore school-management application, including how student, parent, and staff data is handled under Kenya's Data Protection Act, 2019.";
+const DESCRIPTION = "How EduCore Technologies Ltd collects, stores, and uses personal data, including student, parent, and staff data, under Kenya's Data Protection Act.";
 
 export const metadata: Metadata = {
   title: TITLE,
   description: DESCRIPTION,
   alternates: { canonical: "/privacy" },
-  openGraph: { title: TITLE, description: DESCRIPTION, url: "/privacy" },
-  twitter: { card: "summary_large_image", title: TITLE, description: DESCRIPTION },
+  openGraph: { title: TITLE, description: DESCRIPTION, url: "/privacy", images: ["/og-image.png"] },
+  twitter: { card: "summary_large_image", title: TITLE, description: DESCRIPTION, images: ["/og-image.png"] },
 };
 
 // This page has two parts, deliberately kept distinct rather than merged

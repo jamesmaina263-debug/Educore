@@ -40,15 +40,14 @@ import { cn } from "@/lib/utils";
 import { BreadcrumbJsonLd, HOME_CRUMB } from "@/components/marketing/breadcrumb-json-ld";
 
 const TITLE = "School Management System Platform — EduCore Kenya";
-const DESCRIPTION =
-  "The school ERP modules EduCore runs for Kenyan schools: student management, academics, admissions, fees, and communication, in one connected school management software platform.";
+const DESCRIPTION = "The school ERP modules EduCore runs for Kenyan schools: student management, academics, admissions, fees, and communication, in one platform.";
 
 export const metadata: Metadata = {
   title: TITLE,
   description: DESCRIPTION,
   alternates: { canonical: "/platform" },
-  openGraph: { title: TITLE, description: DESCRIPTION, url: "/platform" },
-  twitter: { card: "summary_large_image", title: TITLE, description: DESCRIPTION },
+  openGraph: { title: TITLE, description: DESCRIPTION, url: "/platform", images: ["/og-image.png"] },
+  twitter: { card: "summary_large_image", title: TITLE, description: DESCRIPTION, images: ["/og-image.png"] },
 };
 
 type Mod = {

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isValidCronRequest } from "@/lib/cron-auth";
 import { sendSecurityAlert } from "@/lib/security-alert";
+import { withTransientAuthRetry } from "@/lib/supabase/retry-transient-auth";
 
 export const dynamic = "force-dynamic";
 
@@ -38,9 +39,11 @@ export async function GET(request: Request) {
     );
   }
 
+  // Each call is individually wrapped so a transient gateway auth blip on one RPC (see
+  // retry-transient-auth.ts) doesn't fail the other.
   const [newsletterSweep, thresholdCheck] = await Promise.all([
-    adminClient.rpc("run_term_newsletter_sweep"),
-    adminClient.rpc("check_fee_thresholds"),
+    withTransientAuthRetry(() => adminClient.rpc("run_term_newsletter_sweep")),
+    withTransientAuthRetry(() => adminClient.rpc("check_fee_thresholds")),
   ]);
 
   const errors = [newsletterSweep.error, thresholdCheck.error].filter(Boolean);

@@ -3,6 +3,7 @@ import { buildCorsHeaders } from "../_shared/cors.ts";
 import { getSmsProvider } from "../_shared/sms/index.ts";
 import { getEmailProvider } from "../_shared/email/index.ts";
 import { getWhatsAppProvider } from "../_shared/whatsapp/index.ts";
+import { timingSafeEqual } from "../_shared/timingSafeEqual.ts";
 
 // Dispatches queued notification_logs rows. Called right after queue_communication() for a
 // manual send, and also doubles as the delivery mechanism for system-queued rows (the
@@ -48,7 +49,7 @@ Deno.serve(async (req) => {
     // definition (anyone with that key already has full DB access) — used by
     // admin.functions.invoke() calls from server-side code with no user session, and by the
     // dispatch-communications cron sweep. Everyone else must be a real user JWT, checked below.
-    const isServiceRoleCaller = authHeader === `Bearer ${serviceRoleKey}`;
+    const isServiceRoleCaller = timingSafeEqual(authHeader, `Bearer ${serviceRoleKey}`);
 
     let query = serviceClient
       .from("notification_logs")

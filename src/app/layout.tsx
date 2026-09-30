@@ -49,11 +49,13 @@ export const metadata: Metadata = {
     siteName: SITE_NAME,
     locale: "en_US",
     type: "website",
+    images: ["/og-image.png"],
   },
   twitter: {
     card: "summary",
     title: "EduCore",
     description: "School management platform for Kenyan schools",
+    images: ["/og-image.png"],
   },
 };
 

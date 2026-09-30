@@ -17,6 +17,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { StatusBadge } from "@/components/status-badge";
+import { useSchoolHref } from "@/components/app-shell/school-slug-context";
 import type { ItemRow } from "@/components/inventory/inventory-section";
 import {
   approveRequisitionAction,
@@ -609,6 +610,7 @@ export function ProcurementPanel({
   healthStockRequests: HealthStockRequestRow[];
 }) {
   const router = useRouter();
+  const toHref = useSchoolHref();
   const { isPending, error, run } = useAction();
   const [reqOpen, setReqOpen] = useState(false);
   const [poOpen, setPoOpen] = useState(false);
@@ -979,7 +981,7 @@ export function ProcurementPanel({
                     <td className="font-medium">
                       {po.po_number}{" "}
                       <Link
-                        href={`/inventory/procurement/${po.id}/print`}
+                        href={toHref(`/inventory/procurement/${po.id}/print`)}
                         target="_blank"
                         className="text-[0.6875rem] font-normal text-primary underline underline-offset-2"
                       >
