@@ -142,19 +142,6 @@ export async function getSearchOverviewStats(dateRange: ScDateRangeInput): Promi
   };
 }
 
-export type SearchTimeseriesPoint = { date: string; clicks: number; impressions: number };
-
-export async function getSearchTimeseries(dateRange: ScDateRangeInput): Promise<SearchTimeseriesPoint[] | null> {
-  const [startDate, endDate] = dateRange;
-  const result = await runQuery({ startDate, endDate, dimensions: ["date"] });
-  if (!result?.rows) return null;
-  return result.rows.map((row) => ({
-    date: row.keys?.[0] ?? "",
-    clicks: row.clicks ?? 0,
-    impressions: row.impressions ?? 0,
-  }));
-}
-
 export type SearchBreakdownRow = { label: string; clicks: number; impressions: number };
 
 async function getSearchBreakdown(
