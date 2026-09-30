@@ -60,6 +60,7 @@ import {
   CoinsIcon,
   Bell,
   KeyRound,
+  Lock,
   History,
   Palette,
   Landmark,
@@ -106,6 +107,9 @@ const academicsChildren: NavChild[] = [
   { label: "Subjects", href: "/academics/subjects", icon: BookMarked },
   { label: "Pathway Guidance", href: "/academics/pathway-guidance", icon: Compass },
   { label: "Competency Appraisal", href: "/academics/competency-appraisal", icon: ClipboardCheck },
+  { label: "Scheme of Work", href: "/academics/scheme-of-work", icon: NotebookPen },
+  { label: "Curriculum Content", href: "/academics/curriculum", icon: FileUp },
+  { label: "KICD Content", href: "/academics/kicd-content", icon: Library },
   { label: "Timetable", href: "/academics/timetable", icon: CalendarClock },
   { label: "Newsletters", href: "/academics/newsletters", icon: Mail },
   { label: "Rollover", href: "/academics/rollover", icon: RotateCcw },
@@ -180,6 +184,7 @@ const integrationsChildren: NavChild[] = [
 ];
 
 const settingsChildren: NavChild[] = [
+  { label: "Account", href: "/settings/account", icon: Lock },
   { label: "General", href: "/settings/general", icon: Settings },
   { label: "Branding", href: "/settings/branding", icon: Palette },
   { label: "Admission Form", href: "/settings/admission-form", icon: FileText },

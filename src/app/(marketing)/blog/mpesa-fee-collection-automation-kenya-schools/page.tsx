@@ -18,15 +18,14 @@ import { ArticleJsonLd } from "@/components/marketing/article-json-ld";
 import { BlogByline } from "@/components/marketing/blog-byline";
 
 const TITLE = "M-Pesa Fee Collection Automation for Kenyan Schools — EduCore";
-const DESCRIPTION =
-  "Why manual M-Pesa reconciliation is where Kenyan school bursars lose the most time, and how EduCore automates it — STK push, statement matching, and auto-allocation to invoices.";
+const DESCRIPTION = "Why manual M-Pesa reconciliation costs Kenyan school bursars the most time, and how EduCore automates it with STK push and auto-allocation.";
 
 export const metadata: Metadata = {
   title: TITLE,
   description: DESCRIPTION,
   alternates: { canonical: "/blog/mpesa-fee-collection-automation-kenya-schools" },
-  openGraph: { title: TITLE, description: DESCRIPTION, url: "/blog/mpesa-fee-collection-automation-kenya-schools" },
-  twitter: { card: "summary_large_image", title: TITLE, description: DESCRIPTION },
+  openGraph: { title: TITLE, description: DESCRIPTION, url: "/blog/mpesa-fee-collection-automation-kenya-schools", images: ["/og-image.png"] },
+  twitter: { card: "summary_large_image", title: TITLE, description: DESCRIPTION, images: ["/og-image.png"] },
 };
 
 // Every EduCore capability below was verified against the codebase before

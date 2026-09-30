@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getCachedUser } from "@/lib/supabase/get-user";
 import type { AcademicYearRow, TermRow } from "@/components/academics/years-terms-section";
 import type { ClassRow, StreamRow, TeacherOption } from "@/components/academics/classes-streams-section";
 import type { SubjectRow, CatalogueSubjectRow } from "@/components/academics/subjects-section";
@@ -32,9 +33,7 @@ export interface AcademicsContext {
 
 export async function loadAcademicsContext(): Promise<AcademicsContext> {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCachedUser();
   if (!user) redirect("/login");
 
   const { data: schoolUser } = await supabase
@@ -60,10 +59,10 @@ export async function loadAcademicsContext(): Promise<AcademicsContext> {
   ] = await Promise.all([
     supabase.from("academic_years").select("id, name, start_date, end_date, status").order("start_date", { ascending: false }),
     supabase.from("terms").select("id, academic_year_id, name, term_number, start_date, end_date, status").order("term_number"),
-    supabase.from("classes").select("id, academic_year_id, name, level_order"),
+    supabase.from("classes").select("id, academic_year_id, name, level_order, kicd_grade"),
     supabase.from("streams").select("id, class_id, name, class_teacher_id, capacity"),
     supabase.from("subjects").select("id, catalogue_id, name, code, is_core, is_active").order("name"),
-    supabase.from("subject_catalogue").select("id, pathway, category, name, code, is_core, display_order").order("display_order"),
+    supabase.from("subject_catalogue").select("id, grade_band, pathway, category, name, code, is_core, display_order").order("display_order"),
     supabase
       .from("school_users")
       .select("id, full_name, roles!inner(name)")

@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getCachedUser } from "@/lib/supabase/get-user";
 import type { DashboardStats } from "@/components/boarding/dashboard-section";
 import type { HouseRow, StaffOption } from "@/components/boarding/structure-section";
 import type { AllocationRow, StudentOption, AvailableBedOption } from "@/components/boarding/allocation-section";
@@ -37,9 +38,7 @@ export interface BoardingContext {
 
 export async function loadBoardingContext(date?: string, session?: string): Promise<BoardingContext> {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCachedUser();
   if (!user) redirect("/login");
 
   const [{ data: viewer }, { data: canReadAny }, { data: canWriteData }, { data: canWriteAssigned }] = await Promise.all([

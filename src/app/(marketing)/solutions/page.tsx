@@ -22,15 +22,14 @@ import { cn } from "@/lib/utils";
 import { BreadcrumbJsonLd, HOME_CRUMB } from "@/components/marketing/breadcrumb-json-ld";
 
 const TITLE = "School Administration Software by Role — EduCore Kenya";
-const DESCRIPTION =
-  "How EduCore's school administration software changes day to day for School Owners, Principals, Administrators, Teachers, Finance Teams, Parents, and Students — role by role.";
+const DESCRIPTION = "How EduCore's school administration software changes day to day for Owners, Principals, Administrators, Teachers, Finance Teams, and Parents.";
 
 export const metadata: Metadata = {
   title: TITLE,
   description: DESCRIPTION,
   alternates: { canonical: "/solutions" },
-  openGraph: { title: TITLE, description: DESCRIPTION, url: "/solutions" },
-  twitter: { card: "summary_large_image", title: TITLE, description: DESCRIPTION },
+  openGraph: { title: TITLE, description: DESCRIPTION, url: "/solutions", images: ["/og-image.png"] },
+  twitter: { card: "summary_large_image", title: TITLE, description: DESCRIPTION, images: ["/og-image.png"] },
 };
 
 const ROLE_NAV = [

@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { useSchoolHref } from "@/components/app-shell/school-slug-context";
 import {
   Select,
   SelectTrigger,
@@ -19,9 +20,10 @@ export function StreamPicker({
   date: string;
 }) {
   const router = useRouter();
+  const toHref = useSchoolHref();
 
   return (
-    <Select value={value} onValueChange={(v) => router.push(`/attendance?stream=${v}&date=${date}`)}>
+    <Select value={value} onValueChange={(v) => router.push(toHref(`/attendance?stream=${v}&date=${date}`))}>
       <SelectTrigger className="w-48">
         <SelectValue />
       </SelectTrigger>

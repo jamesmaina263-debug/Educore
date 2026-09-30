@@ -24,11 +24,16 @@ export const WIZARD_STEP_DEFS: WizardStepDef[] = [
 export function applicableStepCount(
   a: { boarding_preference: string | null; transport_required: boolean | null },
   boardingModuleEnabled: boolean = true,
+  transportModuleEnabled: boolean = true,
 ) {
-  // Mirrors the wizard page's own boardingModuleEnabled && boarding_preference !== "day" check
-  // (see [id]/wizard/page.tsx) so "step X of Y" on the drafts list always agrees with the
-  // wizard itself, even for a draft whose boarding_preference predates the school's flag
-  // being turned off.
-  const effective = boardingModuleEnabled ? a : { ...a, boarding_preference: "day" };
+  // Mirrors the wizard page's own boardingModuleEnabled/transportModuleEnabled && ...
+  // checks (see [id]/wizard/page.tsx) so "step X of Y" on the drafts list always agrees with
+  // the wizard itself, even for a draft whose boarding_preference/transport_required predates
+  // the school's flag being turned off.
+  const effective = {
+    ...a,
+    boarding_preference: boardingModuleEnabled ? a.boarding_preference : "day",
+    transport_required: transportModuleEnabled ? a.transport_required : false,
+  };
   return WIZARD_STEP_DEFS.filter((s) => s.applicableFor(effective)).length;
 }

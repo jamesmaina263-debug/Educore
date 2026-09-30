@@ -2,20 +2,22 @@ import Link from "next/link";
 import { redirect, notFound } from "next/navigation";
 import { Lock } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import { getCachedUser } from "@/lib/supabase/get-user";
 import { logout } from "@/app/login/actions";
 import { AppShell } from "@/components/app-shell/app-shell";
 import { StatusBadge } from "@/components/status-badge";
 import { ExamScheduleSection, type ExamScheduleRow, type SubjectClassOption } from "@/components/exams/exam-schedule-section";
 import { ApproveMarksButton } from "@/components/exams/approve-marks-button";
+import { getSchoolSlug } from "@/lib/school-slug-server";
+import { withSchoolSlug } from "@/lib/school-slug-href";
 import { ExamComponentPicker } from "@/components/exams/exam-component-picker";
 
 export default async function ExamProgressPage({ params }: { params: Promise<{ examId: string }> }) {
   const { examId } = await params;
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCachedUser();
   if (!user) redirect("/login");
+  const schoolSlug = await getSchoolSlug();
 
   const { data: schoolUser } = await supabase
     .from("school_users")
@@ -226,7 +228,7 @@ export default async function ExamProgressPage({ params }: { params: Promise<{ e
                       <tr key={s.key}>
                         <td className="font-medium">
                           <Link
-                            href={`/exams/marks?exam=${exam.id}&class=${s.classId}&subject=${s.subjectId}`}
+                            href={withSchoolSlug(schoolSlug, `/exams/marks?exam=${exam.id}&class=${s.classId}&subject=${s.subjectId}`)}
                             className="hover:underline"
                           >
                             {s.subject}

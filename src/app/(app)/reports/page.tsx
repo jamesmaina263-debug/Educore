@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getCachedUser } from "@/lib/supabase/get-user";
 import { logout } from "@/app/login/actions";
 import { AppShell } from "@/components/app-shell/app-shell";
 import {
@@ -35,12 +36,10 @@ export default async function ReportsPage({
   const { term: termParam, stream: streamParam, from: fromParam, to: toParam, campus: campusParam } = await searchParams;
 
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCachedUser();
   if (!user) redirect("/login");
 
-  const [{ data: schoolUser }, { data: canSeeReports }, { data: groupId }] = await Promise.all([
+  const [{ data: schoolUser }, { data: canSeeReports }, { data: groupId }, { data: transportModuleEnabledData }] = await Promise.all([
     supabase
       .from("school_users")
       .select("id, full_name, roles(display_name), schools(name)")
@@ -48,11 +47,17 @@ export default async function ReportsPage({
       .maybeSingle(),
     supabase.rpc("auth_has_permission", { p_permission_key: "reports.read" }),
     supabase.rpc("auth_group_id"),
+    supabase.rpc("auth_school_module_enabled", { p_key: "transport" }),
   ]);
 
   const roleName = (schoolUser?.roles as unknown as { display_name: string } | null)?.display_name;
   const schoolName = (schoolUser?.schools as unknown as { name: string } | null)?.name;
   const isGroupAdmin = Boolean(groupId);
+  // Same "hidden everywhere" standard as the dashboard/AI/student-profile gating -- this
+  // combined report previously included transport route data unconditionally, with no
+  // permission or module check at all. A school with Transport disabled shouldn't see it here
+  // either; transportRoutes just stays its default empty array below.
+  const transportModuleEnabled = transportModuleEnabledData !== false;
 
   // ---- Cross-campus panel (group_admin only) — extends Phase 5's group_schools_summary(),
   // now with an optional campus filter, rather than building a second reporting engine. ----
@@ -210,17 +215,19 @@ export default async function ReportsPage({
     attendanceDays = Array.from(dayBuckets.entries()).map(([date, v]) => ({ date, present: v.present, total: v.total }));
     attendanceExportDays = Array.from(dayBuckets.entries()).map(([date, v]) => ({ date, ...v }));
 
-    const { data: transportRows } = await supabase
-      .from("v_transport_route_capacity")
-      .select("route_id, route_name, capacity, allocated, available")
-      .order("route_name");
-    transportRoutes = (transportRows ?? []).map((r) => ({
-      route_id: r.route_id,
-      route_name: r.route_name,
-      capacity: r.capacity,
-      allocated: r.allocated,
-      available: r.available,
-    }));
+    if (transportModuleEnabled) {
+      const { data: transportRows } = await supabase
+        .from("v_transport_route_capacity")
+        .select("route_id, route_name, capacity, allocated, available")
+        .order("route_name");
+      transportRoutes = (transportRows ?? []).map((r) => ({
+        route_id: r.route_id,
+        route_name: r.route_name,
+        capacity: r.capacity,
+        allocated: r.allocated,
+        available: r.available,
+      }));
+    }
   }
 
   const exportData: ReportExportData = {
@@ -289,7 +296,7 @@ export default async function ReportsPage({
               <EnrollmentTrendCard months={enrollmentMonths} />
               <FeeCollectionCard forecast={feeForecast} />
               <AttendanceTrendCard days={attendanceDays} />
-              <TransportCapacityCard routes={transportRoutes} />
+              {transportModuleEnabled && <TransportCapacityCard routes={transportRoutes} />}
             </div>
             <AtRiskTable rows={atRiskRows} />
             <p className="text-xs text-muted-foreground">

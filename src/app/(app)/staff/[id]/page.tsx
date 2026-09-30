@@ -1,5 +1,6 @@
 import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getCachedUser } from "@/lib/supabase/get-user";
 import { logout } from "@/app/login/actions";
 import { AppShell } from "@/components/app-shell/app-shell";
 import { StatusBadge } from "@/components/status-badge";
@@ -22,9 +23,7 @@ export default async function StaffProfilePage({
   const { tab } = await searchParams;
   const supabase = await createClient();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCachedUser();
   if (!user) redirect("/login");
 
   const { data: viewer } = await supabase
@@ -103,9 +102,18 @@ export default async function StaffProfilePage({
   const canManageStaff = canManage === true;
   const canReadDocuments = canManageStaff || isSelf;
 
-  const canViewBiometric = (await supabase.rpc("auth_has_permission", { p_permission_key: "biometric.view" })).data === true;
-  const canEnrollBiometric = (await supabase.rpc("auth_has_permission", { p_permission_key: "biometric.enroll" })).data === true;
-  const canRevokeBiometric = (await supabase.rpc("auth_has_permission", { p_permission_key: "biometric.revoke" })).data === true;
+  const [
+    { data: canViewBiometricData },
+    { data: canEnrollBiometricData },
+    { data: canRevokeBiometricData },
+  ] = await Promise.all([
+    supabase.rpc("auth_has_permission", { p_permission_key: "biometric.view" }),
+    supabase.rpc("auth_has_permission", { p_permission_key: "biometric.enroll" }),
+    supabase.rpc("auth_has_permission", { p_permission_key: "biometric.revoke" }),
+  ]);
+  const canViewBiometric = canViewBiometricData === true;
+  const canEnrollBiometric = canEnrollBiometricData === true;
+  const canRevokeBiometric = canRevokeBiometricData === true;
   const canSeeBiometricTab = canViewBiometric || canEnrollBiometric || canRevokeBiometric;
 
   const { data: biometricProfileRow } = await supabase

@@ -30,7 +30,7 @@ export async function GET(request: NextRequest) {
 
   return NextResponse.redirect(
     `${origin}/login?error=${encodeURIComponent(
-      "That link has expired or was already used. Request a new one.",
+      "Couldn't verify this link. If you requested this on a different device or browser, open it on the original one, or request a new link.",
     )}`,
   );
 }
