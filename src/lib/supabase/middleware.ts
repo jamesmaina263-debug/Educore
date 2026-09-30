@@ -1,5 +1,5 @@
 import { createServerClient } from "@supabase/ssr";
-import { NextResponse, type NextRequest } from "next/server";
+import { NextResponse, after, type NextRequest } from "next/server";
 import { APP_ROUTE_SEGMENTS } from "@/lib/school-slug-routing";
 
 const PROTECTED_PREFIXES = ["/dashboard"];
@@ -96,11 +96,17 @@ export async function updateSession(request: NextRequest): Promise<SessionUpdate
     const THROTTLE_MS = 5 * 60 * 1000;
     const lastPing = Number(request.cookies.get(LAST_SEEN_PING_COOKIE)?.value ?? 0);
     if (!lastPing || Date.now() - lastPing > THROTTLE_MS) {
-      try {
-        await supabase.rpc("bump_last_seen");
-      } catch {
-        // Never let a last-seen ping failure block or redirect a real request.
-      }
+      // Runs AFTER the response is sent (Next's after(), supported in Proxy) instead of being awaited
+      // on the request path: it's a write RPC that averaged ~44ms but spiked past 1s, and nothing
+      // about serving the page depends on its result. The throttle cookie below is still set
+      // synchronously, so behaviour is unchanged apart from when the write happens.
+      after(async () => {
+        try {
+          await supabase.rpc("bump_last_seen");
+        } catch {
+          // Never let a last-seen ping failure affect anything.
+        }
+      });
       supabaseResponse.cookies.set(LAST_SEEN_PING_COOKIE, String(Date.now()), {
         httpOnly: true,
         sameSite: "lax",
