@@ -1,0 +1,19 @@
+# Reviewed 2026-09-30 (full-history scan: gitleaks 8.28.0 over 1,287 commits, plus
+# TruffleHog --only-verified: 0 verified / 0 unverified findings).
+#
+# Every entry below is a `generic-api-key` entropy match on something that is NOT a
+# credential. Format: <commit>:<file>:<rule>:<line>. Add an entry only after confirming
+# what the match actually is -- same discipline as supabase/.function_drift_allowlist.
+#
+# Auth user UUIDs (identifiers, not secrets) in migrations that delete already-removed
+# QA / load-test accounts:
+2ed9006165ef3297bb44df2e1c6f2b0062368509:supabase/migrations/20260918051554_permanently_delete_exposed_test_accounts.sql:generic-api-key:17
+2ed9006165ef3297bb44df2e1c6f2b0062368509:supabase/migrations/20260918051554_permanently_delete_exposed_test_accounts.sql:generic-api-key:18
+327ad766d4afea5f59750c5a4467bb02d28029ab:supabase/migrations/20260918051554_permanently_delete_exposed_test_accounts.sql:generic-api-key:17
+327ad766d4afea5f59750c5a4467bb02d28029ab:supabase/migrations/20260918051554_permanently_delete_exposed_test_accounts.sql:generic-api-key:18
+01135fb75b40f20c74671d76e928003d3b01bd47:supabase/migrations/20260917155110_delete_qa_test_account_little_beginners.sql:generic-api-key:4
+93d3666b2d03d86954ffbbf4c5dcbbb8d033755d:supabase/migrations/20260917155110_delete_qa_test_account_little_beginners.sql:generic-api-key:4
+31af492362a7cfc530c89819c8ee75bddd657b67:supabase/migrations/20260819115319_delete_orphaned_malformed_auth_user.sql:generic-api-key:13
+#
+# Placeholder device key in a unit-test fixture (not a real biometric device key):
+122ddae50a1232aa020f4ca49492adbf86cfd103:src/lib/offline/biometric-kiosk-queue.test.ts:generic-api-key:19

@@ -1,0 +1,105 @@
+name: Supabase token health
+
+# Why this exists: on 2026-09-25 the SUPABASE_ACCESS_TOKEN repo secret expired. From then
+# on deploy-functions.yml and function-drift-check.yml failed with 401 for days, and nobody
+# noticed -- the Slack step in those workflows is a no-op unless SECURITY_ALERT_WEBHOOK_URL
+# is set. This check calls the same Management API endpoint those workflows depend on, once
+# a day, and opens a GitHub Issue (which emails repo watchers, no extra secret needed) when
+# the token is rejected or is close to expiring.
+#
+# Expiry: the Supabase API does not report a token's expiry date, so it is tracked here.
+# After rotating the token, update the SUPABASE_TOKEN_EXPIRES repo variable
+# (Settings -> Secrets and variables -> Actions -> Variables), format YYYY-MM-DD.
+# The fallback below is the expiry of the token created on 2026-09-30.
+
+on:
+  schedule:
+    - cron: "17 6 * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  token-health:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      TOKEN_EXPIRES: ${{ vars.SUPABASE_TOKEN_EXPIRES || '2027-09-30' }}
+      WARN_DAYS: "30"
+      PROJECT_REF: alzqlvfaftwegptfbfej
+      INVALID_TITLE: "Supabase access token is invalid or expired"
+      EXPIRING_TITLE: "Supabase access token expires soon"
+    steps:
+      - name: Check token is accepted by the Supabase API
+        id: api
+        run: |
+          if [ -z "$SUPABASE_ACCESS_TOKEN" ]; then
+            echo "status=missing" >> "$GITHUB_OUTPUT"
+            echo "SUPABASE_ACCESS_TOKEN repo secret is not set."
+            exit 0
+          fi
+          CODE=$(curl -s -o /dev/null -w "%{http_code}" \
+            --header "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
+            "https://api.supabase.com/v1/projects/$PROJECT_REF/functions" || echo "000")
+          echo "Supabase API responded HTTP $CODE"
+          case "$CODE" in
+            200) echo "status=ok" >> "$GITHUB_OUTPUT" ;;
+            401|403) echo "status=rejected" >> "$GITHUB_OUTPUT" ;;
+            *) echo "status=unreachable" >> "$GITHUB_OUTPUT" ;;  # 5xx / network: not the token's fault
+          esac
+
+      - name: Work out days until expiry
+        id: expiry
+        run: |
+          if ! END=$(date -u -d "$TOKEN_EXPIRES" +%s 2>/dev/null); then
+            echo "days_left=unknown" >> "$GITHUB_OUTPUT"
+            echo "SUPABASE_TOKEN_EXPIRES='$TOKEN_EXPIRES' is not a valid YYYY-MM-DD date."
+            exit 0
+          fi
+          NOW=$(date -u +%s)
+          echo "days_left=$(( (END - NOW) / 86400 ))" >> "$GITHUB_OUTPUT"
+
+      - name: Open an issue if the token is rejected
+        if: steps.api.outputs.status == 'rejected' || steps.api.outputs.status == 'missing'
+        run: |
+          EXISTING=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --search "\"$INVALID_TITLE\" in:title" --json number --jq '.[0].number // empty')
+          BODY="The daily token check got \`${{ steps.api.outputs.status }}\` from the Supabase Management API.
+
+          While this is broken, **deploy-functions.yml and function-drift-check.yml fail**, so edge-function changes are not deployed and direct-to-production changes are not detected.
+
+          **Fix:**
+          1. Create a new token: https://supabase.com/dashboard/account/tokens (Project Settings: read, Edge Functions: read-write, scoped to the project).
+          2. Update the \`SUPABASE_ACCESS_TOKEN\` repo secret: https://github.com/$GITHUB_REPOSITORY/settings/secrets/actions
+          3. Update the \`SUPABASE_TOKEN_EXPIRES\` repo variable (YYYY-MM-DD).
+          4. Re-run **Deploy edge functions** (Run workflow) and close this issue.
+
+          Run: https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          if [ -n "$EXISTING" ]; then
+            gh issue comment "$EXISTING" --repo "$GITHUB_REPOSITORY" --body "Still failing as of $(date -u +%F): $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          else
+            gh issue create --repo "$GITHUB_REPOSITORY" --title "$INVALID_TITLE" --body "$BODY"
+          fi
+
+      - name: Open an issue if the token expires soon
+        if: steps.api.outputs.status == 'ok' && steps.expiry.outputs.days_left != 'unknown' && fromJSON(steps.expiry.outputs.days_left) <= fromJSON(env.WARN_DAYS)
+        run: |
+          EXISTING=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --search "\"$EXPIRING_TITLE\" in:title" --json number --jq '.[0].number // empty')
+          if [ -z "$EXISTING" ]; then
+            gh issue create --repo "$GITHUB_REPOSITORY" --title "$EXPIRING_TITLE" --body "The Supabase token used by CI expires on $TOKEN_EXPIRES (${{ steps.expiry.outputs.days_left }} days left). Rotate it before then: create a token at https://supabase.com/dashboard/account/tokens, update the SUPABASE_ACCESS_TOKEN secret and the SUPABASE_TOKEN_EXPIRES variable, then close this issue."
+          fi
+
+      - name: Close the invalid-token issue once the token works again
+        if: steps.api.outputs.status == 'ok'
+        run: |
+          for N in $(gh issue list --repo "$GITHUB_REPOSITORY" --state open --search "\"$INVALID_TITLE\" in:title" --json number --jq '.[].number'); do
+            gh issue close "$N" --repo "$GITHUB_REPOSITORY" --comment "Token accepted again by the Supabase API ($(date -u +%F)). Closing."
+          done
+
+      - name: Fail the run if the token is rejected
+        if: steps.api.outputs.status == 'rejected' || steps.api.outputs.status == 'missing'
+        run: |
+          echo "::error::Supabase access token is ${{ steps.api.outputs.status }}."
+          exit 1
