@@ -34,3 +34,25 @@ export function compareCatalogueOptions(
   };
   return rank(a.grade_band) - rank(b.grade_band);
 }
+
+type SubjectWithBand = { id: string; name: string; subject_catalogue?: { grade_band: string | null } | { grade_band: string | null }[] | null };
+
+/**
+ * Dropdown options for a school's own subjects. A school can hold the same
+ * subject name once per grade band (e.g. Mathematics from the Upper primary
+ * AND Senior school catalogue entries), which are otherwise indistinguishable.
+ * Only names that actually repeat get a band suffix, so the common case stays
+ * uncluttered.
+ */
+export function labelSubjectOptions(subjects: SubjectWithBand[]): { id: string; label: string }[] {
+  const counts = new Map<string, number>();
+  for (const s of subjects) counts.set(s.name, (counts.get(s.name) ?? 0) + 1);
+  const bandOf = (s: SubjectWithBand): string | null => {
+    const c = s.subject_catalogue;
+    return (Array.isArray(c) ? c[0]?.grade_band : c?.grade_band) ?? null;
+  };
+  return subjects
+    .map((s) => ({ s, band: bandOf(s) }))
+    .sort((a, b) => compareCatalogueOptions({ name: a.s.name, grade_band: a.band }, { name: b.s.name, grade_band: b.band }))
+    .map(({ s, band }) => ({ id: s.id, label: (counts.get(s.name) ?? 0) > 1 ? catalogueOptionLabel(s.name, band) : s.name }));
+}
