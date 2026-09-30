@@ -4,8 +4,8 @@ const mockCreateClient = vi.fn();
 vi.mock("@/lib/supabase/server", () => ({ createClient: mockCreateClient }));
 vi.mock("@/lib/observability/sentry-context", () => ({ tagSentryRequestContext: vi.fn() }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
-vi.mock("pdf-parse", () => ({
-  default: vi.fn(async () => ({ text: "Strand: Numbers\nSub-strand: Whole Numbers\nCount to 100." })),
+vi.mock("@/lib/pdf/extract-text", () => ({
+  extractPdfText: vi.fn(async () => "Strand: Numbers\nSub-strand: Whole Numbers\nCount to 100."),
 }));
 
 const { uploadCurriculumDocument, deleteCurriculumSubStrand } = await import("./actions");
@@ -142,8 +142,8 @@ describe("uploadCurriculumDocument", () => {
   it("refuses a PDF with no extractable text layer, without calling the AI", async () => {
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
-    const pdfParseMock = (await import("pdf-parse")).default as unknown as ReturnType<typeof vi.fn>;
-    (pdfParseMock as ReturnType<typeof vi.fn>).mockResolvedValueOnce({ text: "" });
+    const extractMock = (await import("@/lib/pdf/extract-text")).extractPdfText as unknown as ReturnType<typeof vi.fn>;
+    extractMock.mockResolvedValueOnce("");
 
     mockCreateClient.mockResolvedValue(
       fakeClient({
