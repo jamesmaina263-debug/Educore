@@ -36,6 +36,16 @@ function isProtectedPath(pathname: string): boolean {
   return PROTECTED_PREFIXES.some((prefix) => withoutFirstSegment.startsWith(prefix));
 }
 
+// Per-instance cache of the platform-wide maintenance flag. This row is global (id = 1), not
+// per-user, and used to be re-queried on EVERY school-app request -- one extra Supabase round
+// trip on every navigation for a value that almost never changes. Warm serverless instances
+// keep this module-level variable between requests, so most navigations now skip the query.
+// Trade-off, deliberate: flipping maintenance mode on/off takes up to MAINTENANCE_CACHE_TTL_MS to
+// reach an instance that already cached the old value. Only successful reads are cached -- an
+// error is never cached, so a transient failure can't pin a stale answer.
+const MAINTENANCE_CACHE_TTL_MS = 15_000;
+let maintenanceCache: { enabled: boolean; expiresAt: number } | null = null;
+
 export type SessionUpdate = {
   response: NextResponse;
   // Whether supabase.auth.getUser() below found a valid session. Exposed so
@@ -106,13 +116,25 @@ export async function updateSession(request: NextRequest): Promise<SessionUpdate
   // never itself take the whole platform down.
   if (isMaintenanceGatedPath(request.nextUrl.pathname)) {
     try {
-      const { data: maintenance } = await supabase
-        .from("platform_maintenance")
-        .select("enabled")
-        .eq("id", 1)
-        .maybeSingle();
+      let maintenanceEnabled: boolean;
+      if (maintenanceCache && maintenanceCache.expiresAt > Date.now()) {
+        maintenanceEnabled = maintenanceCache.enabled;
+      } else {
+        const { data: maintenance, error: maintenanceError } = await supabase
+          .from("platform_maintenance")
+          .select("enabled")
+          .eq("id", 1)
+          .maybeSingle();
+        maintenanceEnabled = maintenance?.enabled === true;
+        if (!maintenanceError) {
+          maintenanceCache = {
+            enabled: maintenanceEnabled,
+            expiresAt: Date.now() + MAINTENANCE_CACHE_TTL_MS,
+          };
+        }
+      }
 
-      if (maintenance?.enabled) {
+      if (maintenanceEnabled) {
         let isSuperAdminBypass = false;
         if (user) {
           const { data: isSuperAdmin } = await supabase.rpc("auth_is_super_admin");
