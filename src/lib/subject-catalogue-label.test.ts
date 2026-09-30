@@ -29,3 +29,28 @@ describe("subject catalogue labels", () => {
     ]);
   });
 });
+
+import { labelSubjectOptions } from "./subject-catalogue-label";
+
+describe("labelSubjectOptions", () => {
+  it("adds the band only to subject names that repeat", () => {
+    const out = labelSubjectOptions([
+      { id: "1", name: "Mathematics", subject_catalogue: { grade_band: "senior_school" } },
+      { id: "2", name: "Mathematics", subject_catalogue: { grade_band: "upper_primary" } },
+      { id: "3", name: "Physics", subject_catalogue: { grade_band: "senior_school" } },
+    ]);
+    expect(out).toEqual([
+      { id: "2", label: "Mathematics — Upper primary (G4–6)" },
+      { id: "1", label: "Mathematics — Senior school (G10–12)" },
+      { id: "3", label: "Physics" },
+    ]);
+  });
+
+  it("copes with the embed arriving as an array or missing", () => {
+    const out = labelSubjectOptions([
+      { id: "1", name: "English", subject_catalogue: [{ grade_band: "upper_primary" }] },
+      { id: "2", name: "English", subject_catalogue: null },
+    ]);
+    expect(out.map((o) => o.label)).toEqual(["English — Upper primary (G4–6)", "English"]);
+  });
+});

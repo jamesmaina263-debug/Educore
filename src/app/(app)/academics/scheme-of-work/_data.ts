@@ -1,3 +1,4 @@
+import { labelSubjectOptions } from "@/lib/subject-catalogue-label";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getCachedUser } from "@/lib/supabase/get-user";
@@ -116,7 +117,7 @@ export async function loadSchemeOfWorkDashboard(searchParams: {
       supabase.from("terms").select("id, name, academic_years(name)").order("start_date", { ascending: false }),
       supabase.from("classes").select("id, name").order("level_order"),
       supabase.from("streams").select("id, name, class_id, classes(name)").order("name"),
-      supabase.from("subjects").select("id, name").order("name"),
+      supabase.from("subjects").select("id, name, subject_catalogue(grade_band)").order("name"),
       canWriteAny
         ? supabase
             .from("school_users")
@@ -172,7 +173,7 @@ export async function loadSchemeOfWorkDashboard(searchParams: {
       id: s.id,
       label: `${(s.classes as unknown as { name: string } | null)?.name ?? ""} — ${s.name}`,
     })),
-    subjectOptions: (subjectsRaw ?? []).map((s) => ({ id: s.id, label: s.name })),
+    subjectOptions: labelSubjectOptions((subjectsRaw ?? []) as unknown as Parameters<typeof labelSubjectOptions>[0]),
     teacherOptions: (teachersRaw ?? []).map((t) => ({ id: t.id, label: t.full_name })),
   };
 }
@@ -202,7 +203,7 @@ export async function loadCreateSchemeOptions(): Promise<CreateSchemeOptions> {
       supabase.from("terms").select("id, name, academic_years(name)").order("start_date", { ascending: false }),
       supabase.from("classes").select("id, name").order("level_order"),
       supabase.from("streams").select("id, name, class_id").order("name"),
-      supabase.from("subjects").select("id, name").order("name"),
+      supabase.from("subjects").select("id, name, subject_catalogue(grade_band)").order("name"),
       // "Don't make the teacher re-enter what EduCore already knows" (spec item 2/6):
       // this teacher's own stream+subject assignments, so the create form can
       // offer them as one-click picks that also prefill class/stream/subject.
@@ -256,7 +257,7 @@ export async function loadCreateSchemeOptions(): Promise<CreateSchemeOptions> {
     })),
     classOptions: (classesRaw ?? []).map((c) => ({ id: c.id, label: c.name })),
     streamOptions: (streamsRaw ?? []).map((s) => ({ id: s.id, label: s.name, class_id: s.class_id })),
-    subjectOptions: (subjectsRaw ?? []).map((s) => ({ id: s.id, label: s.name })),
+    subjectOptions: labelSubjectOptions((subjectsRaw ?? []) as unknown as Parameters<typeof labelSubjectOptions>[0]),
     assignments,
   };
 }
