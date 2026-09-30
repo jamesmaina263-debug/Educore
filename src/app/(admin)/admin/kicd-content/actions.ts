@@ -7,23 +7,23 @@ import { logAdminAction } from "@/lib/log-admin-action";
 import { runCurriculumExtraction } from "@/lib/ai/curriculum-extraction";
 import { isKicdGrade } from "@/lib/kicd-grade";
 import { extractPdfText } from "@/lib/pdf/extract-text";
+import { gradeBandLabel } from "@/lib/subject-catalogue-label";
 
-// Platform-admin import of shared (EduCore-wide) KICD curriculum content.
+// Import/manage KICD curriculum content. Two kinds of manager (see
+// requireKicdManager and migration 20260928140000):
+//   - School management (academics.write: school_owner / principal /
+//     deputy_principal) import, review/edit, publish, withdraw and discard
+//     their OWN school's content. It is private to that school -- different
+//     schools follow different curricula, so each school's management owns
+//     what its classes are grounded on.
+//   - Platform admins keep the platform-wide (school_id null) content and the
+//     kill switch: they can see and withdraw any school's content.
+// RLS (kicd_can_manage_source) enforces the same boundary in the database, so
+// the checks here are friendly early refusals, not the only guard.
 //
-// A prior same-day change (migration 20260928140000, PR #481) let school
-// management import/manage their OWN private KICD content too, alongside
-// this. That capability is reverted here at the application layer: it
-// duplicated the already-shipped, already-live Curriculum Content flow
-// (academics/curriculum/actions.ts, Phase 2A) as a second, separate way for
-// a school to upload and manage its own curriculum content -- so schools
-// now have exactly one path for that (Curriculum Content), and this page
-// stays platform-admin-only, matching the original design. Production had
-// zero rows through the school-management path when this was reverted, so
-// nothing real was lost. The schema/RLS from 20260928140000 (school_id
-// column, kicd_can_manage_source, the school-scoped policies) is left in
-// place rather than reverted in this PR -- reverting a different, already-
-// merged migration is a bigger call than disabling unused application code,
-// and is not done unilaterally here.
+// This restores the school-management path that #481 added and #477 turned
+// off at the app layer. The schema/RLS never went away, so no migration is
+// involved. Platform-wide content is untouched.
 //
 // Review-before-publish without a new flag: every import creates its source
 // with is_enabled = false. Shared rows are only visible to schools while their
@@ -49,6 +49,107 @@ async function requireSuperAdmin() {
   return { supabase, ok: true as const };
 }
 
+// Who may manage KICD content: platform admins (platform-wide content,
+// schoolId = null) and school management -- anyone holding academics.write --
+// for THEIR OWN school's content (schoolId = their school).
+async function requireKicdManager() {
+  const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { supabase, ok: false as const, error: "You must be signed in." };
+  const { data: isSuperAdmin } = await supabase.rpc("auth_is_super_admin");
+  if (isSuperAdmin === true) return { supabase, ok: true as const, isPlatform: true as const, schoolId: null, schoolUserId: null };
+  const { data: canManage } = await supabase.rpc("auth_has_permission", { p_permission_key: "academics.write" });
+  if (canManage !== true) return { supabase, ok: false as const, error: "You don't have permission to manage KICD content." };
+  const { data: schoolUser } = await supabase.from("school_users").select("id, school_id").eq("auth_user_id", user.id).maybeSingle();
+  if (!schoolUser?.school_id) return { supabase, ok: false as const, error: "Your account isn't attached to a school." };
+  return {
+    supabase,
+    ok: true as const,
+    isPlatform: false as const,
+    schoolId: schoolUser.school_id as string,
+    schoolUserId: schoolUser.id as string,
+  };
+}
+
+type KicdManager = Extract<Awaited<ReturnType<typeof requireKicdManager>>, { ok: true }>;
+
+// Platform-admin actions go to the platform activity log; school-management
+// actions don't (that log is the platform staff's own trail, and its RPC is
+// platform-admin only).
+function logIfPlatform(auth: KicdManager, action: string, detail: Record<string, unknown>) {
+  if (auth.isPlatform) void logAdminAction(auth.supabase, action, detail);
+}
+
+function revalidateKicdPages() {
+  revalidatePath("/admin/kicd-content");
+  revalidatePath("/academics/kicd-content");
+}
+
+// A school manager may only act on sources that belong to their own school.
+// Returns an error string, or null when allowed. Platform admins always pass.
+async function refuseForeignSource(auth: KicdManager, sourceId: string): Promise<string | null> {
+  if (auth.isPlatform) return null;
+  const { data } = await auth.supabase.from("kicd_content_sources").select("id, school_id").eq("id", sourceId).maybeSingle();
+  if (!data) return "Source not found.";
+  if (data.school_id !== auth.schoolId) return "You can only manage your own school's KICD content.";
+  return null;
+}
+
+// School imports are attached to one of the school's own subjects, and that
+// subject's catalogue entry is what later matches the content to classes
+// (subjects.catalogue_id -> kicd_learning_areas.catalogue_id). Learning areas
+// are a global name-unique taxonomy that school roles can only INSERT into, so
+// this reuses the area already linked to the catalogue entry, or creates one
+// linked at creation. It never edits an existing area. Fails closed with a
+// clear message rather than silently importing content that could never apply.
+async function resolveSchoolLearningArea(
+  supabase: KicdManager["supabase"],
+  subjectId: string,
+): Promise<{ error: string } | { learningAreaId: string; label: string }> {
+  const { data: subject } = await supabase
+    .from("subjects")
+    .select("id, name, catalogue_id, subject_catalogue(name, grade_band)")
+    .eq("id", subjectId)
+    .maybeSingle();
+  if (!subject) return { error: "Choose one of your school's subjects." };
+  const catalogueId = subject.catalogue_id as string | null;
+  if (!catalogueId) {
+    return { error: "That subject isn't linked to the subject catalogue yet, so its KICD content couldn't be matched to your classes. Contact EduCore support to link it." };
+  }
+  const cat = (Array.isArray(subject.subject_catalogue) ? subject.subject_catalogue[0] : subject.subject_catalogue) as
+    | { name: string; grade_band: string | null }
+    | null
+    | undefined;
+  const label = (cat?.name ?? (subject.name as string)).trim();
+
+  const { data: linked } = await supabase.from("kicd_learning_areas").select("id, name").eq("catalogue_id", catalogueId).order("name").limit(1);
+  const existing = (linked ?? [])[0] as { id: string } | undefined;
+  if (existing) return { learningAreaId: existing.id, label };
+
+  // Same subject name can exist once per grade band, and area names are unique,
+  // so fall back to a band-qualified name if the plain one is already taken.
+  const band = gradeBandLabel(cat?.grade_band);
+  const candidates = [label, ...(band ? [`${label} — ${band}`] : [])];
+  for (const name of candidates) {
+    const { data: taken } = await supabase.from("kicd_learning_areas").select("id").eq("name", name).limit(1);
+    if ((taken ?? []).length > 0) continue;
+    const { data: created, error } = await supabase.from("kicd_learning_areas").insert({ name, catalogue_id: catalogueId }).select("id").single();
+    if (created) return { learningAreaId: created.id as string, label };
+    if (error?.code === "23505") {
+      // Lost a race with another import: use whichever area is now linked.
+      const { data: again } = await supabase.from("kicd_learning_areas").select("id").eq("catalogue_id", catalogueId).limit(1);
+      const row = (again ?? [])[0] as { id: string } | undefined;
+      if (row) return { learningAreaId: row.id, label };
+    } else if (error) {
+      return { error: error.message };
+    }
+  }
+  return { error: "Couldn't set up a learning area for that subject. Contact EduCore support." };
+}
+
 export type ImportKicdResult =
   | { error: string }
   | { success: true; sourceId: string; strands: number; subStrands: number; truncated: boolean };
@@ -63,12 +164,12 @@ export async function importKicdDocument(formData: FormData): Promise<ImportKicd
   const licenceScope = str("licence_scope");
   const attribution = str("attribution");
   const learningAreaName = str("learning_area");
+  const subjectId = str("subject_id");
   const grade = str("grade");
 
   if (!sourceName) return { error: "Give this import a name." };
   if (!licenceReference) return { error: "A licence reference is required for every KICD import." };
   if (!attribution) return { error: "An attribution line is required for every KICD import." };
-  if (!learningAreaName) return { error: "Enter the learning area this document covers." };
   if (!isKicdGrade(grade)) return { error: "Please choose a valid grade." };
 
   const file = formData.get("file");
@@ -76,9 +177,23 @@ export async function importKicdDocument(formData: FormData): Promise<ImportKicd
   if (file.type !== "application/pdf") return { error: "Please upload a PDF file." };
   if (file.size > MAX_UPLOAD_BYTES) return { error: "That file is larger than the 20MB limit." };
 
-  const auth = await requireSuperAdmin();
+  const auth = await requireKicdManager();
   if (!auth.ok) return { error: auth.error };
   const { supabase } = auth;
+
+  // Platform admins name the learning area; school management pick one of
+  // their own subjects (which fixes the learning area and its catalogue link).
+  let learningAreaId: string | undefined;
+  let extractionLabel = learningAreaName;
+  if (auth.isPlatform) {
+    if (!learningAreaName) return { error: "Enter the learning area this document covers." };
+  } else {
+    if (!subjectId) return { error: "Choose the subject this document covers." };
+    const resolved = await resolveSchoolLearningArea(supabase, subjectId);
+    if ("error" in resolved) return { error: resolved.error };
+    learningAreaId = resolved.learningAreaId;
+    extractionLabel = resolved.label;
+  }
 
   let documentText: string;
   try {
@@ -91,7 +206,12 @@ export async function importKicdDocument(formData: FormData): Promise<ImportKicd
     return { error: "No readable text was found in that PDF (it may be a scan). Scanned documents aren't supported yet." };
   }
 
-  const extraction = await runCurriculumExtraction({ apiKey, label: learningAreaName, documentText, origin: "platform" });
+  const extraction = await runCurriculumExtraction({
+    apiKey,
+    label: extractionLabel,
+    documentText,
+    origin: auth.isPlatform ? "platform" : "school",
+  });
   if ("error" in extraction) return { error: extraction.error };
 
   // Merge repeated strand / sub-strand names within this document (the tables
@@ -108,9 +228,12 @@ export async function importKicdDocument(formData: FormData): Promise<ImportKicd
   }
   const strands = [...strandMap.values()];
 
-  // Learning area: reuse by (case-insensitive) name, else create.
-  const { data: existingArea } = await supabase.from("kicd_learning_areas").select("id").ilike("name", learningAreaName).maybeSingle();
-  let learningAreaId = existingArea?.id as string | undefined;
+  // Learning area (platform imports): reuse by (case-insensitive) name, else
+  // create. School imports already resolved theirs from the chosen subject.
+  if (!learningAreaId) {
+    const { data: existingArea } = await supabase.from("kicd_learning_areas").select("id").ilike("name", learningAreaName).maybeSingle();
+    learningAreaId = existingArea?.id as string | undefined;
+  }
   if (!learningAreaId) {
     const { data: newArea, error: areaError } = await supabase.from("kicd_learning_areas").insert({ name: learningAreaName }).select("id").single();
     if (areaError || !newArea) return { error: areaError?.message ?? "Could not create the learning area." };
@@ -126,6 +249,8 @@ export async function importKicdDocument(formData: FormData): Promise<ImportKicd
       attribution,
       source_document: file.name,
       is_enabled: false, // unpublished until reviewed -- see header comment
+      school_id: auth.schoolId, // null = platform-wide; set = private to that school
+      created_by: auth.schoolUserId,
     })
     .select("id")
     .single();
@@ -163,24 +288,26 @@ export async function importKicdDocument(formData: FormData): Promise<ImportKicd
     return { error: subError.message };
   }
 
-  void logAdminAction(supabase, "import_kicd_document", {
+  logIfPlatform(auth, "import_kicd_document", {
     source_id: sourceId,
     source_name: sourceName,
     licence_reference: licenceReference,
-    learning_area: learningAreaName,
+    learning_area: extractionLabel,
     grade,
     strands: strands.length,
     sub_strands: subRows.length,
   });
-  revalidatePath("/admin/kicd-content");
+  revalidateKicdPages();
   return { success: true, sourceId, strands: strands.length, subStrands: subRows.length, truncated: extraction.truncated };
 }
 
 export async function setKicdSourceEnabled(sourceId: string, enabled: boolean): Promise<ActionResult> {
   if (typeof sourceId !== "string" || !sourceId) return { error: "Missing source." };
-  const auth = await requireSuperAdmin();
+  const auth = await requireKicdManager();
   if (!auth.ok) return { error: auth.error };
   const { supabase } = auth;
+  const foreign = await refuseForeignSource(auth, sourceId);
+  if (foreign) return { error: foreign };
 
   if (enabled) {
     const { data: strandRows } = await supabase.from("kicd_strands").select("id").eq("source_id", sourceId).limit(1);
@@ -189,8 +316,8 @@ export async function setKicdSourceEnabled(sourceId: string, enabled: boolean): 
   const { data, error } = await supabase.from("kicd_content_sources").update({ is_enabled: enabled }).eq("id", sourceId).select("id");
   if (error) return { error: error.message };
   if (!data || data.length === 0) return { error: "Source not found." };
-  void logAdminAction(supabase, enabled ? "publish_kicd_source" : "withdraw_kicd_source", { source_id: sourceId });
-  revalidatePath("/admin/kicd-content");
+  logIfPlatform(auth, enabled ? "publish_kicd_source" : "withdraw_kicd_source", { source_id: sourceId });
+  revalidateKicdPages();
   return { success: true };
 }
 
@@ -201,7 +328,7 @@ export async function updateKicdSubStrand(
   if (typeof subStrandId !== "string" || !subStrandId) return { error: "Missing sub-strand." };
   const name = fields.name?.trim();
   if (!name) return { error: "Name is required." };
-  const auth = await requireSuperAdmin();
+  const auth = await requireKicdManager();
   if (!auth.ok) return { error: auth.error };
   const { supabase } = auth;
   const { data, error } = await supabase
@@ -216,21 +343,21 @@ export async function updateKicdSubStrand(
     .select("id");
   if (error) return { error: error.code === "23505" ? "Another sub-strand in this strand already has that name." : error.message };
   if (!data || data.length === 0) return { error: "Sub-strand not found." };
-  void logAdminAction(supabase, "edit_kicd_sub_strand", { sub_strand_id: subStrandId });
-  revalidatePath("/admin/kicd-content");
+  logIfPlatform(auth, "edit_kicd_sub_strand", { sub_strand_id: subStrandId });
+  revalidateKicdPages();
   return { success: true };
 }
 
 export async function deleteKicdSubStrand(subStrandId: string): Promise<ActionResult> {
   if (typeof subStrandId !== "string" || !subStrandId) return { error: "Missing sub-strand." };
-  const auth = await requireSuperAdmin();
+  const auth = await requireKicdManager();
   if (!auth.ok) return { error: auth.error };
   const { supabase } = auth;
   const { data, error } = await supabase.from("kicd_sub_strands").delete().eq("id", subStrandId).select("id");
   if (error) return { error: error.message };
   if (!data || data.length === 0) return { error: "Sub-strand not found." };
-  void logAdminAction(supabase, "delete_kicd_sub_strand", { sub_strand_id: subStrandId });
-  revalidatePath("/admin/kicd-content");
+  logIfPlatform(auth, "delete_kicd_sub_strand", { sub_strand_id: subStrandId });
+  revalidateKicdPages();
   return { success: true };
 }
 
@@ -238,17 +365,19 @@ export async function deleteKicdSubStrand(subStrandId: string): Promise<ActionRe
  *  content is never deleted out from under schools by a single click. */
 export async function deleteKicdSource(sourceId: string): Promise<ActionResult> {
   if (typeof sourceId !== "string" || !sourceId) return { error: "Missing source." };
-  const auth = await requireSuperAdmin();
+  const auth = await requireKicdManager();
   if (!auth.ok) return { error: auth.error };
   const { supabase } = auth;
+  const foreign = await refuseForeignSource(auth, sourceId);
+  if (foreign) return { error: foreign };
   const { data: source } = await supabase.from("kicd_content_sources").select("id, is_enabled").eq("id", sourceId).maybeSingle();
   if (!source) return { error: "Source not found." };
   if (source.is_enabled) return { error: "Withdraw this source before deleting it." };
   await supabase.from("kicd_strands").delete().eq("source_id", sourceId);
   const { error } = await supabase.from("kicd_content_sources").delete().eq("id", sourceId);
   if (error) return { error: error.message };
-  void logAdminAction(supabase, "delete_kicd_source", { source_id: sourceId });
-  revalidatePath("/admin/kicd-content");
+  logIfPlatform(auth, "delete_kicd_source", { source_id: sourceId });
+  revalidateKicdPages();
   return { success: true };
 }
 
