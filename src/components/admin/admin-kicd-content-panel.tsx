@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/status-badge";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { KICD_GRADES } from "@/lib/kicd-grade";
+import { catalogueOptionLabel } from "@/lib/subject-catalogue-label";
 import {
   importKicdDocument,
   setKicdSourceEnabled,
@@ -46,7 +47,7 @@ export type KicdSourceRow = {
 };
 
 export type KicdLearningAreaRow = { id: string; name: string; catalogue_id: string | null };
-export type CatalogueOption = { id: string; name: string };
+export type CatalogueOption = { id: string; name: string; grade_band?: string | null };
 
 type Result = { error: string } | { success: true };
 
@@ -171,7 +172,7 @@ export function AdminKicdContentPanel({
                   <SelectItem value="none">Not linked</SelectItem>
                   {catalogue.map((c) => (
                     <SelectItem key={c.id} value={c.id}>
-                      {c.name}
+                      {catalogueOptionLabel(c.name, c.grade_band)}
                     </SelectItem>
                   ))}
                 </SelectContent>
