@@ -5,6 +5,8 @@ import { getCachedUser } from "@/lib/supabase/get-user";
 import { logout } from "@/app/login/actions";
 import { AppShell } from "@/components/app-shell/app-shell";
 import { KICD_GRADES, isKicdGrade, kicdGradeLabel } from "@/lib/kicd-grade";
+import { labelSubjectOptions } from "@/lib/subject-catalogue-label";
+import { AdminKicdContentPanel, type KicdSourceRow } from "@/components/admin/admin-kicd-content-panel";
 
 interface SubStrandRow {
   id: string;
@@ -32,18 +34,16 @@ interface SourceRow {
   kicd_strands: StrandRow[];
 }
 
-// Read-only reference view of the platform-wide KICD content published by
-// EduCore (school_id is null, is_enabled = true), for school management
-// (academics.write). The filters are explicit (not left to RLS) because a
-// platform super-admin's RLS also returns unpublished/withdrawn sources.
-//
-// A same-day change briefly added a self-service "import your own KICD
-// content" section here (private per-school kicd_content_sources rows).
-// That's reverted (see admin/kicd-content/actions.ts's header comment): it
-// duplicated the already-shipped Curriculum Content flow (Phase 2A) as a
-// second way for a school to upload its own curriculum content. Schools now
-// have exactly one path for that: Curriculum Content
-// (academics/curriculum). This page stays read-only.
+// KICD content for school management (academics.write: school_owner / principal /
+// deputy_principal). Two parts:
+//  1. Manage -- the school's OWN curriculum content (kicd_content_sources.school_id =
+//     this school): import, review/edit, publish, withdraw, discard. Different schools
+//     follow different curricula, so each school's management owns what its classes are
+//     grounded on. Private to this school; RLS (kicd_can_manage_source) stops it touching
+//     any other school's or the platform-wide content.
+//  2. Browse -- read-only view of the platform-wide content published by EduCore
+//     (school_id is null, is_enabled = true). The filters are explicit (not left to RLS)
+//     because a platform super-admin's RLS also returns unpublished/withdrawn sources.
 export default async function KicdContentBrowsePage({
   searchParams,
 }: {
@@ -57,13 +57,30 @@ export default async function KicdContentBrowsePage({
   if (!user) redirect("/login");
 
   const [{ data: schoolUser }, { data: canWrite }] = await Promise.all([
-    supabase.from("school_users").select("full_name, roles(display_name), schools(name)").eq("auth_user_id", user.id).maybeSingle(),
+    supabase.from("school_users").select("full_name, school_id, roles(display_name), schools(name)").eq("auth_user_id", user.id).maybeSingle(),
     supabase.rpc("auth_has_permission", { p_permission_key: "academics.write" }),
   ]);
 
   const roleName = (schoolUser?.roles as unknown as { display_name: string } | null)?.display_name;
   const schoolName = (schoolUser?.schools as unknown as { name: string } | null)?.name;
   const canView = canWrite === true;
+
+  let ownSources: KicdSourceRow[] = [];
+  let subjectOptions: { id: string; label: string }[] = [];
+  if (canView && schoolUser?.school_id) {
+    const [{ data: own }, { data: subjects }] = await Promise.all([
+      supabase
+        .from("kicd_content_sources")
+        .select(
+          "id, name, licence_reference, licence_scope, attribution, source_document, is_enabled, created_at, kicd_strands(id, name, grade, kicd_learning_areas(name), kicd_sub_strands(id, name, learning_outcomes, key_inquiry_questions, rubric_text))",
+        )
+        .eq("school_id", schoolUser.school_id)
+        .order("created_at", { ascending: false }),
+      supabase.from("subjects").select("id, name, subject_catalogue(grade_band)").order("name"),
+    ]);
+    ownSources = (own ?? []) as unknown as KicdSourceRow[];
+    subjectOptions = labelSubjectOptions((subjects ?? []) as unknown as Parameters<typeof labelSubjectOptions>[0]);
+  }
 
   let sources: SourceRow[] = [];
   if (canView) {
@@ -95,8 +112,8 @@ export default async function KicdContentBrowsePage({
         <div>
           <h1 className="text-lg font-semibold">KICD Content</h1>
           <p className="text-sm text-muted-foreground">
-            Official KICD curriculum content published by EduCore for all schools. This is a read-only reference -- content is managed
-            centrally. To upload and manage your own school&apos;s curriculum content, use{" "}
+            Upload and manage your school&apos;s own curriculum content, and browse the official content EduCore publishes for all
+            schools. For content tied to a single subject and teacher, you can also use{" "}
             <Link href="/academics/curriculum" className="underline">
               Curriculum Content
             </Link>
@@ -110,6 +127,23 @@ export default async function KicdContentBrowsePage({
           </p>
         ) : (
           <>
+            <section className="flex flex-col gap-2">
+              <div>
+                <h2 className="text-base font-semibold">Your school&apos;s curriculum content</h2>
+                <p className="text-sm text-muted-foreground">
+                  Choose the subject and grade, upload the curriculum PDF, then review and publish it. Every import needs a licence
+                  reference and attribution and starts <strong>unpublished</strong>. Once published, it grounds AI Scheme of Work drafts
+                  for your classes that have a KICD grade set, in that subject, and takes precedence over EduCore&apos;s content. Only
+                  your school&apos;s management can see or change it.
+                </p>
+              </div>
+              <AdminKicdContentPanel sources={ownSources} subjects={subjectOptions} />
+            </section>
+
+            <div>
+              <h2 className="text-base font-semibold">Published by EduCore</h2>
+              <p className="text-sm text-muted-foreground">Read-only reference content shared with all schools.</p>
+            </div>
             <div className="flex flex-wrap items-center gap-2 text-sm">
               <span className="text-muted-foreground">Grade:</span>
               <Link

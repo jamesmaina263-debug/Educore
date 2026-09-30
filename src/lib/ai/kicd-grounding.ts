@@ -11,6 +11,14 @@ import type { CurriculumStrandRow, CurriculumSubStrandRow } from "@/lib/ai/schem
 //   subject.catalogue_id -> kicd_learning_areas.catalogue_id  (platform-admin mapping)
 //   -> kicd_strands for that learning area + grade, from PUBLISHED sources only.
 // Any missing link means no shared content (fail closed).
+//
+// Two kinds of published source feed this, both matched by the same chain:
+//   - platform-wide (school_id null), managed by EduCore;
+//   - the CLASS'S OWN SCHOOL's private sources (school_id = that school),
+//     imported by its management. These win over platform-wide content on a
+//     name conflict, because different schools follow different curricula.
+// Another school's private sources are never read (explicit school_id filter
+// here, and RLS underneath).
 
 const KICD_SOURCE = "kicd_licensed";
 
@@ -72,10 +80,11 @@ export async function fetchSharedKicdStrands(
     if (!ids.classId || !ids.subjectId) return [];
 
     const [{ data: cls }, { data: subject }] = await Promise.all([
-      supabase.from("classes").select("kicd_grade").eq("id", ids.classId).maybeSingle(),
+      supabase.from("classes").select("kicd_grade, school_id").eq("id", ids.classId).maybeSingle(),
       supabase.from("subjects").select("catalogue_id").eq("id", ids.subjectId).maybeSingle(),
     ]);
     const grade = (cls as { kicd_grade?: unknown } | null)?.kicd_grade;
+    const schoolId = (cls as { school_id?: unknown } | null)?.school_id;
     const catalogueId = (subject as { catalogue_id?: unknown } | null)?.catalogue_id;
     if (!isKicdGrade(grade) || typeof catalogueId !== "string" || !catalogueId) return [];
 
@@ -83,31 +92,46 @@ export async function fetchSharedKicdStrands(
     const areaIds = ((areas ?? []) as { id: string }[]).map((a) => a.id);
     if (areaIds.length === 0) return [];
 
-    // !inner + explicit filters: published, PLATFORM-WIDE sources only.
-    // is_enabled: real even for a session whose RLS would otherwise also
-    // expose unpublished ones (a platform admin, or this school's own
-    // academics.write holder managing their own sources).
-    // school_id is null: schools can now also import their OWN private KICD
-    // content (kicd_content_sources.school_id set -- a separate feature, not
-    // part of this design). Deliberately excluded from grounding here: this
-    // PR only wires in officially-published EduCore/KICD content, exactly as
-    // approved. Folding a school's own private KICD imports into grounding
-    // too is a real product question (there would then be two separate
-    // "upload your own content" paths both feeding generation) that needs a
-    // decision, not a default.
-    const { data: strands } = await supabase
+    // !inner + explicit filters: PUBLISHED sources only. is_enabled matters
+    // even though RLS already hides unpublished ones from most users, because
+    // a platform admin -- or this school's own academics.write holder managing
+    // their unpublished imports -- can also see those, and a draft must never
+    // ground a generation.
+    const select =
+      "name, level_order, kicd_content_sources!inner(is_enabled, school_id), kicd_sub_strands(name, learning_outcomes, key_inquiry_questions, rubric_text)";
+    type Row = { name: string; kicd_sub_strands: Omit<CurriculumSubStrandRow, "content_source">[] | null };
+    const toStrands = (rows: unknown): CurriculumStrandRow[] =>
+      ((rows ?? []) as Row[]).map((s) => ({
+        name: s.name,
+        sub_strands: (s.kicd_sub_strands ?? []).map((ss) => ({ ...ss, content_source: KICD_SOURCE })),
+      }));
+
+    const { data: platform } = await supabase
       .from("kicd_strands")
-      .select("name, level_order, kicd_content_sources!inner(is_enabled, school_id), kicd_sub_strands(name, learning_outcomes, key_inquiry_questions, rubric_text)")
+      .select(select)
       .in("learning_area_id", areaIds)
       .eq("grade", grade)
       .eq("kicd_content_sources.is_enabled", true)
       .is("kicd_content_sources.school_id", null)
       .order("level_order");
+    const platformStrands = toStrands(platform);
 
-    return ((strands ?? []) as unknown as { name: string; kicd_sub_strands: Omit<CurriculumSubStrandRow, "content_source">[] | null }[]).map((s) => ({
-      name: s.name,
-      sub_strands: (s.kicd_sub_strands ?? []).map((ss) => ({ ...ss, content_source: KICD_SOURCE })),
-    }));
+    // This school's own published content. Skipped (fail closed) if the class's
+    // school can't be determined, so nothing is ever read unscoped.
+    if (typeof schoolId !== "string" || !schoolId) return platformStrands;
+    const { data: own } = await supabase
+      .from("kicd_strands")
+      .select(select)
+      .in("learning_area_id", areaIds)
+      .eq("grade", grade)
+      .eq("kicd_content_sources.is_enabled", true)
+      .eq("kicd_content_sources.school_id", schoolId)
+      .order("level_order");
+    const ownStrands = toStrands(own);
+    if (ownStrands.length === 0) return platformStrands;
+
+    // The school's own KICD content wins over platform-wide on a name conflict.
+    return mergeCurriculumStrands(ownStrands, platformStrands);
   } catch (e) {
     console.error("fetchSharedKicdStrands: falling back to school content only:", e);
     return [];
