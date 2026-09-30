@@ -46,7 +46,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: supabase/setup-cli@v1
+      - uses: supabase/setup-cli@v3
         with:
           # Pinned per Supabase's own supply-chain guidance -- see deploy-functions.yml for
           # the full rationale (this workflow had the identical unpinned-CLI-version issue).
