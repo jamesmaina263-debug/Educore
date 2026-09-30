@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getCachedUser } from "@/lib/supabase/get-user";
 import { computePathwayFit, type PathwayFitMarkInput, type PathwayFitSummary } from "@/lib/academics/pathway-fit";
 
 export interface ClassOption {
@@ -38,9 +39,7 @@ const DEFAULT_CLASS_PATTERN = /grade\s*9\b/i;
 
 export async function loadPathwayGuidanceContext(requestedClassId?: string): Promise<PathwayGuidanceContext> {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCachedUser();
   if (!user) redirect("/login");
 
   const [{ data: schoolUser }, { data: canAcademics }, { data: canExams }, { data: classes }] = await Promise.all([

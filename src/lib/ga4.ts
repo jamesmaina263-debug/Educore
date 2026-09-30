@@ -300,10 +300,6 @@ export function getTrafficSources(dateRange: GaDateRangeInput, limit = 10, engag
   return getBreakdown(dateRange, "sessionSource", limit, engagedOnly);
 }
 
-export function getChannels(dateRange: GaDateRangeInput, limit = 10, engagedOnly = false) {
-  return getBreakdown(dateRange, "sessionDefaultChannelGroup", limit, engagedOnly);
-}
-
 export function getDeviceBreakdown(dateRange: GaDateRangeInput, engagedOnly = false) {
   return getBreakdown(dateRange, "deviceCategory", 10, engagedOnly);
 }
@@ -426,9 +422,8 @@ export async function getKeyEventsTimeseries(
 export type ChannelPerformanceRow = { label: string; sessions: number; engagementRate: number };
 
 // Channel-level session volume paired with GA4's engagement rate -- a
-// quality signal alongside getChannels() above (which reports
-// totalUsers/engagedSessions to match the other visitor-count breakdowns
-// on this page). engagementRate comes back from GA4 as a 0-1 fraction;
+// quality signal alongside the other visitor-count breakdowns on this
+// page (which report totalUsers/engagedSessions). engagementRate comes back from GA4 as a 0-1 fraction;
 // converted to a 0-100 percentage here so callers never re-derive it.
 export async function getChannelPerformance(
   dateRange: GaDateRangeInput,
@@ -475,4 +470,98 @@ export async function getRealtimeVisitorCount(): Promise<number | null> {
   } catch {
     return null;
   }
+}
+
+export type FunnelDetailRow = {
+  source: string;
+  page: string;
+  device: string;
+  location: string;
+  eventName?: string;
+  ctaLabel?: string;
+  ctaLocation?: string;
+  count: number;
+};
+
+function formatLocation(city: string | undefined, country: string | undefined): string {
+  const c = city && city !== "(not set)" ? city : "";
+  const k = country && country !== "(not set)" ? country : "";
+  return [c, k].filter(Boolean).join(", ") || "(unknown)";
+}
+
+// Row-level drill-down behind the funnel's "Engaged Visitors" stage: each row is a
+// distinct source / landing page / device / city combination with its engaged-session
+// count. Anonymous by design -- GA4 never exposes a person, only aggregates.
+export async function getEngagedSessionDetail(
+  dateRange: GaDateRangeInput,
+  limit = 25,
+): Promise<FunnelDetailRow[] | null> {
+  const result = await runReport({
+    dateRanges: toDateRange(dateRange),
+    dimensions: [
+      { name: "sessionSource" },
+      { name: "sessionMedium" },
+      { name: "landingPage" },
+      { name: "deviceCategory" },
+      { name: "city" },
+      { name: "country" },
+    ],
+    metrics: [{ name: "engagedSessions" }],
+    metricFilter: {
+      filter: { fieldName: "engagedSessions", numericFilter: { operation: "GREATER_THAN", value: { int64Value: "0" } } },
+    },
+    orderBys: [{ metric: { metricName: "engagedSessions" }, desc: true }],
+    limit,
+  });
+  if (!result?.rows) return result ? [] : null;
+  return result.rows.map((row) => {
+    const d = row.dimensionValues ?? [];
+    return {
+      source: `${d[0]?.value || "(none)"} / ${d[1]?.value || "(none)"}`,
+      page: d[2]?.value || "(none)",
+      device: d[3]?.value || "(none)",
+      location: formatLocation(d[4]?.value, d[5]?.value),
+      count: Number(row.metricValues?.[0]?.value ?? 0),
+    };
+  });
+}
+
+// Row-level drill-down behind the funnel's "CTA Clicks" stage. Matches the same events the
+// stage sums (every event name containing "CTA": Contact/Trial/WhatsApp/Email CTA Click),
+// broken down by which button was clicked (cta_label/cta_location custom dimensions, sent
+// on every CTA Click event via GTM) plus the page it happened on and device.
+export async function getCtaClickDetail(
+  dateRange: GaDateRangeInput,
+  limit = 25,
+): Promise<FunnelDetailRow[] | null> {
+  const result = await runReport({
+    dateRanges: toDateRange(dateRange),
+    dimensions: [
+      { name: "eventName" },
+      { name: "customEvent:cta_label" },
+      { name: "customEvent:cta_location" },
+      { name: "pagePath" },
+      { name: "deviceCategory" },
+    ],
+    metrics: [{ name: "eventCount" }],
+    dimensionFilter: {
+      filter: { fieldName: "eventName", stringFilter: { matchType: "CONTAINS", value: "CTA" } },
+    },
+    orderBys: [{ metric: { metricName: "eventCount" }, desc: true }],
+    limit,
+  });
+  if (!result?.rows) return result ? [] : null;
+  return result.rows.map((row) => {
+    const d = row.dimensionValues ?? [];
+    return {
+      eventName: d[0]?.value || "(none)",
+      ctaLabel: d[1]?.value || "(not set)",
+      ctaLocation: d[2]?.value || "(not set)",
+      page: d[3]?.value || "(none)",
+      device: d[4]?.value || "(none)",
+      source: "",
+      location: "",
+      count: Number(row.metricValues?.[0]?.value ?? 0),
+    };
+  });
 }

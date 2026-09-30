@@ -14,8 +14,7 @@ const SLUG = "kjsea-sba-records-kenya-schools";
 const PATH = `/blog/${SLUG}`;
 const PUBLISHED_ON = "2026-09-20";
 const TITLE = "KJSEA and School-Based Assessment: The Grade 7–8 Records Your School Needs on File — EduCore";
-const DESCRIPTION =
-  "Grade 7 and 8 school-based assessment makes up a fifth of a learner's KJSEA score. What the SBA actually is, who uploads it, what KNEC asks schools to keep, and where records go missing.";
+const DESCRIPTION = "Grade 7 and 8 school-based assessment is a fifth of a learner's KJSEA score. What it is, who uploads it, and where records go missing.";
 const KNEC_2026_SBA_CIRCULAR =
   "https://www.knec.ac.ke/wp-content/uploads/2026/04/Guidelines-and-schedule-for-Grades-378-and-SNE-Projects.pdf";
 
@@ -23,8 +22,8 @@ export const metadata: Metadata = {
   title: TITLE,
   description: DESCRIPTION,
   alternates: { canonical: PATH },
-  openGraph: { title: TITLE, description: DESCRIPTION, url: PATH },
-  twitter: { card: "summary_large_image", title: TITLE, description: DESCRIPTION },
+  openGraph: { title: TITLE, description: DESCRIPTION, url: PATH, images: ["/og-image.png"] },
+  twitter: { card: "summary_large_image", title: TITLE, description: DESCRIPTION, images: ["/og-image.png"] },
 };
 
 // Sourcing for the KNEC facts in this post (researched Sep 2026, not from memory):

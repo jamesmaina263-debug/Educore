@@ -1,5 +1,5 @@
 import { createServerClient } from "@supabase/ssr";
-import { NextResponse, type NextRequest } from "next/server";
+import { NextResponse, after, type NextRequest } from "next/server";
 import { APP_ROUTE_SEGMENTS } from "@/lib/school-slug-routing";
 
 const PROTECTED_PREFIXES = ["/dashboard"];
@@ -35,6 +35,16 @@ function isProtectedPath(pathname: string): boolean {
   const withoutFirstSegment = "/" + segments.slice(1).join("/");
   return PROTECTED_PREFIXES.some((prefix) => withoutFirstSegment.startsWith(prefix));
 }
+
+// Per-instance cache of the platform-wide maintenance flag. This row is global (id = 1), not
+// per-user, and used to be re-queried on EVERY school-app request -- one extra Supabase round
+// trip on every navigation for a value that almost never changes. Warm serverless instances
+// keep this module-level variable between requests, so most navigations now skip the query.
+// Trade-off, deliberate: flipping maintenance mode on/off takes up to MAINTENANCE_CACHE_TTL_MS to
+// reach an instance that already cached the old value. Only successful reads are cached -- an
+// error is never cached, so a transient failure can't pin a stale answer.
+const MAINTENANCE_CACHE_TTL_MS = 15_000;
+let maintenanceCache: { enabled: boolean; expiresAt: number } | null = null;
 
 export type SessionUpdate = {
   response: NextResponse;
@@ -86,11 +96,17 @@ export async function updateSession(request: NextRequest): Promise<SessionUpdate
     const THROTTLE_MS = 5 * 60 * 1000;
     const lastPing = Number(request.cookies.get(LAST_SEEN_PING_COOKIE)?.value ?? 0);
     if (!lastPing || Date.now() - lastPing > THROTTLE_MS) {
-      try {
-        await supabase.rpc("bump_last_seen");
-      } catch {
-        // Never let a last-seen ping failure block or redirect a real request.
-      }
+      // Runs AFTER the response is sent (Next's after(), supported in Proxy) instead of being awaited
+      // on the request path: it's a write RPC that averaged ~44ms but spiked past 1s, and nothing
+      // about serving the page depends on its result. The throttle cookie below is still set
+      // synchronously, so behaviour is unchanged apart from when the write happens.
+      after(async () => {
+        try {
+          await supabase.rpc("bump_last_seen");
+        } catch {
+          // Never let a last-seen ping failure affect anything.
+        }
+      });
       supabaseResponse.cookies.set(LAST_SEEN_PING_COOKIE, String(Date.now()), {
         httpOnly: true,
         sameSite: "lax",
@@ -106,13 +122,25 @@ export async function updateSession(request: NextRequest): Promise<SessionUpdate
   // never itself take the whole platform down.
   if (isMaintenanceGatedPath(request.nextUrl.pathname)) {
     try {
-      const { data: maintenance } = await supabase
-        .from("platform_maintenance")
-        .select("enabled")
-        .eq("id", 1)
-        .maybeSingle();
+      let maintenanceEnabled: boolean;
+      if (maintenanceCache && maintenanceCache.expiresAt > Date.now()) {
+        maintenanceEnabled = maintenanceCache.enabled;
+      } else {
+        const { data: maintenance, error: maintenanceError } = await supabase
+          .from("platform_maintenance")
+          .select("enabled")
+          .eq("id", 1)
+          .maybeSingle();
+        maintenanceEnabled = maintenance?.enabled === true;
+        if (!maintenanceError) {
+          maintenanceCache = {
+            enabled: maintenanceEnabled,
+            expiresAt: Date.now() + MAINTENANCE_CACHE_TTL_MS,
+          };
+        }
+      }
 
-      if (maintenance?.enabled) {
+      if (maintenanceEnabled) {
         let isSuperAdminBypass = false;
         if (user) {
           const { data: isSuperAdmin } = await supabase.rpc("auth_is_super_admin");

@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getCachedUser } from "@/lib/supabase/get-user";
 import type { CampusSummaryRow } from "@/components/campuses/campus-summary-table";
 import type { GroupBrandingData } from "@/components/campuses/group-branding-form";
 import type { ApiKeyRow } from "@/components/settings/api-keys-panel";
@@ -17,9 +18,7 @@ export interface CampusesContext {
 
 export async function loadCampusesContext(): Promise<CampusesContext> {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCachedUser();
   if (!user) redirect("/login");
 
   const [{ data: schoolUser }, { data: groupId }] = await Promise.all([

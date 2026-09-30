@@ -9,6 +9,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
 import { useServerTableParams } from "@/hooks/use-server-table-params";
+import { useSchoolHref } from "@/components/app-shell/school-slug-context";
 import {
   Select,
   SelectTrigger,
@@ -35,7 +36,7 @@ function initials(name: string) {
     .toUpperCase();
 }
 
-const columns: ColumnDef<StudentRow>[] = [
+const buildColumns = (toHref: (href: string) => string): ColumnDef<StudentRow>[] => [
   {
     accessorKey: "full_name",
     header: "Name",
@@ -86,7 +87,7 @@ const columns: ColumnDef<StudentRow>[] = [
     header: "",
     cell: ({ row }) => (
       <Button variant="ghost" size="sm" asChild>
-        <Link href={`/students/${row.original.id}`}>View</Link>
+        <Link href={toHref(`/students/${row.original.id}`)}>View</Link>
       </Button>
     ),
     enableSorting: false,
@@ -112,6 +113,7 @@ const STATUS_FILTER_OPTIONS = [
  */
 function StudentsTableInner({ rows, totalCount, pageSize }: { rows: StudentRow[]; totalCount: number; pageSize: number }) {
   const router = useRouter();
+  const toHref = useSchoolHref();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const manual = useServerTableParams({ totalCount, pageSize });
@@ -146,7 +148,7 @@ function StudentsTableInner({ rows, totalCount, pageSize }: { rows: StudentRow[]
         </Select>
       </div>
       <DataTable
-        columns={columns}
+        columns={buildColumns(toHref)}
         data={rows}
         searchColumnId="full_name"
         searchPlaceholder="Search students by name…"
