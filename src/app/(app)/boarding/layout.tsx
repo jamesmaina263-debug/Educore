@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getCachedUser } from "@/lib/supabase/get-user";
 
 // Mirrors the app layout's own boarding_enabled lookup (src/app/(app)/layout.tsx) -- that one
 // only hides the sidebar nav entry, it was never a route guard, so a school with boarding
@@ -11,9 +12,7 @@ import { createClient } from "@/lib/supabase/server";
 // (Little Beginners, so far) 404s here instead of rendering.
 export default async function BoardingLayout({ children }: { children: ReactNode }) {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCachedUser();
 
   if (user) {
     const { data: schoolUser } = await supabase

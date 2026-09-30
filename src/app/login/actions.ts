@@ -8,6 +8,7 @@ import { getRealClientIp } from "@/lib/get-real-client-ip";
 import { sendSecurityAlert } from "@/lib/security-alert";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { setSchoolSlugCookie, clearSchoolSlugCookie } from "@/lib/school-slug-cookie";
+import { clearAdminOperatorCookie } from "@/lib/admin-operator-server";
 
 export type LoginState = { error: string | null };
 
@@ -162,6 +163,9 @@ export async function login(
     const { data: isSuperAdmin } = await supabase.rpc("auth_is_super_admin");
     if (isSuperAdmin) {
       clearSchoolSlugCookie(cookieStore);
+      // Shared super-admin login: forget whoever used it last so the admin layout asks
+      // "who are you logging in as?" again on every fresh sign-in.
+      clearAdminOperatorCookie(cookieStore);
       // Platform staff land on the Platform Admin Console (src/app/(admin)), not a school
       // dashboard -- a super admin typically has no school_users row tied to a real school, so
       // /dashboard previously rendered an empty/default school view with no way to tell that
@@ -189,5 +193,6 @@ export async function logout() {
   await supabase.auth.signOut();
   const cookieStore = await cookies();
   clearSchoolSlugCookie(cookieStore);
+  clearAdminOperatorCookie(cookieStore);
   redirect("/login");
 }

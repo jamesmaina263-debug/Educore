@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getAdminOperator } from "@/lib/admin-operator-server";
 import { logout } from "@/app/login/actions";
 import { AdminConsoleFrame } from "@/components/admin/admin-console-frame";
 
@@ -24,6 +25,11 @@ export default async function AdminRouteGroupLayout({ children }: { children: Re
   const { data: isSuperAdmin } = await supabase.rpc("auth_is_super_admin");
   if (isSuperAdmin !== true) redirect("/dashboard");
 
+  // Shared login: every session must say which person is using it (see lib/admin-operator.ts)
+  // before any admin page renders, so the activity log can attribute what they do.
+  const operator = await getAdminOperator();
+  if (!operator) redirect("/admin/who");
+
   const { data: currentUser } = await supabase
     .from("school_users")
     .select("full_name")
@@ -31,7 +37,11 @@ export default async function AdminRouteGroupLayout({ children }: { children: Re
     .maybeSingle();
 
   return (
-    <AdminConsoleFrame userName={currentUser?.full_name ?? user.email ?? "Account"} onSignOut={logout}>
+    <AdminConsoleFrame
+      userName={currentUser?.full_name ?? user.email ?? "Account"}
+      operatorName={operator}
+      onSignOut={logout}
+    >
       {children}
     </AdminConsoleFrame>
   );

@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
+import { getCachedUser } from "@/lib/supabase/get-user";
 import { logout } from "@/app/login/actions";
 import { AppShell } from "@/components/app-shell/app-shell";
 import { CompetencyAppraisalFilters } from "@/components/academics/competency-appraisal-filters";
@@ -14,10 +14,7 @@ export default async function CompetencyAppraisalPage({
 }) {
   const { stream: streamParam, term: termParam, indicator: indicatorParam } = await searchParams;
 
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCachedUser();
   if (!user) redirect("/login");
 
   // Idempotent, per its own doc comment "safe to call on every page load" --

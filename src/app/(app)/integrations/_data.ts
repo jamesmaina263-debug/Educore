@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getCachedUser } from "@/lib/supabase/get-user";
 import { resolveKnecCbaExportColumns, type KnecCbaExportColumn } from "@/lib/knec-cba-export-columns";
 import {
   buildKnecCbaWindowReminders,
@@ -102,9 +103,7 @@ export interface KnecContext {
 
 export async function loadKnecContext(): Promise<KnecContext> {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCachedUser();
   if (!user) redirect("/login");
 
   const [{ data: schoolUser }, { data: canManageKnec }] = await Promise.all([
@@ -291,9 +290,7 @@ export interface MpesaContext {
 
 export async function loadMpesaContext(): Promise<MpesaContext> {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCachedUser();
   if (!user) redirect("/login");
 
   const [{ data: schoolUser }, { data: canManageMpesa }, { data: canInitiatePush }] = await Promise.all([
@@ -382,9 +379,7 @@ export async function loadMpesaContext(): Promise<MpesaContext> {
 
 export async function loadIntegrationsContext(): Promise<IntegrationsContext> {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCachedUser();
   if (!user) redirect("/login");
 
   const [{ data: schoolUser }, { data: canManageNemis }] = await Promise.all([

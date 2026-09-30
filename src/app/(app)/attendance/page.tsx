@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getCachedUser } from "@/lib/supabase/get-user";
 import { logout } from "@/app/login/actions";
 import { AppShell } from "@/components/app-shell/app-shell";
 import { RegisterForm, type RosterRow } from "@/components/attendance/register-form";
@@ -28,9 +29,7 @@ export default async function AttendancePage({
   const attendanceDate = dateParam || todayISO();
 
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCachedUser();
   if (!user) redirect("/login");
 
   const [{ data: schoolUser }, { data: canMarkAny }, { data: canMark }, { data: canApproveCorrection }] = await Promise.all([

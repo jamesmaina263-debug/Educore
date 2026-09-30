@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
+import { useSchoolHref } from "@/components/app-shell/school-slug-context";
 
 export function ReportCardPicker({
   examOptions,
@@ -15,12 +16,13 @@ export function ReportCardPicker({
   selectedClassId: string | null;
 }) {
   const router = useRouter();
+  const toHref = useSchoolHref();
 
   function go(examId: string | null, classId: string | null) {
     const params = new URLSearchParams();
     if (examId) params.set("exam", examId);
     if (classId) params.set("class", classId);
-    router.push(`/exams/report-cards?${params.toString()}`);
+    router.push(toHref(`/exams/report-cards?${params.toString()}`));
   }
 
   return (

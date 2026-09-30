@@ -9,6 +9,7 @@ import { DataTable } from "@/components/ui/data-table";
 import { useServerTableParams } from "@/hooks/use-server-table-params";
 import { ClaimApplicationButton } from "@/components/admissions/claim-application-button";
 import { DeleteApplicationButton } from "@/components/admissions/delete-application-button";
+import { useSchoolHref } from "@/components/app-shell/school-slug-context";
 import {
   Select,
   SelectTrigger,
@@ -52,6 +53,7 @@ function columns(
   canWrite: boolean,
   claimAction: ClaimAction,
   deleteAction: DeleteAction,
+  toHref: (href: string) => string,
 ): ColumnDef<ApplicationRow>[] {
   return [
     {
@@ -110,7 +112,7 @@ function columns(
         return (
           <div className="flex items-center justify-end gap-3">
             {canReview && (
-              <Link href={`/admissions/${r.id}`} className="text-[0.8125rem] font-medium text-primary hover:underline">
+              <Link href={toHref(`/admissions/${r.id}`)} className="text-[0.8125rem] font-medium text-primary hover:underline">
                 Review
               </Link>
             )}
@@ -153,6 +155,7 @@ function ApplicationsTableInner({
   deleteAction: DeleteAction;
 }) {
   const router = useRouter();
+  const toHref = useSchoolHref();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const manual = useServerTableParams({ totalCount, pageSize });
@@ -187,7 +190,7 @@ function ApplicationsTableInner({
         </Select>
       </div>
       <DataTable
-        columns={columns(canReview, canWrite, claimAction, deleteAction)}
+        columns={columns(canReview, canWrite, claimAction, deleteAction, toHref)}
         data={rows}
         searchColumnId="full_name"
         searchPlaceholder="Search applicants by name or reference…"

@@ -12,15 +12,14 @@ import { Badge } from "@/components/ui/badge";
 import { BreadcrumbJsonLd, HOME_CRUMB } from "@/components/marketing/breadcrumb-json-ld";
 
 const TITLE = "CBC School Management System — EduCore Kenya";
-const DESCRIPTION =
-  "A CBC school management system that also handles 8-4-4-style numeric grading side by side — set per school, grade, or class. Built for Kenya's competency-based curriculum, not bolted onto a foreign grading model.";
+const DESCRIPTION = "A CBC school management system that handles 8-4-4 numeric grading side by side, set per school, grade, or class. Built for Kenya's curriculum.";
 
 export const metadata: Metadata = {
   title: TITLE,
   description: DESCRIPTION,
   alternates: { canonical: "/cbc-school-management" },
-  openGraph: { title: TITLE, description: DESCRIPTION, url: "/cbc-school-management" },
-  twitter: { card: "summary_large_image", title: TITLE, description: DESCRIPTION },
+  openGraph: { title: TITLE, description: DESCRIPTION, url: "/cbc-school-management", images: ["/og-image.png"] },
+  twitter: { card: "summary_large_image", title: TITLE, description: DESCRIPTION, images: ["/og-image.png"] },
 };
 
 // Grounded directly in (app)/exams/_data.ts and the grading_scales /

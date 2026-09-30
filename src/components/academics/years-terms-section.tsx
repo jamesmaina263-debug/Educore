@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { StatusBadge } from "@/components/status-badge";
+import { useSchoolHref } from "@/components/app-shell/school-slug-context";
 import {
   Dialog,
   DialogContent,
@@ -51,6 +52,7 @@ export function YearsTermsSection({
   canSendNewsletter: boolean;
 }) {
   const router = useRouter();
+  const toHref = useSchoolHref();
   const [yearDialogOpen, setYearDialogOpen] = useState(false);
   const [termDialogOpen, setTermDialogOpen] = useState<string | null>(null); // academic_year_id
   const [editYearOpen, setEditYearOpen] = useState<AcademicYearRow | null>(null);
@@ -419,7 +421,7 @@ export function YearsTermsSection({
           <p className="mt-2 text-sm text-muted-foreground">
             {newsletterNotice}{" "}
             {canSendNewsletter && (
-              <a href="/academics/newsletters" className="underline">
+              <a href={toHref("/academics/newsletters")} className="underline">
                 Review newsletters
               </a>
             )}

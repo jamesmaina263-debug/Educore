@@ -1,5 +1,7 @@
 import Link from "next/link";
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@/components/ui/table";
+import { withSchoolSlug } from "@/lib/school-slug-href";
+import { getSchoolSlug } from "@/lib/school-slug-server";
 
 export interface PendingBiometricRow {
   id: string;
@@ -13,7 +15,8 @@ export interface PendingBiometricRow {
 // active biometric_profiles row auto-created by the existing trigger) but have never actually
 // had a fingerprint/face captured on a device (no active biometric_credentials row). Nothing
 // here can enroll or revoke a credential -- that still only happens on the kiosk/device flow.
-export function PendingBiometricPanel({ rows }: { rows: PendingBiometricRow[] }) {
+export async function PendingBiometricPanel({ rows }: { rows: PendingBiometricRow[] }) {
+  const schoolSlug = await getSchoolSlug();
   return (
     <div className="flex flex-col gap-3">
       <div>
@@ -40,7 +43,7 @@ export function PendingBiometricPanel({ rows }: { rows: PendingBiometricRow[] })
             {rows.map((r) => (
               <TableRow key={r.id}>
                 <TableCell>
-                  <Link href={`/students/${r.id}`} className="underline">
+                  <Link href={withSchoolSlug(schoolSlug, `/students/${r.id}`)} className="underline">
                     {r.first_name} {r.last_name}
                   </Link>
                 </TableCell>

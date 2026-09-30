@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem, SelectGroup, SelectLabel } from "@/components/ui/select";
 import { TYPE_LABEL, type StreamOption, type TermOption, type IndicatorOption } from "@/lib/academics/competency-appraisal-types";
+import { useSchoolHref } from "@/components/app-shell/school-slug-context";
 
 export function CompetencyAppraisalFilters({
   streamOptions,
@@ -20,6 +21,7 @@ export function CompetencyAppraisalFilters({
   selectedIndicatorId: string;
 }) {
   const router = useRouter();
+  const toHref = useSchoolHref();
 
   function go(next: { stream?: string; term?: string; indicator?: string }) {
     const params = new URLSearchParams({
@@ -27,7 +29,7 @@ export function CompetencyAppraisalFilters({
       term: next.term ?? selectedTermId,
       indicator: next.indicator ?? selectedIndicatorId,
     });
-    router.push(`/academics/competency-appraisal?${params.toString()}`);
+    router.push(toHref(`/academics/competency-appraisal?${params.toString()}`));
   }
 
   const grouped = (["core_competency", "value", "pci", "school_authored"] as const).map((type) => ({

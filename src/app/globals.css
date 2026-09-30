@@ -180,12 +180,12 @@
 
   --sidebar: oklch(0.988 0.002 264);
   --sidebar-foreground: oklch(0.32 0.014 264);
-  --sidebar-primary: oklch(0.546 0.207 262.9);
+  --sidebar-primary: oklch(0.546 0.16 149.5);
   --sidebar-primary-foreground: oklch(0.99 0.002 264);
   --sidebar-accent: oklch(0.955 0.006 264);
   --sidebar-accent-foreground: oklch(0.21 0.014 264);
   --sidebar-border: oklch(0.916 0.005 264);
-  --sidebar-ring: oklch(0.546 0.207 262.9);
+  --sidebar-ring: oklch(0.546 0.16 149.5);
 
   /* EduCore brand tokens — sampled from the EduCore logo (deep navy +
      graduation-tassel gold). Intentionally kept separate from the neutral
@@ -260,12 +260,12 @@
 
   --sidebar: oklch(0.196 0.011 264);
   --sidebar-foreground: oklch(0.88 0.006 264);
-  --sidebar-primary: oklch(0.648 0.178 261);
+  --sidebar-primary: oklch(0.66 0.14 150);
   --sidebar-primary-foreground: oklch(0.16 0.012 264);
   --sidebar-accent: oklch(0.27 0.013 264);
   --sidebar-accent-foreground: oklch(0.96 0.004 264);
   --sidebar-border: oklch(0.29 0.012 264);
-  --sidebar-ring: oklch(0.648 0.178 261);
+  --sidebar-ring: oklch(0.66 0.14 150);
 }
 
 @layer base {

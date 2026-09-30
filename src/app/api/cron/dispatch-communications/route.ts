@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isValidCronRequest } from "@/lib/cron-auth";
 import { sendSecurityAlert } from "@/lib/security-alert";
+import { withTransientAuthRetry } from "@/lib/supabase/retry-transient-auth";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -50,7 +51,12 @@ export async function GET(request: Request) {
   let pages = 0;
 
   for (; pages < MAX_PAGES_PER_RUN; pages++) {
-    const { data, error } = await adminClient.functions.invoke("send-communication");
+    // Wrapped so a transient gateway auth blip on this page's call (see
+    // retry-transient-auth.ts) doesn't abort the whole sweep and strand the remaining pages
+    // for tomorrow's run.
+    const { data, error } = await withTransientAuthRetry(() =>
+      adminClient.functions.invoke("send-communication"),
+    );
     if (error) {
       // Report what was swept before the failure rather than discarding it — a partial sweep is
       // still real progress, and the next scheduled run picks up wherever this one left off.

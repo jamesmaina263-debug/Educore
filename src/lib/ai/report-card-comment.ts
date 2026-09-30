@@ -41,8 +41,14 @@ Write a warm, specific, 2-3 sentence comment on this student's academic performa
 
 export const GEMINI_REPORT_CARD_MODEL = "gemini-3.5-flash-lite";
 
-export function geminiGenerateContentUrl(apiKey: string): string {
-  return `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_REPORT_CARD_MODEL}:generateContent?key=${apiKey}`;
+/**
+ * Shared across every Gemini caller in the app (report-card comments,
+ * scheme-of-work generation, ...) so there's one place that knows the
+ * generateContent URL shape. `model` defaults to the report-card model to
+ * keep every existing call site (and its test) unchanged.
+ */
+export function geminiGenerateContentUrl(apiKey: string, model: string = GEMINI_REPORT_CARD_MODEL): string {
+  return `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
 }
 
 export type GeminiParseResult = { comment: string } | { error: string };
