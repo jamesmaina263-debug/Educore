@@ -1,3 +1,4 @@
+import { compareCatalogueOptions } from "@/lib/subject-catalogue-label";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { AdminKicdContentPanel, type KicdSourceRow, type KicdLearningAreaRow, type CatalogueOption } from "@/components/admin/admin-kicd-content-panel";
@@ -14,7 +15,7 @@ export default async function AdminKicdContentPage() {
 
   const [{ data: areas }, { data: catalogue }] = await Promise.all([
     supabase.from("kicd_learning_areas").select("id, name, catalogue_id").order("name"),
-    supabase.from("subject_catalogue").select("id, name").order("name"),
+    supabase.from("subject_catalogue").select("id, name, grade_band").order("name"),
   ]);
 
   const { data } = await supabase
@@ -41,7 +42,7 @@ export default async function AdminKicdContentPage() {
       <AdminKicdContentPanel
         sources={(data ?? []) as unknown as KicdSourceRow[]}
         learningAreas={(areas ?? []) as KicdLearningAreaRow[]}
-        catalogue={(catalogue ?? []) as CatalogueOption[]}
+        catalogue={((catalogue ?? []) as CatalogueOption[]).slice().sort(compareCatalogueOptions)}
       />
     </div>
   );
