@@ -6,6 +6,7 @@ import { tagSentryRequestContext } from "@/lib/observability/sentry-context";
 import { logAdminAction } from "@/lib/log-admin-action";
 import { runCurriculumExtraction } from "@/lib/ai/curriculum-extraction";
 import { isKicdGrade } from "@/lib/kicd-grade";
+import { extractPdfText } from "@/lib/pdf/extract-text";
 
 // Platform-admin import of shared (EduCore-wide) KICD curriculum content.
 //
@@ -81,8 +82,7 @@ export async function importKicdDocument(formData: FormData): Promise<ImportKicd
 
   let documentText: string;
   try {
-    const pdfParse = (await import("pdf-parse")).default;
-    documentText = (await pdfParse(Buffer.from(await file.arrayBuffer()))).text?.trim() ?? "";
+    documentText = await extractPdfText(await file.arrayBuffer());
   } catch (e) {
     console.error("importKicdDocument: PDF parsing failed:", e);
     return { error: "We couldn't read that PDF. Check it isn't corrupted or password-protected." };
