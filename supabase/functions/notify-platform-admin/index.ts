@@ -10,6 +10,7 @@
 // (Resend keys) -- either way the in-app notification row is unaffected, since that's inserted
 // directly by the trigger, not by this function.
 import { getEmailProvider } from "../_shared/email/index.ts";
+import { timingSafeEqual } from "../_shared/timingSafeEqual.ts";
 
 const PLATFORM_ADMIN_EMAIL = Deno.env.get("PLATFORM_ADMIN_EMAIL") ?? "admin@educore.co.ke";
 // Used only for the demo-request-assignment notification (kind: demo_request_assigned),
@@ -28,7 +29,7 @@ Deno.serve(async (req) => {
 
   const expectedSecret = Deno.env.get("PLATFORM_NOTIFICATION_WEBHOOK_SECRET");
   const providedSecret = req.headers.get("x-webhook-secret");
-  if (!expectedSecret || providedSecret !== expectedSecret) {
+  if (!expectedSecret || !providedSecret || !timingSafeEqual(providedSecret, expectedSecret)) {
     return json({ error: "Unauthorized" }, 401);
   }
 

@@ -300,10 +300,6 @@ export function getTrafficSources(dateRange: GaDateRangeInput, limit = 10, engag
   return getBreakdown(dateRange, "sessionSource", limit, engagedOnly);
 }
 
-export function getChannels(dateRange: GaDateRangeInput, limit = 10, engagedOnly = false) {
-  return getBreakdown(dateRange, "sessionDefaultChannelGroup", limit, engagedOnly);
-}
-
 export function getDeviceBreakdown(dateRange: GaDateRangeInput, engagedOnly = false) {
   return getBreakdown(dateRange, "deviceCategory", 10, engagedOnly);
 }
@@ -426,9 +422,8 @@ export async function getKeyEventsTimeseries(
 export type ChannelPerformanceRow = { label: string; sessions: number; engagementRate: number };
 
 // Channel-level session volume paired with GA4's engagement rate -- a
-// quality signal alongside getChannels() above (which reports
-// totalUsers/engagedSessions to match the other visitor-count breakdowns
-// on this page). engagementRate comes back from GA4 as a 0-1 fraction;
+// quality signal alongside the other visitor-count breakdowns on this
+// page (which report totalUsers/engagedSessions). engagementRate comes back from GA4 as a 0-1 fraction;
 // converted to a 0-100 percentage here so callers never re-derive it.
 export async function getChannelPerformance(
   dateRange: GaDateRangeInput,
