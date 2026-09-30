@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { tagSentryRequestContext } from "@/lib/observability/sentry-context";
 import { logAdminAction } from "@/lib/log-admin-action";
 
 type ActionResult = { error: string } | { success: true };
@@ -12,6 +13,7 @@ type ActionResult = { error: string } | { success: true };
 
 export async function setWhitelabelEnabled(groupId: string, enabled: boolean): Promise<ActionResult> {
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
   const { error } = await supabase
     .from("school_groups")
     .update({ whitelabel_enabled: enabled })
@@ -24,6 +26,7 @@ export async function setWhitelabelEnabled(groupId: string, enabled: boolean): P
 
 export async function setDomainVerified(groupId: string): Promise<ActionResult> {
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
   const { error } = await supabase
     .from("school_groups")
     .update({ custom_domain_status: "verified" })
@@ -36,6 +39,7 @@ export async function setDomainVerified(groupId: string): Promise<ActionResult> 
 
 export async function setDomainPending(groupId: string): Promise<ActionResult> {
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
   const { error } = await supabase
     .from("school_groups")
     .update({ custom_domain_status: "pending" })

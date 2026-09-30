@@ -17,6 +17,83 @@ export type BlogPostSummary = {
 
 export const BLOG_POSTS: BlogPostSummary[] = [
   {
+    slug: "senior-school-pathways-kenya-stem-social-sciences-arts-sports",
+    title: "Senior School Pathways in Kenya: STEM, Social Sciences, Arts & Sports Science Explained — EduCore",
+    description:
+      "What the three CBC Senior School pathways cover, their tracks and subjects, how learners are placed, and how schools can guide a Grade 9 learner's choice.",
+    publishedOn: "2026-09-29",
+  },
+  {
+    slug: "kicd-curriculum-design-strands-sub-strands-explained",
+    title: "KICD Curriculum Designs Explained: Strands, Sub-Strands and Learning Outcomes — EduCore",
+    description:
+      "How to read a KICD curriculum design: what strands, sub-strands, specific learning outcomes, key inquiry questions, core competencies and PCIs mean, and how to turn them into a term plan.",
+    publishedOn: "2026-09-28",
+  },
+  {
+    slug: "cbc-scheme-of-work-kenya-how-to-write",
+    title: "How to Write a CBC Scheme of Work in Kenya: Columns, Example and Common Mistakes — EduCore",
+    description:
+      "What a CBC scheme of work is, the columns most Kenyan schools use, a worked example row, how it differs from a lesson plan, and the mistakes that get schemes sent back.",
+    publishedOn: "2026-09-28",
+  },
+  {
+    slug: "teacher-performance-reviews-kenya-schools",
+    title: "Teacher Performance Reviews for Kenyan Schools: Termly, Structured, and Kept Private",
+    description:
+      "Why teacher appraisal usually lives in a locked cabinet or a Principal's private notebook, and how EduCore keeps it structured instead — 1-5 competency scoring, an automatically computed rating, and visibility locked to the reviewer tier and the teacher being reviewed.",
+    publishedOn: "2026-09-21",
+  },
+  {
+    slug: "school-payroll-statutory-deductions-kenya",
+    title: "School Payroll in Kenya: PAYE, SHIF, NSSF and the Housing Levy Explained (2026)",
+    description:
+      "The four statutory deductions on a Kenyan school payslip in 2026: what each is, the rates after the February 2026 NSSF change, the order they are applied in, a worked example, deadlines, and common mistakes.",
+    publishedOn: "2026-09-21",
+  },
+  {
+    slug: "boarding-school-management-kenya",
+    title: "Boarding School Management in Kenya: Safety Standards, Roll Call and the Records That Matter",
+    description:
+      "What the Ministry's Safety Standards Manual expects of a boarding school, the records that back those standards up, how to handle exeats and visitors, and what software can and cannot do.",
+    publishedOn: "2026-09-21",
+  },
+  {
+    slug: "mpesa-paybill-till-stk-push-school-fees",
+    title: "M-Pesa Paybill vs Till vs STK Push for School Fees in Kenya",
+    description:
+      "Paybill and Till are where school fees land. STK push is how a payment gets started. What each does, who pays the fee, how it affects reconciliation, and how a school should set them up.",
+    publishedOn: "2026-09-21",
+  },
+  {
+    slug: "gititu-high-school-case-study",
+    title: "Case Study: Gititu High School on Running End of Term From One System",
+    description:
+      "In his own words, the principal of Gititu High School describes end of term before and after moving marks, fees and student records into EduCore, what surprised the school, and what still needs improving.",
+    publishedOn: "2026-09-20",
+  },
+  {
+    slug: "data-protection-act-kenya-schools-guide",
+    title: "The Data Protection Act for Kenyan Schools: A Practical Guide",
+    description:
+      "What Kenya's Data Protection Act asks of schools: registering with the ODPC, parental consent, photos and exam results, children's and biometric data, the 72-hour breach rule, and what to ask your software vendor, including where your data is stored.",
+    publishedOn: "2026-09-20",
+  },
+  {
+    slug: "kjsea-sba-records-kenya-schools",
+    title: "KJSEA and School-Based Assessment: The Grade 7\u20138 Records Your School Needs on File",
+    description:
+      "Grade 7 and 8 school-based assessment makes up a fifth of a learner's KJSEA score. What the SBA actually is, who uploads it, what KNEC asks schools to keep, and where records go missing.",
+    publishedOn: "2026-09-20",
+  },
+  {
+    slug: "free-school-management-system-kenya",
+    title: "Free School Management Software in Kenya: What \"Free\" Actually Covers",
+    description:
+      "Free core platforms, open-source editions, student-capped free tiers and trials all get called free. Where the real costs show up for a Kenyan school, a checklist to compare them, and when free is genuinely the right call.",
+    publishedOn: "2026-09-20",
+  },
+  {
     slug: "student-performance-appraisal-kenya-schools",
     title: "Student Performance Appraisal & Merit Lists for Kenyan Schools",
     description:

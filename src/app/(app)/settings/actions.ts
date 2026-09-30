@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { tagSentryRequestContext } from "@/lib/observability/sentry-context";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { generateTemporaryPassword, temporaryPasswordExpiry } from "@/lib/temporary-password";
 
@@ -18,6 +19,7 @@ export async function updateBranding(input: {
   admission_response_note?: string;
 }): Promise<ActionResult> {
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
   const { data: schoolId, error: schoolIdError } = await supabase.rpc("auth_school_id");
   if (schoolIdError || !schoolId) return { error: "Could not resolve your school." };
 
@@ -51,6 +53,7 @@ export async function inviteStaffMember(input: {
   role_id: string;
 }): Promise<InviteResult> {
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
   const { data: schoolId, error: schoolIdError } = await supabase.rpc("auth_school_id");
   if (schoolIdError || !schoolId) return { error: "Could not resolve your school." };
 
@@ -102,6 +105,7 @@ export async function inviteStaffMember(input: {
 
 export async function changeStaffRole(schoolUserId: string, roleId: string): Promise<ActionResult> {
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
   const { error } = await supabase.from("school_users").update({ role_id: roleId }).eq("id", schoolUserId);
   if (error) return { error: error.message };
   revalidatePath("/settings", "layout");
@@ -113,6 +117,7 @@ export async function setStaffStatus(
   status: "active" | "inactive" | "suspended",
 ): Promise<ActionResult> {
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
 
   const { data: target, error: fetchError } = await supabase
     .from("school_users")
@@ -168,6 +173,7 @@ export async function setStaffStatus(
 // first-time invite.
 export async function resetStaffPassword(schoolUserId: string): Promise<InviteResult> {
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
   const { data: schoolId, error: schoolIdError } = await supabase.rpc("auth_school_id");
   if (schoolIdError || !schoolId) return { error: "Could not resolve your school." };
 
@@ -227,6 +233,7 @@ export async function issueSchoolApiKey(input: {
   scopes: string[];
 }): Promise<IssueApiKeyResult> {
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
   const { data: schoolId, error: schoolIdError } = await supabase.rpc("auth_school_id");
   if (schoolIdError || !schoolId) return { error: "Could not resolve your school." };
 
@@ -249,6 +256,7 @@ export async function issueSchoolApiKey(input: {
 
 export async function revokeSchoolApiKey(id: string): Promise<ActionResult> {
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
   const { data: schoolUser } = await supabase
     .from("school_users")
     .select("id")
@@ -277,6 +285,7 @@ export async function registerBiometricDevice(input: {
   serial_number: string;
 }): Promise<RegisterBiometricDeviceResult> {
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
   const { data, error } = await supabase
     .rpc("issue_biometric_device_key", {
       p_name: input.name,
@@ -296,6 +305,7 @@ export async function registerBiometricDevice(input: {
 
 export async function setBiometricDeviceStatus(id: string, status: "active" | "inactive"): Promise<ActionResult> {
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
   const { error } = await supabase.from("biometric_devices").update({ status }).eq("id", id);
   if (error) return { error: error.message };
   revalidatePath("/settings", "layout");
@@ -312,6 +322,7 @@ export async function updateGateLateThresholds(input: {
   late_after_staff: string | null;
 }): Promise<ActionResult> {
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
   const { error } = await supabase.rpc("update_gate_late_thresholds", {
     p_late_after_student: input.late_after_student || null,
     p_late_after_staff: input.late_after_staff || null,
@@ -336,6 +347,7 @@ export async function createLeaveType(input: {
   }
 
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
   const { data: schoolId, error: schoolIdError } = await supabase.rpc("auth_school_id");
   if (schoolIdError || !schoolId) return { error: "Could not resolve your school." };
 
@@ -365,6 +377,7 @@ export async function updateLeaveType(
   }
 
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
   const { error } = await supabase
     .from("leave_types")
     .update({ name, days_per_year: input.days_per_year, restricted_gender: input.restricted_gender ?? null })
@@ -380,6 +393,7 @@ export async function updateLeaveType(
 
 export async function deleteLeaveType(id: string): Promise<ActionResult> {
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
   const { error } = await supabase.from("leave_types").delete().eq("id", id);
   if (error) {
     // leave_requests.leave_type_id has no ON DELETE clause (default RESTRICT) — a type

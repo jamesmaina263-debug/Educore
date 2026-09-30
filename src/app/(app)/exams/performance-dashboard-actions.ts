@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { tagSentryRequestContext } from "@/lib/observability/sentry-context";
 import { classifyTrend, type TrendResult } from "@/lib/academics/growth-trend";
 
 // ---------------------------------------------------------------------------
@@ -70,6 +71,7 @@ export async function getClassPerformanceDashboard(
   classId: string,
 ): Promise<ClassPerformanceDashboard | { error: string }> {
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
 
   const { data: examRow, error: examError } = await supabase.from("exams").select("term_id").eq("id", examId).maybeSingle();
   if (examError) return { error: examError.message };

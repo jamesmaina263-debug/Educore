@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { tagSentryRequestContext } from "@/lib/observability/sentry-context";
 import { logAdminAction } from "@/lib/log-admin-action";
 
 export interface BroadcastHistoryRow {
@@ -17,6 +18,7 @@ type SendResult = { error: string } | { success: true; recipientCount: number };
 // see the migration for why that's the right audience and delivery mechanism.
 export async function sendBroadcastAnnouncement(subject: string, body: string): Promise<SendResult> {
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
   const { data, error } = await supabase.rpc("broadcast_platform_announcement", {
     p_subject: subject,
     p_body: body,

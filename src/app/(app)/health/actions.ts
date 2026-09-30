@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { extractEdgeFunctionError } from "@/lib/edge-function-error";
+import { setSentryRequestContext } from "@/lib/observability/sentry-context";
 
 type ActionResult = { error: string } | { success: true };
 
@@ -10,7 +11,17 @@ async function currentActor(supabase: Awaited<ReturnType<typeof createClient>>) 
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  const { data: me } = await supabase.from("school_users").select("id, school_id").eq("auth_user_id", user!.id).maybeSingle();
+  // An expired session (e.g. an offline-queued mutation replaying hours later) must come back as
+  // "could not resolve your account" like every caller already handles, not a null-dereference
+  // crash that surfaces as an opaque server error.
+  if (!user) return null;
+  const { data: me } = await supabase.from("school_users").select("id, school_id").eq("auth_user_id", user.id).maybeSingle();
+  // Production-readiness audit: this is the one place every health/sick-bay/medical action
+  // already resolves both the actor and their school, so it's the natural choke-point to tag a
+  // Sentry-captured error with who/which-school -- same reasoning and same helper as
+  // finance/academics/exams/boarding/communication's schoolId(). Medical data is exactly the
+  // kind of thing where "which school, which user" matters most if something goes wrong here.
+  setSentryRequestContext({ userId: user?.id, schoolId: me?.school_id });
   return me;
 }
 
@@ -47,20 +58,41 @@ export async function checkInStudent(input: {
   return { success: true };
 }
 
+// `alreadyCheckedOut` lets callers that are effectively idempotent (an offline-queue replay after
+// a lost ack, or the refer-to-hospital flow that checks the student out as its last step) tell
+// "someone already closed this visit" apart from a genuine failure.
+type CheckOutResult = { error: string; alreadyCheckedOut?: boolean } | { success: true };
+
 export async function checkOutStudent(
   visitId: string,
   outcome: "returned_to_class" | "sent_home" | "referred" | "collected_by_guardian",
   notes?: string,
-): Promise<ActionResult> {
+): Promise<CheckOutResult> {
   const supabase = await createClient();
   const me = await currentActor(supabase);
   if (!me) return { error: "Could not resolve your account." };
 
-  const { error } = await supabase
+  // Only ever closes a visit that is still open. Without the check_out_at guard, a second
+  // check-out (double submit, two devices, or a queued offline retry whose first attempt actually
+  // landed) silently overwrote the original check-out time, outcome and notes on a medical record.
+  // The .select() is required, not cosmetic: RLS (and the guard above) turn "nothing to update"
+  // into zero matched rows rather than an error. Safe with respect to SELECT/UPDATE alignment:
+  // sick_bay_visits UPDATE needs health.write, SELECT needs health.read_any, and every role that
+  // holds the former (nurse, school_owner) also holds the latter.
+  const { data: updated, error } = await supabase
     .from("sick_bay_visits")
     .update({ check_out_at: new Date().toISOString(), check_out_by: me.id, outcome, notes: notes || null })
-    .eq("id", visitId);
+    .eq("id", visitId)
+    .is("check_out_at", null)
+    .select("id");
   if (error) return { error: error.message };
+  if (!updated || updated.length === 0) {
+    const { data: visit } = await supabase.from("sick_bay_visits").select("check_out_at").eq("id", visitId).maybeSingle();
+    if (visit?.check_out_at) {
+      return { error: "This visit has already been checked out. Refresh to see its current state.", alreadyCheckedOut: true };
+    }
+    return { error: "Could not check this student out -- the visit may no longer exist, or you may not have permission." };
+  }
   revalidatePath("/health", "layout");
   return { success: true };
 }
@@ -302,14 +334,20 @@ export async function requestMedicalSuppliesAction(input: {
   const me = await currentActor(supabase);
   if (!me) return { error: "Could not resolve your account." };
 
-  const items = input.items.filter((i) => i.inventory_item_id && i.item_description.trim() && i.quantity > 0);
+  const items = input.items.filter((i) => i.inventory_item_id && i.item_description.trim() && Number.isFinite(i.quantity) && i.quantity > 0);
   if (!input.purpose.trim() || items.length === 0) {
     return { error: "Purpose and at least one catalog item with a quantity are required." };
   }
 
+  // The requisition is created as a DRAFT, its items are added, and only then is it submitted.
+  // It used to be inserted as "submitted" up front with a delete-on-failure rollback -- but the
+  // nurse has no DELETE right on purchase_requisitions (only inventory.procurement.approve does), so
+  // that rollback silently deleted zero rows and a failed items insert left an itemless *submitted*
+  // request sitting in the approvers' queue. A draft that never gets submitted stays out of the
+  // queue, and the nurse's own-draft UPDATE right (RLS) is what lets her submit it.
   const { data: requisition, error } = await supabase
     .from("purchase_requisitions")
-    .insert({ school_id: me.school_id, purpose: input.purpose, status: "submitted", requested_by: me.id })
+    .insert({ school_id: me.school_id, purpose: input.purpose, status: "draft", requested_by: me.id })
     .select("id")
     .single();
   if (error) return { error: error.message };
@@ -326,11 +364,17 @@ export async function requestMedicalSuppliesAction(input: {
       inventory_item_id: i.inventory_item_id ?? null,
     })),
   );
-  if (itemError) {
-    // Don't leave an itemless requisition behind claiming success -- roll the header back.
-    await supabase.from("purchase_requisitions").delete().eq("id", requisition.id);
-    return { error: `Could not save the request items: ${itemError.message}` };
-  }
+  if (itemError) return { error: `Could not save the request items, so nothing was sent for approval: ${itemError.message}` };
+
+  // .select() so a blocked submit (zero matched rows) isn't reported as sent. Alignment: the UPDATE
+  // policy allows the requester's own draft; the SELECT policy allows requested_by = self.
+  const { data: submitted, error: submitError } = await supabase
+    .from("purchase_requisitions")
+    .update({ status: "submitted" })
+    .eq("id", requisition.id)
+    .select("id");
+  if (submitError) return { error: `Could not submit the request: ${submitError.message}` };
+  if (!submitted || submitted.length === 0) return { error: "Could not submit the request for approval. Nothing was sent." };
 
   // Best-effort: let whoever can approve procurement (owner/principal/deputy)
   // know a medical supplies request is waiting. Never block the request on this.

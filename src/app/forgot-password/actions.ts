@@ -73,6 +73,10 @@ export async function requestPasswordReset(
     requestHeaders.get("origin") ??
     (requestHeaders.get("host") ? `https://${requestHeaders.get("host")}` : null) ??
     SITE_URL;
+  // No tagSentryRequestContext() call here (unlike most other Server Actions): this entire flow
+  // is, by design, always unauthenticated -- there is no point in this function where a session
+  // exists to tag, so the call would be a guaranteed no-op every single time, not worth the extra
+  // round trip on a rate-limited endpoint.
   const supabase = await createClient();
   await supabase.auth.resetPasswordForEmail(email, {
     redirectTo: `${origin}/auth/confirm?next=/reset-password`,

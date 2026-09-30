@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { tagSentryRequestContext } from "@/lib/observability/sentry-context";
 
 // SD-09 (GTM Readiness Protocol): school-level data export/portability.
 //
@@ -38,6 +39,7 @@ function fmtDate(d: string | null | undefined): string {
 
 export async function exportSchoolData(): Promise<DataExportOutcome> {
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -84,7 +86,8 @@ export async function exportSchoolData(): Promise<DataExportOutcome> {
     // below via get_staff_statutory_numbers(), the one sanctioned read path for that column.
     supabase
       .from("school_users")
-      .select("id, full_name, email, phone, status, position, department, hire_date, roles(display_name)")
+      .select("id, full_name, email, phone, status, position, department, hire_date, roles!inner(display_name, name)")
+      .not("roles.name", "in", "(parent,student,super_admin)")
       .order("full_name"),
     supabase.from("academic_years").select("name, start_date, end_date, status").order("start_date"),
     supabase.from("terms").select("name, term_number, start_date, end_date, status, academic_years(name)").order("start_date"),
@@ -93,7 +96,7 @@ export async function exportSchoolData(): Promise<DataExportOutcome> {
     supabase.from("subjects").select("name, code, is_core, is_active").order("name"),
     supabase
       .from("invoices")
-      .select("students(admission_number, first_name, last_name), terms(name), total_amount, status, created_at")
+      .select("id, invoice_number, students(admission_number, first_name, last_name), terms(name), total_amount, status, created_at")
       .order("created_at"),
     supabase
       .from("payments")
@@ -211,10 +214,11 @@ export async function exportSchoolData(): Promise<DataExportOutcome> {
     },
     {
       name: "Invoices",
-      headers: ["Student Adm. No.", "Student Name", "Term", "Total Amount (KES)", "Status", "Created At"],
+      headers: ["Reference", "Student Adm. No.", "Student Name", "Term", "Total Amount (KES)", "Status", "Created At"],
       rows: (invoices ?? []).map((i) => {
         const student = i.students as unknown as { admission_number: string; first_name: string; last_name: string } | null;
         return [
+          i.invoice_number ?? `INV-${(i.id as string).slice(0, 8).toUpperCase()}`,
           student?.admission_number ?? "",
           student ? `${student.first_name} ${student.last_name}` : "",
           (i.terms as unknown as { name: string } | null)?.name ?? "",

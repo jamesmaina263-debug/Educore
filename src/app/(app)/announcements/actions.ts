@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { tagSentryRequestContext } from "@/lib/observability/sentry-context";
 import { safeStorageFilename } from "@/lib/storage-path";
 
 type ActionResult = { error: string } | { success: true };
@@ -20,6 +21,7 @@ export async function createAnnouncementAction(input: {
   scheduledAt?: string | null;
 }): Promise<ActionResult & { id?: string }> {
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
   const { data, error } = await supabase.rpc("create_announcement", {
     p_title: input.title,
     p_body: input.body,
@@ -44,6 +46,7 @@ export async function createAnnouncementAction(input: {
 
 export async function publishAnnouncementAction(id: string): Promise<ActionResult> {
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
   const { error } = await supabase.rpc("publish_announcement", { p_id: id });
   if (error) return { error: error.message };
   revalidatePath("/announcements");
@@ -52,6 +55,7 @@ export async function publishAnnouncementAction(id: string): Promise<ActionResul
 
 export async function withdrawAnnouncementAction(id: string, reason: string | null): Promise<ActionResult> {
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
   const { error } = await supabase.rpc("withdraw_announcement", { p_id: id, p_reason: reason });
   if (error) return { error: error.message };
   revalidatePath("/announcements");
@@ -60,6 +64,7 @@ export async function withdrawAnnouncementAction(id: string, reason: string | nu
 
 export async function acknowledgeAnnouncementAction(id: string): Promise<ActionResult> {
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
   const { error } = await supabase.rpc("acknowledge_announcement", { p_id: id });
   if (error) return { error: error.message };
   revalidatePath("/announcements");
@@ -83,6 +88,7 @@ export async function uploadAnnouncementAttachmentAction(
   if (!(file instanceof File) || file.size === 0) return { error: "no file provided" };
 
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
   const { data: userRes } = await supabase.auth.getUser();
   if (!userRes?.user) return { error: "no active session" };
 
@@ -117,6 +123,7 @@ export async function uploadAnnouncementAttachmentAction(
 
 export async function deleteAnnouncementAttachmentAction(attachmentId: string): Promise<ActionResult> {
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
   const { data: path, error } = await supabase.rpc("delete_announcement_attachment", {
     p_attachment_id: attachmentId,
   });
@@ -128,6 +135,7 @@ export async function deleteAnnouncementAttachmentAction(attachmentId: string): 
 
 export async function getAnnouncementAttachmentUrlAction(storagePath: string): Promise<{ url: string } | { error: string }> {
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
   const { data, error } = await supabase.storage
     .from("announcement-attachments")
     .createSignedUrl(storagePath, 60 * 5); // 5-minute expiry -- short-lived, regenerated on each click

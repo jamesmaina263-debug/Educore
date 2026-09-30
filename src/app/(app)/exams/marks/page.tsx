@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getCachedUser } from "@/lib/supabase/get-user";
 import { logout } from "@/app/login/actions";
 import { AppShell } from "@/components/app-shell/app-shell";
 import { MarksPicker } from "@/components/exams/marks-picker";
@@ -19,9 +20,7 @@ export default async function MarksPage({
   const { exam: examParam, class: classParam, subject: subjectParam } = await searchParams;
 
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCachedUser();
   if (!user) redirect("/login");
 
   const [{ data: schoolUser }, { data: canWriteAny }, { data: canWrite }, { data: canManageCurriculum }, { data: exams }] =

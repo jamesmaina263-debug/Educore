@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { setSentryRequestContext } from "@/lib/observability/sentry-context";
 import { mergeAdmissionFormTemplate } from "@/lib/admission-form-merge";
 
 type ActionResult = { error: string } | { success: true };
@@ -11,7 +12,8 @@ async function currentSchoolUser(supabase: Awaited<ReturnType<typeof createClien
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return null;
-  const { data } = await supabase.from("school_users").select("id").eq("auth_user_id", user.id).maybeSingle();
+  const { data } = await supabase.from("school_users").select("id, school_id").eq("auth_user_id", user.id).maybeSingle();
+  setSentryRequestContext({ userId: user.id, schoolId: data?.school_id });
   return data?.id ?? null;
 }
 

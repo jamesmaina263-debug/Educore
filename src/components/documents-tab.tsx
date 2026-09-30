@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { safeStorageFilename } from "@/lib/storage-path";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -71,13 +72,21 @@ export function DocumentsTab({ ownerId, documents, canUpload, ownerType }: Docum
         supabase.rpc("auth_school_id"),
         supabase.auth.getUser(),
       ]);
+      // An expired session must read as a clear message, not "Cannot read properties of null".
+      if (!authData.user || !schoolId) throw new Error("Your session has expired. Please sign in again.");
       const { data: me } = await supabase
         .from("school_users")
         .select("id")
-        .eq("auth_user_id", authData.user!.id)
+        .eq("auth_user_id", authData.user.id)
         .single();
+      if (!me) throw new Error("Could not resolve your account.");
 
-      const path = `${schoolId}/${ownerId}/${crypto.randomUUID()}-${file.name}`;
+      // The original filename goes into the display column only. In the storage key it is reduced to
+      // a conservative charset: Supabase Storage validates object keys and can reject ones with
+      // unusual characters ("Invalid key"), and a raw browser filename is exactly where those turn
+      // up (en dashes, brackets, accented letters). Every other upload path already does this via
+      // safeStorageFilename; this was the last one still using the raw name.
+      const path = `${schoolId}/${ownerId}/${crypto.randomUUID()}-${safeStorageFilename(file.name)}`;
       const { error: uploadError } = await supabase.storage.from(bucket).upload(path, file);
       if (uploadError) throw uploadError;
 
@@ -88,9 +97,13 @@ export function DocumentsTab({ ownerId, documents, canUpload, ownerType }: Docum
         file_name: file.name,
         storage_path: path,
         storage_bucket: bucket,
-        uploaded_by: me!.id,
+        uploaded_by: me.id,
       });
-      if (insertError) throw insertError;
+      if (insertError) {
+        // Don't leave an orphaned file behind with no row pointing at it.
+        await supabase.storage.from(bucket).remove([path]);
+        throw insertError;
+      }
 
       setFile(null);
       router.refresh();

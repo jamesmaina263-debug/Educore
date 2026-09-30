@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { tagSentryRequestContext } from "@/lib/observability/sentry-context";
 import { extractEdgeFunctionError } from "@/lib/edge-function-error";
 import { logAdminAction } from "@/lib/log-admin-action";
 
@@ -13,6 +14,7 @@ export async function activateSchoolSubscription(
   periodEnd: string,
 ): Promise<ActionResult> {
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
   const { error } = await supabase.rpc("activate_subscription", {
     p_school_id: schoolId,
     p_plan_id: planId,
@@ -26,6 +28,7 @@ export async function activateSchoolSubscription(
 
 export async function suspendSchoolSubscription(schoolId: string, reason: string): Promise<ActionResult> {
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
   const { error } = await supabase.rpc("suspend_subscription", {
     p_school_id: schoolId,
     p_reason: reason || null,
@@ -42,6 +45,7 @@ export async function generateSchoolInvoice(
   periodEnd: string,
 ): Promise<ActionResult> {
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
   const { error } = await supabase.rpc("generate_platform_invoice", {
     p_school_id: schoolId,
     p_period_start: periodStart,
@@ -56,6 +60,7 @@ export async function generateSchoolInvoice(
 
 export async function recordSchoolPayment(invoiceId: string, reference: string): Promise<ActionResult> {
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
   const { error } = await supabase.rpc("record_platform_payment", {
     p_invoice_id: invoiceId,
     p_reference: reference || null,
@@ -73,6 +78,7 @@ export async function recordSchoolPayment(invoiceId: string, reference: string):
 // human-facing nudge in between.
 export async function sendBillingReminder(invoiceId: string): Promise<ActionResult> {
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
   const {
     data: { session },
   } = await supabase.auth.getSession();

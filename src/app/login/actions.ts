@@ -3,10 +3,12 @@
 import { redirect } from "next/navigation";
 import { cookies, headers } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
+import { tagSentryRequestContext } from "@/lib/observability/sentry-context";
 import { getRealClientIp } from "@/lib/get-real-client-ip";
 import { sendSecurityAlert } from "@/lib/security-alert";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { setSchoolSlugCookie, clearSchoolSlugCookie } from "@/lib/school-slug-cookie";
+import { clearAdminOperatorCookie } from "@/lib/admin-operator-server";
 
 export type LoginState = { error: string | null };
 
@@ -89,6 +91,11 @@ export async function login(
   // must_change_password set since they authenticate via OTP, not a
   // password an admin generated for them.
   if (signInData.user) {
+    // Placed here rather than right after createClient() above: before this point the request is
+    // unauthenticated (that's the whole point of the login form), so auth.getUser()/auth_school_id()
+    // would just be a wasted round trip on every attempt, successful or not, without ever having
+    // anything real to tag. Now that sign-in has actually succeeded, tag the real user.
+    await tagSentryRequestContext(supabase);
     const { data: schoolUser } = await supabase
       .from("school_users")
       .select("status, must_change_password, temp_password_expires_at, schools(status)")
@@ -156,6 +163,9 @@ export async function login(
     const { data: isSuperAdmin } = await supabase.rpc("auth_is_super_admin");
     if (isSuperAdmin) {
       clearSchoolSlugCookie(cookieStore);
+      // Shared super-admin login: forget whoever used it last so the admin layout asks
+      // "who are you logging in as?" again on every fresh sign-in.
+      clearAdminOperatorCookie(cookieStore);
       // Platform staff land on the Platform Admin Console (src/app/(admin)), not a school
       // dashboard -- a super admin typically has no school_users row tied to a real school, so
       // /dashboard previously rendered an empty/default school view with no way to tell that
@@ -179,8 +189,10 @@ export async function login(
 
 export async function logout() {
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
   await supabase.auth.signOut();
   const cookieStore = await cookies();
   clearSchoolSlugCookie(cookieStore);
+  clearAdminOperatorCookie(cookieStore);
   redirect("/login");
 }

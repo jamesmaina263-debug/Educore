@@ -1,17 +1,12 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { SCHOOL_SLUG_COOKIE } from "@/lib/school-slug-cookie";
+import { APP_ROUTE_SEGMENTS } from "@/lib/app-route-segments";
 
-// Real top-level folders under src/app/(app) -- i.e. every actual staff-app
-// route. Used to tell "/dashboard" (a real route, bare/unslugged) apart from
-// "/gititu-high-school/dashboard" (a real route, slug-prefixed) so the same
-// first path segment can be handled correctly either way. Keep in sync with
-// src/app/(app)'s folder list if a new top-level module is ever added.
-export const APP_ROUTE_SEGMENTS = new Set([
-  "academics", "admin", "admissions", "ai", "announcements", "attendance", "boarding", "campuses",
-  "communication", "connect", "dashboard", "discipline", "exams", "finance", "health",
-  "homework", "integrations", "inventory", "library", "parents", "payroll", "performance", "pt-meetings",
-  "reports", "settings", "staff", "students", "transport",
-]);
+// Defined in its own module so client components (the app shell's slug-aware links) can use the
+// same list without pulling next/server into the browser bundle. Re-exported so existing
+// importers (supabase/middleware.ts, tests) are unaffected.
+export { APP_ROUTE_SEGMENTS };
+
 
 // Never slug-prefixed: public/marketing pages, the parent/student portal
 // (separate login, out of scope for this staff-app change), API routes, and
@@ -28,10 +23,12 @@ export const APP_ROUTE_SEGMENTS = new Set([
 // unchanged. Keep in sync with src/app/(marketing)'s top-level folder list.
 export const NEVER_PREFIX = new Set([
   "api", "apply", "login", "signup", "notifications", "parent-login", "portal", "admin", "change-password",
+  "maintenance", "auth", "reset-password", "forgot-password",
   "platform", "solutions", "ai-automation", "pricing", "about", "contact", "faq",
   "privacy", "terms", "finance-fees", "security", "blog",
   "student-management-system", "cbc-school-management",
   "school-attendance-management", "parent-communication",
+  "student-performance-appraisal", "teacher-performance-management",
 ]);
 
 export type SlugRouting = { type: "next" } | { type: "redirect"; url: URL } | { type: "rewrite"; url: URL };

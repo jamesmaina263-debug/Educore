@@ -13,13 +13,18 @@ import {
 import { navItems } from "./nav-items";
 import { useCommandPalette } from "./command-palette-context";
 import { useOnlineStatus } from "@/hooks/use-online-status";
+import { useSchoolHref } from "./school-slug-context";
 
-export function CommandPalette({ boardingEnabled = true }: { boardingEnabled?: boolean }) {
+export function CommandPalette({ disabledHrefs = [] }: { disabledHrefs?: string[] }) {
   const { open, setOpen } = useCommandPalette();
   const router = useRouter();
   const online = useOnlineStatus();
+  const toHref = useSchoolHref();
 
-  const items = boardingEnabled ? navItems : navItems.filter((item) => !item.href.startsWith("/boarding"));
+  const items =
+    disabledHrefs.length === 0
+      ? navItems
+      : navItems.filter((item) => !disabledHrefs.some((href) => item.href === href || item.href.startsWith(`${href}/`)));
 
   const go = useCallback(
     (href: string) => {
@@ -32,9 +37,9 @@ export function CommandPalette({ boardingEnabled = true }: { boardingEnabled?: b
         window.location.href = href;
         return;
       }
-      router.push(href);
+      router.push(toHref(href));
     },
-    [online, router, setOpen],
+    [online, router, setOpen, toHref],
   );
 
   return (

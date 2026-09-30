@@ -1,6 +1,9 @@
 import Link from "next/link";
 import Image from "next/image";
 
+import { CookieSettingsButton } from "@/components/marketing/cookie-settings-button";
+import { TRIAL_CTA_SHORT, TRIAL_HREF } from "@/lib/marketing/trial";
+
 const FOOTER_GROUPS = [
   {
     heading: "Product",
@@ -32,7 +35,7 @@ const FOOTER_GROUPS = [
     heading: "Account",
     links: [
       { href: "/login", label: "Sign in" },
-      { href: "/signup", label: "Start a school" },
+      { href: TRIAL_HREF, label: TRIAL_CTA_SHORT },
     ],
   },
 ];
@@ -115,6 +118,7 @@ export function MarketingFooter() {
             <Link href="/terms" className="hover:text-white/70">
               Terms of Service
             </Link>
+            <CookieSettingsButton className="hover:text-white/70" />
           </div>
         </div>
       </div>

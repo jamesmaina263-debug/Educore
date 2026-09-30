@@ -7,7 +7,13 @@ import { CustomRangePicker } from "@/components/admin/analytics/custom-range-pic
 import { BreakdownList } from "@/components/admin/analytics/breakdown-list";
 import { EngagedOnlyToggle } from "@/components/admin/analytics/engaged-only-toggle";
 import { TrafficTrendChart } from "@/components/admin/analytics/traffic-trend-chart";
+import { KeyEventsChart } from "@/components/admin/analytics/key-events-chart";
+import { ChannelPerformanceList } from "@/components/admin/analytics/channel-performance-list";
 import { ConversionFunnel, type FunnelStage } from "@/components/admin/analytics/conversion-funnel";
+import {
+  DEMO_PARTIAL_RETENTION_DAYS,
+  startsBeyondPartialRetention,
+} from "@/lib/marketing/demo-partial";
 import { GranularityTabs } from "@/components/admin/analytics/granularity-tabs";
 import {
   resolveDateRange,
@@ -21,6 +27,8 @@ import {
   isGa4Configured,
   getOverviewStats,
   getEngagedVisitors,
+  getEngagedSessionDetail,
+  getCtaClickDetail,
   getTimeseries,
   getTopPages,
   getLandingPages,
@@ -34,8 +42,16 @@ import {
   getCountryBreakdown,
   getRegionBreakdown,
   getRealtimeVisitorCount,
+  getKeyEventsTimeseries,
+  getChannelPerformance,
   type TimeGranularity,
 } from "@/lib/ga4";
+
+// The two GA4 key events flagged for conversion tracking (GA4 Admin > Key
+// events) -- see MARKETING_SITE_STATUS.md's GTM readiness notes. Kept as a
+// single source of truth so the fetch call and the chart's legend can't
+// drift apart.
+const KEY_EVENT_NAMES = ["sign_up", "Demo Request Submitted"];
 import {
   isSearchConsoleConfigured,
   getSearchOverviewStats,
@@ -79,7 +95,11 @@ export default async function AdminAnalyticsPage({
       ? rawGranularity
       : defaultGranularity(period, startIso, endIso);
 
-  const [{ data: demoRequests }, { count: priorPeriodDemoCount }] = await Promise.all([
+  const [
+    { data: demoRequests },
+    { count: priorPeriodDemoCount },
+    { count: contactSavedCount, error: contactSavedError },
+  ] = await Promise.all([
     supabase
       .from("marketing_demo_requests")
       .select("id, created_at, status, utm_source")
@@ -90,6 +110,13 @@ export default async function AdminAnalyticsPage({
       .select("id", { count: "exact", head: true })
       .gte("created_at", `${prior.startIso}T00:00:00Z`)
       .lte("created_at", `${prior.endIso}T23:59:59Z`),
+    // Everyone who pressed Continue on step 1 of the demo form and had their contact details
+    // saved, whatever happened next (still open, contacted, or went on to submit).
+    supabase
+      .from("marketing_demo_partial_leads")
+      .select("id", { count: "exact", head: true })
+      .gte("created_at", `${startIso}T00:00:00Z`)
+      .lte("created_at", `${endIso}T23:59:59Z`),
   ]);
 
   const demoRequestCount = demoRequests?.length ?? 0;
@@ -118,6 +145,10 @@ export default async function AdminAnalyticsPage({
     countries,
     regions,
     realtimeVisitors,
+    keyEventsSeries,
+    channelPerformance,
+    engagedDetail,
+    ctaDetail,
   ] = gaConfigured
     ? await Promise.all([
         getOverviewStats(gaRange),
@@ -140,8 +171,12 @@ export default async function AdminAnalyticsPage({
         getCountryBreakdown(gaRange, 10, engagedOnly),
         getRegionBreakdown(gaRange, 10, engagedOnly),
         getRealtimeVisitorCount(),
+        getKeyEventsTimeseries(gaRange, KEY_EVENT_NAMES, granularity),
+        getChannelPerformance(gaRange, 10),
+        getEngagedSessionDetail(gaRange),
+        getCtaClickDetail(gaRange),
       ])
-    : [null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null];
+    : [null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null];
 
   // Search Console -- a separate config check and a separate, smaller
   // Promise.all than GA4's, since it's a distinct data source (see
@@ -159,11 +194,21 @@ export default async function AdminAnalyticsPage({
       ])
     : [null, null, null, null, null];
 
-  const ctaClicks = goals
-    ?.filter((g) => g.goal.includes("CTA") || g.goal.includes("WhatsApp") || g.goal.includes("Email"))
-    .reduce((sum, g) => sum + g.events, 0);
+  // ctaClickRows backs the "CTA clicks by type" breakdown card below; ctaClicks
+  // (the funnel's single combined number) is derived from the same filter so
+  // the two can never drift out of sync. Deliberately still goals?.filter(...)
+  // here, not (goals ?? []).filter(...) -- goals === null (GA4 query failed)
+  // must stay `undefined`/"Not tracked yet", distinct from a real empty [].
+  const ctaClickRows = goals?.filter(
+    (g) => g.goal.includes("CTA") || g.goal.includes("WhatsApp") || g.goal.includes("Email"),
+  );
+  const ctaClicks = ctaClickRows?.reduce((sum, g) => sum + g.events, 0);
   const demoFormStarted = goals?.find((g) => g.goal === "Demo Form Started")?.events ?? null;
   const demoFormSubmitted = goals?.find((g) => g.goal === "Demo Request Submitted")?.events ?? null;
+
+  const contactSavedNote = startsBeyondPartialRetention(startIso)
+    ? `From the database (step 1 of the demo form) — includes visitors GA4 can't see. Saved leads are deleted after ${DEMO_PARTIAL_RETENTION_DAYS} days, so this count is incomplete for this period`
+    : "From the database (step 1 of the demo form) — includes visitors GA4 can't see, so it can exceed the stage above";
 
   const funnelStages: FunnelStage[] = [
     { label: "Website Visitors", value: overview?.visitors ?? null },
@@ -171,9 +216,46 @@ export default async function AdminAnalyticsPage({
       label: "Engaged Visitors",
       value: engagedVisitors,
       note: "GA4 engaged sessions (10s+ engaged, 2+ pageviews, or a conversion) — a session count, not unique users",
+      detail: engagedDetail
+        ? {
+            columns: [
+              { key: "source", header: "Source / medium" },
+              { key: "page", header: "Landing page" },
+              { key: "device", header: "Device" },
+              { key: "location", header: "Location" },
+              { key: "count", header: "Engaged sessions" },
+            ],
+            rows: engagedDetail,
+          }
+        : null,
     },
-    { label: "CTA Clicks", value: ctaClicks ?? null },
+    {
+      label: "CTA Clicks",
+      value: ctaClicks ?? null,
+      detail: ctaDetail
+        ? {
+            columns: [
+              { key: "eventName", header: "CTA" },
+              { key: "ctaLabel", header: "Button" },
+              { key: "ctaLocation", header: "Section" },
+              { key: "page", header: "Clicked on page" },
+              { key: "device", header: "Device" },
+              { key: "count", header: "Clicks" },
+            ],
+            rows: ctaDetail,
+          }
+        : null,
+    },
     { label: "Demo Form Started", value: demoFormStarted },
+    // Counted from the database, not GA4, so unlike the stages around it this includes
+    // visitors GA4 can't see (declined cookies, blockers) -- it can exceed "Demo Form Started".
+    // null ("Not tracked yet") on a query error rather than 0, so a broken query never reads as
+    // "nobody saved their details".
+    {
+      label: "Contact Details Saved",
+      value: contactSavedError ? null : (contactSavedCount ?? 0),
+      note: contactSavedNote,
+    },
     // Real regardless of Plausible -- backed directly by marketing_demo_requests.
     { label: "Demo Request Submitted", value: demoFormSubmitted ?? demoRequestCount },
     { label: "Demo Completed", value: null, note: "No field tracks this today" },
@@ -281,6 +363,10 @@ export default async function AdminAnalyticsPage({
               </div>
               <TrafficTrendChart data={timeseries ?? []} granularity={granularity} />
             </div>
+            <div className="lg:col-span-2">
+              <KeyEventsChart data={keyEventsSeries ?? []} eventNames={KEY_EVENT_NAMES} granularity={granularity} />
+            </div>
+            <ChannelPerformanceList rows={channelPerformance ?? []} />
             <BreakdownList
               title="Top pages"
               rows={(topPages ?? []).map((r) => ({ label: r.label, value: r.visitors }))}
@@ -388,7 +474,18 @@ export default async function AdminAnalyticsPage({
         )}
       </div>
 
-      <ConversionFunnel stages={funnelStages} />
+      <div className="grid gap-3 lg:grid-cols-2">
+        <ConversionFunnel stages={funnelStages} />
+        {/* Same event rows already summed into the funnel's single "CTA
+            Clicks" number above -- broken out per CTA so it's visible right
+            next to the funnel, without needing to scroll to "Top events
+            (GA4)" and toggle Engaged-only off to find it there. */}
+        <BreakdownList
+          title="CTA clicks by type"
+          rows={(ctaClickRows ?? []).map((r) => ({ label: r.goal, value: r.events }))}
+          valueLabel="Clicks"
+        />
+      </div>
 
       <div className="panel p-4">
         <p className="mb-2 text-sm font-medium">Demo requests by status ({label.toLowerCase()})</p>

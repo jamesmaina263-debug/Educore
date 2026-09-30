@@ -5,6 +5,13 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getRealClientIp } from "@/lib/get-real-client-ip";
 import { sendSecurityAlert } from "@/lib/security-alert";
+import { markIncompleteLeadCompleted } from "@/lib/marketing/demo-partial-store";
+import { normalizeLeadEmail } from "@/lib/marketing/demo-partial";
+import {
+  isMissingColumnError,
+  legacyAttributionColumns,
+  parseAttributionFormData,
+} from "@/lib/marketing/attribution-fields";
 
 export type DemoRequestState = {
   status: "idle" | "success" | "error";
@@ -48,14 +55,13 @@ export async function submitDemoRequest(
   const phone = String(formData.get("phone") ?? "").trim();
   const studentCountRaw = String(formData.get("student_count") ?? "").trim();
   const message = String(formData.get("message") ?? "").trim();
-  // Marketing attribution, forwarded silently from the form's hidden fields
-  // (see src/lib/attribution.ts) -- never visitor-entered, so no validation
-  // beyond trimming/length-capping and treating "" as "not provided". Safe
-  // to trust loosely: these values only ever inform which channel gets
+  // Marketing attribution (UTM tags and, for Google Ads clicks, the click ID),
+  // forwarded silently from the form's hidden fields (see src/lib/attribution.ts)
+  // -- never visitor-entered, so no validation beyond trimming/length-capping
+  // (and a token-shape check on click IDs) and treating "" as "not provided".
+  // Safe to trust loosely: these values only ever inform which channel gets
   // credit for a lead, they never gate submission or touch any other table.
-  const utmSource = String(formData.get("utm_source") ?? "").trim().slice(0, 100) || null;
-  const utmMedium = String(formData.get("utm_medium") ?? "").trim().slice(0, 100) || null;
-  const utmCampaign = String(formData.get("utm_campaign") ?? "").trim().slice(0, 100) || null;
+  const attribution = parseAttributionFormData(formData);
 
   if (!name || !schoolName || !role || !email) {
     return {
@@ -104,8 +110,11 @@ export async function submitDemoRequest(
     };
   }
 
+  // No tagSentryRequestContext() call here: this is a public unauthenticated insert endpoint (see
+  // the comment above) -- there is never a session to tag, so the call would be a guaranteed
+  // no-op every time.
   const supabase = await createClient();
-  const { error } = await supabase.from("marketing_demo_requests").insert({
+  const lead = {
     name,
     school_name: schoolName,
     role,
@@ -113,10 +122,19 @@ export async function submitDemoRequest(
     phone: phone || null,
     student_count: studentCount,
     message: message || null,
-    utm_source: utmSource,
-    utm_medium: utmMedium,
-    utm_campaign: utmCampaign,
-  });
+  };
+  let { error } = await supabase
+    .from("marketing_demo_requests")
+    .insert({ ...lead, ...attribution });
+  if (isMissingColumnError(error)) {
+    // The extra attribution columns come from a migration the deploy workflow
+    // applies in parallel with the app deploy. If the code is briefly live
+    // first, keep the lead (with the three original UTM columns) rather than
+    // failing the visitor's submission.
+    ({ error } = await supabase
+      .from("marketing_demo_requests")
+      .insert({ ...lead, ...legacyAttributionColumns(attribution) }));
+  }
 
   if (error) {
     return {
@@ -124,6 +142,10 @@ export async function submitDemoRequest(
       message: "Something went wrong on our end. Please try again, or email us directly.",
     };
   }
+
+  // The visitor finished the form: close out any step-1 lead saved for this email (see
+  // partial-lead-actions.ts) so it no longer shows as "started but didn't finish".
+  await markIncompleteLeadCompleted(admin, normalizeLeadEmail(email));
 
   return { status: "success" };
 }

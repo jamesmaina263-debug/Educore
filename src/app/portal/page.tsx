@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { portalLogout } from "@/app/portal/actions";
 import { ChildSwitcher } from "@/components/portal/child-switcher";
@@ -99,6 +100,13 @@ export default async function PortalPage({ searchParams }: { searchParams: Promi
     )
     .eq("stream_id", selected.current_class_id)
     .order("due_date", { ascending: false });
+  // Same "hidden everywhere" standard as every staff-side gating -- Homework's portal section
+  // had no permission or module check at all before this, unlike anything on the staff side
+  // (which always had at least a permission check even before module gating existed). Checked
+  // via the generic auth_school_module_enabled RPC rather than needing school_id explicitly,
+  // consistent with every staff-side gate too.
+  const { data: homeworkModuleEnabledData } = await supabase.rpc("auth_school_module_enabled", { p_key: "homework" });
+  const homeworkModuleEnabled = homeworkModuleEnabledData !== false;
   const assignments: PortalAssignmentRow[] = (assignmentRows ?? []).map((a) => {
     const subject = a.subjects as unknown as { name: string } | null;
     const taskAttachments = (a.assignment_attachments ?? []) as { id: string; file_name: string; storage_path: string; file_size: number | null }[];
@@ -140,6 +148,22 @@ export default async function PortalPage({ searchParams }: { searchParams: Promi
         .order("slot_date", { ascending: true })
         .order("start_time", { ascending: true })
     : { data: null };
+  // The embedded pt_meeting_bookings above is filtered by RLS to this guardian's OWN bookings, so it
+  // can only ever say "0 or 1 booked" -- slots never showed as Full. Real per-slot counts come from a
+  // definer function that returns just the counts (no names or student ids) for this school's slots.
+  // If it fails for any reason, fall back to the old (under-counting) figure rather than break the page.
+  const slotIds = (slotRows ?? []).map((s) => s.id);
+  const bookedCountBySlot = new Map<string, number>();
+  if (slotIds.length > 0) {
+    const { data: counts } = await supabase.rpc("pt_slot_booked_counts", { p_slot_ids: slotIds });
+    for (const c of (counts ?? []) as { slot_id: string; booked_count: number }[]) {
+      bookedCountBySlot.set(c.slot_id, c.booked_count);
+    }
+  }
+  // Same "hidden everywhere" standard as Homework's portal section -- this one was already
+  // role-gated to parents, but had no module check at all until now.
+  const { data: ptMeetingsModuleEnabledData } = await supabase.rpc("auth_school_module_enabled", { p_key: "pt_meetings" });
+  const ptMeetingsModuleEnabled = ptMeetingsModuleEnabledData !== false;
   const ptSlots: PortalSlotRow[] = (slotRows ?? []).map((s) => {
     const teacher = s.school_users as unknown as { full_name: string } | null;
     const bookings = (s.pt_meeting_bookings ?? []) as { id: string; status: string; student_id: string }[];
@@ -153,7 +177,7 @@ export default async function PortalPage({ searchParams }: { searchParams: Promi
       end_time: s.end_time,
       location: s.location,
       capacity: s.capacity,
-      booked_count: booked.length,
+      booked_count: bookedCountBySlot.get(s.id) ?? booked.length,
       my_booking_id: mine?.id ?? null,
     };
   });
@@ -408,7 +432,15 @@ export default async function PortalPage({ searchParams }: { searchParams: Promi
                     </span>
                     <span className="font-medium">
                       KES {Number(p.amount).toLocaleString()}
-                      {receiptNumber && <span className="ml-1 font-mono text-xs text-muted-foreground">{receiptNumber}</span>}
+                      {receiptNumber && (
+                        <Link
+                          href={`/portal/receipts/${p.id}`}
+                          target="_blank"
+                          className="ml-1 font-mono text-xs text-muted-foreground underline underline-offset-2 hover:text-primary"
+                        >
+                          {receiptNumber}
+                        </Link>
+                      )}
                     </span>
                   </li>
                 );
@@ -477,12 +509,14 @@ export default async function PortalPage({ searchParams }: { searchParams: Promi
         )}
       </div>
 
-      <div className="panel p-4">
-        <p className="label-eyebrow mb-2">Homework</p>
-        <PortalHomeworkSection studentId={selected.id} assignments={assignments} />
-      </div>
+      {homeworkModuleEnabled && (
+        <div className="panel p-4">
+          <p className="label-eyebrow mb-2">Homework</p>
+          <PortalHomeworkSection studentId={selected.id} assignments={assignments} />
+        </div>
+      )}
 
-      {roleName === "parent" && (
+      {roleName === "parent" && ptMeetingsModuleEnabled && (
         <div className="panel p-4">
           <p className="label-eyebrow mb-2">Parent-teacher meetings</p>
           <PortalPtMeetingsSection studentId={selected.id} slots={ptSlots} />

@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { tagSentryRequestContext } from "@/lib/observability/sentry-context";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { generateTemporaryPassword, temporaryPasswordExpiry } from "@/lib/temporary-password";
 import {
@@ -242,6 +243,7 @@ async function importStaffSheet(
  */
 export async function importSchoolData(sheets: RawImportSheets): Promise<ImportOutcome> {
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
   const { data: canImport } = await supabase.rpc("auth_has_permission", { p_permission_key: "settings.data_import" });
   if (!canImport) return { error: "You don't have permission to import school data." };
 

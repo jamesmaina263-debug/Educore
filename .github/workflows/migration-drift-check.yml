@@ -179,18 +179,20 @@ jobs:
 
       - name: Fetch production's migration history with statements
         run: |
-          RESULT=$(psql "${{ secrets.SUPABASE_DB_URL }}" -Atqc \
-            "select coalesce(json_agg(json_build_object('version', version, 'name', name, 'statements', statements)), '[]') from supabase_migrations.schema_migrations;")
-          {
-            echo "json<<MIGRATIONS_EOF"
-            echo "$RESULT"
-            echo "MIGRATIONS_EOF"
-          } >> "$GITHUB_ENV"
+          # Written straight to a file, not through $GITHUB_ENV, on purpose --
+          # see reconcile_migration_drift.py's module docstring. This query's
+          # result (full SQL statements for the whole migration history) grew
+          # past the OS env/argument size limit on 2026-09-17, which made the
+          # next step's subprocess exec fail with "Argument list too long"
+          # before the script itself ever ran. A file has no such limit here.
+          psql "${{ secrets.SUPABASE_DB_URL }}" -Atqc \
+            "select coalesce(json_agg(json_build_object('version', version, 'name', name, 'statements', statements)), '[]') from supabase_migrations.schema_migrations;" \
+            > /tmp/prod_migrations_with_statements.json
 
       - name: Write any reconcilable migration files
         id: reconcile
         env:
-          PROD_MIGRATIONS_JSON: ${{ env.json }}
+          PROD_MIGRATIONS_JSON_FILE: /tmp/prod_migrations_with_statements.json
         run: |
           set +e
           python3 scripts/reconcile_migration_drift.py > /tmp/reconcile_output.txt 2>&1

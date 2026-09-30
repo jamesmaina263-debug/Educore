@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { tagSentryRequestContext } from "@/lib/observability/sentry-context";
 
 type ActionResult = { error: string } | { success: true };
 
@@ -23,6 +24,7 @@ export interface PermissionRequestRow {
  */
 export async function requestPermission(permissionKey: string, reason: string): Promise<ActionResult> {
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
   const { error } = await supabase.rpc("request_permission", {
     p_permission_key: permissionKey,
     p_reason: reason.trim() || null,
@@ -46,6 +48,7 @@ export async function requestPermission(permissionKey: string, reason: string): 
 /** Cancel your own still-pending request. */
 export async function cancelPermissionRequest(requestId: string): Promise<ActionResult> {
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
   const { error } = await supabase.from("permission_requests").update({ status: "cancelled" }).eq("id", requestId);
   if (error) return { error: error.message };
   revalidatePath("/settings/permission-requests");
@@ -61,6 +64,7 @@ export async function cancelPermissionRequest(requestId: string): Promise<Action
  */
 export async function respondToPermissionRequest(requestId: string, approve: boolean): Promise<ActionResult> {
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
   const { error } = await supabase.rpc("respond_to_permission_request", {
     p_request_id: requestId,
     p_approve: approve,
@@ -72,6 +76,7 @@ export async function respondToPermissionRequest(requestId: string, approve: boo
 
 export async function getMyPermissionRequests(): Promise<{ error: string } | { success: true; rows: PermissionRequestRow[] }> {
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
   const {
     data: { user },
   } = await supabase.auth.getUser();

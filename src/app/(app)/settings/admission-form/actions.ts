@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { tagSentryRequestContext } from "@/lib/observability/sentry-context";
 
 type ActionResult = { error: string } | { success: true };
 
@@ -15,6 +16,7 @@ export interface AdmissionFormTemplateInfo {
 
 export async function getAdmissionFormTemplate(): Promise<AdmissionFormTemplateInfo | null> {
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
   const { data: schoolId } = await supabase.rpc("auth_school_id");
   if (!schoolId) return null;
   const { data } = await supabase
@@ -27,6 +29,7 @@ export async function getAdmissionFormTemplate(): Promise<AdmissionFormTemplateI
 
 export async function uploadAdmissionFormTemplate(formData: FormData): Promise<ActionResult> {
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
   const file = formData.get("file");
   if (!(file instanceof File) || file.size === 0) return { error: "Please choose a file." };
   if (file.type !== DOCX_MIME) return { error: "Please upload a Word document (.docx)." };
@@ -65,6 +68,7 @@ export async function uploadAdmissionFormTemplate(formData: FormData): Promise<A
 
 export async function deleteAdmissionFormTemplate(): Promise<ActionResult> {
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
   const { data: schoolId } = await supabase.rpc("auth_school_id");
   if (!schoolId) return { error: "Not signed in." };
 

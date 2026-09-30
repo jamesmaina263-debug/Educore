@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { MarketingButton } from "@/components/marketing/button";
+import { TRIAL_TERMS } from "@/lib/marketing/trial";
 
 // One tier on the Pricing page. Real pricing (Sep 2026): a flat KES 100 per
 // student, per term, the same across all three tiers -- tiers differ by
@@ -60,8 +61,11 @@ export function PricingCard({
             {priceNote}
           </span>
         </p>
+        <p className="mt-1 text-sm font-medium text-marketing-navy-950">
+          {TRIAL_TERMS}
+        </p>
         <p className="mt-1 text-sm text-marketing-navy-900/70">
-          Final quote confirmed with you before you sign up
+          Final quote confirmed with you before you pay
         </p>
       </div>
 

@@ -1,4 +1,6 @@
 import { describe, it, expect } from "vitest";
+import { readdirSync } from "fs";
+import path from "path";
 import { NextRequest } from "next/server";
 import { APP_ROUTE_SEGMENTS, NEVER_PREFIX, resolveSlugRouting } from "./school-slug-routing";
 import { SCHOOL_SLUG_COOKIE } from "./school-slug-cookie";
@@ -32,6 +34,26 @@ describe("APP_ROUTE_SEGMENTS stays in sync with the real nav", () => {
     expect(missing, `Top-level nav routes missing from APP_ROUTE_SEGMENTS/NEVER_PREFIX: ${missing.join(", ")}`).toEqual(
       [],
     );
+  });
+});
+
+// Regression test for the sibling bug found in /student-performance-appraisal
+// and /teacher-performance-management: a new top-level page added under
+// src/app/(marketing) whose folder name was never added to NEVER_PREFIX gets
+// silently treated as a school slug and rewritten away, same failure mode as
+// the APP_ROUTE_SEGMENTS check above but for marketing pages instead of app
+// nav items. This walks the real (marketing) route-group folder so a future
+// page added there fails CI instead of shipping unreachable.
+describe("NEVER_PREFIX stays in sync with the real (marketing) pages", () => {
+  it("includes every top-level page folder under src/app/(marketing)", () => {
+    const marketingDir = path.join(import.meta.dirname, "..", "app", "(marketing)");
+    const entries = readdirSync(marketingDir, { withFileTypes: true });
+    const missing: string[] = [];
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue; // skip layout.tsx, page.tsx, opengraph-image.tsx, etc.
+      if (!NEVER_PREFIX.has(entry.name)) missing.push(entry.name);
+    }
+    expect(missing, `Marketing page folders missing from NEVER_PREFIX: ${missing.join(", ")}`).toEqual([]);
   });
 });
 

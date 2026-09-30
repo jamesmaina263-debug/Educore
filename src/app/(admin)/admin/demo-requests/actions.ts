@@ -2,11 +2,13 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { tagSentryRequestContext } from "@/lib/observability/sentry-context";
 
 type ActionResult = { error: string } | { success: true };
 
 export async function updateDemoRequestStatus(id: string, status: string): Promise<ActionResult> {
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
   const { error } = await supabase.rpc("admin_update_demo_request_status", {
     p_id: id,
     p_status: status,
@@ -18,6 +20,7 @@ export async function updateDemoRequestStatus(id: string, status: string): Promi
 
 export async function setDemoRequestArchived(id: string, archived: boolean): Promise<ActionResult> {
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
   const { error } = await supabase.rpc("admin_archive_demo_request", {
     p_id: id,
     p_archived: archived,
@@ -29,6 +32,7 @@ export async function setDemoRequestArchived(id: string, archived: boolean): Pro
 
 export async function deleteDemoRequest(id: string): Promise<ActionResult> {
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
   const { error } = await supabase.rpc("admin_delete_demo_request", { p_id: id });
   if (error) return { error: error.message };
   revalidatePath("/admin/demo-requests");
@@ -37,10 +41,37 @@ export async function deleteDemoRequest(id: string): Promise<ActionResult> {
 
 export async function assignDemoRequest(id: string, teamMemberId: string | null): Promise<ActionResult> {
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
   const { error } = await supabase.rpc("admin_assign_demo_request", {
     p_id: id,
     p_team_member_id: teamMemberId,
   });
+  if (error) return { error: error.message };
+  revalidatePath("/admin/demo-requests");
+  return { success: true };
+}
+
+// Step-1 leads from the two-step demo form who never submitted the full request
+// (see marketing_demo_partial_leads).
+export async function setDemoPartialLeadContacted(
+  id: string,
+  contacted: boolean,
+): Promise<ActionResult> {
+  const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
+  const { error } = await supabase.rpc("admin_set_demo_partial_lead_status", {
+    p_id: id,
+    p_status: contacted ? "contacted" : "incomplete",
+  });
+  if (error) return { error: error.message };
+  revalidatePath("/admin/demo-requests");
+  return { success: true };
+}
+
+export async function deleteDemoPartialLead(id: string): Promise<ActionResult> {
+  const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
+  const { error } = await supabase.rpc("admin_delete_demo_partial_lead", { p_id: id });
   if (error) return { error: error.message };
   revalidatePath("/admin/demo-requests");
   return { success: true };

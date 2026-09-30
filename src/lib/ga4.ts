@@ -42,6 +42,27 @@ export function isGa4Configured(): boolean {
 // DateRangeInput this never needs a shorthand like "7d".
 export type GaDateRangeInput = [string, string];
 
+// Retries once on a transient network-level failure -- observed in production runtime errors
+// on /admin/analytics (2026-09-18): `TypeError: fetch failed` wrapping a
+// `SocketError: other side closed` / `UND_ERR_SOCKET` cause, from a handful of concurrent
+// calls to Google's API per page load (this page fires ~16 GA4 requests via Promise.all).
+// A reused keep-alive socket to googleapis.com occasionally gets closed server-side right as
+// a new request tries to reuse it -- a transport-level hiccup, not a bad request or bad
+// credentials, and it self-resolves on a fresh attempt. Only retries `TypeError` (what
+// undici's fetch throws for a network-level failure); an HTTP error response is a resolved
+// promise, not a throw, so it's unaffected and still handled by each caller's own !res.ok
+// check. Never retries a second time -- if it fails again, the existing null-safe fallback
+// (see file header) takes over exactly as before.
+async function withNetworkRetry<T>(fn: () => Promise<T>): Promise<T> {
+  try {
+    return await fn();
+  } catch (err) {
+    if (!(err instanceof TypeError)) throw err;
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    return fn();
+  }
+}
+
 let cachedAuth: GoogleAuth | null = null;
 
 function getAuthClient(): GoogleAuth | null {
@@ -65,7 +86,7 @@ async function getAccessToken(): Promise<string | null> {
   if (!auth) return null;
   try {
     const client = await auth.getClient();
-    const { token } = await client.getAccessToken();
+    const { token } = await withNetworkRetry(() => client.getAccessToken());
     return token ?? null;
   } catch (err) {
     console.error("GA4 auth failed", err);
@@ -86,19 +107,21 @@ async function runReport(body: Record<string, unknown>): Promise<Ga4ReportRespon
   if (!token) return null;
 
   try {
-    const res = await fetch(`${API_BASE_URL}/properties/${PROPERTY_ID}:runReport`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(body),
-      // Same staleness tolerance as Plausible -- an admin dashboard doesn't
-      // need second-by-second numbers, and this avoids hammering GA4's
-      // Data API quota if the page or its date-range tabs are hit
-      // repeatedly.
-      next: { revalidate: 300 },
-    });
+    const res = await withNetworkRetry(() =>
+      fetch(`${API_BASE_URL}/properties/${PROPERTY_ID}:runReport`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(body),
+        // Same staleness tolerance as Plausible -- an admin dashboard doesn't
+        // need second-by-second numbers, and this avoids hammering GA4's
+        // Data API quota if the page or its date-range tabs are hit
+        // repeatedly.
+        next: { revalidate: 300 },
+      }),
+    );
     if (!res.ok) {
       console.error(`GA4 runReport failed: ${res.status} ${await res.text()}`);
       return null;
@@ -358,6 +381,75 @@ export async function getGoalBreakdown(dateRange: GaDateRangeInput): Promise<Goa
     }));
 }
 
+export type KeyEventSeriesPoint = { date: string; counts: Record<string, number> };
+
+// Time series for specific named GA4 events (e.g. "sign_up", "Demo Request
+// Submitted") -- distinct from getGoalBreakdown()'s single-period totals,
+// this tracks how each named event trends day-by-day so a spike or
+// drop-off is visible rather than buried in one summed number. Events only
+// appear once GA4 has actually received them; an event with zero rows in
+// range simply contributes 0 for every date, same posture as the rest of
+// this file's "never fabricate a value" rule.
+export async function getKeyEventsTimeseries(
+  dateRange: GaDateRangeInput,
+  eventNames: string[],
+  granularity: TimeGranularity = "day",
+): Promise<KeyEventSeriesPoint[] | null> {
+  if (eventNames.length === 0) return [];
+  const result = await runReport({
+    dateRanges: toDateRange(dateRange),
+    dimensions: [{ name: GRANULARITY_DIMENSION[granularity] }, { name: "eventName" }],
+    metrics: [{ name: "eventCount" }],
+    dimensionFilter: {
+      filter: { fieldName: "eventName", inListFilter: { values: eventNames } },
+    },
+    orderBys: [{ dimension: { dimensionName: GRANULARITY_DIMENSION[granularity] } }],
+    limit: 1000,
+  });
+  if (!result) return null;
+  if (!result.rows) return [];
+  const byDate = new Map<string, Record<string, number>>();
+  for (const row of result.rows) {
+    const eventName = row.dimensionValues?.[1]?.value;
+    if (!eventName) continue;
+    const label = formatPeriodLabel(row.dimensionValues?.[0]?.value ?? "", granularity);
+    const count = Number(row.metricValues?.[0]?.value ?? 0);
+    const existing = byDate.get(label) ?? {};
+    existing[eventName] = (existing[eventName] ?? 0) + count;
+    byDate.set(label, existing);
+  }
+  return Array.from(byDate.entries())
+    .map(([date, counts]) => ({ date, counts }))
+    .sort((a, b) => a.date.localeCompare(b.date));
+}
+
+export type ChannelPerformanceRow = { label: string; sessions: number; engagementRate: number };
+
+// Channel-level session volume paired with GA4's engagement rate -- a
+// quality signal alongside getChannels() above (which reports
+// totalUsers/engagedSessions to match the other visitor-count breakdowns
+// on this page). engagementRate comes back from GA4 as a 0-1 fraction;
+// converted to a 0-100 percentage here so callers never re-derive it.
+export async function getChannelPerformance(
+  dateRange: GaDateRangeInput,
+  limit = 10,
+): Promise<ChannelPerformanceRow[] | null> {
+  const result = await runReport({
+    dateRanges: toDateRange(dateRange),
+    dimensions: [{ name: "sessionDefaultChannelGroup" }],
+    metrics: [{ name: "sessions" }, { name: "engagementRate" }],
+    orderBys: [{ metric: { metricName: "sessions" }, desc: true }],
+    limit,
+  });
+  if (!result) return null;
+  if (!result.rows) return [];
+  return result.rows.map((row) => ({
+    label: row.dimensionValues?.[0]?.value || "(none)",
+    sessions: Number(row.metricValues?.[0]?.value ?? 0),
+    engagementRate: Number(row.metricValues?.[1]?.value ?? 0) * 100,
+  }));
+}
+
 // GA4's separate Realtime API, mirroring the "lightweight active-visitors
 // count" the admin page shows -- not a full realtime dimension breakdown.
 export async function getRealtimeVisitorCount(): Promise<number | null> {
@@ -365,15 +457,17 @@ export async function getRealtimeVisitorCount(): Promise<number | null> {
   const token = await getAccessToken();
   if (!token) return null;
   try {
-    const res = await fetch(`${API_BASE_URL}/properties/${PROPERTY_ID}:runRealtimeReport`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ metrics: [{ name: "activeUsers" }] }),
-      next: { revalidate: 30 },
-    });
+    const res = await withNetworkRetry(() =>
+      fetch(`${API_BASE_URL}/properties/${PROPERTY_ID}:runRealtimeReport`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ metrics: [{ name: "activeUsers" }] }),
+        next: { revalidate: 30 },
+      }),
+    );
     if (!res.ok) return null;
     const data = (await res.json()) as Ga4ReportResponse;
     const value = data.rows?.[0]?.metricValues?.[0]?.value ?? data.totals?.[0]?.metricValues?.[0]?.value;
@@ -381,4 +475,98 @@ export async function getRealtimeVisitorCount(): Promise<number | null> {
   } catch {
     return null;
   }
+}
+
+export type FunnelDetailRow = {
+  source: string;
+  page: string;
+  device: string;
+  location: string;
+  eventName?: string;
+  ctaLabel?: string;
+  ctaLocation?: string;
+  count: number;
+};
+
+function formatLocation(city: string | undefined, country: string | undefined): string {
+  const c = city && city !== "(not set)" ? city : "";
+  const k = country && country !== "(not set)" ? country : "";
+  return [c, k].filter(Boolean).join(", ") || "(unknown)";
+}
+
+// Row-level drill-down behind the funnel's "Engaged Visitors" stage: each row is a
+// distinct source / landing page / device / city combination with its engaged-session
+// count. Anonymous by design -- GA4 never exposes a person, only aggregates.
+export async function getEngagedSessionDetail(
+  dateRange: GaDateRangeInput,
+  limit = 25,
+): Promise<FunnelDetailRow[] | null> {
+  const result = await runReport({
+    dateRanges: toDateRange(dateRange),
+    dimensions: [
+      { name: "sessionSource" },
+      { name: "sessionMedium" },
+      { name: "landingPage" },
+      { name: "deviceCategory" },
+      { name: "city" },
+      { name: "country" },
+    ],
+    metrics: [{ name: "engagedSessions" }],
+    metricFilter: {
+      filter: { fieldName: "engagedSessions", numericFilter: { operation: "GREATER_THAN", value: { int64Value: "0" } } },
+    },
+    orderBys: [{ metric: { metricName: "engagedSessions" }, desc: true }],
+    limit,
+  });
+  if (!result?.rows) return result ? [] : null;
+  return result.rows.map((row) => {
+    const d = row.dimensionValues ?? [];
+    return {
+      source: `${d[0]?.value || "(none)"} / ${d[1]?.value || "(none)"}`,
+      page: d[2]?.value || "(none)",
+      device: d[3]?.value || "(none)",
+      location: formatLocation(d[4]?.value, d[5]?.value),
+      count: Number(row.metricValues?.[0]?.value ?? 0),
+    };
+  });
+}
+
+// Row-level drill-down behind the funnel's "CTA Clicks" stage. Matches the same events the
+// stage sums (every event name containing "CTA": Contact/Trial/WhatsApp/Email CTA Click),
+// broken down by which button was clicked (cta_label/cta_location custom dimensions, sent
+// on every CTA Click event via GTM) plus the page it happened on and device.
+export async function getCtaClickDetail(
+  dateRange: GaDateRangeInput,
+  limit = 25,
+): Promise<FunnelDetailRow[] | null> {
+  const result = await runReport({
+    dateRanges: toDateRange(dateRange),
+    dimensions: [
+      { name: "eventName" },
+      { name: "customEvent:cta_label" },
+      { name: "customEvent:cta_location" },
+      { name: "pagePath" },
+      { name: "deviceCategory" },
+    ],
+    metrics: [{ name: "eventCount" }],
+    dimensionFilter: {
+      filter: { fieldName: "eventName", stringFilter: { matchType: "CONTAINS", value: "CTA" } },
+    },
+    orderBys: [{ metric: { metricName: "eventCount" }, desc: true }],
+    limit,
+  });
+  if (!result?.rows) return result ? [] : null;
+  return result.rows.map((row) => {
+    const d = row.dimensionValues ?? [];
+    return {
+      eventName: d[0]?.value || "(none)",
+      ctaLabel: d[1]?.value || "(not set)",
+      ctaLocation: d[2]?.value || "(not set)",
+      page: d[3]?.value || "(none)",
+      device: d[4]?.value || "(none)",
+      source: "",
+      location: "",
+      count: Number(row.metricValues?.[0]?.value ?? 0),
+    };
+  });
 }

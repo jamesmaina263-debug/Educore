@@ -9,15 +9,14 @@ import { Reveal } from "@/components/marketing/reveal";
 import { BreadcrumbJsonLd, HOME_CRUMB } from "@/components/marketing/breadcrumb-json-ld";
 
 const TITLE = "Security & Data Privacy — EduCore Kenya";
-const DESCRIPTION =
-  "How EduCore protects student, parent, and financial data: per-school data isolation, role-based permissions, an audit log, and M-Pesa payments confirmed server-side, not client-trusted.";
+const DESCRIPTION = "How EduCore protects student, parent, and financial data: per-school isolation, role-based permissions, an audit log, server-side M-Pesa checks.";
 
 export const metadata: Metadata = {
   title: TITLE,
   description: DESCRIPTION,
   alternates: { canonical: "/security" },
-  openGraph: { title: TITLE, description: DESCRIPTION, url: "/security" },
-  twitter: { card: "summary_large_image", title: TITLE, description: DESCRIPTION },
+  openGraph: { title: TITLE, description: DESCRIPTION, url: "/security", images: ["/og-image.png"] },
+  twitter: { card: "summary_large_image", title: TITLE, description: DESCRIPTION, images: ["/og-image.png"] },
 };
 
 // Every claim on this page was verified directly against the live
@@ -117,9 +116,9 @@ export default function SecurityPage() {
               Reviewed for known vulnerabilities.
             </h2>
             <p className="mt-4 text-white/70">
-              Third-party packages are reviewed for known vulnerabilities as
-              part of our security process. Automated scanning on every
-              change is on our roadmap, not yet in place.
+              Third-party packages are checked for known vulnerabilities on
+              every change before it ships, with automated update proposals
+              reviewed weekly to stay current.
             </p>
           </Reveal>
         </div>

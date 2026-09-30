@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { StatusBadge } from "@/components/status-badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
+import { StudentCombobox } from "@/components/shared/student-combobox";
 import { useOfflineSync } from "@/hooks/use-offline-sync";
 import { queueMutation } from "@/lib/offline/queue";
 import { LibraryOfflineBanner } from "./offline-banner";
@@ -344,18 +345,27 @@ export function LibrarySection({
                         </div>
                         <div className="space-y-1.5">
                           <Label>{borrowerType === "student" ? "Student" : "Staff member"}</Label>
-                          <Select value={issueBorrowerId} onValueChange={setIssueBorrowerId}>
-                            <SelectTrigger>
-                              <SelectValue placeholder={`Select ${borrowerType}`} />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {(borrowerType === "student" ? studentOptions : staffOptions).map((s) => (
-                                <SelectItem key={s.id} value={s.id}>
-                                  {s.name}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
+                          {borrowerType === "student" ? (
+                            <StudentCombobox
+                              students={studentOptions}
+                              value={issueBorrowerId}
+                              onChange={setIssueBorrowerId}
+                              placeholder="Select student"
+                            />
+                          ) : (
+                            <Select value={issueBorrowerId} onValueChange={setIssueBorrowerId}>
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select staff" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {staffOptions.map((s) => (
+                                  <SelectItem key={s.id} value={s.id}>
+                                    {s.name}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          )}
                         </div>
                         <div className="space-y-1.5">
                           <Label>Due date</Label>
@@ -666,22 +676,30 @@ export function LibrarySection({
                       </div>
                       <div className="space-y-1.5">
                         <Label>{reserveBorrowerType === "student" ? "Student" : "Staff member"}</Label>
-                        <Select
-                          name={reserveBorrowerType === "student" ? "student_id" : "staff_id"}
-                          value={reserveBorrowerId}
-                          onValueChange={setReserveBorrowerId}
-                        >
-                          <SelectTrigger>
-                            <SelectValue placeholder={`Select ${reserveBorrowerType}`} />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {(reserveBorrowerType === "student" ? studentOptions : staffOptions).map((s) => (
-                              <SelectItem key={s.id} value={s.id}>
-                                {s.name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                        {reserveBorrowerType === "student" ? (
+                          <>
+                            <input type="hidden" name="student_id" value={reserveBorrowerId} />
+                            <StudentCombobox
+                              students={studentOptions}
+                              value={reserveBorrowerId}
+                              onChange={setReserveBorrowerId}
+                              placeholder="Select student"
+                            />
+                          </>
+                        ) : (
+                          <Select name="staff_id" value={reserveBorrowerId} onValueChange={setReserveBorrowerId}>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select staff" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {staffOptions.map((s) => (
+                                <SelectItem key={s.id} value={s.id}>
+                                  {s.name}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        )}
                       </div>
                       <DialogFooter>
                         <Button type="submit" disabled={pending || !reserveItemId || !reserveBorrowerId}>

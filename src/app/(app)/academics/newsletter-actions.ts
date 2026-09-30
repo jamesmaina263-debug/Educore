@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { tagSentryRequestContext } from "@/lib/observability/sentry-context";
 
 type ActionResult = { error: string } | { success: true };
 
@@ -22,6 +23,7 @@ export async function prepareTermNewsletterDraftAction(
   termId: string,
 ): Promise<{ error: string } | { success: true; draftId: string | null }> {
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
   const { data, error } = await supabase.rpc("prepare_term_newsletter_draft", { p_term_id: termId });
   if (error) return { error: error.message };
   revalidatePath("/academics/years-terms");
@@ -31,6 +33,7 @@ export async function prepareTermNewsletterDraftAction(
 
 export async function updateNewsletterDraftBodyAction(draftId: string, body: string): Promise<ActionResult> {
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
   const { error } = await supabase
     .from("term_newsletter_drafts")
     .update({ draft_body: body })
@@ -45,6 +48,7 @@ export async function previewTermNewsletterDraftAction(
   draftId: string,
 ): Promise<{ error: string } | { success: true; preview: string }> {
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
   const { data, error } = await supabase.rpc("preview_term_newsletter_draft", { p_draft_id: draftId });
   if (error) return { error: error.message };
   return { success: true, preview: (data as string) ?? "" };
@@ -54,6 +58,7 @@ export async function sendTermNewsletterDraftAction(
   draftId: string,
 ): Promise<{ error: string } | { success: true; recipientCount: number }> {
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
   const { data, error } = await supabase.rpc("send_term_newsletter_draft", { p_draft_id: draftId });
   if (error) return { error: error.message };
   revalidatePath("/academics/newsletters");
@@ -77,6 +82,7 @@ export async function polishNewsletterDraftWithAIAction(draftId: string): Promis
   }
 
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
   const { data: draft, error: fetchError } = await supabase
     .from("term_newsletter_drafts")
     .select("draft_body, status")

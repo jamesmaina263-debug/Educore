@@ -16,6 +16,7 @@ import {
   SelectItem,
 } from "@/components/ui/select";
 import { setStaffGender } from "@/app/(app)/staff/actions";
+import { useSchoolHref } from "@/components/app-shell/school-slug-context";
 
 export interface StaffRow {
   id: string;
@@ -64,7 +65,7 @@ function GenderCell({ staffId, gender, canManage }: { staffId: string; gender: "
   );
 }
 
-const buildColumns = (canManage: boolean): ColumnDef<StaffRow>[] => [
+const buildColumns = (canManage: boolean, toHref: (href: string) => string): ColumnDef<StaffRow>[] => [
   {
     accessorKey: "full_name",
     header: "Name",
@@ -112,7 +113,7 @@ const buildColumns = (canManage: boolean): ColumnDef<StaffRow>[] => [
     header: "",
     cell: ({ row }) => (
       <Button variant="ghost" size="sm" asChild>
-        <Link href={`/staff/${row.original.id}`}>View</Link>
+        <Link href={toHref(`/staff/${row.original.id}`)}>View</Link>
       </Button>
     ),
     enableSorting: false,
@@ -131,9 +132,10 @@ function StaffTableInner({
   pageSize: number;
 }) {
   const manual = useServerTableParams({ totalCount, pageSize });
+  const toHref = useSchoolHref();
   return (
     <DataTable
-      columns={buildColumns(canManage)}
+      columns={buildColumns(canManage, toHref)}
       data={rows}
       searchColumnId="full_name"
       searchPlaceholder="Search staff by name…"

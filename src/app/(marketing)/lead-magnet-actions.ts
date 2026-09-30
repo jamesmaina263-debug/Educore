@@ -1,0 +1,110 @@
+"use server";
+
+import { headers } from "next/headers";
+import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { getRealClientIp } from "@/lib/get-real-client-ip";
+import { sendSecurityAlert } from "@/lib/security-alert";
+import {
+  isMissingColumnError,
+  legacyAttributionColumns,
+  parseAttributionFormData,
+} from "@/lib/marketing/attribution-fields";
+
+export type LeadMagnetState = {
+  status: "idle" | "success" | "error";
+  message?: string;
+};
+
+// Same dependency-free bot mitigation as submitDemoRequest (contact/actions.ts)
+// -- honeypot + minimum fill-time, no CAPTCHA. This form asks for even less
+// (just an email), so the same reasoning applies with even less to lose.
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const MIN_FILL_TIME_MS = 1000;
+
+// Inserts into public.marketing_leads (20260919175031_marketing_leads.sql),
+// isolated from the tenant schema exactly like marketing_demo_requests --
+// insert-only RLS, no foreign keys into product data, super-admin-only read.
+export async function submitLeadMagnet(
+  _prevState: LeadMagnetState,
+  formData: FormData,
+): Promise<LeadMagnetState> {
+  const honeypot = String(formData.get("company_website") ?? "").trim();
+  if (honeypot) {
+    return { status: "success" };
+  }
+
+  const renderedAt = Number(formData.get("rendered_at") ?? 0);
+  if (renderedAt && Date.now() - renderedAt < MIN_FILL_TIME_MS) {
+    return { status: "success" };
+  }
+
+  const email = String(formData.get("email") ?? "").trim().toLowerCase();
+  const resource = String(formData.get("resource") ?? "").trim() || "cbc_digital_readiness_checklist";
+  const sourcePage = String(formData.get("source_page") ?? "").trim().slice(0, 200) || null;
+  const attribution = parseAttributionFormData(formData);
+
+  if (!email) {
+    return { status: "error", message: "Enter your email address." };
+  }
+  if (!EMAIL_RE.test(email)) {
+    return { status: "error", message: "Enter a valid email address." };
+  }
+
+  // Same rate-limit primitive and reasoning as submitDemoRequest: the
+  // honeypot/fill-time checks only deter unsophisticated bots, so a real
+  // floor is still needed. A distinct bucket from demo-request means a
+  // burst on one form doesn't consume the other's allowance. Slightly
+  // higher ceiling than the demo form (8 vs 5) since a lower-friction,
+  // lower-intent form is more likely to see a legitimate quick retry
+  // (e.g. a typo'd email resubmitted).
+  const forwardedFor = (await headers()).get("x-forwarded-for");
+  const clientIp = getRealClientIp(forwardedFor);
+  const admin = createAdminClient();
+  const { data: withinLimit } = await admin.rpc("increment_and_check_rate_limit", {
+    p_bucket: `lead-magnet:${clientIp}`,
+    p_max_events: 8,
+    p_window_seconds: 3600,
+  });
+  if (withinLimit === false) {
+    void sendSecurityAlert("Lead-magnet rate limit tripped", {
+      limit: "per-IP (8/hr)",
+      ip: clientIp,
+    });
+    return {
+      status: "error",
+      message: "Too many requests from this network. Please try again later.",
+    };
+  }
+
+  const supabase = await createClient();
+  // Plain insert, not upsert: anon has INSERT-only RLS on this table (no
+  // SELECT policy, by design -- visitors shouldn't be able to read back
+  // other people's captured emails). INSERT ... ON CONFLICT requires
+  // SELECT-level visibility for Postgres to evaluate the conflict, so the
+  // previous upsert(..., { onConflict, ignoreDuplicates }) failed under
+  // anon regardless of the row's actual uniqueness. A resubmitted email
+  // now hits the unique constraint directly, caught below (23505) and
+  // treated the same as a fresh success: same response and download,
+  // without a duplicate row or a leaked error.
+  const lead = { email, resource, source_page: sourcePage };
+  let { error } = await supabase.from("marketing_leads").insert({ ...lead, ...attribution });
+  if (isMissingColumnError(error)) {
+    // The extra attribution columns come from a migration the deploy workflow
+    // applies in parallel with the app deploy. If the code is briefly live
+    // first, keep the lead (with the three original UTM columns) rather than
+    // failing the visitor's submission.
+    ({ error } = await supabase
+      .from("marketing_leads")
+      .insert({ ...lead, ...legacyAttributionColumns(attribution) }));
+  }
+
+  if (error && error.code !== "23505") {
+    return {
+      status: "error",
+      message: "Something went wrong on our end. Please try again.",
+    };
+  }
+
+  return { status: "success" };
+}

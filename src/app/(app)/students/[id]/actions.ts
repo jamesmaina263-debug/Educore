@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { tagSentryRequestContext } from "@/lib/observability/sentry-context";
 import { findOrCreateGuardian } from "@/lib/guardians";
 import { escapePostgrestOrValue } from "@/lib/postgrest-filter";
 
@@ -16,6 +17,7 @@ export interface GuardianSearchResult {
 export async function searchGuardians(query: string): Promise<GuardianSearchResult[] | { error: string }> {
   if (query.trim().length < 2) return [];
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
 
   const { data: parentRole } = await supabase.from("roles").select("id").eq("name", "parent").single();
   if (!parentRole) return { error: "Could not resolve the parent role." };
@@ -57,6 +59,7 @@ async function linkGuardian(
   primaryContact: boolean,
 ): Promise<{ error: string } | { success: true }> {
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
 
   if (primaryContact) {
     // Only one primary contact per student — demote any existing one
@@ -101,6 +104,7 @@ export async function addGuardian(
   },
 ): Promise<{ error: string } | { success: true }> {
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
 
   const guardian = await findOrCreateGuardian(supabase, {
     phone: input.phone,
@@ -121,6 +125,7 @@ export async function updateStudentNemisIdentifiers(
   input: { upi_number?: string; birth_certificate_number?: string },
 ): Promise<{ error: string } | { success: true }> {
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
 
   const { error } = await supabase
     .from("students")
@@ -146,6 +151,7 @@ export async function deleteStudentPermanently(
   reason?: string,
 ): Promise<{ error: string } | { success: true }> {
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
 
   const { error } = await supabase.rpc("delete_student_permanently", {
     p_student_id: studentId,
@@ -167,6 +173,7 @@ export async function updateStudentStatus(
   reason?: string,
 ): Promise<{ error: string } | { success: true }> {
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
 
   const { error } = await supabase.rpc("set_student_status", {
     p_student_id: studentId,

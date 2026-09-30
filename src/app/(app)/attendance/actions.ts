@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { tagSentryRequestContext } from "@/lib/observability/sentry-context";
 
 type ActionResult = { error: string } | { success: true };
 
@@ -11,6 +12,7 @@ export async function submitAttendance(input: {
   marks: { student_id: string; status: "present" | "absent" | "late" }[];
 }): Promise<ActionResult> {
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
 
   const { data: schoolId, error: schoolIdError } = await supabase.rpc("auth_school_id");
   if (schoolIdError || !schoolId) return { error: "Could not resolve your school." };
@@ -52,6 +54,7 @@ export async function editAttendanceRecord(
 ): Promise<ActionResult> {
   if (!edit_reason.trim()) return { error: "A reason is required to edit an already-marked day." };
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -110,6 +113,7 @@ export async function editAttendanceRecord(
 // ---------------------------------------------------------------------------
 export async function reviewAttendanceCorrection(id: string, decision: "approved" | "rejected"): Promise<ActionResult> {
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
   const {
     data: { user },
   } = await supabase.auth.getUser();

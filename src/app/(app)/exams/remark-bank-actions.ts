@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { tagSentryRequestContext } from "@/lib/observability/sentry-context";
 
 // ---------------------------------------------------------------------------
 // Remark bank (Performance Appraisal Engine directive, Phase 10 / roadmap
@@ -39,6 +40,7 @@ export async function searchRemarkBank(input: {
   query?: string;
 }): Promise<{ items: RemarkBankEntry[] } | { error: string }> {
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
   let q = supabase.from("remark_bank_entries").select("id, school_id, category, body").eq("is_active", true);
   if (input.category) q = q.eq("category", input.category);
   if (input.query?.trim()) q = q.ilike("body", `%${input.query.trim()}%`);
@@ -60,6 +62,7 @@ export async function addRemarkBankEntry(input: {
 }): Promise<{ id: string } | { error: string }> {
   if (!input.body.trim()) return { error: "Remark text is required." };
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
   const {
     data: { user },
   } = await supabase.auth.getUser();

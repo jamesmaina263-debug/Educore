@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { tagSentryRequestContext } from "@/lib/observability/sentry-context";
 
 export interface PlatformNotification {
   id: string;
@@ -15,6 +16,7 @@ export async function getPlatformNotifications(): Promise<
   { error: string } | { success: true; notifications: PlatformNotification[] }
 > {
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -32,6 +34,7 @@ export async function getPlatformNotifications(): Promise<
 
 export async function markPlatformNotificationReadAction(id: string): Promise<{ error: string } | { success: true }> {
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
   const { error } = await supabase.rpc("mark_platform_notification_read", { p_notification_id: id });
   if (error) return { error: error.message };
   return { success: true };
@@ -41,6 +44,7 @@ export async function markPlatformNotificationReadAction(id: string): Promise<{ 
 // on platform_notifications.read_at for why this is fine with exactly one platform admin today).
 export async function clearAllPlatformNotificationsAction(): Promise<{ error: string } | { success: true }> {
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
   const { error } = await supabase.rpc("clear_all_platform_notifications");
   if (error) return { error: error.message };
   return { success: true };

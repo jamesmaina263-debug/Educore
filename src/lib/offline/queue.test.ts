@@ -84,11 +84,63 @@ describe("offline mutation queue", () => {
     expect(pending.every((m) => m.status === "pending")).toBe(true);
   });
 
+  it("stops treating repeated throws as connectivity after MAX_TYPEERROR_ATTEMPTS, marks the item failed, and lets the rest of the queue proceed", async () => {
+    // A queued mutation whose handler always throws -- could be a genuine, permanent
+    // network outage, but could just as easily be a bug in the handler/payload itself
+    // (a TypeError isn't only thrown by a failed fetch). Either way, this must not
+    // silently block everything queued after it forever.
+    const submitAttendance = vi.fn().mockImplementation(async (payload: { stream_id: string }) => {
+      if (payload.stream_id === "bad") throw new TypeError("Cannot read properties of undefined");
+      return { success: true };
+    });
+    vi.doMock("@/app/(app)/attendance/actions", () => ({ submitAttendance }));
+    const { queueMod } = await freshModules();
+    const poisoned = await queueMod.queueMutation("attendance", "submitAttendance", { stream_id: "bad", attendance_date: "2026-01-01", marks: [] });
+    await queueMod.queueMutation("attendance", "submitAttendance", { stream_id: "s2", attendance_date: "2026-01-01", marks: [] });
+
+    // First 4 passes: still gives the benefit of the doubt (assumes offline), stops
+    // the whole pass each time, same as the single-attempt case above.
+    for (let i = 0; i < 4; i++) {
+      const result = await queueMod.syncPendingMutations("attendance");
+      expect(result.synced).toBe(0);
+      const pending = await queueMod.getPendingMutations("attendance");
+      expect(pending.find((m) => m.id === poisoned.id)?.status).toBe("pending");
+    }
+
+    // Meanwhile the connection is actually fine -- the 5th attempt against the
+    // poisoned item marks *it* failed and still reaches (and syncs) the second,
+    // healthy mutation in the same pass.
+    const result = await queueMod.syncPendingMutations("attendance");
+    expect(result).toEqual({ synced: 1, failed: 1 });
+
+    const pending = await queueMod.getPendingMutations("attendance");
+    expect(pending).toHaveLength(1);
+    expect(pending[0].id).toBe(poisoned.id);
+    expect(pending[0].status).toBe("failed");
+    expect(pending[0].attempts).toBe(5);
+    expect(pending[0].last_error).toContain("Cannot read properties of undefined");
+  });
+
   it("discards a failed mutation without retrying it", async () => {
     const { queueMod } = await freshModules();
     const record = await queueMod.queueMutation("attendance", "submitAttendance", { stream_id: "s1", attendance_date: "2026-01-01", marks: [] });
     await queueMod.discardMutation(record.id);
     expect(await queueMod.getPendingMutations("attendance")).toHaveLength(0);
+  });
+
+  it("returns mutations in queue order even when many are queued within the same millisecond", async () => {
+    const { queueMod } = await freshModules();
+    const nowSpy = vi.spyOn(Date, "now").mockReturnValue(1_700_000_000_000);
+    try {
+      const ids: string[] = [];
+      for (let i = 0; i < 25; i++) {
+        ids.push((await queueMod.queueMutation("attendance", "submitAttendance", { n: i })).id);
+      }
+      const pending = await queueMod.getPendingMutations("attendance");
+      expect(pending.map((m) => m.id)).toEqual(ids);
+    } finally {
+      nowSpy.mockRestore();
+    }
   });
 
   it("adapts checkOutStudent's positional-args signature correctly when replaying from the queue", async () => {
@@ -239,6 +291,41 @@ describe("offline mutation queue", () => {
     expect(receivedFormData.get("category")).toBe("moderate");
     expect(receivedFormData.get("description")).toBe("Left class without permission");
     expect(receivedFormData.get("visible_to_guardian")).toBe("on");
+  });
+
+  it("treats a replayed sick-bay check-out whose first attempt already landed as synced, not failed", async () => {
+    const checkOutStudent = vi.fn().mockResolvedValue({ error: "This visit has already been checked out.", alreadyCheckedOut: true });
+    vi.doMock("@/app/(app)/health/actions", () => ({
+      checkInStudent: vi.fn(),
+      checkOutStudent,
+      administerMedication: vi.fn(),
+      logEmergency: vi.fn(),
+      createReferral: vi.fn(),
+    }));
+    const { queueMod } = await freshModules();
+    await queueMod.queueMutation("health", "checkOutStudent", { visitId: "visit-1", outcome: "sent_home" as const });
+
+    const result = await queueMod.syncPendingMutations("health");
+
+    expect(result).toEqual({ synced: 1, failed: 0 });
+    expect(checkOutStudent).toHaveBeenCalledWith("visit-1", "sent_home", undefined);
+  });
+
+  it("still fails a sick-bay check-out that was rejected for any other reason", async () => {
+    const checkOutStudent = vi.fn().mockResolvedValue({ error: "Could not check this student out -- the visit may no longer exist, or you may not have permission." });
+    vi.doMock("@/app/(app)/health/actions", () => ({
+      checkInStudent: vi.fn(),
+      checkOutStudent,
+      administerMedication: vi.fn(),
+      logEmergency: vi.fn(),
+      createReferral: vi.fn(),
+    }));
+    const { queueMod } = await freshModules();
+    await queueMod.queueMutation("health", "checkOutStudent", { visitId: "visit-2", outcome: "sent_home" as const });
+
+    const result = await queueMod.syncPendingMutations("health");
+
+    expect(result).toEqual({ synced: 0, failed: 1 });
   });
 
   it("syncs staff attendance the same way student attendance works, under its own module key", async () => {

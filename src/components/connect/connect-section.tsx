@@ -11,6 +11,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { StatusBadge } from "@/components/status-badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
+import { StudentCombobox } from "@/components/shared/student-combobox";
 import { createConnectItemAction, resolveConnectItemAction } from "@/app/(app)/connect/actions";
 
 export interface ConnectStudentOption {
@@ -141,18 +142,12 @@ export function ConnectSection({
               <div className="space-y-3">
                 <div className="space-y-1.5">
                   <Label>Student</Label>
-                  <Select value={studentId} onValueChange={setStudentId}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select a student" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {studentOptions.map((s) => (
-                        <SelectItem key={s.id} value={s.id}>
-                          {s.name} — {s.stream_label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <StudentCombobox
+                    students={studentOptions.map((s) => ({ id: s.id, name: s.name, class_name: s.stream_label }))}
+                    value={studentId}
+                    onChange={setStudentId}
+                    placeholder="Select a student"
+                  />
                   {studentOptions.length === 0 && (
                     <p className="text-xs text-muted-foreground">No students found in a class you&apos;re the class teacher of.</p>
                   )}

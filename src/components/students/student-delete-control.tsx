@@ -13,6 +13,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { deleteStudentPermanently } from "@/app/(app)/students/[id]/actions";
+import { useSchoolHref } from "@/components/app-shell/school-slug-context";
 
 // Owner/principal only (gated by the students.delete permission server-side — this component
 // only renders for someone who already has it, but the RPC re-checks regardless). Requires
@@ -27,6 +28,7 @@ export function StudentDeleteControl({
   fullName: string;
 }) {
   const router = useRouter();
+  const toHref = useSchoolHref();
   const [open, setOpen] = useState(false);
   const [confirmName, setConfirmName] = useState("");
   const [reason, setReason] = useState("");
@@ -46,7 +48,7 @@ export function StudentDeleteControl({
     const result = await deleteStudentPermanently(studentId, reason);
     setBusy(false);
     if ("error" in result) return setError(result.error);
-    router.push("/students");
+    router.push(toHref("/students"));
     router.refresh();
   }
 

@@ -2,12 +2,17 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { setSentryRequestContext } from "@/lib/observability/sentry-context";
 
 type ActionResult = { error: string } | { success: true };
 
 async function schoolId(supabase: Awaited<ReturnType<typeof createClient>>) {
   const { data, error } = await supabase.rpc("auth_school_id");
   if (error || !data) throw new Error("Could not resolve your school.");
+  // Production-readiness audit: tag the school on every action that resolves it here, so a
+  // Sentry-captured error from this file can be traced back to which school hit it. See
+  // src/lib/observability/sentry-context.ts for why/what's (and isn't) attached.
+  setSentryRequestContext({ schoolId: data as string });
   return data as string;
 }
 

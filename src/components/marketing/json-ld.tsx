@@ -24,26 +24,19 @@ export function MarketingJsonLd() {
     },
   };
 
-  const softwareApplication = {
-    "@context": "https://schema.org",
-    "@type": "SoftwareApplication",
-    name: SITE_NAME,
-    applicationCategory: "EducationalApplication",
-    operatingSystem: "Web",
-    description: "School management platform for Kenyan schools.",
-    url: SITE_URL,
-  };
-
+  // A SoftwareApplication block previously lived here too, but Google's
+  // rich-result validation for that type requires either `offers` or
+  // `aggregateRating` -- neither of which this site states anywhere
+  // (Phase 7 deliberately withholds exact pricing, and there are no real
+  // reviews to cite). That gap made ahrefs/Google flag a "rich results
+  // validation error" on every marketing page site-wide. Re-add it only
+  // once one of those two facts becomes real and public -- see the
+  // Organization block above for the same "don't assert what isn't true
+  // yet" policy.
   return (
-    <>
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(organization) }}
-      />
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(softwareApplication) }}
-      />
-    </>
+    <script
+      type="application/ld+json"
+      dangerouslySetInnerHTML={{ __html: JSON.stringify(organization) }}
+    />
   );
 }

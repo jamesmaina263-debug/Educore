@@ -2,11 +2,13 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { tagSentryRequestContext } from "@/lib/observability/sentry-context";
 
 type ActionResult = { error: string } | { success: true };
 
 export async function createPtSlotAction(formData: FormData): Promise<ActionResult> {
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -45,6 +47,7 @@ export async function createPtSlotAction(formData: FormData): Promise<ActionResu
 
 export async function deletePtSlotAction(slotId: string): Promise<ActionResult> {
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
 
   // pt_meeting_bookings.slot_id is ON DELETE CASCADE — without this check, deleting a slot with
   // active bookings would silently wipe out a guardian's booking with zero notification to them.

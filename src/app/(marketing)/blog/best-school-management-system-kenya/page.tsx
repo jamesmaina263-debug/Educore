@@ -11,15 +11,14 @@ import { ArticleJsonLd } from "@/components/marketing/article-json-ld";
 import { BlogByline } from "@/components/marketing/blog-byline";
 
 const TITLE = "Best School Management System in Kenya (2026 Guide) — EduCore";
-const DESCRIPTION =
-  "What actually separates a school management system schools keep using from one that gets abandoned for spreadsheets — M-Pesa, CBC grading, offline resilience, and real data isolation, evaluated for Kenyan schools.";
+const DESCRIPTION = "What separates a school system schools keep using from one abandoned for spreadsheets — M-Pesa, CBC grading, offline resilience, data isolation.";
 
 export const metadata: Metadata = {
   title: TITLE,
   description: DESCRIPTION,
   alternates: { canonical: "/blog/best-school-management-system-kenya" },
-  openGraph: { title: TITLE, description: DESCRIPTION, url: "/blog/best-school-management-system-kenya" },
-  twitter: { card: "summary_large_image", title: TITLE, description: DESCRIPTION },
+  openGraph: { title: TITLE, description: DESCRIPTION, url: "/blog/best-school-management-system-kenya", images: ["/og-image.png"] },
+  twitter: { card: "summary_large_image", title: TITLE, description: DESCRIPTION, images: ["/og-image.png"] },
 };
 
 // Verified against the codebase before adding the AI bullet (Sep 2026

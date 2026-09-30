@@ -2,21 +2,24 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { tagSentryRequestContext } from "@/lib/observability/sentry-context";
+import { buildEmploymentUpdate, type EmploymentInput } from "@/lib/staff/employment-input";
 
 export async function updateEmployment(
   staffId: string,
-  input: {
-    position?: string | null;
-    department?: string | null;
-    hire_date?: string | null;
-    contract_type?: "permanent" | "contract" | "part_time" | null;
-    contract_end_date?: string | null;
-    gender?: "male" | "female" | null;
-  },
+  input: EmploymentInput,
 ): Promise<{ error: string } | { success: true }> {
+  const built = buildEmploymentUpdate(input);
+  if ("error" in built) return { error: built.error };
+
   const supabase = await createClient();
-  const { error } = await supabase.from("school_users").update(input).eq("id", staffId);
+  await tagSentryRequestContext(supabase);
+  // .select() so a blocked update (zero matched rows, which RLS reports as success) isn't shown as
+  // saved. Safe with respect to SELECT/UPDATE alignment: school_users UPDATE needs self / staff.manage
+  // in the same school, and the SELECT policy is school-wide, so anything updatable is also returnable.
+  const { data: updated, error } = await supabase.from("school_users").update(built.payload).eq("id", staffId).select("id");
   if (error) return { error: error.message };
+  if (!updated || updated.length === 0) return { error: "Could not update this staff member -- you may not have permission." };
   revalidatePath(`/staff/${staffId}`);
   return { success: true as const };
 }
@@ -26,6 +29,7 @@ export async function addQualification(
   input: { qualification_name: string; institution?: string; year_obtained?: number; expiry_date?: string },
 ): Promise<{ error: string } | { success: true }> {
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
   const { data: schoolId, error: schoolIdError } = await supabase.rpc("auth_school_id");
   if (schoolIdError || !schoolId) return { error: "Could not resolve your school." };
 
@@ -57,6 +61,7 @@ export async function requestLeave(
     return { error: "End date must be on or after the start date." };
   }
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
   const { data: schoolId, error: schoolIdError } = await supabase.rpc("auth_school_id");
   if (schoolIdError || !schoolId) return { error: "Could not resolve your school." };
 
@@ -98,6 +103,7 @@ export async function respondToLeaveRequest(
   status: "approved" | "rejected",
 ): Promise<{ error: string } | { success: true }> {
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -109,11 +115,20 @@ export async function respondToLeaveRequest(
     .eq("auth_user_id", user.id)
     .maybeSingle();
 
-  const { error } = await supabase
+  // .select() on the update is required, not cosmetic: RLS blocks an unauthorized UPDATE
+  // by matching zero rows, not by raising an error -- without this, someone lacking
+  // staff.leave.approve would get {error: null} back and the caller would report success
+  // even though the request was never touched. Same pattern as
+  // attendance/actions.ts's reviewAttendanceCorrection.
+  const { data: updated, error } = await supabase
     .from("leave_requests")
     .update({ status, approved_by: me?.id ?? null, approved_at: new Date().toISOString() })
-    .eq("id", requestId);
+    .eq("id", requestId)
+    .select("id");
   if (error) return { error: error.message };
+  if (!updated || updated.length === 0) {
+    return { error: "You don't have permission to respond to this leave request." };
+  }
 
   // Best-effort: tell the requester the outcome. Never block the approval on this.
   await supabase.rpc("notify_school_user", {
@@ -136,8 +151,20 @@ export async function cancelLeaveRequest(
   staffId: string,
 ): Promise<{ error: string } | { success: true }> {
   const supabase = await createClient();
-  const { error } = await supabase.from("leave_requests").update({ status: "cancelled" }).eq("id", requestId);
+  await tagSentryRequestContext(supabase);
+  // Same RLS-silent-no-op guard as respondToLeaveRequest above: leave_requests_update's
+  // own-request clause only allows this while status = 'pending', so a stale page (the
+  // request got approved/rejected/cancelled elsewhere since it was loaded) would otherwise
+  // silently report success while leaving the request untouched.
+  const { data: updated, error } = await supabase
+    .from("leave_requests")
+    .update({ status: "cancelled" })
+    .eq("id", requestId)
+    .select("id");
   if (error) return { error: error.message };
+  if (!updated || updated.length === 0) {
+    return { error: "This request can no longer be cancelled -- it may have already been responded to." };
+  }
   revalidatePath(`/staff/${staffId}`);
   return { success: true as const };
 }

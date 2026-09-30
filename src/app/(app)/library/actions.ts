@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { tagSentryRequestContext } from "@/lib/observability/sentry-context";
 
 type ActionResult = { error: string } | { success: true };
 
@@ -13,6 +14,7 @@ export async function createLibraryItemAction(input: {
   total_copies: number;
 }): Promise<ActionResult> {
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -43,6 +45,7 @@ export async function issueLoanAction(input: {
   client_mutation_id?: string;
 }): Promise<ActionResult> {
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
   const { error } = await supabase.rpc("issue_library_loan", {
     p_item_id: input.library_item_id,
     p_student_id: input.student_id,
@@ -56,6 +59,7 @@ export async function issueLoanAction(input: {
 
 export async function returnLoanAction(id: string): Promise<ActionResult> {
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
   const { error } = await supabase.rpc("return_library_loan", { p_loan_id: id });
   if (error) return { error: error.message };
   revalidatePath("/library", "layout");
@@ -64,6 +68,7 @@ export async function returnLoanAction(id: string): Promise<ActionResult> {
 
 async function currentSchoolUser() {
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -79,6 +84,7 @@ export async function issueLoanToStaffAction(input: {
   client_mutation_id?: string;
 }): Promise<ActionResult> {
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
   const { error } = await supabase.rpc("issue_library_loan_to_staff", {
     p_item_id: input.library_item_id,
     p_staff_id: input.staff_id,
@@ -117,6 +123,7 @@ export async function markLoanLostOrDamagedAction(input: { loan_id: string; item
 
 export async function adjustCopiesAction(input: { item_id: string; total_delta: number; available_delta: number }): Promise<ActionResult> {
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
   const { error } = await supabase.rpc("adjust_library_item_copies", {
     p_item_id: input.item_id,
     p_total_delta: input.total_delta,
@@ -161,6 +168,7 @@ export async function createReservationAction(formData: FormData): Promise<Actio
 
 export async function cancelReservationAction(id: string): Promise<ActionResult> {
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
   const { error } = await supabase.from("library_reservations").update({ status: "cancelled" }).eq("id", id);
   if (error) return { error: error.message };
   revalidatePath("/library", "layout");
@@ -189,6 +197,7 @@ export async function createFineAction(formData: FormData): Promise<ActionResult
 
 export async function resolveFineAction(input: { fine_id: string; status: "paid" | "waived" }): Promise<ActionResult> {
   const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
   const { error } = await supabase
     .from("library_fines")
     .update({ status: input.status, resolved_at: new Date().toISOString() })

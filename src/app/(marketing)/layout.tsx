@@ -1,9 +1,13 @@
 import type { ReactNode } from "react";
 import { GoogleTagManager } from "@next/third-parties/google";
+import { Analytics } from "@vercel/analytics/next";
 import { MarketingNav } from "@/components/marketing/nav";
 import { MarketingFooter } from "@/components/marketing/footer";
 import { MarketingJsonLd } from "@/components/marketing/json-ld";
 import { MarketingAnalytics } from "@/components/marketing/analytics";
+import { ExitIntentLeadMagnet } from "@/components/marketing/exit-intent-lead-magnet";
+import { ConsentDefaults } from "@/components/marketing/consent-defaults";
+import { CookieNotice } from "@/components/marketing/cookie-notice";
 
 // Shared by every public marketing page (see src/lib/school-slug-routing.ts
 // NEVER_PREFIX for the full route list this covers). Deliberately does not
@@ -19,15 +23,29 @@ import { MarketingAnalytics } from "@/components/marketing/analytics";
 // src/lib/ga4.ts / src/app/(admin)/admin/analytics reads from -- that
 // dashboard's own stated scope is marketing-site performance only, so this
 // keeps GTM's actual reach matching that stated scope.
+//
+// Vercel's <Analytics /> component is scoped here for the same reason --
+// same PII boundary as GTM, and it doubles as a second, independent traffic
+// source (real edge request data, not GA4's client-side + Google's bot
+// filtering) to sanity-check the country/region breakdown on the admin
+// analytics page against. It is a no-op until Web Analytics is turned on
+// for this project in the Vercel dashboard (Project -> Analytics -> Enable)
+// -- no API for that step, it's a one-time manual toggle.
 export default function MarketingLayout({ children }: { children: ReactNode }) {
   return (
     <div className="flex min-h-full flex-col bg-marketing-canvas">
+      {/* Must stay immediately before GoogleTagManager: applies a returning
+          visitor's "declined" cookie choice before any Google tag runs. */}
+      <ConsentDefaults />
       <GoogleTagManager gtmId="GTM-MGV2XHBB" />
       <MarketingJsonLd />
       <MarketingAnalytics />
       <MarketingNav />
       <main className="flex-1">{children}</main>
       <MarketingFooter />
+      <ExitIntentLeadMagnet />
+      <CookieNotice />
+      <Analytics />
     </div>
   );
 }

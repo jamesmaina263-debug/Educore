@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { setSentryRequestContext } from "@/lib/observability/sentry-context";
 
 type ActionResult = { error: string } | { success: true };
 
@@ -20,7 +21,8 @@ async function schoolUserId(supabase: Awaited<ReturnType<typeof createClient>>) 
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  const { data } = await supabase.from("school_users").select("id").eq("auth_user_id", user?.id ?? "").maybeSingle();
+  const { data } = await supabase.from("school_users").select("id, school_id").eq("auth_user_id", user?.id ?? "").maybeSingle();
+  setSentryRequestContext({ userId: user?.id, schoolId: data?.school_id });
   return data?.id ?? null;
 }
 

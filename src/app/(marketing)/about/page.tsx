@@ -9,15 +9,14 @@ import { Reveal } from "@/components/marketing/reveal";
 import { BreadcrumbJsonLd, HOME_CRUMB } from "@/components/marketing/breadcrumb-json-ld";
 
 const TITLE = "About EduCore — School Management Software Built for Kenya";
-const DESCRIPTION =
-  "Why EduCore exists: one school management system built for the way Kenyan schools actually run, instead of a patchwork of spreadsheets, WhatsApp groups, and paper registers.";
+const DESCRIPTION = "Why EduCore exists: one school management system built for how Kenyan schools actually run, not a patchwork of spreadsheets and paper registers.";
 
 export const metadata: Metadata = {
   title: TITLE,
   description: DESCRIPTION,
   alternates: { canonical: "/about" },
-  openGraph: { title: TITLE, description: DESCRIPTION, url: "/about" },
-  twitter: { card: "summary_large_image", title: TITLE, description: DESCRIPTION },
+  openGraph: { title: TITLE, description: DESCRIPTION, url: "/about", images: ["/og-image.png"] },
+  twitter: { card: "summary_large_image", title: TITLE, description: DESCRIPTION, images: ["/og-image.png"] },
 };
 
 export default function AboutPage() {

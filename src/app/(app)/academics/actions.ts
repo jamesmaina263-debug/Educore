@@ -1,7 +1,9 @@
 "use server";
 
+import { isKicdGrade } from "@/lib/kicd-grade";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { setSentryRequestContext } from "@/lib/observability/sentry-context";
 import { buildGrid, generateTimetableSlots } from "@/lib/timetable/auto-generate";
 
 // Matches the DAYS list already used by TimetableSection (Mon-Fri). Kept as
@@ -13,6 +15,10 @@ type ActionResult = { error: string } | { success: true };
 async function schoolId(supabase: Awaited<ReturnType<typeof createClient>>) {
   const { data, error } = await supabase.rpc("auth_school_id");
   if (error || !data) throw new Error("Could not resolve your school.");
+  // Production-readiness audit: tag the school on every action that resolves it here, so a
+  // Sentry-captured error from this file can be traced back to which school hit it. See
+  // src/lib/observability/sentry-context.ts for why/what's (and isn't) attached.
+  setSentryRequestContext({ schoolId: data as string });
   return data as string;
 }
 
@@ -176,6 +182,24 @@ export async function createClassLevel(input: {
   } catch (e) {
     return { error: e instanceof Error ? e.message : "Could not create the class." };
   }
+  revalidatePath("/academics", "layout");
+  return { success: true };
+}
+
+/**
+ * Sets (or clears, with null) the school-confirmed KICD grade for a class.
+ * This is what tells Scheme of Work which shared KICD content applies to the
+ * class; unset means no shared grounding. Same authority as any other class
+ * edit (the existing classes update RLS). .select() is used to detect an
+ * RLS-silenced no-op, the same way updateCurriculumSubStrandContent does.
+ */
+export async function updateClassKicdGrade(classId: string, grade: string | null): Promise<ActionResult> {
+  if (typeof classId !== "string" || classId.trim().length === 0) return { error: "Missing class." };
+  if (grade !== null && !isKicdGrade(grade)) return { error: "Please choose a valid grade." };
+  const supabase = await createClient();
+  const { data, error } = await supabase.from("classes").update({ kicd_grade: grade }).eq("id", classId).select("id");
+  if (error) return { error: error.message };
+  if (!data || data.length === 0) return { error: "You don't have permission to change this class, or it no longer exists." };
   revalidatePath("/academics", "layout");
   return { success: true };
 }

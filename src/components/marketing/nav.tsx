@@ -5,6 +5,7 @@ import { MarketingButton } from "@/components/marketing/button";
 import { MobileNav } from "@/components/marketing/mobile-nav";
 import { NavDropdownMenu } from "@/components/marketing/nav-dropdown";
 import { NAV_ITEMS, isDropdown } from "@/components/marketing/nav-data";
+import { TRIAL_CTA_SHORT, TRIAL_HREF } from "@/lib/marketing/trial";
 
 export function MarketingNav() {
   return (
@@ -39,13 +40,19 @@ export function MarketingNav() {
 
         <div className="flex items-center gap-3">
           <Link
+            href="/contact"
+            className="hidden text-sm font-medium text-white/80 hover:text-white lg:inline"
+          >
+            Book a Demo
+          </Link>
+          <Link
             href="/login"
             className="hidden text-sm font-medium text-white/80 hover:text-white sm:inline"
           >
             Sign in
           </Link>
           <MarketingButton asChild size="sm">
-            <Link href="/contact">Book a Demo</Link>
+            <Link href={TRIAL_HREF}>{TRIAL_CTA_SHORT}</Link>
           </MarketingButton>
           <MobileNav />
         </div>
