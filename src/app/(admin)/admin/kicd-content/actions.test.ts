@@ -6,7 +6,7 @@ vi.mock("@/lib/supabase/server", () => ({ createClient: mockCreateClient }));
 vi.mock("@/lib/observability/sentry-context", () => ({ tagSentryRequestContext: vi.fn() }));
 vi.mock("@/lib/log-admin-action", () => ({ logAdminAction: mockLog }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
-vi.mock("pdf-parse", () => ({ default: vi.fn(async () => ({ text: "Strand: Numbers. Sub-strand: Whole Numbers. Count to 100." })) }));
+vi.mock("@/lib/pdf/extract-text", () => ({ extractPdfText: vi.fn(async () => "Strand: Numbers. Sub-strand: Whole Numbers. Count to 100.") }));
 
 const { importKicdDocument, setKicdSourceEnabled, updateKicdSubStrand, deleteKicdSubStrand, deleteKicdSource } = await import("./actions");
 

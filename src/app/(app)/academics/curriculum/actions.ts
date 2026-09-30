@@ -14,6 +14,7 @@ import {
 } from "@/lib/ai/curriculum-extraction";
 import { geminiGenerateContentUrl } from "@/lib/ai/report-card-comment";
 import { safeStorageFilename } from "@/lib/storage-path";
+import { extractPdfText } from "@/lib/pdf/extract-text";
 
 // ---------------------------------------------------------------------------
 // uploadCurriculumDocument
@@ -131,12 +132,7 @@ export async function uploadCurriculumDocument(subjectId: string, formData: Form
   // ---- Extract text from the PDF. ----
   let documentText: string;
   try {
-    const buffer = Buffer.from(await file.arrayBuffer());
-    // Lazily imported: pdf-parse pulls in a moderately large dependency tree
-    // that only this code path needs.
-    const pdfParse = (await import("pdf-parse")).default;
-    const parsed = await pdfParse(buffer);
-    documentText = parsed.text?.trim() ?? "";
+    documentText = await extractPdfText(await file.arrayBuffer());
   } catch (e) {
     console.error(`uploadCurriculumDocument: PDF parsing failed for batch ${batchId}:`, e);
     await markBatchFailed("pdf_parse_error");
