@@ -62,7 +62,7 @@ export async function loadAcademicsContext(): Promise<AcademicsContext> {
     supabase.from("classes").select("id, academic_year_id, name, level_order, kicd_grade"),
     supabase.from("streams").select("id, class_id, name, class_teacher_id, capacity"),
     supabase.from("subjects").select("id, catalogue_id, name, code, is_core, is_active").order("name"),
-    supabase.from("subject_catalogue").select("id, pathway, category, name, code, is_core, display_order").order("display_order"),
+    supabase.from("subject_catalogue").select("id, grade_band, pathway, category, name, code, is_core, display_order").order("display_order"),
     supabase
       .from("school_users")
       .select("id, full_name, roles!inner(name)")
