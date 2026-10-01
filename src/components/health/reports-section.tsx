@@ -7,19 +7,31 @@ export interface HealthReportsData {
   referralsThisTerm: number;
   emergenciesThisTerm: number;
   sickBayUtilizationRate: number; // % of school days with at least one visit, or similar simple metric
+  /** One row per clinic visit (grouped by reason) with student name, admission no and class, for the Visit Reasons export. */
+  visitReasonExportRows: Record<string, string | number>[];
+  /** One row per visit/medication/referral/emergency with student name, admission no and class, for the Health Summary export. */
+  summaryExportRows: Record<string, string | number>[];
 }
 
 export function ReportsSection({ data, schoolName }: { data: HealthReportsData; schoolName: string }) {
-  const summaryRows = [
-    {
-      "Clinic Visits": data.totalVisitsThisTerm,
-      "Medications Given": data.medicationsThisTerm,
-      Referrals: data.referralsThisTerm,
-      Emergencies: data.emergenciesThisTerm,
-      "Sick Bay Utilization (%)": data.sickBayUtilizationRate,
-    },
-  ];
-  const reasonRows = data.commonReasons.map((r) => ({ Reason: r.reason, Visits: r.count }));
+  const totalsRow = {
+    "Clinic Visits": data.totalVisitsThisTerm,
+    "Medications Given": data.medicationsThisTerm,
+    Referrals: data.referralsThisTerm,
+    Emergencies: data.emergenciesThisTerm,
+    "Sick Bay Utilization (%)": data.sickBayUtilizationRate,
+  };
+  // Exports carry per-student detail; when there is nothing to detail (no records yet) they fall
+  // back to the original totals / reason-count rows so the download never comes out empty.
+  const summaryRows = data.summaryExportRows.length > 0 ? data.summaryExportRows : [totalsRow];
+  const reasonRows =
+    data.visitReasonExportRows.length > 0
+      ? data.visitReasonExportRows
+      : data.commonReasons.map((r) => ({ Reason: r.reason, Visits: r.count }));
+  const summarySubtitle =
+    data.summaryExportRows.length > 0
+      ? `${schoolName} · Visits: ${data.totalVisitsThisTerm} · Medications: ${data.medicationsThisTerm} · Referrals: ${data.referralsThisTerm} · Emergencies: ${data.emergenciesThisTerm}`
+      : schoolName;
 
   return (
     <div className="flex flex-col gap-6">
@@ -27,7 +39,7 @@ export function ReportsSection({ data, schoolName }: { data: HealthReportsData; 
         <TableExportMenu
           filenameStub={`${schoolName}-health-summary`}
           title="Health Summary"
-          subtitle={schoolName}
+          subtitle={summarySubtitle}
           rows={summaryRows}
         />
       </div>

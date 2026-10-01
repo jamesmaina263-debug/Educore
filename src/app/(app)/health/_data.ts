@@ -15,6 +15,26 @@ function fullName(row: { first_name: string; last_name: string } | null) {
   return row ? `${row.first_name} ${row.last_name}` : "Unknown";
 }
 
+interface ExportStudentJoin {
+  first_name: string;
+  last_name: string;
+  admission_number: string | null;
+  streams: { name: string; classes: { name: string } | null } | null;
+}
+
+// Student identity columns for the exported reports (name / admission no / class), same class
+// label convention as the KNEC export ("<class> <stream>"). Missing pieces fall back to "" so a
+// deleted or unassigned student never breaks an export.
+function studentExportCols(row: unknown) {
+  const s = row as ExportStudentJoin | null;
+  const stream = s?.streams ?? null;
+  return {
+    "Student Name": s ? `${s.first_name} ${s.last_name}` : "Unknown",
+    "Admission No": s?.admission_number ?? "",
+    Class: stream ? `${stream.classes?.name ?? ""} ${stream.name}`.trim() : "",
+  };
+}
+
 export interface HealthContext {
   userName: string;
   userRole?: string;
@@ -107,6 +127,8 @@ export async function loadHealthContext(): Promise<HealthContext> {
         referralsThisTerm: 0,
         emergenciesThisTerm: 0,
         sickBayUtilizationRate: 0,
+        visitReasonExportRows: [],
+        summaryExportRows: [],
       },
     };
   }
@@ -123,19 +145,19 @@ export async function loadHealthContext(): Promise<HealthContext> {
     supabase.from("students").select("id, first_name, last_name").eq("status", "active").order("first_name"),
     supabase
       .from("sick_bay_visits")
-      .select("id, student_id, check_in_at, reason, symptoms, temperature_c, check_out_at, outcome, students(first_name, last_name)")
+      .select("id, student_id, check_in_at, reason, symptoms, temperature_c, check_out_at, outcome, students(first_name, last_name, admission_number, streams(name, classes(name)))")
       .order("check_in_at", { ascending: false }),
     supabase
       .from("medication_administrations")
-      .select("id, medication_name, dosage, route, administered_at, quantity_administered, students(first_name, last_name), administrator:administered_by(full_name)")
+      .select("id, medication_name, dosage, route, administered_at, quantity_administered, students(first_name, last_name, admission_number, streams(name, classes(name))), administrator:administered_by(full_name)")
       .order("administered_at", { ascending: false }),
     supabase
       .from("health_referrals")
-      .select("id, referred_to, reason, referral_date, status, guardian_notified, outcome_notes, students(first_name, last_name)")
+      .select("id, referred_to, reason, referral_date, status, guardian_notified, outcome_notes, students(first_name, last_name, admission_number, streams(name, classes(name)))")
       .order("referral_date", { ascending: false }),
     supabase
       .from("health_emergencies")
-      .select("id, incident_at, description, severity, action_taken, hospital_name, guardian_notified, students(first_name, last_name)")
+      .select("id, incident_at, description, severity, action_taken, hospital_name, guardian_notified, students(first_name, last_name, admission_number, streams(name, classes(name)))")
       .order("incident_at", { ascending: false }),
     supabase.from("inventory_categories").select("id").eq("name", "Medical Supplies").maybeSingle(),
     supabase.from("student_guardians").select("student_id, primary_contact, relationship, school_users(id, full_name, phone)"),
@@ -329,6 +351,50 @@ export async function loadHealthContext(): Promise<HealthContext> {
       .slice(0, 5),
   };
 
+  // Per-record rows for the Reports page exports, so each exported line says WHO it was about.
+  // The on-screen reason counts and summary cards are unchanged; only the downloads carry detail.
+  const dateOnly = (iso: string | null) => (iso ? iso.slice(0, 10) : "");
+  // Grouped by reason (most common first, matching the on-screen table), one line per visit.
+  const visitReasonExportRows = (sickBayRows ?? [])
+    .map((v) => ({
+      count: reasonCounts.get(v.reason) ?? 0,
+      row: {
+        Reason: v.reason,
+        ...studentExportCols(v.students),
+        "Visit Date": dateOnly(v.check_in_at),
+        Symptoms: v.symptoms ?? "",
+        Outcome: v.outcome ?? "",
+      },
+    }))
+    .sort((a, b) => b.count - a.count || a.row.Reason.localeCompare(b.row.Reason))
+    .map((r) => r.row);
+  const summaryExportRows = [
+    ...(sickBayRows ?? []).map((v) => ({
+      "Record Type": "Clinic Visit",
+      ...studentExportCols(v.students),
+      Date: dateOnly(v.check_in_at),
+      Details: [v.reason, v.symptoms].filter(Boolean).join(" - "),
+    })),
+    ...(medicationRows ?? []).map((m) => ({
+      "Record Type": "Medication Given",
+      ...studentExportCols(m.students),
+      Date: dateOnly(m.administered_at),
+      Details: [m.medication_name, m.dosage].filter(Boolean).join(" - "),
+    })),
+    ...(referralRows ?? []).map((r) => ({
+      "Record Type": "Referral",
+      ...studentExportCols(r.students),
+      Date: dateOnly(r.referral_date),
+      Details: [r.referred_to, r.reason].filter(Boolean).join(" - "),
+    })),
+    ...(emergencyRows ?? []).map((e) => ({
+      "Record Type": "Emergency",
+      ...studentExportCols(e.students),
+      Date: dateOnly(e.incident_at),
+      Details: [e.severity, e.description].filter(Boolean).join(" - "),
+    })),
+  ];
+
   const reportsData: HealthReportsData = {
     totalVisitsThisTerm: sickBayTableRows.length,
     commonReasons,
@@ -336,6 +402,8 @@ export async function loadHealthContext(): Promise<HealthContext> {
     referralsThisTerm: referralTableRows.length,
     emergenciesThisTerm: emergencyTableRows.length,
     sickBayUtilizationRate: 0,
+    visitReasonExportRows,
+    summaryExportRows,
   };
 
   return {
