@@ -22,17 +22,8 @@ export default async function StaffDirectoryPage({
 
   const supabase = await createClient();
 
-  const user = await getCachedUser();
+  const [user, schoolSlug] = await Promise.all([getCachedUser(), getSchoolSlug()]);
   if (!user) redirect("/login");
-  const schoolSlug = await getSchoolSlug();
-
-  const { data: schoolUser } = await supabase
-    .from("school_users")
-    .select("full_name, roles(display_name), schools(name)")
-    .eq("auth_user_id", user.id)
-    .maybeSingle();
-
-  const { data: canManage } = await supabase.rpc("auth_has_permission", { p_permission_key: "staff.manage" });
 
   // Paginated + searched server-side (2026-09-03 audit, finding A2). Staff rosters are
   // typically much smaller than student rosters, but a large multi-campus school group could
@@ -50,7 +41,17 @@ export default async function StaffDirectoryPage({
   }
 
   const from = (page - 1) * PAGE_SIZE;
-  const { data: staffRows, count } = await query.order("full_name").range(from, from + PAGE_SIZE - 1);
+  // Header lookup, permission check and roster query are independent -- one batch, not three
+  // sequential round trips.
+  const [{ data: schoolUser }, { data: canManage }, { data: staffRows, count }] = await Promise.all([
+    supabase
+      .from("school_users")
+      .select("full_name, roles(display_name), schools(name)")
+      .eq("auth_user_id", user.id)
+      .maybeSingle(),
+    supabase.rpc("auth_has_permission", { p_permission_key: "staff.manage" }),
+    query.order("full_name").range(from, from + PAGE_SIZE - 1),
+  ]);
 
   const rows: StaffRow[] = (staffRows ?? []).map((s) => ({
     id: s.id,

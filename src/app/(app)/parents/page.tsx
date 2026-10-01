@@ -12,12 +12,6 @@ export default async function ParentsDirectoryPage() {
   const user = await getCachedUser();
   if (!user) redirect("/login");
 
-  const { data: schoolUser } = await supabase
-    .from("school_users")
-    .select("full_name, roles(display_name), schools(name)")
-    .eq("auth_user_id", user.id)
-    .maybeSingle();
-
   // Guardian accounts are created the moment an online/walk-in application is
   // submitted, well before any admission decision -- that's how a parent logs in
   // to check status, respond to an interview, pay a deposit, etc. while their
@@ -29,9 +23,16 @@ export default async function ParentsDirectoryPage() {
   // pending, has no row here and correctly stays out of this list -- their
   // account (and its PII) can still exist for portal login/audit purposes, but it
   // is not "stored" in the sense of appearing as one of the school's parents.
-  const { data: guardianLinks } = await supabase
-    .from("student_guardians")
-    .select("guardian_user_id, students(first_name, last_name)");
+  // Header lookup, guardian links and the delete permission don't depend on each other: one batch.
+  const [{ data: schoolUser }, { data: guardianLinks }, { data: canDeleteGuardians }] = await Promise.all([
+    supabase
+      .from("school_users")
+      .select("full_name, roles(display_name), schools(name)")
+      .eq("auth_user_id", user.id)
+      .maybeSingle(),
+    supabase.from("student_guardians").select("guardian_user_id, students(first_name, last_name)"),
+    supabase.rpc("auth_has_permission", { p_permission_key: "guardians.delete" }),
+  ]);
 
   const childrenByParent = new Map<string, string[]>();
   for (const link of guardianLinks ?? []) {
@@ -53,10 +54,6 @@ export default async function ParentsDirectoryPage() {
         .in("id", admittedGuardianIds)
         .order("full_name")
     : { data: [] };
-
-  const { data: canDeleteGuardians } = await supabase.rpc("auth_has_permission", {
-    p_permission_key: "guardians.delete",
-  });
 
   const rows: ParentRow[] = (parentRows ?? []).map((p) => ({
     id: p.id,

@@ -32,23 +32,127 @@ export default async function StudentProfilePage({
   const { id } = await params;
   const supabase = await createClient();
 
-  const user = await getCachedUser();
+  const [user, schoolSlug] = await Promise.all([getCachedUser(), getSchoolSlug()]);
   if (!user) redirect("/login");
-  const schoolSlug = await getSchoolSlug();
 
-  const { data: schoolUser } = await supabase
-    .from("school_users")
-    .select("full_name, roles(display_name), schools(name, boarding_enabled)")
-    .eq("auth_user_id", user.id)
-    .maybeSingle();
+  const ninetyDaysAgo = new Date();
+  ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
 
-  const { data: student } = await supabase
-    .from("students")
-    .select(
-      "id, admission_number, upi_number, birth_certificate_number, nemis_sync_status, nemis_synced_at, nemis_notes, first_name, last_name, other_names, date_of_birth, gender, status, admission_date, streams(name, class_id, classes(name))",
-    )
-    .eq("id", id)
-    .maybeSingle();
+  // Round 1: every query that needs only the student id (or nothing) runs in ONE batch. This page
+  // used to make ~13 sequential Supabase round trips before it could render; the queries below
+  // are all independent of each other, so the page now waits only for the slowest one. Nothing
+  // here reads another query's result. Queries that DO depend on these (pathway marks, biometric
+  // credentials/devices, handoff checklist) run in Round 2 further down.
+  const [
+    { data: schoolUser },
+    { data: student },
+    { data: originatingApplication },
+    growthSummary,
+    { data: guardianLinks },
+    { data: documentRows },
+    { data: certificateRows },
+    { data: disciplineRows },
+    { data: canManageStudentsData },
+    { data: canDeleteStudentsData },
+    { data: canUploadDocumentsData },
+    { data: canReadMedicalData },
+    { data: canReadDisciplineData },
+    { data: canReadFinanceData },
+    { data: canIssueCertificatesData },
+    { data: canWriteDisciplineData },
+    { data: canViewBiometricData },
+    { data: canEnrollBiometricData },
+    { data: canRevokeBiometricData },
+    { data: disciplineModuleEnabledData },
+    { data: transportModuleEnabledData },
+    { data: biometricProfileRow },
+    { data: attendanceRows },
+    { data: balanceRow },
+    { data: boardingRow },
+    { data: transportRow },
+    { data: latestReportCard },
+    { data: financialAccount },
+  ] = await Promise.all([
+    supabase
+      .from("school_users")
+      .select("full_name, roles(display_name), schools(name, boarding_enabled)")
+      .eq("auth_user_id", user.id)
+      .maybeSingle(),
+    supabase
+      .from("students")
+      .select(
+        "id, admission_number, upi_number, birth_certificate_number, nemis_sync_status, nemis_synced_at, nemis_notes, first_name, last_name, other_names, date_of_birth, gender, status, admission_date, streams(name, class_id, classes(name))",
+      )
+      .eq("id", id)
+      .maybeSingle(),
+    supabase.from("applications").select("id, application_number").eq("resulting_student_id", id).maybeSingle(),
+    getStudentGrowth(id),
+    supabase
+      .from("student_guardians")
+      .select("id, relationship, primary_contact, school_users(full_name, phone)")
+      .eq("student_id", id),
+    supabase
+      .from("documents")
+      .select("id, category, file_name, storage_path, storage_bucket, created_at")
+      .eq("student_id", id)
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("certificates")
+      .select("id, certificate_type, title, description, issued_date")
+      .eq("student_id", id)
+      .order("issued_date", { ascending: false }),
+    supabase
+      .from("discipline_records")
+      .select("id, incident_date, category, description, action_taken, visible_to_guardian")
+      .eq("student_id", id)
+      .order("incident_date", { ascending: false }),
+    supabase.rpc("auth_has_permission", { p_permission_key: "students.write" }),
+    supabase.rpc("auth_has_permission", { p_permission_key: "students.delete" }),
+    supabase.rpc("auth_has_permission", { p_permission_key: "students.documents.write" }),
+    supabase.rpc("auth_has_permission", { p_permission_key: "students.medical.read" }),
+    supabase.rpc("auth_has_permission", { p_permission_key: "discipline.read_any" }),
+    supabase.rpc("auth_has_permission", { p_permission_key: "finance.read" }),
+    supabase.rpc("auth_has_permission", { p_permission_key: "certificates.write" }),
+    supabase.rpc("auth_has_permission", { p_permission_key: "discipline.write" }),
+    supabase.rpc("auth_has_permission", { p_permission_key: "biometric.view" }),
+    supabase.rpc("auth_has_permission", { p_permission_key: "biometric.enroll" }),
+    supabase.rpc("auth_has_permission", { p_permission_key: "biometric.revoke" }),
+    supabase.rpc("auth_school_module_enabled", { p_key: "discipline" }),
+    supabase.rpc("auth_school_module_enabled", { p_key: "transport" }),
+    supabase
+      .from("biometric_profiles")
+      .select("id, status")
+      .eq("person_type", "student")
+      .eq("person_id", id)
+      .maybeSingle(),
+    supabase
+      .from("student_attendance")
+      .select("status")
+      .eq("student_id", id)
+      .eq("session", "class")
+      .gte("attendance_date", ninetyDaysAgo.toISOString().slice(0, 10)),
+    supabase.from("v_student_balances").select("balance, credit_balance").eq("student_id", id).maybeSingle(),
+    supabase
+      .from("hostel_allocations")
+      .select("hostel_rooms(room_number, block)")
+      .eq("student_id", id)
+      .eq("status", "active")
+      .maybeSingle(),
+    supabase
+      .from("student_transport_assignments")
+      .select("pickup_point, transport_routes(name)")
+      .eq("student_id", id)
+      .eq("status", "active")
+      .maybeSingle(),
+    supabase
+      .from("report_cards")
+      .select("id, generated_at, exams(name)")
+      .eq("student_id", id)
+      .order("generated_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    supabase.from("student_financial_accounts").select("payment_reference").eq("student_id", id).maybeSingle(),
+  ]);
 
   if (!student) notFound();
 
@@ -62,19 +166,41 @@ export default async function StudentProfilePage({
   // does, since there's no canonical grade-number column. RLS on `marks` already scopes what comes back
   // to what this viewer (staff or guardian) is allowed to see, so no extra permission check is needed here.
   const showsPathwayFit = !!studentClassName && /grade\s*9\b/i.test(studentClassName);
-  const { data: pathwayMarkRows } = showsPathwayFit
-    ? await supabase
-        .from("marks")
-        .select(
-          "subject_id, exam_id, raw_score, band_id, subjects(name, is_core, subject_catalogue(pathway)), grading_scale_bands(label)",
-        )
-        .eq("student_id", id)
-        .eq("class_id", studentStream!.class_id)
-    : { data: null };
-
-  const { data: pathwayExamSubjectRows } = showsPathwayFit && studentStream
-    ? await supabase.from("exam_subjects").select("exam_id, subject_id, max_score").eq("class_id", studentStream.class_id)
-    : { data: null };
+  // Round 2: queries that depend on Round 1 results (student's class, biometric profile, permission,
+  // originating application). Again one batch instead of four sequential awaits.
+  const [
+    { data: pathwayMarkRows },
+    { data: pathwayExamSubjectRows },
+    { data: biometricCredentialRows },
+    { data: biometricDeviceRows },
+    { data: handoffChecklist },
+  ] = await Promise.all([
+    showsPathwayFit
+      ? supabase
+          .from("marks")
+          .select(
+            "subject_id, exam_id, raw_score, band_id, subjects(name, is_core, subject_catalogue(pathway)), grading_scale_bands(label)",
+          )
+          .eq("student_id", id)
+          .eq("class_id", studentStream!.class_id)
+      : Promise.resolve({ data: null }),
+    showsPathwayFit && studentStream
+      ? supabase.from("exam_subjects").select("exam_id, subject_id, max_score").eq("class_id", studentStream.class_id)
+      : Promise.resolve({ data: null }),
+    biometricProfileRow
+      ? supabase
+          .from("biometric_credentials")
+          .select("id, credential_type, provider, status, enrolled_at, revoked_at, biometric_devices(name)")
+          .eq("profile_id", (biometricProfileRow as BiometricProfileRow).id)
+          .order("enrolled_at", { ascending: false })
+      : Promise.resolve({ data: null }),
+    canEnrollBiometricData === true
+      ? supabase.from("biometric_devices").select("id, name, location").eq("status", "active").order("name")
+      : Promise.resolve({ data: null }),
+    originatingApplication
+      ? supabase.rpc("check_admission_checklist", { p_application_id: originatingApplication.id })
+      : Promise.resolve({ data: null }),
+  ]);
 
   const pathwayMaxScoreByKey = new Map<string, number>();
   for (const es of pathwayExamSubjectRows ?? []) {
@@ -106,19 +232,6 @@ export default async function StudentProfilePage({
       )
     : null;
 
-  const { data: originatingApplication } = await supabase
-    .from("applications")
-    .select("id, application_number")
-    .eq("resulting_student_id", id)
-    .maybeSingle();
-
-  const growthSummary = await getStudentGrowth(id);
-
-  const { data: guardianLinks } = await supabase
-    .from("student_guardians")
-    .select("id, relationship, primary_contact, school_users(full_name, phone)")
-    .eq("student_id", id);
-
   const guardians: GuardianRow[] = (guardianLinks ?? []).map((g) => ({
     id: g.id,
     full_name: (g.school_users as unknown as { full_name: string } | null)?.full_name ?? "—",
@@ -127,60 +240,12 @@ export default async function StudentProfilePage({
     primary_contact: g.primary_contact,
   }));
 
-  const { data: documentRows } = await supabase
-    .from("documents")
-    .select("id, category, file_name, storage_path, storage_bucket, created_at")
-    .eq("student_id", id)
-    .order("created_at", { ascending: false });
-
   const documents: DocumentRow[] = documentRows ?? [];
 
-  const { data: certificateRows } = await supabase
-    .from("certificates")
-    .select("id, certificate_type, title, description, issued_date")
-    .eq("student_id", id)
-    .order("issued_date", { ascending: false });
   const certificates: CertificateRow[] = certificateRows ?? [];
 
-  const { data: disciplineRows } = await supabase
-    .from("discipline_records")
-    .select("id, incident_date, category, description, action_taken, visible_to_guardian")
-    .eq("student_id", id)
-    .order("incident_date", { ascending: false });
   const disciplineRecords: DisciplineRow[] = disciplineRows ?? [];
 
-  // These 11 checks are independent of each other -- none depends on another's result -- so
-  // running them one at a time was 11 sequential network round-trips to Supabase on every
-  // visit to this page. Batching them cuts that to the time of the single slowest check.
-  const [
-    { data: canManageStudentsData },
-    { data: canDeleteStudentsData },
-    { data: canUploadDocumentsData },
-    { data: canReadMedicalData },
-    { data: canReadDisciplineData },
-    { data: canReadFinanceData },
-    { data: canIssueCertificatesData },
-    { data: canWriteDisciplineData },
-    { data: canViewBiometricData },
-    { data: canEnrollBiometricData },
-    { data: canRevokeBiometricData },
-    { data: disciplineModuleEnabledData },
-    { data: transportModuleEnabledData },
-  ] = await Promise.all([
-    supabase.rpc("auth_has_permission", { p_permission_key: "students.write" }),
-    supabase.rpc("auth_has_permission", { p_permission_key: "students.delete" }),
-    supabase.rpc("auth_has_permission", { p_permission_key: "students.documents.write" }),
-    supabase.rpc("auth_has_permission", { p_permission_key: "students.medical.read" }),
-    supabase.rpc("auth_has_permission", { p_permission_key: "discipline.read_any" }),
-    supabase.rpc("auth_has_permission", { p_permission_key: "finance.read" }),
-    supabase.rpc("auth_has_permission", { p_permission_key: "certificates.write" }),
-    supabase.rpc("auth_has_permission", { p_permission_key: "discipline.write" }),
-    supabase.rpc("auth_has_permission", { p_permission_key: "biometric.view" }),
-    supabase.rpc("auth_has_permission", { p_permission_key: "biometric.enroll" }),
-    supabase.rpc("auth_has_permission", { p_permission_key: "biometric.revoke" }),
-    supabase.rpc("auth_school_module_enabled", { p_key: "discipline" }),
-    supabase.rpc("auth_school_module_enabled", { p_key: "transport" }),
-  ]);
   const canManageStudents = canManageStudentsData === true;
   const canDeleteStudents = canDeleteStudentsData === true;
   const canUploadDocuments = canUploadDocumentsData === true;
@@ -205,21 +270,8 @@ export default async function StudentProfilePage({
   const canRevokeBiometric = canRevokeBiometricData === true;
   const canSeeBiometricTab = canViewBiometric || canEnrollBiometric || canRevokeBiometric;
 
-  const { data: biometricProfileRow } = await supabase
-    .from("biometric_profiles")
-    .select("id, status")
-    .eq("person_type", "student")
-    .eq("person_id", id)
-    .maybeSingle();
   const biometricProfile: BiometricProfileRow | null = biometricProfileRow as BiometricProfileRow | null;
 
-  const { data: biometricCredentialRows } = biometricProfile
-    ? await supabase
-        .from("biometric_credentials")
-        .select("id, credential_type, provider, status, enrolled_at, revoked_at, biometric_devices(name)")
-        .eq("profile_id", biometricProfile.id)
-        .order("enrolled_at", { ascending: false })
-    : { data: null };
   const biometricCredentials: BiometricCredentialRow[] = (biometricCredentialRows ?? []).map((c) => ({
     id: c.id,
     credential_type: c.credential_type,
@@ -230,9 +282,6 @@ export default async function StudentProfilePage({
     device_name: (c.biometric_devices as unknown as { name: string } | null)?.name ?? null,
   }));
 
-  const { data: biometricDeviceRows } = canEnrollBiometric
-    ? await supabase.from("biometric_devices").select("id, name, location").eq("status", "active").order("name")
-    : { data: null };
   const biometricDevices: BiometricDeviceOption[] = biometricDeviceRows ?? [];
 
   // Gap 5 (audit): post-enrollment handoff. Nothing previously enforced who confirms
@@ -243,53 +292,10 @@ export default async function StudentProfilePage({
   // students who actually came through Admissions (originatingApplication set); a manually
   // created student never had a checklist to complete. Errors are swallowed to a null
   // rather than failing the whole profile page — this is a supplementary display, not a gate.
-  const { data: handoffChecklist } = originatingApplication
-    ? await supabase.rpc("check_admission_checklist", { p_application_id: originatingApplication.id })
-    : { data: null };
   const biometricCaptured = biometricCredentials.some((c) => c.status === "active");
 
   // Overview tab: display-only aggregation pulled live from each module's own
   // authoritative table (Section 5.1) — nothing here is duplicated/stored on Students.
-  const ninetyDaysAgo = new Date();
-  ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
-
-  const [
-    { data: attendanceRows },
-    { data: balanceRow },
-    { data: boardingRow },
-    { data: transportRow },
-    { data: latestReportCard },
-    { data: financialAccount },
-  ] = await Promise.all([
-    supabase
-      .from("student_attendance")
-      .select("status")
-      .eq("student_id", id)
-      .eq("session", "class")
-      .gte("attendance_date", ninetyDaysAgo.toISOString().slice(0, 10)),
-    supabase.from("v_student_balances").select("balance, credit_balance").eq("student_id", id).maybeSingle(),
-    supabase
-      .from("hostel_allocations")
-      .select("hostel_rooms(room_number, block)")
-      .eq("student_id", id)
-      .eq("status", "active")
-      .maybeSingle(),
-    supabase
-      .from("student_transport_assignments")
-      .select("pickup_point, transport_routes(name)")
-      .eq("student_id", id)
-      .eq("status", "active")
-      .maybeSingle(),
-    supabase
-      .from("report_cards")
-      .select("id, generated_at, exams(name)")
-      .eq("student_id", id)
-      .order("generated_at", { ascending: false })
-      .limit(1)
-      .maybeSingle(),
-    supabase.from("student_financial_accounts").select("payment_reference").eq("student_id", id).maybeSingle(),
-  ]);
-
   const attendanceTotal = attendanceRows?.length ?? 0;
   const attendancePresent = (attendanceRows ?? []).filter((a) => a.status === "present").length;
   const attendanceRate = attendanceTotal > 0 ? Math.round((attendancePresent / attendanceTotal) * 100) : null;
