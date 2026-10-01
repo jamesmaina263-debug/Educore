@@ -24,15 +24,8 @@ export default async function StudentsPage({
 
   const supabase = await createClient();
 
-  const user = await getCachedUser();
+  const [user, schoolSlug] = await Promise.all([getCachedUser(), getSchoolSlug()]);
   if (!user) redirect("/login");
-  const schoolSlug = await getSchoolSlug();
-
-  const { data: schoolUser } = await supabase
-    .from("school_users")
-    .select("full_name, roles(display_name), schools(name)")
-    .eq("auth_user_id", user.id)
-    .maybeSingle();
 
   // "applied" and "approved" are interim admission-in-progress statuses (student record
   // created early in the Admissions wizard for duplicate-detection/FK-linking purposes, but
@@ -70,9 +63,16 @@ export default async function StudentsPage({
   }
 
   const from = (page - 1) * PAGE_SIZE;
-  const { data: students, count } = await query
-    .order("last_name")
-    .range(from, from + PAGE_SIZE - 1);
+  // The header lookup (school_users) and the roster query don't depend on each other, so they run
+  // together instead of back to back.
+  const [{ data: schoolUser }, { data: students, count }] = await Promise.all([
+    supabase
+      .from("school_users")
+      .select("full_name, roles(display_name), schools(name)")
+      .eq("auth_user_id", user.id)
+      .maybeSingle(),
+    query.order("last_name").range(from, from + PAGE_SIZE - 1),
+  ]);
 
   const studentIds = (students ?? []).map((s) => s.id);
 
