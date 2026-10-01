@@ -53,11 +53,22 @@ jobs:
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
         run: |
-          RESULT=$(curl -sf --request GET \
+          # Capture the HTTP status instead of `curl -sf`, which hid WHY the call failed
+          # (a run of red checks 2026-09-28..30 had no visible cause in the log). The
+          # token is only ever sent as a header and is never echoed.
+          HTTP_CODE=$(curl -s -o /tmp/functions_response.json -w "%{http_code}" --request GET \
             "https://api.supabase.com/v1/projects/alzqlvfaftwegptfbfej/functions" \
             --header "Authorization: Bearer $SUPABASE_ACCESS_TOKEN")
+          if [ "$HTTP_CODE" != "200" ]; then
+            MSG="Supabase Management API returned HTTP $HTTP_CODE (000 = no response). 401/403 usually means SUPABASE_ACCESS_TOKEN is expired, revoked or lacks access to this project; 429/5xx is transient. Response: $(head -c 300 /tmp/functions_response.json 2>/dev/null)"
+            echo "::error::$MSG"
+            echo "$MSG" > /tmp/drift_output.txt
+            exit 1
+          fi
+          RESULT=$(cat /tmp/functions_response.json)
           if [ -z "$RESULT" ]; then
             echo "::error::Empty response from Supabase Management API -- failing loudly."
+            echo "Empty response from Supabase Management API." > /tmp/drift_output.txt
             exit 1
           fi
           {
@@ -102,6 +113,9 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          # drift_output.txt only exists if an earlier step wrote it; without this guard
+          # a failed fetch step made this step fail too, on a missing file.
+          [ -f /tmp/drift_output.txt ] || echo "The check failed before producing output -- see the job log." > /tmp/drift_output.txt
           {
             echo "### Edge function drift check failed"
             echo '```'
