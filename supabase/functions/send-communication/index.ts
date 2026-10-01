@@ -37,8 +37,15 @@ Deno.serve(async (req) => {
   }
 
   try {
+    // Dedicated server-to-server secret (cron + admissions form). Independent of how Supabase's
+    // gateway handles sb_secret_ keys in Authorization. Unset DISPATCH_SECRET disables this path.
+    const dispatchSecret = Deno.env.get("DISPATCH_SECRET");
+    const providedDispatchSecret = req.headers.get("x-dispatch-secret");
+    const isDispatchSecretCaller =
+      !!dispatchSecret && !!providedDispatchSecret && timingSafeEqual(providedDispatchSecret, dispatchSecret);
+
     const authHeader = req.headers.get("Authorization");
-    if (!authHeader) {
+    if (!authHeader && !isDispatchSecretCaller) {
       return json({ error: "Missing Authorization header." }, 401);
     }
 
@@ -49,7 +56,8 @@ Deno.serve(async (req) => {
     // definition (anyone with that key already has full DB access) — used by
     // admin.functions.invoke() calls from server-side code with no user session, and by the
     // dispatch-communications cron sweep. Everyone else must be a real user JWT, checked below.
-    const isServiceRoleCaller = timingSafeEqual(authHeader, `Bearer ${serviceRoleKey}`);
+    const isServiceRoleCaller =
+      isDispatchSecretCaller || (!!authHeader && timingSafeEqual(authHeader, `Bearer ${serviceRoleKey}`));
 
     let query = serviceClient
       .from("notification_logs")
@@ -69,7 +77,7 @@ Deno.serve(async (req) => {
       const userClient = createClient(
         Deno.env.get("SUPABASE_URL")!,
         Deno.env.get("SUPABASE_ANON_KEY")!,
-        { global: { headers: { Authorization: authHeader } } },
+        { global: { headers: { Authorization: authHeader! } } },
       );
 
       const [{ data: canWrite }, { data: canWriteHealth }, { data: schoolId }] = await Promise.all([

@@ -5,6 +5,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { safeStorageFilename } from "@/lib/storage-path";
 import { getRealClientIp } from "@/lib/get-real-client-ip";
 import { sendSecurityAlert } from "@/lib/security-alert";
+import { dispatchQueuedCommunications } from "@/lib/dispatch-communications-client";
 
 const KENYA_PHONE_RE = /^\+254\d{9}$/;
 const GUARDIAN_VERIFICATION_PURPOSE = "guardian_verification";
@@ -311,12 +312,9 @@ export async function submitApplication(
     status: "queued",
     segments: Math.max(1, Math.ceil(confirmationBody.length / 160)),
   });
-  try {
-    await admin.functions.invoke("send-communication");
-  } catch {
-    // Best-effort — the row stays 'queued' and gets swept the next time a staff member opens
-    // Communication, same fallback path the absence-alert trigger already relies on.
-  }
+  // Best-effort — the row stays 'queued' and the daily dispatch-communications cron (or a staff
+  // member opening Communication) sweeps it. The helper never throws; it returns { error }.
+  await dispatchQueuedCommunications();
 
   return {
     error: null,

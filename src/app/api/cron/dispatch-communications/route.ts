@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { dispatchQueuedCommunications } from "@/lib/dispatch-communications-client";
 import { isValidCronRequest } from "@/lib/cron-auth";
 import { sendSecurityAlert } from "@/lib/security-alert";
 import { withTransientAuthRetry } from "@/lib/supabase/retry-transient-auth";
@@ -36,16 +36,6 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  let adminClient;
-  try {
-    adminClient = createAdminClient();
-  } catch (e) {
-    return NextResponse.json(
-      { error: e instanceof Error ? e.message : "Admin client not configured." },
-      { status: 500 },
-    );
-  }
-
   let totalSent = 0;
   let totalFailed = 0;
   let pages = 0;
@@ -54,9 +44,7 @@ export async function GET(request: Request) {
     // Wrapped so a transient gateway auth blip on this page's call (see
     // retry-transient-auth.ts) doesn't abort the whole sweep and strand the remaining pages
     // for tomorrow's run.
-    const { data, error } = await withTransientAuthRetry(() =>
-      adminClient.functions.invoke("send-communication"),
-    );
+    const { data, error } = await withTransientAuthRetry(() => dispatchQueuedCommunications());
     if (error) {
       // Report what was swept before the failure rather than discarding it — a partial sweep is
       // still real progress, and the next scheduled run picks up wherever this one left off.
