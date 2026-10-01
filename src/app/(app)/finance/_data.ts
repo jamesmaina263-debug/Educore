@@ -47,7 +47,38 @@ export interface FinanceContext {
  * all Finance data once, exactly as the pre-Phase-19 monolithic /finance page did — no
  * business logic changed, only where it lives.
  */
-export async function loadFinanceContext(): Promise<FinanceContext> {
+/**
+ * Fields of FinanceContext that come from the heavy per-school data queries (everything except
+ * the account/permission basics, which are always loaded).
+ */
+export type FinanceField = Exclude<
+  keyof FinanceContext,
+  | "userName"
+  | "userRole"
+  | "schoolName"
+  | "expenseApprovalThreshold"
+  | "feeAlertThreshold"
+  | "canRead"
+  | "canWrite"
+  | "canApproveDiscounts"
+  | "canApproveExpenses"
+  | "mpesaActive"
+>;
+
+const SKIPPED_QUERY = { data: null, error: null } as const;
+
+/**
+ * `fields` lets a page say which parts of the context it actually renders, so a light tab (e.g.
+ * Fee Alerts, Configuration) doesn't pay for ~15 whole-school queries it never reads. Omitting it
+ * loads everything, exactly as before -- the four heavy tabs (dashboard, reports, invoicing,
+ * receivables) and any caller not updated keep the previous behaviour. A field that is NOT listed
+ * comes back empty ([] / 0 / ""), so list every ctx field the page (and FinancePageShell, which
+ * reads activeTermName) uses.
+ */
+export async function loadFinanceContext(fields?: readonly FinanceField[]): Promise<FinanceContext> {
+  const needs = (...wanted: FinanceField[]) => !fields || wanted.some((f) => fields.includes(f));
+  const when = <T,>(on: boolean, query: PromiseLike<T>): PromiseLike<T | typeof SKIPPED_QUERY> =>
+    on ? query : Promise.resolve(SKIPPED_QUERY);
   const supabase = await createClient();
   const user = await getCachedUser();
   if (!user) redirect("/login");
@@ -143,32 +174,38 @@ export async function loadFinanceContext(): Promise<FinanceContext> {
     "streams",
   ] as const;
   const financeResults = await Promise.all([
-    supabase.from("academic_years").select("id, status").eq("status", "active"),
-    supabase.from("classes").select("id, name").order("level_order"),
-    supabase.from("fee_structures").select("id, name, term_id, class_id, boarding_type, fee_category, is_active, terms(name), classes(name)").order("created_at", { ascending: false }),
-    supabase.from("fee_items").select("fee_structure_id, name, amount"),
-    supabase.from("invoices").select("id, invoice_number, student_id, total_amount, status, created_at, term_id, students(first_name, last_name, current_class_id, admission_number), terms(name)").order("created_at", { ascending: false }),
-    supabase.from("payments").select("id, student_id, method, amount, reference, purpose, notes, status, phone_number, recorded_at, students(first_name, last_name)").order("recorded_at", { ascending: false }),
-    supabase.from("discounts").select("id, invoice_id, amount, reason, status, students(first_name, last_name)").order("created_at", { ascending: false }),
-    supabase.from("expenses").select("id, category, vendor, amount, description, status").order("created_at", { ascending: false }),
-    supabase.from("v_student_balances").select("student_id, total_invoiced, total_discounted, total_paid, balance, credit_balance, stream_id"),
-    supabase.from("payment_allocations").select("invoice_id, amount_allocated"),
-    supabase
-      .from("fee_waivers")
-      .select("id, name, waiver_type, discount_kind, discount_value, status, students(first_name, last_name), starts_term:terms!fee_waivers_starts_term_id_fkey(name)")
-      .order("created_at", { ascending: false }),
-    supabase
-      .from("students")
-      .select("id, first_name, last_name, admission_number, current_class_id")
-      .eq("status", "active")
-      .order("first_name"),
-    supabase.from("student_financial_accounts").select("student_id, payment_reference"),
-    supabase.from("receipts").select("payment_id, receipt_number"),
-    supabase.from("payment_reversals").select("payment_id, amount"),
+    when(needs("activeYearId", "terms", "termOptions", "activeTermName", "termInvoiced", "termCollected", "termDiscounted", "termOutstanding"), supabase.from("academic_years").select("id, status").eq("status", "active")),
+    when(needs("classes"), supabase.from("classes").select("id, name").order("level_order")),
+    when(needs("structureRows"), supabase.from("fee_structures").select("id, name, term_id, class_id, boarding_type, fee_category, is_active, terms(name), classes(name)").order("created_at", { ascending: false })),
+    when(needs("structureRows"), supabase.from("fee_items").select("fee_structure_id, name, amount")),
+    when(needs("invoiceRows", "invoiceOptions", "termInvoiced", "termCollected", "termDiscounted", "termOutstanding"), supabase.from("invoices").select("id, invoice_number, student_id, total_amount, status, created_at, term_id, students(first_name, last_name, current_class_id, admission_number), terms(name)").order("created_at", { ascending: false })),
+    when(needs("paymentRows", "unallocatedRows"), supabase.from("payments").select("id, student_id, method, amount, reference, purpose, notes, status, phone_number, recorded_at, students(first_name, last_name)").order("recorded_at", { ascending: false })),
+    when(needs("discountRows", "invoiceRows", "termInvoiced", "termCollected", "termDiscounted", "termOutstanding"), supabase.from("discounts").select("id, invoice_id, amount, reason, status, students(first_name, last_name)").order("created_at", { ascending: false })),
+    when(needs("expenseRows"), supabase.from("expenses").select("id, category, vendor, amount, description, status").order("created_at", { ascending: false })),
+    when(needs("balanceRows"), supabase.from("v_student_balances").select("student_id, total_invoiced, total_discounted, total_paid, balance, credit_balance, stream_id")),
+    when(needs("invoiceRows", "termInvoiced", "termCollected", "termDiscounted", "termOutstanding"), supabase.from("payment_allocations").select("invoice_id, amount_allocated")),
+    when(
+      needs("waiverRows"),
+      supabase
+        .from("fee_waivers")
+        .select("id, name, waiver_type, discount_kind, discount_value, status, students(first_name, last_name), starts_term:terms!fee_waivers_starts_term_id_fkey(name)")
+        .order("created_at", { ascending: false }),
+    ),
+    when(
+      needs("studentOptions", "balanceRows"),
+      supabase
+        .from("students")
+        .select("id, first_name, last_name, admission_number, current_class_id")
+        .eq("status", "active")
+        .order("first_name"),
+    ),
+    when(needs("balanceRows"), supabase.from("student_financial_accounts").select("student_id, payment_reference")),
+    when(needs("paymentRows"), supabase.from("receipts").select("payment_id, receipt_number")),
+    when(needs("paymentRows"), supabase.from("payment_reversals").select("payment_id, amount")),
     // Streams don't depend on anything above, so they ride in this batch instead of being an
     // extra sequential round trip after it. A failure still throws with the same message
     // ("Failed to load Finance data (streams)") via the loop below.
-    supabase.from("streams").select("id, class_id, classes(name)"),
+    when(needs("invoiceRows", "studentOptions", "balanceRows"), supabase.from("streams").select("id, class_id, classes(name)")),
   ]);
 
   // Same reasoning as the account/permission batch above: a failed query here used to
@@ -201,7 +238,7 @@ export async function loadFinanceContext(): Promise<FinanceContext> {
   ] = financeResults;
 
   const activeYearId = years?.[0]?.id ?? "";
-  const { data: terms, error: termsError } = activeYearId
+  const { data: terms, error: termsError } = activeYearId && needs("terms", "termOptions", "activeTermName", "termInvoiced", "termCollected", "termDiscounted", "termOutstanding")
     ? await supabase.from("terms").select("id, name, status").eq("academic_year_id", activeYearId)
     : { data: [], error: null };
   if (termsError) {

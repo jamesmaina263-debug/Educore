@@ -4,7 +4,7 @@ import { ExpensesSection } from "@/components/finance/expenses-section";
 import { FeeAlertThresholdPanel } from "@/components/finance/fee-alert-threshold-panel";
 
 export default async function FinanceConfigurationPage() {
-  const ctx = await loadFinanceContext();
+  const ctx = await loadFinanceContext(["expenseRows", "activeTermName"]);
   return (
     <FinancePageShell ctx={ctx} section="Configuration" title="Configuration">
       <div className="flex flex-col gap-6">

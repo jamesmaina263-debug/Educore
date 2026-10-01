@@ -14,7 +14,7 @@ export default async function FinanceStudentAccountsPage({
   const page = Math.max(1, Number(pageParam) || 1);
 
   const [ctx, { rows, totalCount }] = await Promise.all([
-    loadFinanceContext(),
+    loadFinanceContext(["classes", "studentOptions", "terms", "activeTermName"]),
     getStudentBalancesPage({ search: q, classId, page, pageSize: PAGE_SIZE }),
   ]);
   const activeTermId = ctx.terms.find((t) => t.status === "active")?.id ?? null;

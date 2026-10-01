@@ -4,7 +4,7 @@ import { DiscountsSection } from "@/components/finance/discounts-section";
 import { WaiversSection } from "@/components/finance/waivers-section";
 
 export default async function FinanceDiscountsWaiversPage() {
-  const ctx = await loadFinanceContext();
+  const ctx = await loadFinanceContext(["discountRows", "invoiceOptions", "waiverRows", "studentOptions", "termOptions", "activeTermName"]);
   return (
     <FinancePageShell ctx={ctx} section="Discounts & Waivers" title="Discounts & Waivers">
       <div className="flex flex-col gap-6">

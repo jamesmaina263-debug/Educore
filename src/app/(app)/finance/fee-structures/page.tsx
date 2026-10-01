@@ -3,7 +3,7 @@ import { FinancePageShell } from "@/components/finance/finance-page-shell";
 import { FeeStructuresSection } from "@/components/finance/fee-structures-section";
 
 export default async function FinanceFeeStructuresPage() {
-  const ctx = await loadFinanceContext();
+  const ctx = await loadFinanceContext(["structureRows", "activeYearId", "terms", "classes", "activeTermName"]);
   return (
     <FinancePageShell ctx={ctx} section="Fee Structures" title="Fee Structures">
       <FeeStructuresSection
