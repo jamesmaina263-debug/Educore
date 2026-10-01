@@ -104,22 +104,20 @@ export default async function AdmissionsPage({
 
   const supabase = await createClient();
 
-  const user = await getCachedUser();
+  const [user, schoolSlug] = await Promise.all([getCachedUser(), getSchoolSlug()]);
   if (!user) redirect("/login");
-  const schoolSlug = await getSchoolSlug();
 
-  const [{ data: schoolUser }, { data: canReview }, { data: canWrite }, { data: canReadFinance }, { data: transportModuleEnabledData }] = await Promise.all([
+  // Started now, awaited after the main list queries below are also in flight: the two batches
+  // don't depend on each other (the list queries only need view/search/page), so they used to run
+  // back to back for no reason. Supabase calls resolve with { error } rather than rejecting, so
+  // leaving this un-awaited for a moment can't cause an unhandled rejection.
+  const authBatch = Promise.all([
     supabase.from("school_users").select("full_name, roles(display_name), schools(name, slug, boarding_enabled)").eq("auth_user_id", user.id).maybeSingle(),
     supabase.rpc("auth_has_permission", { p_permission_key: "admissions.read_any" }),
     supabase.rpc("auth_has_permission", { p_permission_key: "admissions.write" }),
     supabase.rpc("auth_has_permission", { p_permission_key: "finance.read" }),
     supabase.rpc("auth_school_module_enabled", { p_key: "transport" }),
   ]);
-
-  const roleName = (schoolUser?.roles as unknown as { display_name: string } | null)?.display_name;
-  const school = schoolUser?.schools as unknown as { name: string; slug: string; boarding_enabled: boolean } | null;
-  const boardingModuleEnabled = school?.boarding_enabled ?? true;
-  const transportModuleEnabled = transportModuleEnabledData ?? true;
 
   // The working-queue table is now filtered (by `view`) + paginated server-side, so it no
   // longer silently truncates at a fixed row count as a school's admissions history grows.
@@ -193,6 +191,14 @@ export default async function AdmissionsPage({
       .select("id", { count: "exact", head: true })
       .in("status", ["accepted", "conditionally_accepted", "admission_pending"]),
   ]);
+
+  const [{ data: schoolUser }, { data: canReview }, { data: canWrite }, { data: canReadFinance }, { data: transportModuleEnabledData }] =
+    await authBatch;
+
+  const roleName = (schoolUser?.roles as unknown as { display_name: string } | null)?.display_name;
+  const school = schoolUser?.schools as unknown as { name: string; slug: string; boarding_enabled: boolean } | null;
+  const boardingModuleEnabled = school?.boarding_enabled ?? true;
+  const transportModuleEnabled = transportModuleEnabledData ?? true;
 
   const termNameById = new Map((terms ?? []).map((t) => [t.id, t.name]));
   const termsWithFeeStructure = new Set((feeStructures ?? []).map((f) => f.term_id));

@@ -140,6 +140,7 @@ export async function loadFinanceContext(): Promise<FinanceContext> {
     "financial accounts",
     "receipts",
     "payment reversals",
+    "streams",
   ] as const;
   const financeResults = await Promise.all([
     supabase.from("academic_years").select("id, status").eq("status", "active"),
@@ -164,6 +165,10 @@ export async function loadFinanceContext(): Promise<FinanceContext> {
     supabase.from("student_financial_accounts").select("student_id, payment_reference"),
     supabase.from("receipts").select("payment_id, receipt_number"),
     supabase.from("payment_reversals").select("payment_id, amount"),
+    // Streams don't depend on anything above, so they ride in this batch instead of being an
+    // extra sequential round trip after it. A failure still throws with the same message
+    // ("Failed to load Finance data (streams)") via the loop below.
+    supabase.from("streams").select("id, class_id, classes(name)"),
   ]);
 
   // Same reasoning as the account/permission batch above: a failed query here used to
@@ -192,6 +197,7 @@ export async function loadFinanceContext(): Promise<FinanceContext> {
     { data: accounts },
     { data: receipts },
     { data: reversals },
+    { data: streamsWithClass },
   ] = financeResults;
 
   const activeYearId = years?.[0]?.id ?? "";
@@ -203,11 +209,6 @@ export async function loadFinanceContext(): Promise<FinanceContext> {
     throw new Error("Failed to load Finance data (terms). Please try again.");
   }
 
-  const { data: streamsWithClass, error: streamsError } = await supabase.from("streams").select("id, class_id, classes(name)");
-  if (streamsError) {
-    console.error("[finance] failed to load streams", streamsError);
-    throw new Error("Failed to load Finance data (streams). Please try again.");
-  }
   const classNameByStream = new Map(
     (streamsWithClass ?? []).map((s) => [s.id, (s.classes as unknown as { name: string } | null)?.name ?? ""]),
   );
