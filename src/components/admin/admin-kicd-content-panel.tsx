@@ -48,23 +48,32 @@ export type KicdSourceRow = {
 
 export type KicdLearningAreaRow = { id: string; name: string; catalogue_id: string | null };
 export type CatalogueOption = { id: string; name: string; grade_band?: string | null };
+export type SubjectOption = { id: string; label: string };
 
 type Result = { error: string } | { success: true };
 
+// Two uses. Platform admin console: pass learningAreas + catalogue (free-text
+// learning area on import, plus the area -> catalogue link editor). School
+// management page: pass `subjects` (the school's own subjects) instead -- the
+// import is attached to one of them, and the link editor is not shown.
 export function AdminKicdContentPanel({
   sources,
-  learningAreas,
-  catalogue,
+  learningAreas = [],
+  catalogue = [],
+  subjects,
 }: {
   sources: KicdSourceRow[];
-  learningAreas: KicdLearningAreaRow[];
-  catalogue: CatalogueOption[];
+  learningAreas?: KicdLearningAreaRow[];
+  catalogue?: CatalogueOption[];
+  subjects?: SubjectOption[];
 }) {
+  const schoolMode = subjects !== undefined;
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [grade, setGrade] = useState("");
+  const [subjectId, setSubjectId] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
   const [form, setForm] = useState({ source_name: "", licence_reference: "", licence_scope: "", attribution: "", learning_area: "" });
 
@@ -84,6 +93,7 @@ export function AdminKicdContentPanel({
     const fd = new FormData();
     Object.entries(form).forEach(([k, v]) => fd.set(k, v));
     fd.set("grade", grade);
+    if (schoolMode) fd.set("subject_id", subjectId);
     fd.set("file", file);
     setError(null);
     setNotice(null);
@@ -104,7 +114,7 @@ export function AdminKicdContentPanel({
   return (
     <div className="flex flex-col gap-4">
       <div className="panel flex flex-col gap-3 p-4">
-        <p className="text-sm font-medium">Import a KICD document</p>
+        <p className="text-sm font-medium">{schoolMode ? "Import a curriculum document" : "Import a KICD document"}</p>
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="space-y-1.5">
             <Label>Import name</Label>
@@ -122,10 +132,28 @@ export function AdminKicdContentPanel({
             <Label>Licence scope (optional)</Label>
             <Input value={form.licence_scope} onChange={set("licence_scope")} placeholder="Grades / learning areas covered" />
           </div>
-          <div className="space-y-1.5">
-            <Label>Learning area</Label>
-            <Input value={form.learning_area} onChange={set("learning_area")} placeholder="e.g. Mathematics" />
-          </div>
+          {schoolMode ? (
+            <div className="space-y-1.5">
+              <Label>Subject</Label>
+              <Select value={subjectId || undefined} onValueChange={setSubjectId}>
+                <SelectTrigger aria-label="Subject this document covers">
+                  <SelectValue placeholder="Choose a subject" />
+                </SelectTrigger>
+                <SelectContent>
+                  {(subjects ?? []).map((sub) => (
+                    <SelectItem key={sub.id} value={sub.id}>
+                      {sub.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          ) : (
+            <div className="space-y-1.5">
+              <Label>Learning area</Label>
+              <Input value={form.learning_area} onChange={set("learning_area")} placeholder="e.g. Mathematics" />
+            </div>
+          )}
           <div className="space-y-1.5">
             <Label>Grade</Label>
             <Select value={grade || undefined} onValueChange={setGrade}>
@@ -150,7 +178,7 @@ export function AdminKicdContentPanel({
         </div>
       </div>
 
-      {learningAreas.length > 0 && (
+      {!schoolMode && learningAreas.length > 0 && (
         <div className="panel flex flex-col gap-2 p-4">
           <p className="text-sm font-medium">Learning area → school subject link</p>
           <p className="text-xs text-muted-foreground">
@@ -186,7 +214,9 @@ export function AdminKicdContentPanel({
       {notice && <p className="panel p-3 text-sm">{notice}</p>}
 
       {sources.length === 0 ? (
-        <p className="panel border-dashed p-8 text-center text-sm text-muted-foreground">No KICD content imported yet.</p>
+        <p className="panel border-dashed p-8 text-center text-sm text-muted-foreground">
+          {schoolMode ? "Nothing imported for your school yet." : "No KICD content imported yet."}
+        </p>
       ) : (
         sources.map((s) => (
           <div key={s.id} className="panel flex flex-col gap-2 p-4">

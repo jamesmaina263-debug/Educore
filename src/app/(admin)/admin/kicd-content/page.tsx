@@ -32,11 +32,12 @@ export default async function AdminKicdContentPage() {
         <p className="text-sm text-muted-foreground">
           Import official curriculum documents as shared content for all schools. Every import needs a licence reference and
           attribution, starts <strong>unpublished</strong>, and only becomes visible after you review it and publish it. Withdrawing a
-          source hides it from every school immediately. Content imported by a school&apos;s own management is private to that school
-          and is labelled below; you can still withdraw it. Published <strong>platform-wide</strong> content (not tied to a school)
-          grounds AI Scheme of Work drafts for classes with a KICD grade set, in subjects whose catalogue entry is linked to the
-          learning area below. A school&apos;s own reviewed content always takes precedence. Schools&apos; own private KICD imports
-          don&apos;t ground generation yet.
+          source hides it from every school immediately. Each school&apos;s own management imports and publishes their school&apos;s
+          content from their KICD Content page; it is private to that school, labelled below, and you can still withdraw it. Published
+          content grounds AI Scheme of Work drafts for classes with a KICD grade set, in subjects whose catalogue entry is linked to the
+          learning area (platform-wide content is linked by you below; a school&apos;s own imports are linked automatically to the
+          subject they were uploaded for). A school&apos;s own content takes precedence over platform-wide content, and its reviewed
+          Curriculum Content takes precedence over both.
         </p>
       </div>
       <AdminKicdContentPanel

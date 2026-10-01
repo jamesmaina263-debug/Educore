@@ -4,7 +4,6 @@ import {
   Bar,
   BarChart,
   CartesianGrid,
-  Label,
   LabelList,
   Legend,
   Line,

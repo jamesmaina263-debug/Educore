@@ -20,13 +20,30 @@ import { NextResponse, type NextRequest } from "next/server";
 // errors) without needing a new table/RLS surface for what should be a
 // short-lived diagnostic tool once the enforcing policy has run clean for a
 // while.
+//
+// Because it is unauthenticated, it is bounded: oversized bodies are dropped, at most
+// MAX_REPORTS_PER_REQUEST entries are logged per request, and each logged entry is truncated,
+// so a hostile caller can't flood Vercel logs / Sentry with arbitrary payloads.
+const MAX_BODY_BYTES = 16 * 1024;
+const MAX_REPORTS_PER_REQUEST = 10;
+const MAX_LOG_CHARS = 2000;
+
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json();
-    const reports = Array.isArray(body) ? body : [body];
+    const declaredLength = Number(req.headers.get("content-length") ?? "0");
+    if (declaredLength > MAX_BODY_BYTES) {
+      return NextResponse.json({ ok: true }, { status: 202 });
+    }
+    const raw = await req.text();
+    if (raw.length > MAX_BODY_BYTES) {
+      return NextResponse.json({ ok: true }, { status: 202 });
+    }
+    const body = JSON.parse(raw);
+    const reports = (Array.isArray(body) ? body : [body]).slice(0, MAX_REPORTS_PER_REQUEST);
     for (const report of reports) {
+      if (report === null || typeof report !== "object") continue;
       const csp = report.body ?? report["csp-report"] ?? report;
-      console.error("[csp-violation]", JSON.stringify(csp));
+      console.error("[csp-violation]", JSON.stringify(csp).slice(0, MAX_LOG_CHARS));
     }
   } catch {
     // Malformed report body -- nothing to act on, don't fail the (fire-and-forget) beacon.

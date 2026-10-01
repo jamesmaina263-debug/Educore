@@ -42,7 +42,10 @@ describe("mergeCurriculumStrands", () => {
 function fake(tables: Record<string, unknown>) {
   const calls: { table: string; op: string; args: unknown[] }[] = [];
   const from = vi.fn((t: string) => {
-    const result = tables[t] ?? { data: null, error: null };
+    // An array is a queue of results, one per from(t) call, for tests that
+    // query the same table twice (platform-wide, then the school's own).
+    const raw = tables[t];
+    const result = (Array.isArray(raw) ? raw.shift() : raw) ?? { data: null, error: null };
     const chain: Record<string, unknown> = {};
     for (const op of ["select", "eq", "in", "order", "is"]) {
       chain[op] = (...args: unknown[]) => (calls.push({ table: t, op, args }), chain);
@@ -99,5 +102,38 @@ describe("fetchSharedKicdStrands", () => {
     const client = { from: () => { throw new Error("db down"); } } as unknown as SupabaseClient;
     vi.spyOn(console, "error").mockImplementation(() => {});
     expect(await fetchSharedKicdStrands(client, ids)).toEqual([]);
+  });
+
+  describe("the school's own published sources", () => {
+    const own = (name: string, lo: string) => ({ data: [{ name, level_order: 0, kicd_sub_strands: [{ name: "Whole", learning_outcomes: lo, key_inquiry_questions: null, rubric_text: null }] }], error: null });
+    const withSchool = { ...ok, classes: { data: { kicd_grade: "G6", school_id: "sch1" } } };
+
+    it("filters the second query to the class's own school AND published only", async () => {
+      const f = fake({ ...withSchool, kicd_strands: [strandRows, own("Numbers", "own")] });
+      await fetchSharedKicdStrands(f.client, ids);
+      const calls = f.calls.filter((c) => c.table === "kicd_strands");
+      expect(calls).toContainEqual({ table: "kicd_strands", op: "eq", args: ["kicd_content_sources.school_id", "sch1"] });
+      expect(calls.filter((c) => c.op === "eq" && c.args[0] === "kicd_content_sources.is_enabled")).toHaveLength(2);
+    });
+    it("lets the school's own KICD content win over platform-wide on a name conflict", async () => {
+      const out = await fetchSharedKicdStrands(fake({ ...withSchool, kicd_strands: [strandRows, own("Numbers", "own")] }).client, ids);
+      expect(out).toHaveLength(1);
+      expect(out[0].sub_strands.map((s) => s.learning_outcomes)).toEqual(["own"]);
+    });
+    it("keeps platform-wide strands the school hasn't replaced, and adds the school's own", async () => {
+      const out = await fetchSharedKicdStrands(fake({ ...withSchool, kicd_strands: [strandRows, own("Local strand", "own")] }).client, ids);
+      expect(out.map((s) => s.name)).toEqual(["Numbers", "Local strand"]);
+    });
+    it("uses the school's own content when there is no platform-wide content", async () => {
+      const out = await fetchSharedKicdStrands(fake({ ...withSchool, kicd_strands: [{ data: [], error: null }, own("Numbers", "own")] }).client, ids);
+      expect(out.map((s) => s.name)).toEqual(["Numbers"]);
+    });
+    it("fails closed to platform-wide only when the class has no school id (never queries unscoped)", async () => {
+      const f = fake(ok);
+      await fetchSharedKicdStrands(f.client, ids);
+      expect(f.calls.filter((c) => c.table === "kicd_strands" && c.args[0] === "kicd_content_sources.school_id")).toEqual([
+        { table: "kicd_strands", op: "is", args: ["kicd_content_sources.school_id", null] },
+      ]);
+    });
   });
 });
