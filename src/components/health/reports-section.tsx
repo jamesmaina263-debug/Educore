@@ -13,7 +13,20 @@ export interface HealthReportsData {
   summaryExportRows: Record<string, string | number>[];
 }
 
-export function ReportsSection({ data, schoolName }: { data: HealthReportsData; schoolName: string }) {
+export function ReportsSection({
+  data,
+  schoolName,
+  logoUrl,
+  nurseName,
+}: {
+  data: HealthReportsData;
+  schoolName: string;
+  /** School logo for the PDF header (omitted from the PDF if absent or unloadable). */
+  logoUrl?: string | null;
+  /** Pre-fills the nurse name on the PDF sign-off when the exporting user is the nurse; blank line otherwise. */
+  nurseName?: string | null;
+}) {
+  const signOff = { heading: "Nurse sign-off", printedName: nurseName };
   const totalsRow = {
     "Clinic Visits": data.totalVisitsThisTerm,
     "Medications Given": data.medicationsThisTerm,
@@ -41,6 +54,8 @@ export function ReportsSection({ data, schoolName }: { data: HealthReportsData; 
           title="Health Summary"
           subtitle={summarySubtitle}
           rows={summaryRows}
+          logoUrl={logoUrl}
+          signOff={signOff}
         />
       </div>
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
@@ -70,6 +85,8 @@ export function ReportsSection({ data, schoolName }: { data: HealthReportsData; 
             title="Visit Reasons"
             subtitle={schoolName}
             rows={reasonRows}
+            logoUrl={logoUrl}
+            signOff={signOff}
           />
         </div>
         <div className="overflow-x-auto">

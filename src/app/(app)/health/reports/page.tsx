@@ -15,7 +15,12 @@ export default async function HealthReportsPage() {
       title="Reports"
       noAccess={!(ctx.canReadAny || ctx.canWrite)}
     >
-      <ReportsSection data={ctx.reportsData} schoolName={ctx.schoolName} />
+      <ReportsSection
+        data={ctx.reportsData}
+        schoolName={ctx.schoolName}
+        logoUrl={ctx.schoolLogoUrl}
+        nurseName={/nurse/i.test(ctx.userRole ?? "") ? ctx.userName : null}
+      />
     </ModulePageShell>
   );
 }

@@ -39,6 +39,8 @@ export interface HealthContext {
   userName: string;
   userRole?: string;
   schoolName: string;
+  /** schools.logo_url (null when the school has not set one); used for the PDF report header. */
+  schoolLogoUrl: string | null;
   canReadAny: boolean;
   canReadMedicalRecords: boolean;
   canWrite: boolean;
@@ -65,7 +67,7 @@ export async function loadHealthContext(): Promise<HealthContext> {
   if (!user) redirect("/login");
 
   const [{ data: viewer }, { data: canReadAny }, { data: canWriteData }, { data: canReadMedicalData }, { data: canRequestData }, { data: moduleEnabled }] = await Promise.all([
-    supabase.from("school_users").select("id, full_name, roles(display_name), schools(name)").eq("auth_user_id", user.id).maybeSingle(),
+    supabase.from("school_users").select("id, full_name, roles(display_name), schools(name, logo_url)").eq("auth_user_id", user.id).maybeSingle(),
     supabase.rpc("auth_has_permission", { p_permission_key: "health.read_any" }),
     supabase.rpc("auth_has_permission", { p_permission_key: "health.write" }),
     supabase.rpc("auth_has_permission", { p_permission_key: "students.medical.read" }),
@@ -84,10 +86,11 @@ export async function loadHealthContext(): Promise<HealthContext> {
   const canRequestSupplies = canRequestData === true;
   const roleName = (viewer?.roles as unknown as { display_name: string } | null)?.display_name;
   const schoolName = (viewer?.schools as unknown as { name: string } | null)?.name ?? "EduCore";
+  const schoolLogoUrl = (viewer?.schools as unknown as { logo_url: string | null } | null)?.logo_url ?? null;
   const userName = viewer?.full_name ?? user.email ?? "Account";
   const myId = viewer?.id ?? null;
 
-  const base = { userName, userRole: roleName, schoolName, canReadAny: canReadAny === true, canReadMedicalRecords, canWrite, canRequestSupplies };
+  const base = { userName, userRole: roleName, schoolName, schoolLogoUrl, canReadAny: canReadAny === true, canReadMedicalRecords, canWrite, canRequestSupplies };
 
   // health.read_any gates the bulk of this module's SELECT queries below, but
   // a user granted only health.write (e.g. a nurse-assigned helper who should
