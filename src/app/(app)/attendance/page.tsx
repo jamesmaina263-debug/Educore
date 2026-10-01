@@ -32,7 +32,9 @@ export default async function AttendancePage({
   const user = await getCachedUser();
   if (!user) redirect("/login");
 
-  const [{ data: schoolUser }, { data: canMarkAny }, { data: canMark }, { data: canApproveCorrection }] = await Promise.all([
+  // The active-term lookup doesn't depend on the user or permissions, so it rides along in this
+  // first batch instead of being its own sequential round trip further down.
+  const [{ data: schoolUser }, { data: canMarkAny }, { data: canMark }, { data: canApproveCorrection }, { data: activeTerm }] = await Promise.all([
     supabase
       .from("school_users")
       .select("id, full_name, roles(display_name), schools(name)")
@@ -41,6 +43,7 @@ export default async function AttendancePage({
     supabase.rpc("auth_has_permission", { p_permission_key: "attendance.mark_any" }),
     supabase.rpc("auth_has_permission", { p_permission_key: "attendance.mark" }),
     supabase.rpc("auth_has_permission", { p_permission_key: "attendance.approve_correction" }),
+    supabase.from("terms").select("id, start_date, end_date").eq("status", "active").maybeSingle(),
   ]);
 
   const roleName = (schoolUser?.roles as unknown as { display_name: string } | null)?.display_name;
@@ -60,12 +63,6 @@ export default async function AttendancePage({
 
   const selectedStreamId = streamParam || streamOptions[0]?.id || null;
   const selectedStreamLabel = streamOptions.find((s) => s.id === selectedStreamId)?.label;
-
-  const { data: activeTerm } = await supabase
-    .from("terms")
-    .select("id, start_date, end_date")
-    .eq("status", "active")
-    .maybeSingle();
 
   let roster: RosterRow[] = [];
   if (selectedStreamId) {
