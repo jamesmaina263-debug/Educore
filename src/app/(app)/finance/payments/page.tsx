@@ -15,7 +15,7 @@ export default async function FinancePaymentsPage({
   const page = Math.max(1, Number(pageParam) || 1);
 
   const [ctx, { rows, totalCount }] = await Promise.all([
-    loadFinanceContext(),
+    loadFinanceContext(["unallocatedRows", "activeTermName"]),
     getPaymentsPage({ search: q, page, pageSize: PAGE_SIZE }),
   ]);
 
