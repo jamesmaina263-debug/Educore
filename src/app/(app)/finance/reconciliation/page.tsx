@@ -4,7 +4,7 @@ import { FinancePageShell } from "@/components/finance/finance-page-shell";
 import { ReconciliationSection, type StatementBatchRow } from "@/components/finance/reconciliation-section";
 
 export default async function FinanceReconciliationPage() {
-  const ctx = await loadFinanceContext();
+  const ctx = await loadFinanceContext([]);
   const supabase = await createClient();
 
   let batches: StatementBatchRow[] = [];

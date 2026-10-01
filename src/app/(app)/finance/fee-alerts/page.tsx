@@ -4,7 +4,7 @@ import { FinancePageShell } from "@/components/finance/finance-page-shell";
 import { FeeAlertsSection, type FeeAlertRow } from "@/components/finance/fee-alerts-section";
 
 export default async function FinanceFeeAlertsPage() {
-  const ctx = await loadFinanceContext();
+  const ctx = await loadFinanceContext([]);
   const supabase = await createClient();
 
   const { data: alertRows } = ctx.canRead
