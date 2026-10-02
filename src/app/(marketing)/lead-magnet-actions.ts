@@ -40,6 +40,8 @@ export async function submitLeadMagnet(
   }
 
   const email = String(formData.get("email") ?? "").trim().toLowerCase();
+  // Optional. Only used to greet the person by name in follow-up emails.
+  const name = String(formData.get("name") ?? "").replace(/\s+/g, " ").trim().slice(0, 100) || null;
   const resource = String(formData.get("resource") ?? "").trim() || "cbc_digital_readiness_checklist";
   const sourcePage = String(formData.get("source_page") ?? "").trim().slice(0, 200) || null;
   const attribution = parseAttributionFormData(formData);
@@ -88,12 +90,14 @@ export async function submitLeadMagnet(
   // treated the same as a fresh success: same response and download,
   // without a duplicate row or a leaked error.
   const lead = { email, resource, source_page: sourcePage };
-  let { error } = await supabase.from("marketing_leads").insert({ ...lead, ...attribution });
+  let { error } = await supabase
+    .from("marketing_leads")
+    .insert({ ...lead, ...(name ? { name } : {}), ...attribution });
   if (isMissingColumnError(error)) {
-    // The extra attribution columns come from a migration the deploy workflow
-    // applies in parallel with the app deploy. If the code is briefly live
-    // first, keep the lead (with the three original UTM columns) rather than
-    // failing the visitor's submission.
+    // The extra attribution and name columns come from migrations the deploy
+    // workflow applies in parallel with the app deploy. If the code is briefly
+    // live first, keep the lead (email plus the three original UTM columns)
+    // rather than failing the visitor's submission.
     ({ error } = await supabase
       .from("marketing_leads")
       .insert({ ...lead, ...legacyAttributionColumns(attribution) }));
