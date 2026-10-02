@@ -15,6 +15,33 @@ export interface AudienceRow {
   suppressed: boolean;
 }
 
+export interface ProspectRow {
+  source: string;
+  prospect_name: string | null;
+  org_name: string | null;
+  email: string;
+  first_seen: string;
+  suppressed: boolean;
+}
+
+export interface SequenceStep {
+  step_number: number;
+  delay_days: number;
+  subject: string;
+  body: string;
+  active: boolean;
+  sent: number;
+  failed: number;
+}
+
+export interface SequenceConfig {
+  enabled: boolean;
+  enabled_at: string | null;
+  steps: SequenceStep[];
+}
+
+export type CampaignAudienceKind = "owners" | "prospects";
+
 export interface CampaignHistoryRow {
   id: string;
   subject: string;
@@ -42,7 +69,11 @@ function validate(subject: string, body: string): string | null {
 // Authorization lives in the database: every RPC below raises unless auth_is_super_admin(), and
 // the Edge Function re-checks it. These actions deliberately do not trust the page-level redirect.
 
-export async function sendCampaignTestEmail(subject: string, body: string): Promise<ErrorResult | { success: true; sentTo: string }> {
+export async function sendCampaignTestEmail(
+  subject: string,
+  body: string,
+  audience: CampaignAudienceKind = "owners",
+): Promise<ErrorResult | { success: true; sentTo: string }> {
   const invalid = validate(subject, body);
   if (invalid) return { error: invalid };
 
@@ -54,7 +85,7 @@ export async function sendCampaignTestEmail(subject: string, body: string): Prom
 
   const { data, error } = await supabase.functions.invoke("send-owner-campaign", {
     headers: { Authorization: `Bearer ${session.access_token}` },
-    body: { test: true, subject: subject.trim(), body: body.trim() },
+    body: { test: true, subject: subject.trim(), body: body.trim(), audience },
   });
   if (error) return { error: await extractEdgeFunctionError(error, "Failed to send the test email.") };
   return { success: true, sentTo: String(data?.sent_to ?? "your login email") };
@@ -82,6 +113,54 @@ export async function createOwnerCampaign(
   void logAdminAction(supabase, "email_campaign_created", { campaign_id: data, subject: subject.trim() });
   revalidatePath("/admin/email-campaigns");
   return { success: true, campaignId: data as string };
+}
+
+// Same flow as createOwnerCampaign, for people who left their email on the marketing site but are
+// not onboarded to a school yet. Sending then goes through the same sendCampaignBatch loop.
+export async function createProspectCampaign(
+  subject: string,
+  body: string,
+  excludedEmails: string[],
+): Promise<ErrorResult | { success: true; campaignId: string }> {
+  const invalid = validate(subject, body);
+  if (invalid) return { error: invalid };
+
+  const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
+  const { data, error } = await supabase.rpc("create_prospect_email_campaign", {
+    p_subject: subject.trim(),
+    p_body: body.trim(),
+    p_excluded_emails: excludedEmails,
+  });
+  if (error) return { error: error.message };
+
+  void logAdminAction(supabase, "prospect_email_campaign_created", { campaign_id: data, subject: subject.trim() });
+  revalidatePath("/admin/email-campaigns");
+  return { success: true, campaignId: data as string };
+}
+
+// Saves the automated prospect sequence (on/off switch + the editable steps). The database checks
+// the caller is a super admin and that active steps are in increasing order of delay.
+export async function saveProspectSequence(
+  enabled: boolean,
+  steps: Pick<SequenceStep, "step_number" | "delay_days" | "subject" | "body" | "active">[],
+): Promise<ErrorResult | { success: true }> {
+  for (const s of steps) {
+    const invalid = validate(s.subject, s.body);
+    if (invalid) return { error: `Step ${s.step_number}: ${invalid}` };
+    if (!Number.isInteger(s.delay_days) || s.delay_days < 0 || s.delay_days > 90) {
+      return { error: `Step ${s.step_number}: days must be a whole number from 0 to 90.` };
+    }
+  }
+
+  const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
+  const { error } = await supabase.rpc("admin_save_prospect_sequence", { p_enabled: enabled, p_steps: steps });
+  if (error) return { error: error.message };
+
+  void logAdminAction(supabase, "prospect_sequence_saved", { enabled, steps: steps.length });
+  revalidatePath("/admin/email-campaigns");
+  return { success: true };
 }
 
 export async function sendCampaignBatch(

@@ -3,7 +3,7 @@ import { buildCorsHeaders } from "../_shared/cors.ts";
 import { getEmailProvider } from "../_shared/email/index.ts";
 import { renderCampaignEmail } from "../_shared/campaignEmail.ts";
 
-// Sends a promotional campaign to school owners, one small batch per call.
+// Sends a promotional campaign (school owners or prospects), one small batch per call.
 //
 // Caller must be a platform super_admin (a real user JWT -- the service role is NOT accepted,
 // so nothing server-side can fire a campaign by accident). Two modes:
@@ -63,6 +63,7 @@ Deno.serve(async (req) => {
         recipientName: "Test Owner",
         schoolName: "Your School (test)",
         unsubscribeUrl,
+        audience: payload.audience === "prospects" ? "prospects" : "owners",
       });
       await provider.send(to, `[TEST] ${subject}`, text, undefined, fromAddress, { html, replyTo });
       return json({ sent_to: to });
@@ -76,7 +77,7 @@ Deno.serve(async (req) => {
 
     const { data: campaign, error: campErr } = await admin
       .from("email_campaigns")
-      .select("id, subject, body")
+      .select("id, subject, body, audience")
       .eq("id", campaignId)
       .single();
     if (campErr || !campaign) return json({ error: "Campaign not found." }, 404);
@@ -96,6 +97,7 @@ Deno.serve(async (req) => {
         recipientName: r.recipient_name,
         schoolName: r.school_name,
         unsubscribeUrl,
+        audience: campaign.audience === "prospects" ? "prospects" : "owners",
       });
       try {
         await provider.send(r.email, campaign.subject, text, undefined, fromAddress, {

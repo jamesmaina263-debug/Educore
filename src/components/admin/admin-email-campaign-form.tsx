@@ -15,10 +15,13 @@ import {
 } from "@/components/ui/dialog";
 import {
   createOwnerCampaign,
+  createProspectCampaign,
   sendCampaignBatch,
   sendCampaignTestEmail,
   type AudienceRow,
+  type CampaignAudienceKind,
   type CampaignHistoryRow,
+  type ProspectRow,
 } from "@/app/(admin)/admin/email-campaigns/actions";
 
 type Progress = { campaignId: string; sent: number; failed: number; remaining: number };
@@ -27,14 +30,26 @@ function formatDate(iso: string): string {
   return new Date(iso).toLocaleString("en-KE", { dateStyle: "medium", timeStyle: "short" });
 }
 
+const SOURCE_LABELS: Record<string, string> = {
+  demo_request: "Demo request",
+  checklist_download: "Checklist download",
+  incomplete_demo_form: "Unfinished demo form",
+};
+
+// Both audiences are shown in one table shape so the send flow doesn't care which one it is.
+type RecipientRow = { email: string; org: string; name: string; detail: string; suppressed: boolean };
+
 export function AdminEmailCampaignForm({
   audience,
+  prospects,
   history,
 }: {
   audience: AudienceRow[];
+  prospects: ProspectRow[];
   history: CampaignHistoryRow[];
 }) {
   const router = useRouter();
+  const [kind, setKind] = useState<CampaignAudienceKind>("owners");
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
   const [excluded, setExcluded] = useState<Set<string>>(new Set());
@@ -44,9 +59,33 @@ export function AdminEmailCampaignForm({
   const [notice, setNotice] = useState<string | null>(null);
   const [progress, setProgress] = useState<Progress | null>(null);
 
-  const eligible = audience.filter((a) => !a.suppressed && !excluded.has(a.email));
-  const suppressedCount = audience.filter((a) => a.suppressed).length;
+  const recipients: RecipientRow[] =
+    kind === "owners"
+      ? audience.map((a) => ({
+          email: a.email,
+          org: a.school_name,
+          name: a.owner_name ?? "-",
+          detail: a.school_status,
+          suppressed: a.suppressed,
+        }))
+      : prospects.map((p) => ({
+          email: p.email,
+          org: p.org_name ?? "-",
+          name: p.prospect_name ?? "-",
+          detail: SOURCE_LABELS[p.source] ?? p.source,
+          suppressed: p.suppressed,
+        }));
+  const noun = kind === "owners" ? "owner" : "prospect";
+  const eligible = recipients.filter((a) => !a.suppressed && !excluded.has(a.email));
+  const suppressedCount = recipients.filter((a) => a.suppressed).length;
   const canSend = subject.trim().length > 0 && body.trim().length > 0 && eligible.length > 0;
+
+  function switchKind(next: CampaignAudienceKind) {
+    setKind(next);
+    setExcluded(new Set());
+    setError(null);
+    setNotice(null);
+  }
 
   function toggle(email: string) {
     setExcluded((prev) => {
@@ -85,7 +124,7 @@ export function AdminEmailCampaignForm({
     setError(null);
     setNotice(null);
     startTransition(async () => {
-      const res = await sendCampaignTestEmail(subject, body);
+      const res = await sendCampaignTestEmail(subject, body, kind);
       if ("error" in res) setError(res.error);
       else setNotice(`Test email sent to ${res.sentTo}.`);
     });
@@ -95,7 +134,8 @@ export function AdminEmailCampaignForm({
     setError(null);
     setNotice(null);
     startTransition(async () => {
-      const created = await createOwnerCampaign(subject, body, Array.from(excluded));
+      const create = kind === "owners" ? createOwnerCampaign : createProspectCampaign;
+      const created = await create(subject, body, Array.from(excluded));
       if ("error" in created) {
         setError(created.error);
         setConfirmOpen(false);
@@ -140,14 +180,38 @@ export function AdminEmailCampaignForm({
           </div>
         )}
 
+        <div className="flex flex-wrap gap-2" role="group" aria-label="Audience">
+          <Button
+            size="sm"
+            variant={kind === "owners" ? "default" : "outline"}
+            disabled={pending}
+            onClick={() => switchKind("owners")}
+          >
+            School owners ({audience.length})
+          </Button>
+          <Button
+            size="sm"
+            variant={kind === "prospects" ? "default" : "outline"}
+            disabled={pending}
+            onClick={() => switchKind("prospects")}
+          >
+            Prospects ({prospects.length})
+          </Button>
+        </div>
+        {kind === "prospects" && (
+          <p className="text-xs text-muted-foreground">
+            People who left their email on the website (demo requests, checklist downloads, unfinished demo forms) and
+            are not onboarded to a school. Anyone who becomes a school user is excluded automatically.
+          </p>
+        )}
         <div className="space-y-1">
           <p className="text-xs text-muted-foreground">Subject</p>
           <Input value={subject} onChange={(e) => setSubject(e.target.value)} maxLength={200} placeholder="New in EduCore: ..." />
         </div>
         <div className="space-y-1">
           <p className="text-xs text-muted-foreground">
-            Message (plain text; blank line = new paragraph). Use {"{{name}}"} for the owner&apos;s first name and{" "}
-            {"{{school}}"} for the school.
+            Message (plain text; blank line = new paragraph). Use {"{{name}}"} for the first name and{" "}
+            {"{{school}}"} for the school (&quot;your school&quot; if unknown).
           </p>
           <Textarea
             value={body}
@@ -162,7 +226,8 @@ export function AdminEmailCampaignForm({
             Send test to me
           </Button>
           <Button disabled={!canSend || pending} onClick={() => setConfirmOpen(true)}>
-            Send to {eligible.length} owner{eligible.length === 1 ? "" : "s"}
+            Send to {eligible.length} {noun}
+            {eligible.length === 1 ? "" : "s"}
           </Button>
         </div>
       </div>
@@ -170,7 +235,7 @@ export function AdminEmailCampaignForm({
       <div className="panel">
         <header className="border-b border-border px-4 py-2.5">
           <h2 className="text-[0.8125rem] font-semibold">
-            Recipients ({eligible.length} of {audience.length})
+            Recipients ({eligible.length} of {recipients.length})
             {suppressedCount > 0 ? ` · ${suppressedCount} unsubscribed` : ""}
           </h2>
           <p className="text-xs text-muted-foreground">Untick anyone to leave them out of this campaign.</p>
@@ -180,21 +245,21 @@ export function AdminEmailCampaignForm({
             <thead className="bg-muted/70">
               <tr>
                 <th className="w-10 px-3 py-2" />
-                <th className="px-3 py-2 text-left">School</th>
-                <th className="px-3 py-2 text-left">Owner</th>
+                <th className="px-3 py-2 text-left">{kind === "owners" ? "School" : "School / organisation"}</th>
+                <th className="px-3 py-2 text-left">{kind === "owners" ? "Owner" : "Name"}</th>
                 <th className="px-3 py-2 text-left">Email</th>
-                <th className="px-3 py-2 text-left">Status</th>
+                <th className="px-3 py-2 text-left">{kind === "owners" ? "Status" : "Source"}</th>
               </tr>
             </thead>
             <tbody>
               {audience.length === 0 && (
                 <tr>
                   <td colSpan={5} className="px-3 py-4 text-sm text-muted-foreground">
-                    No eligible school owners found.
+                    {kind === "owners" ? "No eligible school owners found." : "No prospects found."}
                   </td>
                 </tr>
               )}
-              {audience.map((a) => (
+              {recipients.map((a) => (
                 <tr key={a.email} className={a.suppressed ? "opacity-60" : undefined}>
                   <td className="px-3 py-2">
                     <input
@@ -205,10 +270,10 @@ export function AdminEmailCampaignForm({
                       onChange={() => toggle(a.email)}
                     />
                   </td>
-                  <td className="px-3 py-2">{a.school_name}</td>
-                  <td className="px-3 py-2">{a.owner_name ?? "-"}</td>
+                  <td className="px-3 py-2">{a.org}</td>
+                  <td className="px-3 py-2">{a.name}</td>
                   <td className="px-3 py-2">{a.email}</td>
-                  <td className="px-3 py-2">{a.suppressed ? "Unsubscribed" : a.school_status}</td>
+                  <td className="px-3 py-2">{a.suppressed ? "Unsubscribed" : a.detail}</td>
                 </tr>
               ))}
             </tbody>
@@ -268,7 +333,7 @@ export function AdminEmailCampaignForm({
           <DialogHeader>
             <DialogTitle>Send this campaign?</DialogTitle>
             <DialogDescription>
-              &ldquo;{subject.trim()}&rdquo; will be emailed to {eligible.length} school owner
+              &ldquo;{subject.trim()}&rdquo; will be emailed to {eligible.length} {kind === "owners" ? "school owner" : "prospect"}
               {eligible.length === 1 ? "" : "s"} as EDUCORE. This can&apos;t be recalled once sent.
             </DialogDescription>
           </DialogHeader>

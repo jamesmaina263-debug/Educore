@@ -29,4 +29,24 @@ describe("campaign email rendering", () => {
     expect(html).toContain("<p style=\"margin:0 0 14px\">One<br>Two</p>");
     expect(html).toContain(">Three</p>");
   });
+
+  it("uses a prospect footer and falls back to 'your school' when no school is known", () => {
+    const { text, html } = renderCampaignEmail({
+      body: "Hi {{name}}, a walkthrough for {{school}}?",
+      recipientName: null,
+      schoolName: null,
+      unsubscribeUrl: base.unsubscribeUrl,
+      audience: "prospects",
+    });
+    expect(text).toContain("Hi there, a walkthrough for your school?");
+    expect(text).toContain("you asked about EduCore on our website");
+    expect(text).not.toContain("owner of");
+    expect(text).toContain(base.unsubscribeUrl);
+    expect(html).toContain(`href="${base.unsubscribeUrl}"`);
+  });
+
+  it("keeps the school-owner footer when no audience is given", () => {
+    const { text } = renderCampaignEmail({ ...base, body: "Hello" });
+    expect(text).toContain("you're the owner of Tetu Bygrace Academy");
+  });
 });

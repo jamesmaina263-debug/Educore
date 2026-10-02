@@ -4,8 +4,11 @@
 export interface CampaignEmailInput {
   body: string;
   recipientName?: string | null;
-  schoolName: string;
+  // Prospects often have no school name on file; {{school}} then reads "your school".
+  schoolName?: string | null;
   unsubscribeUrl: string;
+  // Controls the footer wording only. Defaults to school owners (the original behaviour).
+  audience?: "owners" | "prospects";
 }
 
 export function escapeHtml(s: string): string {
@@ -22,16 +25,20 @@ export function firstName(fullName?: string | null): string {
   return first;
 }
 
-// {{name}} -> owner's first name (falls back to "there"), {{school}} -> the school's name.
+// {{name}} -> first name (falls back to "there"), {{school}} -> the school's name (falls back to
+// "your school").
 export function personalize(template: string, input: Pick<CampaignEmailInput, "recipientName" | "schoolName">): string {
   return template
     .replace(/\{\{\s*name\s*\}\}/gi, firstName(input.recipientName) || "there")
-    .replace(/\{\{\s*school\s*\}\}/gi, input.schoolName);
+    .replace(/\{\{\s*school\s*\}\}/gi, () => (input.schoolName ?? "").trim() || "your school");
 }
 
 export function renderCampaignEmail(input: CampaignEmailInput): { text: string; html: string } {
   const body = personalize(input.body, input).trim();
-  const footerLine = `You're receiving this because you're the owner of ${input.schoolName} on EduCore.`;
+  const footerLine =
+    input.audience === "prospects"
+      ? "You're receiving this because you asked about EduCore on our website."
+      : `You're receiving this because you're the owner of ${(input.schoolName ?? "").trim() || "your school"} on EduCore.`;
 
   const text = `${body}\n\n--\n${footerLine}\nUnsubscribe: ${input.unsubscribeUrl}\nEduCore - https://educoreafrica.com`;
 
