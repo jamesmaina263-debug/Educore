@@ -1,7 +1,6 @@
 "use server";
 
 import { headers } from "next/headers";
-import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getRealClientIp } from "@/lib/get-real-client-ip";
 import { sendSecurityAlert } from "@/lib/security-alert";
@@ -27,10 +26,14 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MIN_FILL_TIME_MS = 1500;
 
 // Inserts into public.marketing_demo_requests, a table isolated from the
-// app's tenant schema with insert-only RLS (see the Phase 8 migration).
-// This never touches any product/school data, and this file does not
-// modify src/lib/supabase/server.ts -- it only imports the existing,
-// already-shared createClient() helper the rest of the app also uses.
+// app's tenant schema (see the Phase 8 migration). This never touches any
+// product/school data.
+//
+// The insert runs through the service-role admin client, not the anon-keyed
+// client, so the table no longer needs a public INSERT policy: the abuse
+// guards above (honeypot, fill-time, per-IP rate limit) are enforced here in
+// the server action, which is the only legitimate writer. This lets the
+// anon/authenticated insert policy be dropped in a follow-up migration.
 export async function submitDemoRequest(
   _prevState: DemoRequestState,
   formData: FormData,
@@ -113,7 +116,6 @@ export async function submitDemoRequest(
   // No tagSentryRequestContext() call here: this is a public unauthenticated insert endpoint (see
   // the comment above) -- there is never a session to tag, so the call would be a guaranteed
   // no-op every time.
-  const supabase = await createClient();
   const lead = {
     name,
     school_name: schoolName,
@@ -123,7 +125,7 @@ export async function submitDemoRequest(
     student_count: studentCount,
     message: message || null,
   };
-  let { error } = await supabase
+  let { error } = await admin
     .from("marketing_demo_requests")
     .insert({ ...lead, ...attribution });
   if (isMissingColumnError(error)) {
@@ -131,7 +133,7 @@ export async function submitDemoRequest(
     // applies in parallel with the app deploy. If the code is briefly live
     // first, keep the lead (with the three original UTM columns) rather than
     // failing the visitor's submission.
-    ({ error } = await supabase
+    ({ error } = await admin
       .from("marketing_demo_requests")
       .insert({ ...lead, ...legacyAttributionColumns(attribution) }));
   }
