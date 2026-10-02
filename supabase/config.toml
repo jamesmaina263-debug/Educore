@@ -73,3 +73,9 @@ verify_jwt = false
 # verify_jwt just rejects anonymous callers at the gateway first.
 [functions.send-owner-campaign]
 verify_jwt = true
+
+# Called only by the /api/cron/prospect-sequence Vercel Cron route, with no user session, so it
+# cannot present a Supabase JWT. Authenticated instead by the x-dispatch-secret header checked
+# inside the function (same DISPATCH_SECRET and constant-time compare as send-communication).
+[functions.send-prospect-sequence]
+verify_jwt = false
