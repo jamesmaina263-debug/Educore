@@ -54,3 +54,14 @@ export const IMPORT_SHEET_HEADERS: Record<ImportSheetName, string[]> = {
   ],
   Guardians: ["Student Adm. No.", "Guardian Name", "Relationship", "Primary Contact", "Phone", "Email"],
 };
+
+/** A student's stream as joined by the export query: `streams:current_class_id(name, classes(name))`. */
+export type ExportedStudentStream = { name: string; classes: { name: string } | null } | null;
+
+/**
+ * The "Class" and "Stream" cells of a Students-sheet row, in IMPORT_SHEET_HEADERS.Students order.
+ * Blank (not "Unassigned") when the student has no stream, which the importer treats as "leave as is".
+ */
+export function classStreamCells(stream: ExportedStudentStream): [string, string] {
+  return [stream?.classes?.name ?? "", stream?.name ?? ""];
+}

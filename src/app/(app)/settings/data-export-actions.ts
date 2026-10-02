@@ -2,6 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { tagSentryRequestContext } from "@/lib/observability/sentry-context";
+import { IMPORT_SHEET_HEADERS, classStreamCells, type ExportedStudentStream } from "./data-import-shared";
 
 // SD-09 (GTM Readiness Protocol): school-level data export/portability.
 //
@@ -70,7 +71,7 @@ export async function exportSchoolData(): Promise<DataExportOutcome> {
     supabase
       .from("students")
       .select(
-        "admission_number, upi_number, first_name, last_name, other_names, date_of_birth, gender, status, admission_date, streams:current_class_id(name)",
+        "admission_number, upi_number, first_name, last_name, other_names, date_of_birth, gender, status, admission_date, streams:current_class_id(name, classes(name))",
       )
       .order("admission_number"),
     supabase
@@ -130,7 +131,8 @@ export async function exportSchoolData(): Promise<DataExportOutcome> {
   const sheets: DataExportSheet[] = [
     {
       name: "Students",
-      headers: ["Admission No.", "UPI No.", "First Name", "Last Name", "Other Names", "DOB", "Gender", "Class/Stream", "Status", "Admission Date"],
+      // Same headers the importer reads (and the template uses), so an exported file re-imports cleanly.
+      headers: IMPORT_SHEET_HEADERS.Students,
       rows: (students ?? []).map((s) => [
         s.admission_number ?? "",
         s.upi_number ?? "",
@@ -139,7 +141,7 @@ export async function exportSchoolData(): Promise<DataExportOutcome> {
         s.other_names ?? "",
         fmtDate(s.date_of_birth),
         s.gender ?? "",
-        (s.streams as unknown as { name: string } | null)?.name ?? "",
+        ...classStreamCells(s.streams as unknown as ExportedStudentStream),
         s.status ?? "",
         fmtDate(s.admission_date),
       ]),
