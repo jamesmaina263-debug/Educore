@@ -205,6 +205,14 @@ export function ExitIntentLeadMagnet() {
             ))}
 
             <input
+              type="text"
+              name="name"
+              maxLength={100}
+              autoComplete="given-name"
+              placeholder="Your first name (optional)"
+              className="h-10 w-full rounded-md border border-marketing-navy-900/15 bg-white px-3 text-sm text-marketing-navy-950 placeholder:text-marketing-navy-900/40 focus:border-marketing-gold-500 focus:outline-none focus:ring-2 focus:ring-marketing-gold-500/40"
+            />
+            <input
               type="email"
               name="email"
               required
