@@ -68,6 +68,7 @@ const NAV_GROUPS: AdminNavGroup[] = [
     items: [
       { href: "/admin/analytics", label: "Analytics", icon: BarChart3 },
       { href: "/admin/broadcast", label: "Broadcast", icon: Megaphone },
+      { href: "/admin/email-campaigns", label: "Email Campaigns", icon: Mail },
       { href: "/admin/company-email", label: "Company Email", icon: Mail },
       { href: "/admin/demo-requests", label: "Requests", icon: Inbox },
       { href: "/admin/leads", label: "Leads", icon: UserPlus },

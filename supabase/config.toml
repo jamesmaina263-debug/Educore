@@ -68,3 +68,8 @@ verify_jwt = false
 # than relying on Supabase's platform-level JWT gate.
 [functions.zoho-mail-monitor]
 verify_jwt = false
+
+# Super-admin-only promotional sender. Auth is enforced inside the function (user JWT + auth_is_super_admin);
+# verify_jwt just rejects anonymous callers at the gateway first.
+[functions.send-owner-campaign]
+verify_jwt = true
