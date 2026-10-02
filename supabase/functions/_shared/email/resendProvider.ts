@@ -1,4 +1,4 @@
-import type { EmailProvider, EmailAttachment } from "./types.ts";
+import type { EmailProvider, EmailAttachment, EmailSendOptions } from "./types.ts";
 
 export class ResendProvider implements EmailProvider {
   constructor(
@@ -6,7 +6,14 @@ export class ResendProvider implements EmailProvider {
     private fromAddress: string,
   ) {}
 
-  async send(to: string, subject: string, message: string, attachments?: EmailAttachment[], from?: string): Promise<void> {
+  async send(
+    to: string,
+    subject: string,
+    message: string,
+    attachments?: EmailAttachment[],
+    from?: string,
+    options?: EmailSendOptions,
+  ): Promise<void> {
     // Same reasoning as the WhatsApp/M-Pesa providers: send-communication processes a whole
     // batch sequentially, so one hung request here blocks every message behind it.
     let res: Response;
@@ -22,6 +29,9 @@ export class ResendProvider implements EmailProvider {
           to: [to],
           subject,
           text: message,
+          ...(options?.html ? { html: options.html } : {}),
+          ...(options?.replyTo ? { reply_to: options.replyTo } : {}),
+          ...(options?.headers ? { headers: options.headers } : {}),
           ...(attachments && attachments.length > 0
             ? { attachments: attachments.map((a) => ({ filename: a.filename, content: a.contentBase64 })) }
             : {}),
