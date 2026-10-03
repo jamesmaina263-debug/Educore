@@ -3,6 +3,7 @@ import { getPaymentsPage } from "@/lib/finance/get-payments-page";
 import { FinancePageShell } from "@/components/finance/finance-page-shell";
 import { PaymentsSection } from "@/components/finance/payments-section";
 import { UnallocatedPaymentsSection } from "@/components/finance/unallocated-payments-section";
+import { MpesaStatementExport } from "@/components/finance/mpesa-statement-export";
 
 const PAGE_SIZE = 25;
 
@@ -22,6 +23,8 @@ export default async function FinancePaymentsPage({
   return (
     <FinancePageShell ctx={ctx} section="Payments" title="Payments">
       <div className="flex flex-col gap-6">
+        <MpesaStatementExport />
+
         <PaymentsSection payments={rows} totalCount={totalCount} pageSize={PAGE_SIZE} canReverse={ctx.canWrite} />
 
         <div>
