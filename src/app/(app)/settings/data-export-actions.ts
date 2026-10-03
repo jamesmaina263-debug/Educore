@@ -93,7 +93,7 @@ export async function exportSchoolData(): Promise<DataExportOutcome> {
     supabase.from("academic_years").select("name, start_date, end_date, status").order("start_date"),
     supabase.from("terms").select("name, term_number, start_date, end_date, status, academic_years(name)").order("start_date"),
     supabase.from("classes").select("name, level_order, academic_years(name)").order("level_order"),
-    supabase.from("streams").select("name, capacity, classes(name)").order("name"),
+    supabase.from("streams").select("name, capacity, classes(name, academic_years(name))").order("name"),
     supabase.from("subjects").select("name, code, is_core, is_active").order("name"),
     supabase
       .from("invoices")
@@ -206,8 +206,11 @@ export async function exportSchoolData(): Promise<DataExportOutcome> {
     },
     {
       name: "Streams",
-      headers: ["Class", "Stream Name", "Capacity"],
-      rows: (streams ?? []).map((s) => [(s.classes as unknown as { name: string } | null)?.name ?? "", s.name ?? "", s.capacity ?? ""]),
+      headers: IMPORT_SHEET_HEADERS.Streams,
+      rows: (streams ?? []).map((s) => {
+        const cls = s.classes as unknown as { name: string; academic_years: { name: string } | null } | null;
+        return [cls?.academic_years?.name ?? "", cls?.name ?? "", s.name ?? "", s.capacity ?? ""];
+      }),
     },
     {
       name: "Subjects",
