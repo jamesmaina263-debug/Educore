@@ -1,7 +1,6 @@
 "use server";
 
 import { headers } from "next/headers";
-import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getRealClientIp } from "@/lib/get-real-client-ip";
 import { sendSecurityAlert } from "@/lib/security-alert";
@@ -79,18 +78,16 @@ export async function submitLeadMagnet(
     };
   }
 
-  const supabase = await createClient();
-  // Plain insert, not upsert: anon has INSERT-only RLS on this table (no
-  // SELECT policy, by design -- visitors shouldn't be able to read back
-  // other people's captured emails). INSERT ... ON CONFLICT requires
-  // SELECT-level visibility for Postgres to evaluate the conflict, so the
-  // previous upsert(..., { onConflict, ignoreDuplicates }) failed under
-  // anon regardless of the row's actual uniqueness. A resubmitted email
-  // now hits the unique constraint directly, caught below (23505) and
-  // treated the same as a fresh success: same response and download,
-  // without a duplicate row or a leaked error.
+  // Runs through the service-role admin client, not the anon-keyed one, so
+  // the table needs no public INSERT policy or anon write grant (the abuse
+  // guards above are enforced here, in the only legitimate writer).
+  //
+  // Still a plain insert, not an upsert: a resubmitted email hits the unique
+  // constraint directly, caught below (23505) and treated the same as a fresh
+  // success: same response and download, without a duplicate row or a leaked
+  // error.
   const lead = { email, resource, source_page: sourcePage };
-  let { error } = await supabase
+  let { error } = await admin
     .from("marketing_leads")
     .insert({ ...lead, ...(name ? { name } : {}), ...attribution });
   if (isMissingColumnError(error)) {
@@ -98,7 +95,7 @@ export async function submitLeadMagnet(
     // workflow applies in parallel with the app deploy. If the code is briefly
     // live first, keep the lead (email plus the three original UTM columns)
     // rather than failing the visitor's submission.
-    ({ error } = await supabase
+    ({ error } = await admin
       .from("marketing_leads")
       .insert({ ...lead, ...legacyAttributionColumns(attribution) }));
   }
