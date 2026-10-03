@@ -20,13 +20,18 @@ jobs:
       - run: npm ci
 
       - name: Dependency audit
-        # Fails the build on high/critical vulnerabilities only. Moderate/low
-        # findings are surfaced (npm audit still prints them) but don't block
-        # CI -- Dependabot's weekly PRs are the mechanism for those, since
-        # gating every PR on every moderate finding would make CI red for
-        # reasons unrelated to the change being reviewed. Re-evaluate this
-        # threshold if that trade-off stops making sense.
-        run: npm audit --audit-level=high
+        # Fails the build on high/critical vulnerabilities in PRODUCTION dependencies
+        # (--omit=dev), i.e. anything that ships in or runs inside the app. Moderate/low
+        # findings don't block CI -- Dependabot's weekly PRs are the mechanism for those,
+        # since gating every PR on every moderate finding would make CI red for reasons
+        # unrelated to the change being reviewed.
+        #
+        # Dev-only tooling (eslint, eslint-config-next, ...) is excluded on purpose: it never
+        # reaches production, and some advisories there have no patched release (e.g. `braces`
+        # via eslint-config-next, GHSA-vfj7-8cjw-p6xm, 2026-10), which would otherwise leave
+        # CI red for every PR with nothing actionable to do. Run a plain `npm audit` locally
+        # to see dev-tooling findings. Re-evaluate if that trade-off stops making sense.
+        run: npm audit --omit=dev --audit-level=high
 
       - name: Type check
         run: npx tsc --noEmit
