@@ -20,7 +20,7 @@ declare
 
   v_guardian_user_id uuid := gen_random_uuid();
   v_guardian_email text := 'connect.test.guardian@educore.test';
-  v_guardian_password text := 'ConnectTest!2026#';
+  v_guardian_password text := gen_random_uuid()::text;
   v_guardian_school_user_id uuid;
 begin
   select id into v_parent_role_id from public.roles where name = 'parent';
