@@ -26,3 +26,15 @@ describe("Students export/import round trip", () => {
     expect(row[headers.indexOf("Stream")]).toBe("S.B");
   });
 });
+
+describe("Subjects export/import round trip", () => {
+  it("carries the Code column the export writes, so same-named subjects at different levels stay distinct", () => {
+    expect(IMPORT_SHEET_HEADERS.Subjects).toEqual(["Name", "Code", "Active"]);
+  });
+});
+
+describe("Streams export/import round trip", () => {
+  it("includes Academic Year, which the importer requires to find the class", () => {
+    expect(IMPORT_SHEET_HEADERS.Streams).toEqual(["Academic Year", "Class", "Stream Name", "Capacity"]);
+  });
+});

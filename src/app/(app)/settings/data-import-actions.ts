@@ -40,7 +40,7 @@ const EXAMPLE_ROWS: Record<ImportSheetName, (string | number)[]> = {
   Terms: ["2027", "Term 1", 1, "2027-01-01", "2027-04-10", "active"],
   Classes: ["Grade 9", 9, "2027"],
   Streams: ["2027", "Grade 9", "North", 40],
-  Subjects: ["Mathematics", "Yes"],
+  Subjects: ["Mathematics", "JS-MATH", "Yes"],
   Staff: ["Jane Wanjiku", "Teacher", "jane.wanjiku@example.com", "0712345678", "Class Teacher", "Academics", "T-014", "2024-01-15", "active"],
   Students: ["ADM-0142", "UPI00142", "Grace", "Achieng", "", "2011-03-14", "female", "Grade 9", "North", "active", "2027-01-10"],
   Guardians: ["ADM-0142", "Mary Achieng", "mother", "Yes", "0712345678", "mary.achieng@example.com"],
@@ -311,7 +311,7 @@ export async function importSchoolData(sheets: RawImportSheets): Promise<ImportO
   const subjects = sheets.Subjects ?? [];
   out.push({
     sheet: "Subjects",
-    results: await runRpc(supabase, "bulk_import_subjects", toJsonRows(subjects, { name: "Name", is_active: "Active" })),
+    results: await runRpc(supabase, "bulk_import_subjects", toJsonRows(subjects, { name: "Name", code: "Code", is_active: "Active" })),
   });
 
   const staff = sheets.Staff ?? [];

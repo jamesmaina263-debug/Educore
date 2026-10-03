@@ -37,7 +37,8 @@ export const IMPORT_SHEET_HEADERS: Record<ImportSheetName, string[]> = {
   Terms: ["Academic Year", "Name", "Term No.", "Start Date", "End Date", "Status"],
   Classes: ["Name", "Level Order", "Academic Year"],
   Streams: ["Academic Year", "Class", "Stream Name", "Capacity"],
-  Subjects: ["Name", "Active"],
+  // Code picks the exact catalogue level: names repeat across levels (Mathematics = JS-MATH, LP-MATH, MATH, UP-MATH).
+  Subjects: ["Name", "Code", "Active"],
   Staff: ["Full Name", "Role", "Email", "Phone", "Position", "Department", "Staff No.", "Hire Date", "Status"],
   Students: [
     "Admission No.",
