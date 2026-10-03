@@ -21,7 +21,10 @@
 
 import { getRealClientIp } from "../getRealClientIp.ts";
 
-const DEFAULT_ALLOWLIST = ["196.201.214.0/24", "196.201.213.0/24"];
+// 196.201.212.0/24 added 2026-10-03: after the cf-connecting-ip fix, production logs showed genuine
+// Daraja callbacks arriving from 196.201.212.69 (Safaricom's published Daraja egress list includes
+// several 196.201.212.x hosts alongside the .213/.214 ones) and being rejected by the old two-range list.
+const DEFAULT_ALLOWLIST = ["196.201.214.0/24", "196.201.213.0/24", "196.201.212.0/24"];
 
 function parseCidr(cidr: string): { base: number; mask: number } | null {
   const [ip, bitsStr] = cidr.trim().split("/");

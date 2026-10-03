@@ -30,6 +30,14 @@ describe("verifyCallbackSource", () => {
     expect(r.sourceIp).toBe("196.201.214.200");
   });
 
+  it("accepts Daraja callbacks from the 196.201.212.x egress range seen in production", () => {
+    const r = verifyCallbackSource(
+      req({ "x-forwarded-for": "196.201.212.69,196.201.212.69, 13.248.120.179", "cf-connecting-ip": "196.201.212.69" }),
+    );
+    expect(r.allowed).toBe(true);
+    expect(verifyCallbackSource(req({ "cf-connecting-ip": "196.201.211.69" })).allowed).toBe(false);
+  });
+
   it("rejects a non-Safaricom cf-connecting-ip even if X-Forwarded-For is spoofed to a Safaricom IP", () => {
     const r = verifyCallbackSource(
       req({ "x-forwarded-for": "196.201.214.10, 203.0.113.9", "cf-connecting-ip": "203.0.113.9" }),
