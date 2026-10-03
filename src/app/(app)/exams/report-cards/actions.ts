@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { tagSentryRequestContext } from "@/lib/observability/sentry-context";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { buildReportCardCommentPrompt, geminiGenerateContentUrl, parseGeminiCommentResponse } from "@/lib/ai/report-card-comment";
+import { buildReportCardCommentPrompt, geminiGenerateContentUrl, geminiHeaders, parseGeminiCommentResponse } from "@/lib/ai/report-card-comment";
 
 type ActionResult = { error: string } | { success: true };
 
@@ -165,7 +165,7 @@ export async function draftCommentWithAI(input: {
     // into a clean returned message, so no other change is needed for this one.
     const res = await fetch(geminiGenerateContentUrl(apiKey), {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: geminiHeaders(apiKey),
       body: JSON.stringify({
         contents: [{ parts: [{ text: prompt }] }],
         generationConfig: { maxOutputTokens: 200 },

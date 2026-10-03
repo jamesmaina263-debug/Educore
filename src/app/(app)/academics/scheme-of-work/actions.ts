@@ -26,7 +26,7 @@ import {
   type EntryAssistMode,
   type EntryAssistDraft,
 } from "@/lib/ai/scheme-of-work";
-import { geminiGenerateContentUrl } from "@/lib/ai/report-card-comment";
+import { geminiGenerateContentUrl, geminiHeaders } from "@/lib/ai/report-card-comment";
 
 // ---------------------------------------------------------------------------
 // generateSchemeWithAI
@@ -280,7 +280,7 @@ export async function generateSchemeWithAI(input: GenerateSchemeInput): Promise<
     try {
       res = await fetch(geminiGenerateContentUrl(apiKey, GEMINI_SCHEME_MODEL), {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: geminiHeaders(apiKey),
         body: JSON.stringify({
           contents: [{ parts: [{ text: prompt }] }],
           generationConfig: {
@@ -987,7 +987,7 @@ export async function assistSchemeEntry(input: AssistSchemeEntryInput): Promise<
   try {
     res = await fetch(geminiGenerateContentUrl(apiKey, GEMINI_SCHEME_MODEL), {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: geminiHeaders(apiKey),
       body: JSON.stringify({
         contents: [{ parts: [{ text: prompt }] }],
         generationConfig: {

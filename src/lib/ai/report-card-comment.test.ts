@@ -3,6 +3,7 @@ import {
   buildReportCardCommentPrompt,
   formatMarkLines,
   geminiGenerateContentUrl,
+  geminiHeaders,
   parseGeminiCommentResponse,
 } from "./report-card-comment";
 
@@ -54,10 +55,26 @@ describe("buildReportCardCommentPrompt", () => {
 });
 
 describe("geminiGenerateContentUrl", () => {
-  it("builds the current gemini-3.5-flash-lite generateContent URL with the key as a query param", () => {
-    expect(geminiGenerateContentUrl("test-key")).toBe(
-      "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent?key=test-key",
+  it("builds the current gemini-3.5-flash-lite generateContent URL without the API key", () => {
+    const url = geminiGenerateContentUrl("test-key");
+    expect(url).toBe("https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent");
+    expect(url).not.toContain("test-key");
+    expect(url).not.toContain("key=");
+  });
+
+  it("uses a custom model when given one", () => {
+    expect(geminiGenerateContentUrl("test-key", "some-model")).toBe(
+      "https://generativelanguage.googleapis.com/v1beta/models/some-model:generateContent",
     );
+  });
+});
+
+describe("geminiHeaders", () => {
+  it("sends the API key in the x-goog-api-key header alongside the JSON content type", () => {
+    expect(geminiHeaders("test-key")).toEqual({
+      "Content-Type": "application/json",
+      "x-goog-api-key": "test-key",
+    });
   });
 });
 

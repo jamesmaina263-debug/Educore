@@ -3,6 +3,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { tagSentryRequestContext } from "@/lib/observability/sentry-context";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { geminiGenerateContentUrl, geminiHeaders } from "@/lib/ai/report-card-comment";
 
 // Phase 4, Item 1: Natural-language analytics ("Ask Educore AI").
 //
@@ -229,10 +230,10 @@ Respond with ONLY the JSON object, nothing else.`;
   let res: Response;
   try {
     res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent?key=${apiKey}`,
+      geminiGenerateContentUrl(apiKey),
       {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: geminiHeaders(apiKey),
         body: JSON.stringify({
           contents: [{ parts: [{ text: prompt }] }],
           generationConfig: { maxOutputTokens: 40 },
