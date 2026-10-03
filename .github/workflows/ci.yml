@@ -19,13 +19,25 @@ jobs:
 
       - run: npm ci
 
-      - name: Dependency audit
-        # Fails the build on high/critical vulnerabilities only. Moderate/low
-        # findings are surfaced (npm audit still prints them) but don't block
-        # CI -- Dependabot's weekly PRs are the mechanism for those, since
-        # gating every PR on every moderate finding would make CI red for
-        # reasons unrelated to the change being reviewed. Re-evaluate this
-        # threshold if that trade-off stops making sense.
+      - name: Dependency audit (production dependencies)
+        # Fails the build on high/critical vulnerabilities in packages that
+        # ship to / run in production (--omit=dev). Moderate/low findings are
+        # surfaced (npm audit still prints them) but don't block CI --
+        # Dependabot's weekly PRs are the mechanism for those, since gating
+        # every PR on every moderate finding would make CI red for reasons
+        # unrelated to the change being reviewed. Re-evaluate this threshold
+        # if that trade-off stops making sense.
+        #
+        # Dev tooling is audited separately below and does not block: a new
+        # advisory in lint/test tooling with no non-breaking fix (e.g. braces
+        # via eslint-config-next, 2026-10) would otherwise turn every PR red,
+        # including security fixes, without any production exposure.
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Dependency audit (dev tooling, informational)
+        # Same threshold, dev dependencies included. Never fails the job, but
+        # the findings stay visible in the log on every run.
+        continue-on-error: true
         run: npm audit --audit-level=high
 
       - name: Type check
