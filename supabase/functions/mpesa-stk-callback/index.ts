@@ -42,6 +42,20 @@ Deno.serve(async (req) => {
         "mpesa-stk-callback: rejected callback from IP outside Safaricom's allowlist",
         sourceCheck.sourceIp,
       );
+      // DIAGNOSTIC (temporary): record the raw network-identity headers so we can tell whether
+      // the rejected IP is the real Daraja egress or an intermediary hop picked up as the last
+      // X-Forwarded-For entry. Deliberately excludes the URL path (it contains the callback
+      // token) and the request body. Remove once the allowlist question is settled.
+      console.error(
+        "mpesa-stk-callback: DIAG source headers",
+        JSON.stringify({
+          xff: req.headers.get("x-forwarded-for"),
+          cfConnectingIp: req.headers.get("cf-connecting-ip"),
+          xRealIp: req.headers.get("x-real-ip"),
+          forwarded: req.headers.get("forwarded"),
+          userAgent: req.headers.get("user-agent"),
+        }),
+      );
       void sendSecurityAlert("M-Pesa callback rejected: IP outside Safaricom allowlist", {
         ip: sourceCheck.sourceIp ?? "unknown",
       });
