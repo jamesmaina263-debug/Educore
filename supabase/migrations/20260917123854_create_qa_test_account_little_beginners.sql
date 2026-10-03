@@ -9,7 +9,7 @@ declare
   v_school_id uuid := 'bc0e14ef-25ed-492d-8999-8d9718c3c2d1'; -- Little Beginners School
   v_role_id uuid;
   v_email text := 'qa-littlebeginners@educore.test';
-  v_password text := 'LittleBeginnersQA!2026#';
+  v_password text := gen_random_uuid()::text;
 begin
   select id into v_role_id from public.roles where name = 'school_owner';
 

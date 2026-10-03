@@ -8,12 +8,12 @@ declare
 
   v_parent_user_id uuid := gen_random_uuid();
   v_parent_email text := 'parent.demo@educore.test';
-  v_parent_password text := 'TestParent!2026#';
+  v_parent_password text := gen_random_uuid()::text;
   v_parent_school_user_id uuid;
 
   v_teacher_user_id uuid := gen_random_uuid();
   v_teacher_email text := 'teacher.demo@educore.test';
-  v_teacher_password text := 'TestTeacher!2026#';
+  v_teacher_password text := gen_random_uuid()::text;
 begin
   -- Look up Demo Academy by its stable slug rather than assuming a hardcoded id exists.
   select id into v_school_id from public.schools where slug = 'demo-academy';

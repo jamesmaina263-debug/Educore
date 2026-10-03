@@ -5,7 +5,7 @@ declare
   v_school_id uuid := '50f09948-2f38-4802-8b19-2efe073197bb';
   v_role_id uuid;
   v_email text := 'owner.demo@educore.test';
-  v_password text := 'TestOwner!2026#';
+  v_password text := gen_random_uuid()::text;
 begin
   -- Demo Academy is referenced by fixed id across several later demo/seed migrations
   -- (parent/teacher accounts, nurse account, health module seed data). Create it here

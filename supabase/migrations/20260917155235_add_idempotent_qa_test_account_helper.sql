@@ -24,7 +24,7 @@
 
 create or replace function public.ensure_qa_test_account(
   p_school_id uuid,
-  p_password text default 'QaTest!2026#'
+  p_password text default gen_random_uuid()::text
 )
 returns uuid
 language plpgsql

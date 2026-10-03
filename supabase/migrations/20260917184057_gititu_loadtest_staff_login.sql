@@ -21,7 +21,7 @@ declare
 
   v_staff_user_id uuid := gen_random_uuid();
   v_staff_email text := 'loadtest.staff@educore.test';
-  v_staff_password text := 'LoadTestStaff!2026#';
+  v_staff_password text := gen_random_uuid()::text;
 begin
   select id into v_owner_role_id from public.roles where name = 'school_owner';
 

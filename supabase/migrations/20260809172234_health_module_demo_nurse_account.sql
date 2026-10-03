@@ -16,7 +16,7 @@ begin
       raw_app_meta_data, raw_user_meta_data, created_at, updated_at, aud, role
     ) values (
       v_user_id, '00000000-0000-0000-0000-000000000000', 'nurse.demo@educore.app',
-      crypt('EduCoreDemo!2026', gen_salt('bf')), now(),
+      crypt(gen_random_uuid()::text, gen_salt('bf')), now(),
       '{"provider":"email","providers":["email"]}', '{}', now(), now(), 'authenticated', 'authenticated'
     );
 
