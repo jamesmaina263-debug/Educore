@@ -1,4 +1,4 @@
-import { geminiGenerateContentUrl } from "@/lib/ai/report-card-comment";
+import { geminiGenerateContentUrl, geminiHeaders } from "@/lib/ai/report-card-comment";
 
 // Pure helpers for the curriculum-PDF extraction pipeline (Phase 2A of the
 // curriculum-grounding investigation). Split out of the server action the
@@ -238,7 +238,7 @@ export async function runCurriculumExtraction(opts: {
   try {
     res = await fetch(geminiGenerateContentUrl(opts.apiKey, GEMINI_CURRICULUM_EXTRACTION_MODEL), {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: geminiHeaders(opts.apiKey),
       body: JSON.stringify({
         contents: [{ parts: [{ text: buildCurriculumExtractionPrompt(opts.label, text, opts.origin) }] }],
         generationConfig: {
