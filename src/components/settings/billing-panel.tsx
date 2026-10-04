@@ -1,17 +1,25 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import Link from "next/link";
 import { StatusBadge } from "@/components/status-badge";
+import { InvoiceStatusBadge } from "@/components/billing/invoice-status-badge";
+import { formatDateOnly, formatInstantDate, formatKes } from "@/lib/billing/format";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { cancelOwnSubscription } from "@/app/(app)/settings/billing-actions";
 
 export type BillingInvoice = {
   id: string;
+  invoice_number: string;
+  billing_period_label: string | null;
   period_start: string;
   period_end: string;
   student_count: number;
+  unit_price_kes: number | null;
   amount_kes: number;
+  amount_paid_kes: number;
+  balance_kes: number;
   status: string;
   due_at: string;
   paid_at: string | null;
@@ -108,42 +116,61 @@ export function BillingPanel({ data, canManage }: { data: BillingData; canManage
         </header>
         <div className="overflow-x-auto">
           <Table className="table-dense">
-          <TableHeader>
-            <TableRow>
-              <TableHead>Period</TableHead>
-              <TableHead>Students</TableHead>
-              <TableHead>Amount (KES)</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead>Due</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {data.invoices.length === 0 && (
+            <TableHeader>
               <TableRow>
-                <TableCell colSpan={5} className="text-muted-foreground">
-                  No invoices yet.
-                </TableCell>
+                <TableHead>Invoice</TableHead>
+                <TableHead>Billing period</TableHead>
+                <TableHead className="text-right">Students × rate</TableHead>
+                <TableHead className="text-right">Amount</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Due</TableHead>
+                <TableHead className="text-right">
+                  <span className="sr-only">Actions</span>
+                </TableHead>
               </TableRow>
-            )}
-            {data.invoices.map((inv) => (
-              <TableRow key={inv.id}>
-                <TableCell>
-                  {new Date(inv.period_start).toLocaleDateString()} –{" "}
-                  {new Date(inv.period_end).toLocaleDateString()}
-                </TableCell>
-                <TableCell>{inv.student_count}</TableCell>
-                <TableCell>{inv.amount_kes.toLocaleString()}</TableCell>
-                <TableCell>
-                  <StatusBadge
-                    tone={inv.status === "paid" ? "success" : inv.status === "overdue" ? "danger" : "neutral"}
-                    label={inv.status}
-                  />
-                </TableCell>
-                <TableCell>{new Date(inv.due_at).toLocaleDateString()}</TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+            </TableHeader>
+            <TableBody>
+              {data.invoices.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={7} className="text-muted-foreground">
+                    No invoices yet.
+                  </TableCell>
+                </TableRow>
+              )}
+              {data.invoices.map((inv) => (
+                <TableRow key={inv.id}>
+                  <TableCell className="font-medium">
+                    <Link href={`/settings/billing/invoices/${inv.id}`} className="underline-offset-2 hover:underline">
+                      {inv.invoice_number}
+                    </Link>
+                  </TableCell>
+                  <TableCell>
+                    <div>{inv.billing_period_label ?? "—"}</div>
+                    <div className="text-xs text-muted-foreground">
+                      {formatDateOnly(inv.period_start)} – {formatDateOnly(inv.period_end)}
+                    </div>
+                  </TableCell>
+                  <TableCell className="text-right tabular-nums">
+                    {inv.student_count.toLocaleString("en-KE")} × {inv.unit_price_kes == null ? "—" : formatKes(inv.unit_price_kes)}
+                  </TableCell>
+                  <TableCell className="text-right font-medium tabular-nums">{formatKes(inv.amount_kes)}</TableCell>
+                  <TableCell>
+                    <InvoiceStatusBadge status={inv.status} />
+                  </TableCell>
+                  <TableCell>{formatInstantDate(inv.due_at)}</TableCell>
+                  <TableCell className="whitespace-nowrap text-right">
+                    <Link href={`/settings/billing/invoices/${inv.id}`} className="text-sm underline-offset-2 hover:underline">
+                      View
+                    </Link>
+                    {" · "}
+                    <a href={`/api/billing/invoices/${inv.id}/pdf`} className="text-sm underline-offset-2 hover:underline">
+                      PDF
+                    </a>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
         </div>
       </div>
     </div>

@@ -141,7 +141,7 @@ export async function loadSettingsContext(): Promise<SettingsContext> {
       .maybeSingle();
     const { data: invoiceRows } = await supabase
       .from("platform_invoices")
-      .select("id, period_start, period_end, student_count, amount_kes, status, due_at, paid_at")
+      .select("id, invoice_number, billing_period_label, period_start, period_end, student_count, unit_price_kes, amount_kes, amount_paid_kes, balance_kes, status, due_at, paid_at")
       .order("period_start", { ascending: false })
       .limit(12);
     const plan = sub?.subscription_plans as unknown as { name: string } | null;
@@ -150,7 +150,13 @@ export async function loadSettingsContext(): Promise<SettingsContext> {
       plan_name: plan?.name ?? null,
       trial_ends_at: sub?.trial_ends_at ?? null,
       current_period_end: sub?.current_period_end ?? null,
-      invoices: invoiceRows ?? [],
+      invoices: (invoiceRows ?? []).map((r) => ({
+        ...r,
+        amount_kes: Number(r.amount_kes),
+        unit_price_kes: r.unit_price_kes == null ? null : Number(r.unit_price_kes),
+        amount_paid_kes: Number(r.amount_paid_kes),
+        balance_kes: Number(r.balance_kes),
+      })),
     };
   }
 

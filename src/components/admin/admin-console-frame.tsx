@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import {
   LayoutDashboard,
   CreditCard,
+  Receipt,
   BarChart3,
   Inbox,
   UserPlus,
@@ -60,6 +61,7 @@ const NAV_GROUPS: AdminNavGroup[] = [
     label: "Revenue",
     items: [
       { href: "/admin/billing", label: "Plans & Billing", icon: CreditCard },
+      { href: "/admin/billing/invoices", label: "Invoices", icon: Receipt },
       { href: "/admin/whitelabel", label: "White-label", icon: Palette },
     ],
   },
@@ -90,8 +92,15 @@ const NAV_GROUPS: AdminNavGroup[] = [
 
 const ALL_ITEMS: AdminNavItem[] = NAV_GROUPS.flatMap((g) => g.items);
 
+function matches(pathname: string, href: string) {
+  return href === "/admin" ? pathname === "/admin" : pathname === href || pathname.startsWith(`${href}/`);
+}
+
+// The most specific matching item wins, so /admin/billing/invoices highlights "Invoices" and not
+// also its parent "Plans & Billing".
 function isActive(pathname: string, href: string) {
-  return href === "/admin" ? pathname === "/admin" : pathname.startsWith(href);
+  if (!matches(pathname, href)) return false;
+  return !ALL_ITEMS.some((other) => other.href.length > href.length && matches(pathname, other.href));
 }
 
 function AdminSidebarNav({ pathname, onNavigate }: { pathname: string; onNavigate?: () => void }) {

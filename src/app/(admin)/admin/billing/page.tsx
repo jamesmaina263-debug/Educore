@@ -1,6 +1,8 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { AdminBillingTable, type SchoolBillingRow } from "@/components/admin/admin-billing-table";
+import { Button } from "@/components/ui/button";
 import { AdminDunningList, type OverdueInvoiceRow } from "@/components/admin/admin-dunning-list";
 
 export default async function AdminBillingPage() {
@@ -63,11 +65,21 @@ export default async function AdminBillingPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <div>
-        <h1 className="text-lg font-semibold">Platform billing</h1>
-        <p className="text-sm text-muted-foreground">
-          Every school&apos;s subscription and invoices — visible to platform staff only.
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-lg font-semibold">Platform billing</h1>
+          <p className="text-sm text-muted-foreground">
+            Every school&apos;s subscription and invoices — visible to platform staff only.
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <Button asChild variant="outline" size="sm">
+            <Link href="/admin/billing/settings">Billing settings</Link>
+          </Button>
+          <Button asChild size="sm">
+            <Link href="/admin/billing/invoices">All invoices</Link>
+          </Button>
+        </div>
       </div>
       <AdminDunningList invoices={overdueRows} />
       <AdminBillingTable rows={rows} plans={plans ?? []} />

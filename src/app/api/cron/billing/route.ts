@@ -3,6 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { isValidCronRequest } from "@/lib/cron-auth";
 import { sendSecurityAlert } from "@/lib/security-alert";
 import { withTransientAuthRetry } from "@/lib/supabase/retry-transient-auth";
+import { runScheduledInvoicing } from "@/lib/billing/cycle";
 
 export const dynamic = "force-dynamic";
 
@@ -56,10 +57,23 @@ export async function GET(request: Request) {
     );
   }
 
+  // Automated invoicing (end-of-term invoices). Deliberately AFTER the three steps above and isolated:
+  // it is a no-op until an administrator enables it in /admin/billing/settings, and a failure here is
+  // alerted and reported but never turns the (already completed) enforcement steps above into a 500.
+  let invoicing;
+  try {
+    invoicing = await runScheduledInvoicing(adminClient);
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e);
+    void sendSecurityAlert("Automated invoicing crashed", { error: message });
+    invoicing = { ran: false, error: message };
+  }
+
   return NextResponse.json({
     expired_trials: expiredTrials.data,
     invoices_marked_overdue: overdueInvoices.data,
     schools_suspended: suspendedSchools.data,
+    invoicing,
     ran_at: new Date().toISOString(),
   });
 }
