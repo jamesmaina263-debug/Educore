@@ -48,3 +48,28 @@ export function oldestAgeMinutes(rows: StaleCandidate[], now: Date): number {
   const oldest = Math.min(...rows.map((r) => new Date(r.initiated_at).getTime()));
   return Math.round((now.getTime() - oldest) / 60_000);
 }
+
+// How many stuck rows one cron run asks the mpesa-stk-query function about (Daraja spike-arrests
+// at burst 3 / 30 per minute, and the function spaces its calls ~2s apart).
+export const RECONCILE_BATCH_SIZE = 5;
+
+export interface ReconcileCandidate extends StaleCandidate {
+  last_query_at: string | null;
+}
+
+/**
+ * Picks which stale rows to ask Daraja about this run: never-queried rows first, then the least
+ * recently queried, oldest first within a tie. Without this, a few rows Daraja can never answer
+ * (e.g. old sandbox requests) would occupy the batch forever and starve newer stuck rows.
+ */
+export function pickReconcileBatch<T extends ReconcileCandidate>(rows: T[], size = RECONCILE_BATCH_SIZE): T[] {
+  const key = (r: T) => (r.last_query_at ? new Date(r.last_query_at).getTime() : -Infinity);
+  return [...rows]
+    .sort((a, b) => {
+      const ka = key(a);
+      const kb = key(b);
+      if (ka !== kb) return ka < kb ? -1 : 1;
+      return new Date(a.initiated_at).getTime() - new Date(b.initiated_at).getTime();
+    })
+    .slice(0, size);
+}

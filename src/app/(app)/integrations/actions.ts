@@ -387,6 +387,15 @@ export async function initiateMpesaPush(input: {
   return { success: true as const, requestId: requestId as string };
 }
 
+// Safaricom's callback is normally what resolves a request, but it is not always delivered
+// (2026-10-04: three pushes accepted by Daraja, callback endpoint never called, rows stuck on
+// "Awaiting response" although Safaricom had processed them). So once a dispatched request has
+// been pending for STK_QUERY_AFTER_MS, each poll also asks the mpesa-stk-query edge function to
+// check with Daraja (STK Push Query). That function is throttled and idempotent against the real
+// callback, and any failure here is swallowed -- the plain status read below is still the answer.
+const STK_QUERY_AFTER_MS = 30_000;
+const STK_QUERY_RETRY_MS = 20_000;
+
 export async function getMpesaRequestStatus(
   requestId: string,
 ): Promise<{ error: string } | { success: true; status: string; resultDesc: string | null }> {
@@ -394,10 +403,30 @@ export async function getMpesaRequestStatus(
   await tagSentryRequestContext(supabase);
   const { data, error } = await supabase
     .from("mpesa_stk_requests")
-    .select("status, result_desc")
+    .select("status, result_desc, initiated_at, last_query_at, checkout_request_id")
     .eq("id", requestId)
     .maybeSingle();
   if (error || !data) return { error: error?.message ?? "Request not found." };
+
+  if (data.status === "pending" && data.checkout_request_id) {
+    const now = Date.now();
+    const oldEnough = now - new Date(data.initiated_at).getTime() >= STK_QUERY_AFTER_MS;
+    const notQueriedRecently =
+      !data.last_query_at || now - new Date(data.last_query_at).getTime() >= STK_QUERY_RETRY_MS;
+    if (oldEnough && notQueriedRecently) {
+      try {
+        await supabase.functions.invoke("mpesa-stk-query", { body: { request_id: requestId } });
+      } catch (e) {
+        console.error("mpesa-stk-query invoke failed", e);
+      }
+      const { data: after } = await supabase
+        .from("mpesa_stk_requests")
+        .select("status, result_desc")
+        .eq("id", requestId)
+        .maybeSingle();
+      if (after) return { success: true as const, status: after.status, resultDesc: after.result_desc };
+    }
+  }
 
   return { success: true as const, status: data.status, resultDesc: data.result_desc };
 }

@@ -127,6 +127,51 @@ export async function initiateDarajaStkPush(params: {
   };
 }
 
+// STK Push Query: asks Safaricom for the outcome of a previously dispatched CheckoutRequestID.
+// Returns the raw HTTP status + parsed body (null if not JSON) so the caller can run it through
+// interpretStkQueryResponse(); a Daraja error/429/"still processing" is a normal, expected
+// answer here and must not throw. Network failures / timeouts do throw.
+export async function queryDarajaStkStatus(params: {
+  creds: DarajaCredentials;
+  accessToken: string;
+  checkoutRequestId: string;
+}): Promise<{ httpStatus: number; body: unknown }> {
+  const { creds, accessToken } = params;
+  const timestamp = darajaTimestamp();
+  const password = btoa(`${creds.shortcode}${creds.passkey}${timestamp}`);
+
+  let res: Response;
+  try {
+    res = await fetch(`${baseUrl(creds.environment)}/mpesa/stkpushquery/v1/query`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+      signal: AbortSignal.timeout(15000),
+      body: JSON.stringify({
+        BusinessShortCode: creds.shortcode,
+        Password: password,
+        Timestamp: timestamp,
+        CheckoutRequestID: params.checkoutRequestId,
+      }),
+    });
+  } catch (e) {
+    if (e instanceof DOMException && e.name === "TimeoutError") {
+      throw new Error("Daraja STK query timed out after 15s -- Safaricom's API may be down or unreachable.");
+    }
+    throw e;
+  }
+
+  let body: unknown = null;
+  try {
+    body = await res.json();
+  } catch {
+    body = null;
+  }
+  return { httpStatus: res.status, body };
+}
+
 // Normalizes a Kenyan phone number to Daraja's required 2547XXXXXXXX / 2541XXXXXXXX shape.
 // Accepts +254..., 254..., 07..., 01... -- rejects anything else rather than guessing.
 export function normalizeKenyanPhoneForDaraja(input: string): string | null {
