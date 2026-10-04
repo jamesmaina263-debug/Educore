@@ -81,11 +81,30 @@ export async function GET(request: Request) {
   // hide the alert below, so errors are logged and the full stale set is alerted on as before.
   let reconciled = 0;
   const batch = pickReconcileBatch(stale);
+  let reconcileError: string | null = null;
   try {
-    const { error: invokeError } = await adminClient.functions.invoke("mpesa-stk-query", {
-      body: { request_ids: batch.map((r) => r.id) },
-    });
+    // Authenticates with the shared DISPATCH_SECRET (x-dispatch-secret), NOT the service key as a
+    // Bearer token: the gateway 401s an sb_secret_ key (same failure as the dispatch cron).
+    const baseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const dispatchSecret = process.env.DISPATCH_SECRET;
+    let invokeError: string | null = null;
+    if (!baseUrl || !dispatchSecret) {
+      invokeError = "DISPATCH_SECRET or NEXT_PUBLIC_SUPABASE_URL is not configured.";
+    } else {
+      const res = await fetch(`${baseUrl}/functions/v1/mpesa-stk-query`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-dispatch-secret": dispatchSecret },
+        body: JSON.stringify({ request_ids: batch.map((r) => r.id) }),
+        cache: "no-store",
+        signal: AbortSignal.timeout(50_000),
+      });
+      if (!res.ok) {
+        const body = (await res.json().catch(() => null)) as { error?: string } | null;
+        invokeError = body?.error ?? `mpesa-stk-query responded ${res.status}`;
+      }
+    }
     if (invokeError) {
+      reconcileError = invokeError;
       console.error("mpesa-stale-pending: mpesa-stk-query invoke failed", invokeError);
     } else {
       const { data: stillPending, error: stillPendingError } = await adminClient
@@ -103,11 +122,20 @@ export async function GET(request: Request) {
       }
     }
   } catch (e) {
+    reconcileError = e instanceof Error ? e.message : String(e);
     console.error("mpesa-stale-pending: reconcile step threw", e);
+  }
+  // A broken reconcile step used to be invisible (this route still answered 200 and the workflow
+  // went green). Make it loud, once per run, without hiding the stale-row alert below.
+  if (reconcileError) {
+    void sendSecurityAlert("M-Pesa stale-pending reconcile step failed (mpesa-stk-query)", {
+      error: reconcileError.slice(0, 300),
+      stuck_rows: String(batch.length),
+    });
   }
 
   if (stale.length === 0) {
-    return NextResponse.json({ stale: 0, reconciled, alerted: 0, ran_at: now.toISOString() });
+    return NextResponse.json({ stale: 0, reconciled, alerted: 0, reconcile_error: reconcileError, ran_at: now.toISOString() });
   }
 
   // Dedup against alerts already raised for these rows. If this lookup fails we alert anyway:
@@ -122,7 +150,7 @@ export async function GET(request: Request) {
 
   const fresh = newlyStale(stale, alreadyAlerted);
   if (fresh.length === 0) {
-    return NextResponse.json({ stale: stale.length, reconciled, alerted: 0, ran_at: now.toISOString() });
+    return NextResponse.json({ stale: stale.length, reconciled, alerted: 0, reconcile_error: reconcileError, ran_at: now.toISOString() });
   }
 
   await sendSecurityAlert(MPESA_STALE_PENDING_EVENT, {
@@ -135,5 +163,5 @@ export async function GET(request: Request) {
       "Daraja callback not processed -- check mpesa-stk-callback logs for 'rejected callback' (IP allowlist / token) or 'confirm failed'",
   });
 
-  return NextResponse.json({ stale: stale.length, reconciled, alerted: fresh.length, ran_at: now.toISOString() });
+  return NextResponse.json({ stale: stale.length, reconciled, alerted: fresh.length, reconcile_error: reconcileError, ran_at: now.toISOString() });
 }
