@@ -12,7 +12,7 @@ import {
   truncateDocumentText,
   findMatchingStrandId,
 } from "@/lib/ai/curriculum-extraction";
-import { geminiGenerateContentUrl } from "@/lib/ai/report-card-comment";
+import { geminiGenerateContentUrl, geminiHeaders } from "@/lib/ai/report-card-comment";
 import { safeStorageFilename } from "@/lib/storage-path";
 import { extractPdfText } from "@/lib/pdf/extract-text";
 
@@ -156,7 +156,7 @@ export async function uploadCurriculumDocument(subjectId: string, formData: Form
   try {
     res = await fetch(geminiGenerateContentUrl(apiKey, GEMINI_CURRICULUM_EXTRACTION_MODEL), {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: geminiHeaders(apiKey),
       body: JSON.stringify({
         contents: [{ parts: [{ text: buildCurriculumExtractionPrompt(subjectRow.name, truncatedText) }] }],
         generationConfig: {

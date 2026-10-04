@@ -45,10 +45,19 @@ export const GEMINI_REPORT_CARD_MODEL = "gemini-3.5-flash-lite";
  * Shared across every Gemini caller in the app (report-card comments,
  * scheme-of-work generation, ...) so there's one place that knows the
  * generateContent URL shape. `model` defaults to the report-card model to
- * keep every existing call site (and its test) unchanged.
+ * keep every existing call site unchanged.
+ *
+ * The API key is deliberately NOT part of the URL: URLs end up in proxy,
+ * server and error logs. It is sent in the `x-goog-api-key` header instead
+ * (see geminiHeaders), which is Google's documented alternative to `?key=`.
  */
-export function geminiGenerateContentUrl(apiKey: string, model: string = GEMINI_REPORT_CARD_MODEL): string {
-  return `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+export function geminiGenerateContentUrl(_apiKey: string, model: string = GEMINI_REPORT_CARD_MODEL): string {
+  return `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
+}
+
+/** Request headers for every Gemini call: JSON body + the API key header. */
+export function geminiHeaders(apiKey: string): Record<string, string> {
+  return { "Content-Type": "application/json", "x-goog-api-key": apiKey };
 }
 
 export type GeminiParseResult = { comment: string } | { error: string };

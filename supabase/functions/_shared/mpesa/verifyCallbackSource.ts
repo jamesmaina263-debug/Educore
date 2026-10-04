@@ -21,7 +21,10 @@
 
 import { getRealClientIp } from "../getRealClientIp.ts";
 
-const DEFAULT_ALLOWLIST = ["196.201.214.0/24", "196.201.213.0/24"];
+// 196.201.212.0/24 added 2026-10-03: after the cf-connecting-ip fix, production logs showed genuine
+// Daraja callbacks arriving from 196.201.212.69 (Safaricom's published Daraja egress list includes
+// several 196.201.212.x hosts alongside the .213/.214 ones) and being rejected by the old two-range list.
+const DEFAULT_ALLOWLIST = ["196.201.214.0/24", "196.201.213.0/24", "196.201.212.0/24"];
 
 function parseCidr(cidr: string): { base: number; mask: number } | null {
   const [ip, bitsStr] = cidr.trim().split("/");
@@ -53,7 +56,17 @@ function ipInCidr(ip: string, cidr: string): boolean {
 // this allowlist check could be bypassed entirely by anyone who could set an X-Forwarded-For
 // header on their request (i.e. anyone), which defeated the "still has to originate from inside
 // Safaricom's network" guarantee this file's own comments claim it provides.
+//
+// FOLLOW-UP FIX: the LAST X-Forwarded-For entry is only the real caller when the trusted edge is
+// the final hop. For Daraja callbacks an extra intermediary now appends its own address after
+// Safaricom's, so the last entry was e.g. 13.248.120.200 while the true caller was
+// 196.201.214.200 -- every genuine callback was rejected (and the STK request stayed 'pending'
+// forever). Supabase's edge is fronted by Cloudflare, which SETS cf-connecting-ip itself and
+// overwrites any client-supplied value, so it is the trustworthy source when present. If it is
+// absent we fall back to the previous behaviour unchanged.
 function getSourceIp(req: Request): string | null {
+  const cfIp = req.headers.get("cf-connecting-ip")?.trim();
+  if (cfIp && ipToInt(cfIp) !== null) return cfIp;
   return getRealClientIp(req);
 }
 

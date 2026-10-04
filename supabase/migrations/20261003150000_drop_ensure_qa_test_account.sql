@@ -1,0 +1,24 @@
+-- N3 (security): remove the ensure_qa_test_account() QA-login helper.
+--
+-- Why: it is a SECURITY DEFINER function that writes straight into auth.users /
+-- auth.identities and creates a school_owner-level account. It shipped with a
+-- plaintext default password committed to this (public) repo, and has no remaining
+-- purpose: every QA/demo/load-test account it or its predecessors created has already
+-- been deleted from production. Keeping a privileged account-minting function around
+-- "just in case" is exactly the kind of latent risk we don't want.
+--
+-- Safety, verified against production before writing this (read-only queries):
+--   * only `postgres` and `service_role` could execute it (the earlier lockdown held)
+--   * no other function, trigger or view references it
+--   * no @educore.test / demo / QA accounts exist in auth.users, so dropping this
+--     orphans nothing
+--
+-- Deliberately NO `cascade`: if anything unexpectedly depends on this function the
+-- statement fails and rolls back instead of silently dropping the dependent object.
+-- `if exists` keeps it safe to run twice.
+--
+-- Note: the old plaintext password still exists in git history (it cannot be removed
+-- without rewriting history). The text in earlier migration files has been replaced
+-- with run-time-random values, and no live account used it, so it grants nothing.
+
+drop function if exists public.ensure_qa_test_account(uuid, text);

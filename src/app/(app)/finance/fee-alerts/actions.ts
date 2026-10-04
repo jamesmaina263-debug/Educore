@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { tagSentryRequestContext } from "@/lib/observability/sentry-context";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { geminiGenerateContentUrl, geminiHeaders } from "@/lib/ai/report-card-comment";
 
 type ActionResult = { error: string } | { success: true };
 
@@ -139,10 +140,10 @@ Rewrite it to sound warmer and more considerate, while staying brief (2-4 senten
 
   try {
     const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent?key=${apiKey}`,
+      geminiGenerateContentUrl(apiKey),
       {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: geminiHeaders(apiKey),
         body: JSON.stringify({
           contents: [{ parts: [{ text: prompt }] }],
           generationConfig: { temperature: 0.6, maxOutputTokens: 200 },
