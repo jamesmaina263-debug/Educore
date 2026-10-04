@@ -69,7 +69,8 @@ Deno.serve(async (req) => {
     const callbackToken = parts.at(-1);
 
     if (!schoolId || !callbackToken) {
-      console.error("mpesa-stk-callback: malformed path, no school_id/token", url.pathname);
+      // Deliberately do NOT log url.pathname: it ends in <school_id>/<callback_token>.
+      console.error("mpesa-stk-callback: malformed path, no school_id/token");
       return alwaysOk();
     }
 
@@ -80,7 +81,7 @@ Deno.serve(async (req) => {
 
     const { data: settings } = await serviceClient
       .from("mpesa_settings")
-      .select("school_id")
+      .select("school_id, environment")
       .eq("school_id", schoolId)
       .eq("callback_token", callbackToken)
       .maybeSingle();
@@ -90,6 +91,20 @@ Deno.serve(async (req) => {
       void sendSecurityAlert("M-Pesa callback rejected: school_id/token mismatch", {
         school_id: schoolId,
         source_ip: sourceCheck.sourceIp ?? "unknown",
+      });
+      return alwaysOk();
+    }
+
+    // The enforcement flag is a sandbox convenience only. For any non-sandbox school the
+    // Safaricom IP allowlist still applies even when MPESA_CALLBACK_IP_ALLOWLIST_ENFORCE=false.
+    if (!sourceCheck.enforced && settings.environment !== "sandbox" && !sourceCheck.inAllowlist) {
+      console.error(
+        "mpesa-stk-callback: allowlist enforcement is off but school is not sandbox -- rejecting callback from",
+        sourceCheck.sourceIp,
+      );
+      void sendSecurityAlert("M-Pesa callback rejected: IP outside allowlist (non-sandbox school, enforcement flag ignored)", {
+        school_id: schoolId,
+        ip: sourceCheck.sourceIp ?? "unknown",
       });
       return alwaysOk();
     }
@@ -117,6 +132,8 @@ Deno.serve(async (req) => {
       p_receipt_number: typeof receiptNumber === "string" ? receiptNumber : null,
       p_amount: typeof amount === "number" ? amount : null,
       p_phone_number: phoneNumber != null ? String(phoneNumber) : null,
+      // Bind the callback to the school whose token was validated above.
+      p_school_id: schoolId,
     });
 
     if (error) {
@@ -130,6 +147,24 @@ Deno.serve(async (req) => {
         school_id: schoolId,
         error: error.message ?? "unknown",
       });
+    }
+
+    if (!error && resultCode === 0) {
+      // mpesa_stk_callback_confirm refuses to record a success whose Amount differs from the
+      // requested amount: it leaves the request 'pending' tagged AMOUNT_MISMATCH. Surface it.
+      const { data: after } = await serviceClient
+        .from("mpesa_stk_requests")
+        .select("status, result_desc")
+        .eq("checkout_request_id", stkCallback.CheckoutRequestID)
+        .maybeSingle();
+      if (after?.status === "pending" && after.result_desc?.startsWith("AMOUNT_MISMATCH")) {
+        void sendSecurityAlert("M-Pesa callback amount mismatch -- payment NOT recorded", {
+          checkout_request_id: stkCallback.CheckoutRequestID,
+          school_id: schoolId,
+          detail: after.result_desc,
+          source_ip: sourceCheck.sourceIp ?? "unknown",
+        });
+      }
     }
 
     return alwaysOk();
