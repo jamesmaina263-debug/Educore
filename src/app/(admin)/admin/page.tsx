@@ -61,7 +61,7 @@ export default async function AdminOverviewPage({
     supabase.from("subscription_plans").select("id, name, price_per_student_kes, billing_period"),
     // Unfiltered (all statuses, all time) -- lifetime revenue, this-period vs. prior-period,
     // and the overdue total all need to be derived from the same full set below.
-    supabase.from("platform_invoices").select("school_id, amount_kes, status, paid_at, due_at"),
+    supabase.from("platform_invoices").select("school_id, amount_kes, amount_paid_kes, status, paid_at, due_at"),
     supabase.from("students").select("school_id"),
     // Staff count for the school list below -- excludes parent/student/super_admin rows,
     // same filter used by /staff, /admin/view-as/[schoolId], and everywhere else "staff"
@@ -143,9 +143,12 @@ export default async function AdminOverviewPage({
   // so this card doesn't silently under-report for up to 24h.
   const now = new Date().toISOString();
   const overdueInvoices = allInvoices.filter(
-    (inv) => inv.status === "overdue" || (inv.status === "issued" && !!inv.due_at && inv.due_at < now),
+    (inv) =>
+      inv.status === "overdue" ||
+      (["issued", "sent", "partially_paid"].includes(inv.status) && !!inv.due_at && inv.due_at < now),
   );
-  const overdueAmount = overdueInvoices.reduce((sum, inv) => sum + Number(inv.amount_kes), 0);
+  // Outstanding balance, so a part-paid invoice is not reported at its full amount. Drafts are never in this set.
+  const overdueAmount = overdueInvoices.reduce((sum, inv) => sum + (Number(inv.amount_kes) - Number(inv.amount_paid_kes ?? 0)), 0);
   const overdueCount = overdueInvoices.length;
 
   // MRR: active subscriptions only, priced by each plan's price_per_student_kes times that

@@ -53,6 +53,12 @@ verify_jwt = false
 [functions.send-billing-reminder]
 verify_jwt = false
 
+# Emails a platform invoice PDF to a school. verify_jwt is false: auth is done inside the function
+# (administrator JWT checked with auth_is_super_admin, or the x-dispatch-secret used by the billing
+# cron), same pattern as send-billing-reminder / send-communication.
+[functions.send-platform-invoice]
+verify_jwt = false
+
 [functions.verify-otp]
 verify_jwt = false
 
