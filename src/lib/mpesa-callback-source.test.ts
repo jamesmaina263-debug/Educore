@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 // Deno-targeted module (uses the Deno global and ".ts" import suffixes), so it is loaded via a
 // non-literal specifier: vitest resolves it fine, while the app's tsc pass never type-checks it.
-type Check = { allowed: boolean; sourceIp: string | null; enforced: boolean };
+type Check = { allowed: boolean; sourceIp: string | null; enforced: boolean; inAllowlist: boolean };
 const MODULE_PATH = "../../supabase/functions/_shared/mpesa/verifyCallbackSource";
 let verifyCallbackSource: (req: Request) => Check;
 
@@ -59,5 +59,18 @@ describe("verifyCallbackSource", () => {
 
   it("fails closed when no source IP can be determined", () => {
     expect(verifyCallbackSource(req({})).allowed).toBe(false);
+  });
+
+  it("with enforcement off, allows the request but still reports whether the IP is in the allowlist", () => {
+    env.MPESA_CALLBACK_IP_ALLOWLIST_ENFORCE = "false";
+    const outside = verifyCallbackSource(req({ "cf-connecting-ip": "203.0.113.9" }));
+    expect(outside.enforced).toBe(false);
+    expect(outside.allowed).toBe(true);
+    expect(outside.inAllowlist).toBe(false);
+    const inside = verifyCallbackSource(req({ "cf-connecting-ip": "196.201.214.200" }));
+    expect(inside.allowed).toBe(true);
+    expect(inside.inAllowlist).toBe(true);
+    // no determinable IP is never "in the allowlist", even with enforcement off
+    expect(verifyCallbackSource(req({})).inAllowlist).toBe(false);
   });
 });
