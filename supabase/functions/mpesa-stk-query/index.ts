@@ -28,8 +28,8 @@ import { interpretStkQueryResponse } from "../_shared/mpesa/stkQueryResult.ts";
 // Callers:
 //   * user mode  -- Next.js server action getMpesaRequestStatus() with the user's JWT; the request
 //     must be visible to the caller under RLS (same cross-tenant guard as mpesa-stk-push).
-//   * batch mode -- /api/cron/mpesa-stale-pending with the service-role key, for requests nobody
-//     is watching any more.
+//   * batch mode -- /api/cron/mpesa-stale-pending, authenticated with the shared DISPATCH_SECRET
+//     (x-dispatch-secret header), for requests nobody is watching any more.
 const MIN_AGE_MS = 30_000; // give the genuine callback (normally 12-16s after the PIN) a head start
 const MAX_AGE_MS = 24 * 60 * 60 * 1000;
 const THROTTLE_MS = 20_000;
@@ -66,12 +66,12 @@ Deno.serve(async (req) => {
 
   try {
     // Batch (cron) callers authenticate with the shared DISPATCH_SECRET in x-dispatch-secret -- the
-    // same server-to-server path send-communication uses. They CANNOT use the service key as a
-    // Bearer token: with verify_jwt on, Supabase's gateway 401s an sb_secret_ key before this code
-    // runs (verified 2026-10-04: the cron's call was rejected at the gateway), and the in-function
-    // comparison against SUPABASE_SERVICE_ROLE_KEY need not match the key the app holds anyway.
-    // verify_jwt is therefore false for this function; user-mode calls are still authenticated
-    // below by an RLS-gated read under the caller's own JWT, so an anonymous caller gets nothing.
+    // same server-to-server path send-communication uses, and the ONLY way into batch mode. The
+    // service key as a Bearer token is deliberately not accepted: with verify_jwt on, Supabase's
+    // gateway 401s an sb_secret_ key before this code runs (verified 2026-10-04), so that path
+    // could never be used by the cron. verify_jwt is therefore false for this function; user-mode
+    // calls are still authenticated below by an RLS-gated read under the caller's own JWT, so an
+    // anonymous caller (or one that merely sends a Bearer value) gets nothing.
     const dispatchSecret = Deno.env.get("DISPATCH_SECRET");
     const providedSecret = req.headers.get("x-dispatch-secret");
     const isDispatchCaller =
@@ -86,14 +86,10 @@ Deno.serve(async (req) => {
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
     const serviceClient = createClient(supabaseUrl, serviceKey);
 
-    const bearer = (authHeader ?? "").replace(/^Bearer\s+/i, "").trim();
-    const isServiceCaller =
-      isDispatchCaller || (serviceKey.length > 0 && bearer.length > 0 && timingSafeEqual(bearer, serviceKey));
-
     const body = await req.json().catch(() => ({}));
 
-    // ---- batch mode (cron, service role only) -------------------------------------------
-    if (isServiceCaller) {
+    // ---- batch mode (cron, x-dispatch-secret only) --------------------------------------
+    if (isDispatchCaller) {
       const ids: string[] = Array.isArray(body?.request_ids)
         ? body.request_ids.filter((x: unknown): x is string => typeof x === "string")
         : typeof body?.request_id === "string"
