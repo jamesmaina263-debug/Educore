@@ -15,9 +15,10 @@
 //
 // Ranges below are Safaricom's publicly documented Daraja callback source IPs as of 2026.
 // Override via MPESA_CALLBACK_IP_ALLOWLIST (comma-separated CIDR blocks) if Safaricom changes
-// these, without a redeploy. Set MPESA_CALLBACK_IP_ALLOWLIST_ENFORCE=false to disable entirely
-// (e.g. sandbox testing from a non-Safaricom IP) -- every callback logs a warning while disabled
-// so it can't be silently left off in production.
+// these, without a redeploy. Set MPESA_CALLBACK_IP_ALLOWLIST_ENFORCE=false to skip the check
+// for SANDBOX schools only (e.g. testing from a non-Safaricom IP). The callback handler ignores
+// the flag for any school whose mpesa_settings.environment is not 'sandbox', so it cannot be
+// left off for real money by accident. Every callback still logs a warning while it is off.
 
 import { getRealClientIp } from "../getRealClientIp.ts";
 
@@ -74,6 +75,9 @@ export interface CallbackSourceCheck {
   allowed: boolean;
   sourceIp: string | null;
   enforced: boolean;
+  // Result of the allowlist check itself, computed even when enforcement is switched off, so the
+  // caller can still insist on it for non-sandbox schools (see mpesa-stk-callback/index.ts).
+  inAllowlist: boolean;
 }
 
 export function verifyCallbackSource(req: Request): CallbackSourceCheck {
@@ -85,16 +89,13 @@ export function verifyCallbackSource(req: Request): CallbackSourceCheck {
 
   const sourceIp = getSourceIp(req);
 
+  // Fail closed: a payment webhook with no determinable source IP is treated the same as one
+  // from an unrecognized IP, not silently let through.
+  const inAllowlist = sourceIp !== null && allowlist.some((cidr) => ipInCidr(sourceIp, cidr));
+
   if (!enforced) {
-    return { allowed: true, sourceIp, enforced: false };
+    return { allowed: true, sourceIp, enforced: false, inAllowlist };
   }
 
-  if (!sourceIp) {
-    // Fail closed: a payment webhook with no determinable source IP is treated the same as one
-    // from an unrecognized IP, not silently let through.
-    return { allowed: false, sourceIp: null, enforced: true };
-  }
-
-  const allowed = allowlist.some((cidr) => ipInCidr(sourceIp, cidr));
-  return { allowed, sourceIp, enforced: true };
+  return { allowed: inAllowlist, sourceIp, enforced: true, inAllowlist };
 }
