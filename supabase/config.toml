@@ -32,6 +32,11 @@ verify_jwt = false
 [functions.mpesa-stk-push]
 verify_jwt = true
 
+# Fallback for a lost Daraja callback: called from the app (user JWT) and from the
+# stale-pending cron (service-role key, which also passes JWT verification).
+[functions.mpesa-stk-query]
+verify_jwt = true
+
 # Called only by the notify_admin_new_demo_request() Postgres trigger via pg_net (see
 # supabase/migrations/20260830120000_platform_admin_notifications.sql) -- no user session exists
 # at that point, so it can't present a Supabase JWT. Authenticated instead by the
