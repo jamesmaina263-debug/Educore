@@ -65,8 +65,20 @@ Deno.serve(async (req) => {
   }
 
   try {
+    // Batch (cron) callers authenticate with the shared DISPATCH_SECRET in x-dispatch-secret -- the
+    // same server-to-server path send-communication uses. They CANNOT use the service key as a
+    // Bearer token: with verify_jwt on, Supabase's gateway 401s an sb_secret_ key before this code
+    // runs (verified 2026-10-04: the cron's call was rejected at the gateway), and the in-function
+    // comparison against SUPABASE_SERVICE_ROLE_KEY need not match the key the app holds anyway.
+    // verify_jwt is therefore false for this function; user-mode calls are still authenticated
+    // below by an RLS-gated read under the caller's own JWT, so an anonymous caller gets nothing.
+    const dispatchSecret = Deno.env.get("DISPATCH_SECRET");
+    const providedSecret = req.headers.get("x-dispatch-secret");
+    const isDispatchCaller =
+      !!dispatchSecret && !!providedSecret && timingSafeEqual(providedSecret, dispatchSecret);
+
     const authHeader = req.headers.get("Authorization");
-    if (!authHeader) {
+    if (!isDispatchCaller && !authHeader) {
       return json({ error: "Missing Authorization header." }, 401);
     }
 
@@ -74,8 +86,9 @@ Deno.serve(async (req) => {
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
     const serviceClient = createClient(supabaseUrl, serviceKey);
 
-    const bearer = authHeader.replace(/^Bearer\s+/i, "").trim();
-    const isServiceCaller = serviceKey.length > 0 && timingSafeEqual(bearer, serviceKey);
+    const bearer = (authHeader ?? "").replace(/^Bearer\s+/i, "").trim();
+    const isServiceCaller =
+      isDispatchCaller || (serviceKey.length > 0 && bearer.length > 0 && timingSafeEqual(bearer, serviceKey));
 
     const body = await req.json().catch(() => ({}));
 
@@ -112,7 +125,7 @@ Deno.serve(async (req) => {
     // RLS-gated read under the caller's own JWT: a caller who cannot see this school's finance
     // data gets nothing back whether or not they know the request_id.
     const userClient = createClient(supabaseUrl, Deno.env.get("SUPABASE_ANON_KEY")!, {
-      global: { headers: { Authorization: authHeader } },
+      global: { headers: { Authorization: authHeader! } },
     });
     const { data: visible, error: visibleError } = await userClient
       .from("mpesa_stk_requests")
