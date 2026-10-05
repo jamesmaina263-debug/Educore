@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { tagSentryRequestContext } from "@/lib/observability/sentry-context";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { generateTemporaryPassword, temporaryPasswordExpiry } from "@/lib/temporary-password";
+import { LOGO_BUCKET, validateLogoFile } from "@/lib/logo-upload";
 
 type ActionResult = { error: string } | { success: true };
 type InviteResult = { error: string } | { success: true; temporaryPassword: string };
@@ -45,6 +46,50 @@ export async function updateBranding(input: {
 
   revalidatePath("/settings", "layout");
   return { success: true };
+}
+
+// Logo upload for Settings -> Branding. This is the ONLY path that can set a custom
+// schools.logo_url: the guard_schools_logo_url trigger rejects any other writer (including
+// direct PostgREST calls with a user session) unless the value is null/empty, a first-party
+// /branding/ asset, or unchanged. So authorization is checked here explicitly (the write
+// itself uses the service-role client), and the file's bytes are verified, not just its MIME type.
+export async function uploadSchoolLogo(
+  formData: FormData
+): Promise<{ error: string } | { success: true; logo_url: string }> {
+  const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
+  const { data: schoolId, error: schoolIdError } = await supabase.rpc("auth_school_id");
+  if (schoolIdError || !schoolId) return { error: "Could not resolve your school." };
+
+  const { data: canWrite, error: permError } = await supabase.rpc("auth_has_permission", {
+    p_permission_key: "settings.branding.write",
+  });
+  if (permError || !canWrite) return { error: "You don't have permission to change the school logo." };
+
+  const file = formData.get("logo");
+  if (!(file instanceof File)) return { error: "Choose a logo image to upload." };
+  const checked = await validateLogoFile(file);
+  if ("error" in checked) return checked;
+
+  const admin = createAdminClient();
+  const path = `${schoolId}/logo-${Date.now()}.${checked.extension}`;
+  const { error: uploadError } = await admin.storage
+    .from(LOGO_BUCKET)
+    .upload(path, file, { contentType: checked.contentType });
+  if (uploadError) return { error: "Could not upload the logo. Please try again." };
+
+  const { data: publicUrlData } = admin.storage.from(LOGO_BUCKET).getPublicUrl(path);
+  const { error: updateError } = await admin
+    .from("schools")
+    .update({ logo_url: publicUrlData.publicUrl })
+    .eq("id", schoolId);
+  if (updateError) {
+    await admin.storage.from(LOGO_BUCKET).remove([path]);
+    return { error: "Could not save the new logo. Please try again." };
+  }
+
+  revalidatePath("/settings", "layout");
+  return { success: true, logo_url: publicUrlData.publicUrl };
 }
 
 export async function inviteStaffMember(input: {
