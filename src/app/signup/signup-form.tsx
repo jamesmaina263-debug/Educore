@@ -450,7 +450,7 @@ export function SignupForm() {
           ref={fileInputRef}
           type="file"
           name="logo"
-          accept="image/png,image/jpeg,image/webp,image/svg+xml"
+          accept="image/png,image/jpeg,image/webp"
           className="hidden"
           onChange={(e) => setLogoFile(e.target.files?.[0] ?? null)}
         />

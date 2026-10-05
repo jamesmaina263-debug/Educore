@@ -241,12 +241,13 @@ export async function signUpSchool(
   let logoToUpload: File | null = null;
   if (logoFile instanceof File && logoFile.size > 0) {
     const MAX_LOGO_BYTES = 2 * 1024 * 1024; // matches the school-logos bucket's file_size_limit
-    const ALLOWED_LOGO_TYPES = ["image/png", "image/jpeg", "image/webp", "image/svg+xml"];
+    // SVG is deliberately excluded: it can carry script, and logos are served from a public bucket.
+    const ALLOWED_LOGO_TYPES = ["image/png", "image/jpeg", "image/webp"];
     if (logoFile.size > MAX_LOGO_BYTES) {
       return { error: "Logo must be 2MB or smaller." };
     }
     if (!ALLOWED_LOGO_TYPES.includes(logoFile.type)) {
-      return { error: "Logo must be a PNG, JPEG, WebP, or SVG image." };
+      return { error: "Logo must be a PNG, JPEG, or WebP image." };
     }
     logoToUpload = logoFile;
   }
