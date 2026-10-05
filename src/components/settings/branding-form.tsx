@@ -123,6 +123,7 @@ export function BrandingForm({
           <SourceBadge source={logoSource} />
         </div>
         <div className="flex items-center gap-3">
+          {/* eslint-disable-next-line @next/next/no-img-element -- tenant-uploaded logo from a public bucket */}
           <img
             src={form.logo_url || logoFallbackValue}
             alt=""
