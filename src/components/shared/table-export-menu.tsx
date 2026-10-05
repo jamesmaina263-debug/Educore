@@ -75,7 +75,7 @@ interface LoadedLogo {
   height: number;
 }
 
-// Loads the logo through an <img> + canvas so any browser-supported format (PNG, JPEG, WebP, SVG)
+// Loads the logo through an <img> + canvas so any browser-supported format (PNG, JPEG, WebP)
 // ends up as a PNG data URL jsPDF can embed. Resolves to null on ANY failure (network error,
 // missing CORS headers tainting the canvas, timeout) so a logo problem can never block a download.
 function loadLogo(url: string): Promise<LoadedLogo | null> {
