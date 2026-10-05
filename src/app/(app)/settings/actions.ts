@@ -24,21 +24,22 @@ export async function updateBranding(input: {
   const { data: schoolId, error: schoolIdError } = await supabase.rpc("auth_school_id");
   if (schoolIdError || !schoolId) return { error: "Could not resolve your school." };
 
-  // admission_response_note is only ever set from GeneralSettingsPanel below, not from
-  // BrandingForm (a separate caller of this same action, which doesn't know this field
-  // exists). Unlike the other fields here, this one is conditionally included -- `undefined`
-  // means "caller didn't touch it," leaving the existing value alone, rather than always
-  // coercing to null and letting a Branding-only save silently wipe it out.
-  const update: Record<string, string | null> = {
-    name: input.name,
-    email: input.email || null,
-    motto: input.motto || null,
-    logo_url: input.logo_url || null,
-    primary_color: input.primary_color || null,
-    kra_pin: input.kra_pin || null,
+  // updateBranding has two callers that each send a DIFFERENT subset of fields: BrandingForm
+  // (name/motto/logo_url/primary_color) and GeneralSettingsPanel (name/email/kra_pin/
+  // admission_response_note). `undefined` therefore means "caller didn't touch it" and must
+  // leave the existing value alone -- coercing it to null made each form silently wipe the
+  // other form's fields on every save. An explicit empty string still clears the field.
+  const update: Record<string, string | null> = { name: input.name };
+  const optional = {
+    email: input.email,
+    motto: input.motto,
+    logo_url: input.logo_url,
+    primary_color: input.primary_color,
+    kra_pin: input.kra_pin,
+    admission_response_note: input.admission_response_note,
   };
-  if (input.admission_response_note !== undefined) {
-    update.admission_response_note = input.admission_response_note || null;
+  for (const [key, value] of Object.entries(optional)) {
+    if (value !== undefined) update[key] = value || null;
   }
 
   const { error } = await supabase.from("schools").update(update).eq("id", schoolId);
