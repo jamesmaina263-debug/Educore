@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { tagSentryRequestContext } from "@/lib/observability/sentry-context";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { generateTemporaryPassword, temporaryPasswordExpiry } from "@/lib/temporary-password";
+import { LOGO_BUCKET, validateLogoFile } from "@/lib/logo-upload";
 
 type ActionResult = { error: string } | { success: true };
 type InviteResult = { error: string } | { success: true; temporaryPassword: string };
@@ -23,21 +24,22 @@ export async function updateBranding(input: {
   const { data: schoolId, error: schoolIdError } = await supabase.rpc("auth_school_id");
   if (schoolIdError || !schoolId) return { error: "Could not resolve your school." };
 
-  // admission_response_note is only ever set from GeneralSettingsPanel below, not from
-  // BrandingForm (a separate caller of this same action, which doesn't know this field
-  // exists). Unlike the other fields here, this one is conditionally included -- `undefined`
-  // means "caller didn't touch it," leaving the existing value alone, rather than always
-  // coercing to null and letting a Branding-only save silently wipe it out.
-  const update: Record<string, string | null> = {
-    name: input.name,
-    email: input.email || null,
-    motto: input.motto || null,
-    logo_url: input.logo_url || null,
-    primary_color: input.primary_color || null,
-    kra_pin: input.kra_pin || null,
+  // updateBranding has two callers that each send a DIFFERENT subset of fields: BrandingForm
+  // (name/motto/logo_url/primary_color) and GeneralSettingsPanel (name/email/kra_pin/
+  // admission_response_note). `undefined` therefore means "caller didn't touch it" and must
+  // leave the existing value alone -- coercing it to null made each form silently wipe the
+  // other form's fields on every save. An explicit empty string still clears the field.
+  const update: Record<string, string | null> = { name: input.name };
+  const optional = {
+    email: input.email,
+    motto: input.motto,
+    logo_url: input.logo_url,
+    primary_color: input.primary_color,
+    kra_pin: input.kra_pin,
+    admission_response_note: input.admission_response_note,
   };
-  if (input.admission_response_note !== undefined) {
-    update.admission_response_note = input.admission_response_note || null;
+  for (const [key, value] of Object.entries(optional)) {
+    if (value !== undefined) update[key] = value || null;
   }
 
   const { error } = await supabase.from("schools").update(update).eq("id", schoolId);
@@ -45,6 +47,50 @@ export async function updateBranding(input: {
 
   revalidatePath("/settings", "layout");
   return { success: true };
+}
+
+// Logo upload for Settings -> Branding. This is the ONLY path that can set a custom
+// schools.logo_url: the guard_schools_logo_url trigger rejects any other writer (including
+// direct PostgREST calls with a user session) unless the value is null/empty, a first-party
+// /branding/ asset, or unchanged. So authorization is checked here explicitly (the write
+// itself uses the service-role client), and the file's bytes are verified, not just its MIME type.
+export async function uploadSchoolLogo(
+  formData: FormData
+): Promise<{ error: string } | { success: true; logo_url: string }> {
+  const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
+  const { data: schoolId, error: schoolIdError } = await supabase.rpc("auth_school_id");
+  if (schoolIdError || !schoolId) return { error: "Could not resolve your school." };
+
+  const { data: canWrite, error: permError } = await supabase.rpc("auth_has_permission", {
+    p_permission_key: "settings.branding.write",
+  });
+  if (permError || !canWrite) return { error: "You don't have permission to change the school logo." };
+
+  const file = formData.get("logo");
+  if (!(file instanceof File)) return { error: "Choose a logo image to upload." };
+  const checked = await validateLogoFile(file);
+  if ("error" in checked) return checked;
+
+  const admin = createAdminClient();
+  const path = `${schoolId}/logo-${Date.now()}.${checked.extension}`;
+  const { error: uploadError } = await admin.storage
+    .from(LOGO_BUCKET)
+    .upload(path, file, { contentType: checked.contentType });
+  if (uploadError) return { error: "Could not upload the logo. Please try again." };
+
+  const { data: publicUrlData } = admin.storage.from(LOGO_BUCKET).getPublicUrl(path);
+  const { error: updateError } = await admin
+    .from("schools")
+    .update({ logo_url: publicUrlData.publicUrl })
+    .eq("id", schoolId);
+  if (updateError) {
+    await admin.storage.from(LOGO_BUCKET).remove([path]);
+    return { error: "Could not save the new logo. Please try again." };
+  }
+
+  revalidatePath("/settings", "layout");
+  return { success: true, logo_url: publicUrlData.publicUrl };
 }
 
 export async function inviteStaffMember(input: {

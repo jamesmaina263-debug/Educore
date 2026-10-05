@@ -1,12 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { updateBranding } from "@/app/(app)/settings/actions";
+import { updateBranding, uploadSchoolLogo } from "@/app/(app)/settings/actions";
 
 // Platform default, used only when neither the school nor its group has set a value.
 const PLATFORM_DEFAULT_LOGO_URL = "/branding/educore-default-logo.svg";
@@ -61,6 +61,8 @@ export function BrandingForm({
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
 
   const logoSource = resolveSource(initial.logo_url, groupFallback?.logo_url);
   const colorSource = resolveSource(initial.primary_color, groupFallback?.primary_color);
@@ -76,6 +78,22 @@ export function BrandingForm({
     setPending(false);
     if ("error" in result) return setError(result.error);
     setSaved(true);
+    router.refresh();
+  }
+
+  async function handleLogoFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // allow re-selecting the same file after an error
+    if (!file) return;
+    setUploading(true);
+    setError(null);
+    setSaved(false);
+    const fd = new FormData();
+    fd.append("logo", file);
+    const result = await uploadSchoolLogo(fd);
+    setUploading(false);
+    if ("error" in result) return setError(result.error);
+    setForm((f) => ({ ...f, logo_url: result.logo_url }));
     router.refresh();
   }
 
@@ -101,16 +119,39 @@ export function BrandingForm({
       </div>
       <div className="space-y-1.5">
         <div className="flex items-center justify-between">
-          <Label htmlFor="logo_url">Logo URL (optional)</Label>
+          <Label htmlFor="logo_file">Logo (optional)</Label>
           <SourceBadge source={logoSource} />
         </div>
-        <Input
-          id="logo_url"
-          placeholder={logoFallbackValue}
-          value={form.logo_url}
-          onChange={(e) => setForm({ ...form, logo_url: e.target.value })}
-          disabled={!canWrite}
-        />
+        <div className="flex items-center gap-3">
+          {/* eslint-disable-next-line @next/next/no-img-element -- tenant-uploaded logo from a public bucket */}
+          <img
+            src={form.logo_url || logoFallbackValue}
+            alt=""
+            className="h-12 w-12 rounded border border-border bg-white object-contain p-1"
+          />
+          {canWrite && (
+            <>
+              <input
+                id="logo_file"
+                ref={fileRef}
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                className="hidden"
+                onChange={handleLogoFile}
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={uploading || pending}
+                onClick={() => fileRef.current?.click()}
+              >
+                {uploading ? "Uploading…" : form.logo_url ? "Replace logo" : "Upload logo"}
+              </Button>
+            </>
+          )}
+        </div>
+        <p className="text-xs text-muted-foreground">PNG, JPEG or WebP, up to 2 MB. Uploading saves the logo immediately.</p>
         {form.logo_url && canWrite && (
           <button
             type="button"
