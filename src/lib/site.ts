@@ -13,3 +13,12 @@ export const SITE_URL =
   process.env.NEXT_PUBLIC_SITE_URL ?? "https://www.educoreafrica.com";
 
 export const SITE_NAME = "EduCore";
+
+// Public profiles that represent this business, used for the Organization
+// schema's `sameAs`. Only add a URL here once it is a real, live profile for
+// EduCore -- `sameAs` is a claim to search engines that these pages are the
+// same entity as the website. Use each profile's canonical URL, not a
+// share/short link (those are redirects and not stable entity identifiers).
+export const SOCIAL_PROFILES = [
+  "https://www.facebook.com/profile.php?id=61593117913242",
+];

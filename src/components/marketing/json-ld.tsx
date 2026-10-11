@@ -1,14 +1,14 @@
-import { SITE_URL, SITE_NAME } from "@/lib/site";
+import { SITE_URL, SITE_NAME, SOCIAL_PROFILES } from "@/lib/site";
 
 // Site-wide structured data for the marketing site only (rendered from
 // (marketing)/layout.tsx, not the root layout -- this must never appear on
 // authenticated app routes). Deliberately conservative: only facts already
 // asserted elsewhere on the site (name, URL, logo, what the product is,
-// city-level location as shown on /about and in the footer, and the
-// published pricing on /pricing) are included. No aggregateRating (there
-// are no real reviews to cite), no sameAs social profiles, no street
-// address or registration number (not yet provided) -- none of that is
-// claimed here. Extend this only when a fact becomes real and public.
+// city-level location as shown on /about and in the footer, the published
+// pricing on /pricing, and the live social profiles in SOCIAL_PROFILES) are
+// included. No aggregateRating (there are no real reviews to cite), no
+// street address or registration number (not yet provided) -- none of that
+// is claimed here. Extend this only when a fact becomes real and public.
 export function buildOrganizationJsonLd() {
   return {
     "@context": "https://schema.org",
@@ -22,6 +22,9 @@ export function buildOrganizationJsonLd() {
       addressLocality: "Nairobi",
       addressCountry: "KE",
     },
+    // EduCore sells to Kenyan schools only (current scope).
+    areaServed: { "@type": "Country", name: "Kenya" },
+    sameAs: SOCIAL_PROFILES,
   };
 }
 
