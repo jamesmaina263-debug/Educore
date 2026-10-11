@@ -13,8 +13,8 @@ import { BlogByline } from "@/components/marketing/blog-byline";
 const SLUG = "kjsea-sba-records-kenya-schools";
 const PATH = `/blog/${SLUG}`;
 const PUBLISHED_ON = "2026-09-20";
-const TITLE = "KJSEA and School-Based Assessment: The Grade 7–8 Records Your School Needs on File — EduCore";
-const DESCRIPTION = "Grade 7 and 8 school-based assessment is a fifth of a learner's KJSEA score. What it is, who uploads it, and where records go missing.";
+const TITLE = "SBA KNEC Meaning: School-Based Assessment and the KJSEA Records Your School Needs — EduCore";
+const DESCRIPTION = "SBA means school-based assessment. What SBA means at KNEC, how Grade 7 and 8 SBA makes up a fifth of the KJSEA score, who uploads it, and where records go missing.";
 const KNEC_2026_SBA_CIRCULAR =
   "https://www.knec.ac.ke/wp-content/uploads/2026/04/Guidelines-and-schedule-for-Grades-378-and-SNE-Projects.pdf";
 
@@ -57,6 +57,10 @@ export const metadata: Metadata = {
 // EduCore does not upload to the KNEC portal and this post says so.
 
 const FAQS = [
+  {
+    q: "What does SBA mean at KNEC?",
+    a: "SBA stands for school-based assessment. KNEC is the Kenya National Examinations Council. In the KJSEA context, SBA is the assessment learners complete in school during Grades 7 and 8, using tasks and scoring guidelines KNEC provides. The school administers the tasks, teachers score them, and the scores are uploaded to KNEC and count toward the learner's final KJSEA score.",
+  },
   {
     q: "How much do Grade 7 and Grade 8 SBA count towards the KJSEA score?",
     a: "As announced by the Ministry of Education, a learner's KJSEA score is built from 60% the Grade 9 KJSEA assessment, 20% the Grade 6 KPSEA, and 20% school-based assessment from Grades 7 and 8. Press reports of KNEC's guidance describe the 20% as 10% from each of the two years. Check the current KNEC circular for any changes.",
@@ -139,6 +143,17 @@ export default function KjseaSbaRecordsKenyaSchoolsPost() {
           easy to lose: what the SBA actually is, who uploads it, and what
           your school should be able to produce if anyone asks.
         </p>
+        <div className="mt-8 max-w-2xl rounded-2xl border border-white/10 bg-white/[0.04] p-6">
+          <p className="text-sm font-semibold text-white">What does SBA mean at KNEC?</p>
+          <p className="mt-2 text-sm leading-relaxed text-white/70">
+            <strong className="text-white">SBA means school-based assessment.</strong>{" "}
+            KNEC is the Kenya National Examinations Council. SBA is the
+            assessment learners complete in school during Grades 7 and 8 on
+            tasks and scoring guidelines KNEC provides, scored by subject
+            teachers and uploaded by the school. It counts toward the
+            learner&apos;s final KJSEA score.
+          </p>
+        </div>
       </Section>
 
       {/* 2 — The composite */}
