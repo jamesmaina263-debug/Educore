@@ -88,6 +88,7 @@ export default async function DashboardPage() {
     { data: healthModuleEnabledData },
     { data: transportModuleEnabledData },
     { data: inventoryModuleEnabledData },
+    { data: dashboardNoteFlag },
   ] = await Promise.all([
     supabase.rpc("auth_is_super_admin"),
     supabase
@@ -119,6 +120,8 @@ export default async function DashboardPage() {
     supabase.rpc("auth_school_module_enabled", { p_key: "health" }),
     supabase.rpc("auth_school_module_enabled", { p_key: "transport" }),
     supabase.rpc("auth_school_module_enabled", { p_key: "inventory" }),
+    // Experiment flag (opt-in: absent/error reads as off, so the note stays hidden).
+    supabase.rpc("auth_school_feature_flag_enabled", { p_key: "dashboard_experiment_note" }),
   ]);
   if (isSuperAdmin) redirect("/admin");
   void canMarkAny;
@@ -629,6 +632,12 @@ export default async function DashboardPage() {
             </Link>
           )}
         </div>
+
+        {dashboardNoteFlag === true && (
+          <p className="rounded-md border border-border bg-muted/50 px-3 py-2 text-sm text-muted-foreground">
+            Feature flag test: this school is in the &quot;dashboard_experiment_note&quot; experiment.
+          </p>
+        )}
 
         {metrics.length > 0 && (
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
