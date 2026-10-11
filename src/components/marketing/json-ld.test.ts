@@ -11,6 +11,13 @@ describe("marketing JSON-LD", () => {
     expect(org.address.addressCountry).toBe("KE");
   });
 
+  it("declares the Kenya service area and live social profiles", () => {
+    const org = buildOrganizationJsonLd();
+    expect(org.areaServed.name).toBe("Kenya");
+    expect(org.sameAs.length).toBeGreaterThan(0);
+    for (const url of org.sameAs) expect(url).toMatch(/^https:\/\//);
+  });
+
   it("SoftwareApplication carries offers (required for Google rich results)", () => {
     const app = buildSoftwareApplicationJsonLd();
     expect(app["@type"]).toBe("SoftwareApplication");
