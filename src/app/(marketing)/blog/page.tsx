@@ -8,7 +8,7 @@ import { Reveal } from "@/components/marketing/reveal";
 import { BreadcrumbJsonLd, HOME_CRUMB } from "@/components/marketing/breadcrumb-json-ld";
 import { BLOG_POSTS } from "@/lib/blog-posts";
 
-const TITLE = "Blog — EduCore Kenya";
+const TITLE = "School Management and CBC Guides for Kenya — EduCore Blog";
 const DESCRIPTION =
   "Guides and practical advice on running a school in Kenya — fee collection, CBC grading, admissions, and choosing school management software.";
 

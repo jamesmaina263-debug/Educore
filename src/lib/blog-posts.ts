@@ -17,6 +17,13 @@ export type BlogPostSummary = {
 
 export const BLOG_POSTS: BlogPostSummary[] = [
   {
+    slug: "what-is-a-school-management-system-kenya",
+    title: "What Is a School Management System? A Kenya Guide — EduCore",
+    description:
+      "What a school management system is, what it does, and what to look for in Kenya: CBC grading, M-Pesa fees, parent communication and data protection.",
+    publishedOn: "2026-10-11",
+  },
+  {
     slug: "senior-school-pathways-kenya-stem-social-sciences-arts-sports",
     title: "Senior School Pathways in Kenya: STEM, Social Sciences, Arts & Sports Science Explained — EduCore",
     description:

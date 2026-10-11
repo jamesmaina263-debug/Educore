@@ -8,7 +8,7 @@ import { Section } from "@/components/marketing/section";
 import { Reveal } from "@/components/marketing/reveal";
 import { BreadcrumbJsonLd, HOME_CRUMB } from "@/components/marketing/breadcrumb-json-ld";
 
-const TITLE = "FAQ — EduCore";
+const TITLE = "FAQ: School Management Software in Kenya — EduCore";
 const DESCRIPTION =
   "Answers to common questions about EduCore: modules, data security, offline support, M-Pesa, AI features, multi-campus schools, and how billing works.";
 
