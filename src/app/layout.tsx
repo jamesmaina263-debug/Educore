@@ -69,7 +69,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="h-full antialiased">
+    <html lang="en-KE" className="h-full antialiased">
       {/* GTM (GTM-MGV2XHBB) deliberately does NOT live here anymore -- this
           layout wraps every route in the app, including the authenticated
           school app ((app) route group: student, health, finance,
