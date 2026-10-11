@@ -19,7 +19,7 @@ import { MiniFrame } from "@/components/marketing/mini-frame";
 import { Badge } from "@/components/ui/badge";
 import { BreadcrumbJsonLd, HOME_CRUMB } from "@/components/marketing/breadcrumb-json-ld";
 
-const TITLE = "AI & Automation — EduCore";
+const TITLE = "AI & Automation for Schools — EduCore Kenya";
 const DESCRIPTION =
   "How EduCore actually uses AI: grounded in your school's real data, drafted for a human to review, never sent unreviewed. Live features only — nothing on this page is a roadmap promise.";
 
