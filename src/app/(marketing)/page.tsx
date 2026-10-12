@@ -141,6 +141,7 @@ export default function MarketingHomePage() {
       {/* 1 & 2 & 3 & 4 — Hero: value proposition, primary/secondary CTA, Dashboard Frame */}
       <Section tone="navy" className="pt-16 sm:pt-20">
         <div className="grid items-center gap-16 lg:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)]">
+          <div>
           <Eyebrow tone="light">School Management System for Kenya</Eyebrow>
           <h1 className="mt-5 text-4xl font-extrabold leading-[1.1] tracking-tight sm:text-5xl lg:text-[3.25rem]">
             School management software built for Kenyan schools.
@@ -174,11 +175,14 @@ export default function MarketingHomePage() {
           <p className="mt-6 text-xs font-medium uppercase tracking-[0.14em] text-white/50">
             Built for modern schools &bull; Secure &bull; Cloud-based &bull; Scalable
           </p>
+          </div>
 
-          <DashboardFrame />
-          <p className="mt-3 text-center text-xs text-white/50">
-            Illustrative preview — not actual account data.
-          </p>
+          <div>
+            <DashboardFrame />
+            <p className="mt-3 text-center text-xs text-white/50">
+              Illustrative preview — not actual account data.
+            </p>
+          </div>
         </div>
       </Section>
 

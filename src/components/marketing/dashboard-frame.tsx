@@ -33,7 +33,8 @@ import { cn } from "@/lib/utils";
 //   invoiced 4,900,000 = weekly invoiced bars below; collected 4,100,000 =
 //   weekly collected bars (83.7%); attendance 781 / 812 = 96.2%.
 
-const DESIGN_WIDTH = 1200;
+const DESIGN_WIDTH = 1280;
+const DESIGN_HEIGHT = 840; // 3:2 -- a laptop-screen screenshot
 
 const SCHOOL = "Northgate Academy";
 const TERM = "Term 3, 2026";
@@ -185,7 +186,7 @@ function NavRow({
   return (
     <div
       className={cn(
-        "flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-sm font-medium",
+        "flex items-center gap-2.5 rounded-md px-2.5 py-[2.5px] text-[13px] font-medium leading-5",
         active ? "bg-sidebar-primary/10 text-sidebar-primary" : "text-sidebar-foreground/80",
       )}
     >
@@ -199,7 +200,7 @@ function NavRow({
 /** Bar chart drawn with plain markup -- same look as the app's recharts charts. */
 function BarChart({
   data,
-  height = 190,
+  height = 170,
   max,
   ticks,
   format = (v: number) => String(v),
@@ -223,7 +224,7 @@ function BarChart({
           </span>
         ))}
       </div>
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
         <div className="relative flex items-end justify-around" style={{ height }}>
           {ticks.map((t) => (
             <div
@@ -339,17 +340,17 @@ export function DashboardFrame({ className }: { className?: string }) {
         </div>
 
         {/* The real app shell + Dashboard page, at desktop width, scaled to fit. */}
-        <ScaledStage designWidth={DESIGN_WIDTH}>
-          <div className="flex bg-background" aria-hidden="true">
+        <ScaledStage designWidth={DESIGN_WIDTH} designHeight={DESIGN_HEIGHT}>
+          <div className="flex h-full bg-background" aria-hidden="true">
             {/* Sidebar -- every module, rendered from the real navGroups. */}
-            <aside className="flex w-56 shrink-0 flex-col border-r border-sidebar-border bg-sidebar">
+            <aside className="flex w-56 shrink-0 flex-col overflow-hidden border-r border-sidebar-border bg-sidebar">
               <div className="flex h-14 items-center border-b border-sidebar-border px-4 text-sm font-semibold text-sidebar-foreground">
                 {SCHOOL}
               </div>
-              <nav className="flex flex-col gap-3 p-2">
+              <nav className="flex flex-col gap-2 p-2">
                 {navGroups.map((group) => (
-                  <div key={group.label} className="flex flex-col gap-0.5">
-                    <p className="px-2.5 pb-1 pt-1 text-[10px] font-semibold uppercase tracking-wider text-sidebar-foreground/40">
+                  <div key={group.label} className="flex flex-col">
+                    <p className="px-2.5 pb-0.5 pt-0.5 text-[10px] font-semibold uppercase tracking-wider text-sidebar-foreground/40">
                       {group.label}
                     </p>
                     {group.items.map((item) => (
@@ -366,7 +367,7 @@ export function DashboardFrame({ className }: { className?: string }) {
               </nav>
             </aside>
 
-            <div className="flex min-w-0 flex-1 flex-col">
+            <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
               {/* Top bar */}
               <header className="flex h-14 shrink-0 items-center gap-3 border-b border-border bg-surface px-4">
                 <div className="flex h-8 max-w-sm flex-1 items-center gap-2 rounded-md border border-border bg-background px-2.5 text-sm text-muted-foreground">
