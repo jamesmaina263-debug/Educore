@@ -38,6 +38,7 @@ import { MiniFrame } from "@/components/marketing/mini-frame";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { BreadcrumbJsonLd, HOME_CRUMB } from "@/components/marketing/breadcrumb-json-ld";
+import { RelatedGuides } from "@/components/marketing/related-guides";
 
 const TITLE = "School Management System Platform — EduCore Kenya";
 const DESCRIPTION = "The school ERP modules EduCore runs for Kenyan schools: student management, academics, admissions, fees, and communication, in one platform.";
@@ -512,6 +513,7 @@ export default function PlatformPage() {
           </MarketingButton>
         </Reveal>
       </Section>
+      <RelatedGuides page="/platform" />
     </>
   );
 }

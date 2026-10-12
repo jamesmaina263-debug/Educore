@@ -10,6 +10,7 @@ import { BreadcrumbJsonLd, HOME_CRUMB } from "@/components/marketing/breadcrumb-
 import { ArticleJsonLd } from "@/components/marketing/article-json-ld";
 import { BlogByline } from "@/components/marketing/blog-byline";
 import { TRIAL_HREF, TRIAL_CTA_SHORT } from "@/lib/marketing/trial";
+import { RelatedGuides } from "@/components/marketing/related-guides";
 
 const SLUG = "boarding-school-management-kenya";
 const PATH = `/blog/${SLUG}`;
@@ -384,6 +385,7 @@ export default function BoardingSchoolManagementKenyaPost() {
           </div>
         </Reveal>
       </Section>
+      <RelatedGuides slug="boarding-school-management-kenya" />
     </>
   );
 }

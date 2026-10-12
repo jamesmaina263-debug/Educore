@@ -9,6 +9,7 @@ import { Reveal } from "@/components/marketing/reveal";
 import { BreadcrumbJsonLd, HOME_CRUMB } from "@/components/marketing/breadcrumb-json-ld";
 import { ArticleJsonLd } from "@/components/marketing/article-json-ld";
 import { BlogByline } from "@/components/marketing/blog-byline";
+import { RelatedGuides } from "@/components/marketing/related-guides";
 
 const TITLE = "Student Performance Appraisal for Kenyan Schools — EduCore";
 const DESCRIPTION = "Why merit lists usually mean rebuilding a spreadsheet from scratch, and how EduCore computes rankings and growth trends automatically.";
@@ -268,6 +269,7 @@ export default function StudentPerformanceAppraisalKenyaPost() {
           </div>
         </Reveal>
       </Section>
+      <RelatedGuides slug="student-performance-appraisal-kenya-schools" />
     </>
   );
 }

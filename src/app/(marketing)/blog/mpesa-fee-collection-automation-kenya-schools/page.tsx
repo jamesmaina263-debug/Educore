@@ -16,6 +16,7 @@ import { Reveal } from "@/components/marketing/reveal";
 import { BreadcrumbJsonLd, HOME_CRUMB } from "@/components/marketing/breadcrumb-json-ld";
 import { ArticleJsonLd } from "@/components/marketing/article-json-ld";
 import { BlogByline } from "@/components/marketing/blog-byline";
+import { RelatedGuides } from "@/components/marketing/related-guides";
 
 const TITLE = "M-Pesa Fee Collection Automation for Kenyan Schools — EduCore";
 const DESCRIPTION = "Why manual M-Pesa reconciliation costs Kenyan school bursars the most time, and how EduCore automates it with STK push and auto-allocation.";
@@ -289,6 +290,7 @@ export default function MpesaFeeCollectionAutomationKenyaPost() {
           </div>
         </Reveal>
       </Section>
+      <RelatedGuides slug="mpesa-fee-collection-automation-kenya-schools" />
     </>
   );
 }
