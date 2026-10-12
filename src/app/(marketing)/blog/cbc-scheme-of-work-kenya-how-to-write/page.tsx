@@ -9,6 +9,7 @@ import { Reveal } from "@/components/marketing/reveal";
 import { BreadcrumbJsonLd, HOME_CRUMB } from "@/components/marketing/breadcrumb-json-ld";
 import { ArticleJsonLd } from "@/components/marketing/article-json-ld";
 import { BlogByline } from "@/components/marketing/blog-byline";
+import { RelatedGuides } from "@/components/marketing/related-guides";
 
 const SLUG = "cbc-scheme-of-work-kenya-how-to-write";
 const PATH = `/blog/${SLUG}`;
@@ -374,6 +375,7 @@ export default function CbcSchemeOfWorkKenyaPost() {
           </div>
         </Reveal>
       </Section>
+      <RelatedGuides slug="cbc-scheme-of-work-kenya-how-to-write" />
     </>
   );
 }

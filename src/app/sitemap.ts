@@ -1,6 +1,7 @@
 import type { MetadataRoute } from "next";
 import { SITE_URL } from "@/lib/site";
 import { BLOG_POSTS } from "@/lib/blog-posts";
+import { PAGE_LAST_MODIFIED } from "@/lib/seo-dates";
 
 // Lists every route that currently renders real marketing content.
 // /about and /contact were added here once Phase 8 landed (it shipped
@@ -44,11 +45,18 @@ const BLOG_ROUTES: typeof ROUTES = BLOG_POSTS.map((post) => ({
   changeFrequency: "monthly",
 }));
 
+// lastModified is a real date, not `new Date()` -- see src/lib/seo-dates.ts.
+// Static routes read PAGE_LAST_MODIFIED; blog posts use their publishedOn.
+const BLOG_DATES = new Map(BLOG_POSTS.map((p) => [`/blog/${p.slug}`, p.publishedOn]));
+
+function lastModifiedFor(path: string): string | undefined {
+  return PAGE_LAST_MODIFIED[path] ?? BLOG_DATES.get(path);
+}
+
 export default function sitemap(): MetadataRoute.Sitemap {
-  const lastModified = new Date();
   return [...ROUTES, ...BLOG_ROUTES].map(({ path, priority, changeFrequency }) => ({
     url: `${SITE_URL}${path}`,
-    lastModified,
+    lastModified: lastModifiedFor(path),
     priority,
     changeFrequency,
   }));

@@ -18,6 +18,7 @@ import { Reveal } from "@/components/marketing/reveal";
 import { BreadcrumbJsonLd, HOME_CRUMB } from "@/components/marketing/breadcrumb-json-ld";
 import { ArticleJsonLd } from "@/components/marketing/article-json-ld";
 import { BlogByline } from "@/components/marketing/blog-byline";
+import { RelatedGuides } from "@/components/marketing/related-guides";
 
 const TITLE = "CBC/CBE Assessment & Learner Performance in Kenya — EduCore";
 const DESCRIPTION = "How CBC/CBE competency-based assessment works in Kenya, the roles KICD and KNEC play, and how EduCore turns strand-level records into insight.";
@@ -242,7 +243,16 @@ export default function CbcCbeAssessmentLearnerPerformancePost() {
             distinguish exceptional performance from good performance within
             the same broad level. Day-to-day classroom assessment, the kind
             EduCore records at the sub-strand level, uses the four-level
-            scale above directly.
+            scale above directly. Separately, school-based assessment from
+            Grades 7 and 8 also counts toward a learner&apos;s KJSEA score;
+            see our guide to{" "}
+            <Link
+              href="/blog/kjsea-sba-records-kenya-schools"
+              className="font-semibold underline underline-offset-4"
+            >
+              KJSEA and school-based assessment records
+            </Link>
+            .
           </p>
         </Reveal>
       </Section>
@@ -568,6 +578,7 @@ export default function CbcCbeAssessmentLearnerPerformancePost() {
           </div>
         </Reveal>
       </Section>
+      <RelatedGuides slug="cbc-cbe-assessment-learner-performance-kenya" />
     </>
   );
 }

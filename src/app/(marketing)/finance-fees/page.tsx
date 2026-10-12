@@ -11,6 +11,7 @@ import { MiniFrame } from "@/components/marketing/mini-frame";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { BreadcrumbJsonLd, HOME_CRUMB } from "@/components/marketing/breadcrumb-json-ld";
+import { RelatedGuides } from "@/components/marketing/related-guides";
 
 const TITLE = "M-Pesa School Fees Management System — EduCore Kenya";
 const DESCRIPTION =
@@ -185,6 +186,7 @@ export default function FinancePage() {
           </MarketingButton>
         </Reveal>
       </Section>
+      <RelatedGuides page="/finance-fees" />
     </>
   );
 }

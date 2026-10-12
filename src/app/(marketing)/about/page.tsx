@@ -7,6 +7,7 @@ import { Eyebrow } from "@/components/marketing/eyebrow";
 import { Section } from "@/components/marketing/section";
 import { Reveal } from "@/components/marketing/reveal";
 import { BreadcrumbJsonLd, HOME_CRUMB } from "@/components/marketing/breadcrumb-json-ld";
+import { RelatedGuides } from "@/components/marketing/related-guides";
 
 const TITLE = "About EduCore — School Management Software Built for Kenya";
 const DESCRIPTION = "Why EduCore exists: one school management system built for how Kenyan schools actually run, not a patchwork of spreadsheets and paper registers.";
@@ -130,6 +131,7 @@ export default function AboutPage() {
           </div>
         </Reveal>
       </Section>
+      <RelatedGuides page="/about" />
     </>
   );
 }

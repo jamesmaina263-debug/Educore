@@ -9,6 +9,7 @@ import { Reveal } from "@/components/marketing/reveal";
 import { ModuleBlock } from "@/components/marketing/module-block";
 import { MiniFrame } from "@/components/marketing/mini-frame";
 import { BreadcrumbJsonLd, HOME_CRUMB } from "@/components/marketing/breadcrumb-json-ld";
+import { RelatedGuides } from "@/components/marketing/related-guides";
 
 const TITLE = "Parent Communication Platform Kenya — EduCore";
 const DESCRIPTION = "WhatsApp and SMS from one place: structured teacher-to-parent items, automatic termly newsletters, and fee alerts a human always approves first.";
@@ -182,6 +183,7 @@ export default function ParentCommunicationPage() {
           </MarketingButton>
         </Reveal>
       </Section>
+      <RelatedGuides page="/parent-communication" />
     </>
   );
 }

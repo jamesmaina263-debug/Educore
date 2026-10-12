@@ -28,7 +28,13 @@ const AUTHENTICATED_APP_PATHS = [
   "/biometric-kiosk",
   "/academics",
   "/admissions",
-  "/ai",
+  // "/ai" and "/finance" are written as "<path>/" + "<path>$" (not the bare
+  // prefix) because robots.txt Disallow matches by prefix: a bare "/ai" also
+  // blocks the public /ai-automation page and a bare "/finance" blocks
+  // /finance-fees. Search Console flagged both as "Blocked by robots.txt".
+  // seo-routes.test.ts fails if any public route is ever blocked again.
+  "/ai/",
+  "/ai$",
   "/attendance",
   "/boarding",
   "/campuses",
@@ -36,7 +42,8 @@ const AUTHENTICATED_APP_PATHS = [
   "/connect",
   "/discipline",
   "/exams",
-  "/finance",
+  "/finance/",
+  "/finance$",
   "/health",
   "/homework",
   "/integrations",
@@ -53,6 +60,29 @@ const AUTHENTICATED_APP_PATHS = [
   "/transport",
 ];
 
+// AI search / answer-engine crawlers, named explicitly so the intent to be
+// discoverable and citable is on record rather than implied by the `*` rule.
+// IMPORTANT: robots.txt crawlers obey only the most specific matching
+// user-agent group and ignore `*` once they match one -- so this group must
+// repeat the full AUTHENTICATED_APP_PATHS disallow list, otherwise naming
+// these bots would quietly re-open every authenticated path to them.
+// Only public marketing pages are reachable without a session anyway, so
+// allowing both retrieval ("search") and training-style agents here is a
+// visibility decision, not a data-exposure one. Drop a name from this list
+// to opt that crawler out.
+const AI_CRAWLERS = [
+  "GPTBot",
+  "OAI-SearchBot",
+  "ChatGPT-User",
+  "ClaudeBot",
+  "Claude-SearchBot",
+  "Claude-User",
+  "PerplexityBot",
+  "Perplexity-User",
+  "Google-Extended",
+  "Applebot-Extended",
+];
+
 export default function robots(): MetadataRoute.Robots {
   return {
     rules: [
@@ -63,6 +93,11 @@ export default function robots(): MetadataRoute.Robots {
         // "start a school" page, not an authenticated route (see
         // footer.tsx's "Account" links). /apply/[slug] (public admissions
         // application forms) is also deliberately not disallowed.
+        disallow: AUTHENTICATED_APP_PATHS,
+      },
+      {
+        userAgent: AI_CRAWLERS,
+        allow: "/",
         disallow: AUTHENTICATED_APP_PATHS,
       },
     ],

@@ -29,7 +29,7 @@ export function MiniFrame({
           <span className="h-2 w-2 rounded-full bg-muted-foreground/25" />
           <span className="ml-2 font-mono text-[10px] text-muted-foreground">{path}</span>
         </div>
-        <div className="bg-background p-3.5">{children}</div>
+        <div className="bg-background p-3.5 text-foreground">{children}</div>
       </div>
     </div>
   );

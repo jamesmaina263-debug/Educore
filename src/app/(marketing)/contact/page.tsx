@@ -9,7 +9,7 @@ import { DemoRequestForm } from "@/components/marketing/demo-request-form";
 import { BreadcrumbJsonLd, HOME_CRUMB } from "@/components/marketing/breadcrumb-json-ld";
 import { TRIAL_CTA_LABEL, TRIAL_HREF } from "@/lib/marketing/trial";
 
-const TITLE = "Contact — EduCore";
+const TITLE = "Contact EduCore — Book a Demo for Your Kenyan School";
 const DESCRIPTION =
   "Book a demo or ask a question — or skip the wait and start a 30-day free trial, no card required.";
 

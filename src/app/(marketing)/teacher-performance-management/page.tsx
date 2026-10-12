@@ -216,6 +216,16 @@ export default function TeacherPerformanceManagementPage() {
               </div>
             ))}
           </div>
+          <p className="mt-8 text-sm leading-relaxed text-marketing-navy-900/70">
+            Want the background first? Read our guide to{" "}
+            <Link
+              href="/blog/teacher-performance-reviews-kenya-schools"
+              className="font-semibold underline underline-offset-4"
+            >
+              teacher performance reviews for Kenyan schools
+            </Link>
+            .
+          </p>
         </Reveal>
       </Section>
 

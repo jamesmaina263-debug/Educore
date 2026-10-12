@@ -19,6 +19,8 @@ import {
   isValidCurrencyCode,
   isValidStartingYear,
   timezoneOptions,
+  startingYearOptions,
+  defaultsForCountry,
 } from "@/lib/institution-reference-data";
 
 export type Plan = {
@@ -166,8 +168,8 @@ export async function signUpSchool(
   const countryCode = trimmed(formData, "country_code");
   const address = trimmed(formData, "address");
   const startingAcademicYearRaw = trimmed(formData, "starting_academic_year");
-  const gmtTimezone = trimmed(formData, "gmt_timezone");
-  const currencyCode = trimmed(formData, "currency_code");
+  const gmtTimezoneRaw = trimmed(formData, "gmt_timezone");
+  const currencyCodeRaw = trimmed(formData, "currency_code");
 
   const website = trimmed(formData, "website");
   const facebookUrl = trimmed(formData, "facebook_url");
@@ -179,39 +181,41 @@ export async function signUpSchool(
   const logoFile = formData.get("logo");
 
   // ---- Required-field validation ----
+  // The signup form was cut down to the fields needed to create an account
+  // (name, school name, email, phone, country). Everything else is optional:
+  // when omitted, the school columns are left null (all nullable, and every
+  // reader already handles null) except year/currency/time zone, which get
+  // sensible defaults derived from the country. The longer fields are still
+  // accepted and validated if a client sends them.
   const missing: string[] = [];
-  if (!title) missing.push("Your Title");
   if (!ownerName) missing.push("Your Name");
-  if (!schoolType) missing.push("School Type");
   if (!schoolName) missing.push("Institution Name");
-  if (!description) missing.push("Institution Description");
-  if (!cycleType) missing.push("Cycles");
-  if (!ownershipType) missing.push("Organisation State");
-  if (!institutionType) missing.push("Type");
   if (!phone) missing.push("Phone");
   if (!email) missing.push("Email");
   if (!countryCode) missing.push("Country");
-  if (!address) missing.push("Address");
-  if (!startingAcademicYearRaw) missing.push("Year");
-  if (!gmtTimezone) missing.push("GMT Timezone");
-  if (!currencyCode) missing.push("Currency Code");
   if (missing.length > 0) {
     return { error: `Please fill in: ${missing.join(", ")}.` };
   }
 
   // ---- Value validation (never trust the client Select options) ----
-  if (!isValidTitle(title)) return { error: "Please select a valid title." };
-  if (!isValidSchoolType(schoolType)) return { error: "Please select a valid school type." };
-  if (!isValidCycle(cycleType)) return { error: "Please select a valid cycle." };
-  if (!isValidOwnershipType(ownershipType)) return { error: "Please select a valid organisation state." };
-  if (!isValidInstitutionType(institutionType)) return { error: "Please select a valid institution type." };
   if (!isValidCountryCode(countryCode)) return { error: "Please select a valid country." };
-  if (!isValidCurrencyCode(currencyCode)) return { error: "Please select a valid currency code." };
-  if (!timezoneOptions().includes(gmtTimezone)) return { error: "Please select a valid time zone." };
-  const startingAcademicYear = Number(startingAcademicYearRaw);
-  if (!Number.isInteger(startingAcademicYear) || !isValidStartingYear(startingAcademicYear)) {
-    return { error: "Please select a valid year." };
+  if (title && !isValidTitle(title)) return { error: "Please select a valid title." };
+  if (schoolType && !isValidSchoolType(schoolType)) return { error: "Please select a valid school type." };
+  if (cycleType && !isValidCycle(cycleType)) return { error: "Please select a valid cycle." };
+  if (ownershipType && !isValidOwnershipType(ownershipType)) return { error: "Please select a valid organisation state." };
+  if (institutionType && !isValidInstitutionType(institutionType)) return { error: "Please select a valid institution type." };
+  if (currencyCodeRaw && !isValidCurrencyCode(currencyCodeRaw)) return { error: "Please select a valid currency code." };
+  if (gmtTimezoneRaw && !timezoneOptions().includes(gmtTimezoneRaw)) return { error: "Please select a valid time zone." };
+  let startingAcademicYear = startingYearOptions()[0];
+  if (startingAcademicYearRaw) {
+    startingAcademicYear = Number(startingAcademicYearRaw);
+    if (!Number.isInteger(startingAcademicYear) || !isValidStartingYear(startingAcademicYear)) {
+      return { error: "Please select a valid year." };
+    }
   }
+  const countryDefaults = defaultsForCountry(countryCode);
+  const currencyCode = currencyCodeRaw || countryDefaults.currencyCode;
+  const gmtTimezone = gmtTimezoneRaw || countryDefaults.gmtTimezone;
   if (!PHONE_RE.test(phone)) {
     return { error: "Please enter a valid phone number, e.g. +2547XXXXXXXX." };
   }
@@ -281,15 +285,15 @@ export async function signUpSchool(
       name: schoolName,
       slug,
       status: "trial",
-      description,
-      school_type: schoolType,
-      cycle_type: cycleType,
-      ownership_type: ownershipType,
-      institution_type: institutionType,
+      description: description || null,
+      school_type: schoolType || null,
+      cycle_type: cycleType || null,
+      ownership_type: ownershipType || null,
+      institution_type: institutionType || null,
       phone,
       email,
       country_code: countryCode,
-      address,
+      address: address || null,
       starting_academic_year: startingAcademicYear,
       gmt_timezone: gmtTimezone,
       currency_code: currencyCode,
@@ -323,7 +327,7 @@ export async function signUpSchool(
     auth_user_id: created.user.id,
     school_id: school.id,
     role_id: ownerRole.id,
-    title,
+    title: title || null,
     full_name: ownerName,
     email,
     phone,

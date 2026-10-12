@@ -19,6 +19,7 @@ import { Reveal } from "@/components/marketing/reveal";
 import { ModuleBlock } from "@/components/marketing/module-block";
 import { MiniFrame } from "@/components/marketing/mini-frame";
 import { BreadcrumbJsonLd, HOME_CRUMB } from "@/components/marketing/breadcrumb-json-ld";
+import { RelatedGuides } from "@/components/marketing/related-guides";
 
 const TITLE = "Student Management System Kenya — EduCore";
 const DESCRIPTION = "One student record per learner — admissions, academics, discipline, medical, guardians, ID cards — instead of five spreadsheets.";
@@ -207,6 +208,7 @@ export default function StudentManagementSystemPage() {
           </MarketingButton>
         </Reveal>
       </Section>
+      <RelatedGuides page="/student-management-system" />
     </>
   );
 }

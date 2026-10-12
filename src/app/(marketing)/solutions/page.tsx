@@ -20,6 +20,7 @@ import { MiniFrame } from "@/components/marketing/mini-frame";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { BreadcrumbJsonLd, HOME_CRUMB } from "@/components/marketing/breadcrumb-json-ld";
+import { RelatedGuides } from "@/components/marketing/related-guides";
 
 const TITLE = "School Administration Software by Role — EduCore Kenya";
 const DESCRIPTION = "How EduCore's school administration software changes day to day for Owners, Principals, Administrators, Teachers, Finance Teams, and Parents.";
@@ -302,6 +303,7 @@ export default function SolutionsPage() {
           </div>
         </Reveal>
       </Section>
+      <RelatedGuides page="/solutions" />
     </>
   );
 }

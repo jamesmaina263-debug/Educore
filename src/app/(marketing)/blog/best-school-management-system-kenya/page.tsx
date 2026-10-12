@@ -9,6 +9,7 @@ import { Reveal } from "@/components/marketing/reveal";
 import { BreadcrumbJsonLd, HOME_CRUMB } from "@/components/marketing/breadcrumb-json-ld";
 import { ArticleJsonLd } from "@/components/marketing/article-json-ld";
 import { BlogByline } from "@/components/marketing/blog-byline";
+import { RelatedGuides } from "@/components/marketing/related-guides";
 
 const TITLE = "Best School Management System in Kenya (2026 Guide) — EduCore";
 const DESCRIPTION = "What separates a school system schools keep using from one abandoned for spreadsheets — M-Pesa, CBC grading, offline resilience, data isolation.";
@@ -213,6 +214,7 @@ export default function BestSchoolManagementSystemKenyaPost() {
           </div>
         </Reveal>
       </Section>
+      <RelatedGuides slug="best-school-management-system-kenya" />
     </>
   );
 }
