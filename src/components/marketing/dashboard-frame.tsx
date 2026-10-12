@@ -36,6 +36,12 @@ import { cn } from "@/lib/utils";
 const DESIGN_WIDTH = 1280;
 const DESIGN_HEIGHT = 840; // 3:2 -- a laptop-screen screenshot
 
+// Phones: scaling the whole 1280px window down to ~330px makes every label
+// ~4px and unreadable. Below COMPACT.below px the stage instead shows a
+// narrower, taller crop (no sidebar, 2x2 KPI cards, fee chart only) that is
+// scaled far less, so the headline figures stay legible.
+const COMPACT = { below: 640, width: 520, height: 760 };
+
 const SCHOOL = "Northgate Academy";
 const TERM = "Term 3, 2026";
 
@@ -156,16 +162,18 @@ function Panel({
   title,
   meta,
   children,
+  className,
 }: {
   title: string;
   meta?: string;
   children: React.ReactNode;
+  className?: string;
 }) {
   return (
-    <section className="panel flex flex-col">
+    <section className={cn("panel flex flex-col", className)}>
       <header className="flex items-center justify-between border-b border-border px-4 py-2.5">
         <h2 className="text-[0.8125rem] font-semibold">{title}</h2>
-        {meta && <span className="text-[0.6875rem] text-muted-foreground">{meta}</span>}
+        {meta && <span className="text-xs text-muted-foreground">{meta}</span>}
       </header>
       <div className="flex-1 p-4">{children}</div>
     </section>
@@ -217,7 +225,7 @@ function BarChart({
         {ticks.map((t) => (
           <span
             key={t}
-            className="absolute right-0 -translate-y-1/2 text-[11px] text-muted-foreground"
+            className="absolute right-0 translate-y-1/2 text-xs text-muted-foreground"
             style={{ bottom: `${(t / max) * 100}%` }}
           >
             {t}
@@ -237,7 +245,7 @@ function BarChart({
             <div key={group.label} className="relative z-10 flex items-end gap-0.5">
               {group.values.map((bar, i) => (
                 <div key={i} className="flex flex-col items-center justify-end" style={{ height }}>
-                  <span className="mb-0.5 text-[11px] text-foreground">{format(bar.v)}</span>
+                  <span className="mb-0.5 text-xs text-foreground group-data-[compact=true]:hidden">{format(bar.v)}</span>
                   <div
                     className="w-3.5 rounded-t-sm"
                     style={{
@@ -252,7 +260,7 @@ function BarChart({
         </div>
         <div className="flex justify-around pt-1.5">
           {data.map((group) => (
-            <span key={group.label} className="text-[11px] text-muted-foreground">
+            <span key={group.label} className="text-xs text-muted-foreground">
               {group.label}
             </span>
           ))}
@@ -334,23 +342,27 @@ export function DashboardFrame({ className }: { className?: string }) {
           <span className="h-2.5 w-2.5 rounded-full bg-muted-foreground/25" />
           <span className="h-2.5 w-2.5 rounded-full bg-muted-foreground/25" />
           <span className="h-2.5 w-2.5 rounded-full bg-muted-foreground/25" />
-          <span className="ml-3 truncate font-mono text-[11px] text-muted-foreground">
+          <span className="ml-3 truncate font-mono text-xs text-muted-foreground">
             app.educore.io/dashboard
           </span>
         </div>
 
         {/* The real app shell + Dashboard page, at desktop width, scaled to fit. */}
-        <ScaledStage designWidth={DESIGN_WIDTH} designHeight={DESIGN_HEIGHT}>
-          <div className="flex h-full bg-background" aria-hidden="true">
+        <ScaledStage
+          designWidth={DESIGN_WIDTH}
+          designHeight={DESIGN_HEIGHT}
+          compact={COMPACT}
+        >
+          <div className="flex h-full bg-background text-foreground" aria-hidden="true">
             {/* Sidebar -- every module, rendered from the real navGroups. */}
-            <aside className="flex w-64 shrink-0 flex-col overflow-hidden border-r border-sidebar-border bg-sidebar">
+            <aside className="flex w-64 shrink-0 flex-col overflow-hidden border-r border-sidebar-border bg-sidebar group-data-[compact=true]:hidden">
               <div className="flex h-14 items-center border-b border-sidebar-border px-4 text-sm font-semibold text-sidebar-foreground">
                 {SCHOOL}
               </div>
               <nav className="flex flex-col gap-2 p-2">
                 {navGroups.map((group) => (
                   <div key={group.label} className="flex flex-col">
-                    <p className="px-2.5 pb-0.5 pt-0.5 text-[10px] font-semibold uppercase tracking-wider text-sidebar-foreground/40">
+                    <p className="px-2.5 pb-0.5 pt-0.5 text-[11px] font-semibold uppercase tracking-wider text-sidebar-foreground/40">
                       {group.label}
                     </p>
                     {group.items.map((item) => (
@@ -406,7 +418,7 @@ export function DashboardFrame({ className }: { className?: string }) {
                     </span>
                   </div>
 
-                  <div className="grid grid-cols-4 gap-3">
+                  <div className="grid grid-cols-4 gap-3 group-data-[compact=true]:grid-cols-2">
                     {METRICS.map((m) => (
                       <div key={m.label} className="panel px-4 py-3">
                         <div className="flex items-start justify-between gap-2">
@@ -421,7 +433,7 @@ export function DashboardFrame({ className }: { className?: string }) {
                           </span>
                         </div>
                         <p
-                          className="mt-1.5 whitespace-nowrap text-2xl font-semibold tracking-tight"
+                          className="mt-1.5 whitespace-nowrap text-2xl font-semibold tracking-tight group-data-[compact=true]:text-xl"
                           data-numeric
                         >
                           {m.value}
@@ -447,25 +459,25 @@ export function DashboardFrame({ className }: { className?: string }) {
                     ))}
                   </div>
 
-                  <div className="panel px-4 py-3">
+                  <div className="panel px-4 py-3 group-data-[compact=true]:hidden">
                     <p className="label-eyebrow mb-2">Operations</p>
                     <div className="grid grid-cols-6 gap-x-4 gap-y-3">
                       {OPERATIONS.map((op) => (
                         <div key={op.label}>
-                          <p className="text-[0.6875rem] text-muted-foreground">{op.label}</p>
+                          <p className="text-xs text-muted-foreground">{op.label}</p>
                           <p className="text-base font-semibold tracking-tight" data-numeric>
                             {op.value}
                           </p>
-                          <p className="text-[0.6875rem] text-muted-foreground">{op.note}</p>
+                          <p className="text-xs text-muted-foreground">{op.note}</p>
                         </div>
                       ))}
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-3 gap-3">
-                    <div className="col-span-2">
+                  <div className="grid grid-cols-3 gap-3 group-data-[compact=true]:grid-cols-1">
+                    <div className="col-span-2 group-data-[compact=true]:col-span-1">
                       <Panel title="Fee collection vs. invoiced" meta="KES thousands · this term">
-                        <div className="mb-1 flex items-center gap-3 text-xs text-muted-foreground">
+                        <div className="mb-3 flex items-center gap-3 text-xs text-muted-foreground">
                           <span className="flex items-center gap-1.5">
                             <span className="size-2 rounded-full" style={{ background: "var(--chart-1)" }} />
                             Collected
@@ -488,7 +500,7 @@ export function DashboardFrame({ className }: { className?: string }) {
                         />
                       </Panel>
                     </div>
-                    <Panel title="Attendance rate by class" meta="Today">
+                    <Panel title="Attendance rate by class" meta="Today" className="group-data-[compact=true]:hidden">
                       <BarChart
                         max={100}
                         ticks={[0, 25, 50, 75, 100]}
@@ -501,7 +513,7 @@ export function DashboardFrame({ className }: { className?: string }) {
                     </Panel>
                   </div>
 
-                  <div className="grid grid-cols-3 gap-3">
+                  <div className="grid grid-cols-3 gap-3 group-data-[compact=true]:hidden">
                     <Panel title="Enrollment trend" meta="Last 5 terms">
                       <EnrollmentChart />
                     </Panel>
@@ -512,7 +524,7 @@ export function DashboardFrame({ className }: { className?: string }) {
                           <li key={t.label} className="flex items-start justify-between gap-3 py-2.5">
                             <div className="min-w-0">
                               <p className="truncate text-[0.8125rem] font-medium">{t.label}</p>
-                              <p className="text-[0.6875rem] text-muted-foreground">{t.owner}</p>
+                              <p className="text-xs text-muted-foreground">{t.owner}</p>
                             </div>
                             <StatusBadge tone={t.tone} label={t.badge} />
                           </li>
@@ -548,14 +560,14 @@ export function DashboardFrame({ className }: { className?: string }) {
                     </Panel>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-2 gap-3 group-data-[compact=true]:hidden">
                     <div className="panel-interactive flex items-center gap-3 px-4 py-3">
                       <span className="grid size-8 place-items-center rounded-md bg-primary-subtle text-primary">
                         <CalendarCheck className="size-4" />
                       </span>
                       <div>
                         <p className="text-[0.8125rem] font-medium">Mark today&apos;s attendance</p>
-                        <p className="text-[0.6875rem] text-muted-foreground">
+                        <p className="text-xs text-muted-foreground">
                           3 of 24 classes still pending
                         </p>
                       </div>
@@ -566,7 +578,7 @@ export function DashboardFrame({ className }: { className?: string }) {
                       </span>
                       <div>
                         <p className="text-[0.8125rem] font-medium">Review outstanding balances</p>
-                        <p className="text-[0.6875rem] text-muted-foreground">
+                        <p className="text-xs text-muted-foreground">
                           64 students with a balance owing
                         </p>
                       </div>
