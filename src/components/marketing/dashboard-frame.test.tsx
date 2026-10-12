@@ -61,4 +61,12 @@ describe("DashboardFrame", () => {
     // ...but the headline KPI cards and the fee chart are not.
     expect(html).not.toMatch(/Enrolled students[^]{0,40}group-data-\[compact=true\]:hidden/);
   });
+
+  it("has a tablet layout that drops the sidebar and the narrow attendance panel", () => {
+    const html = renderToStaticMarkup(<DashboardFrame />);
+    expect(html).toMatch(/<aside[^>]*group-data-\[tablet=true\]:hidden/);
+    expect(html).toContain("group-data-[tablet=true]:grid-cols-1");
+    // KPI cards and operations strip are kept on tablets.
+    expect(html).not.toMatch(/Operations[^]{0,40}group-data-\[tablet=true\]:hidden/);
+  });
 });
