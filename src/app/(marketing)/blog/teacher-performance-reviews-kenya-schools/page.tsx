@@ -9,6 +9,7 @@ import { Reveal } from "@/components/marketing/reveal";
 import { BreadcrumbJsonLd, HOME_CRUMB } from "@/components/marketing/breadcrumb-json-ld";
 import { ArticleJsonLd } from "@/components/marketing/article-json-ld";
 import { BlogByline } from "@/components/marketing/blog-byline";
+import { RelatedGuides } from "@/components/marketing/related-guides";
 
 const TITLE = "Teacher Performance Reviews for Kenyan Schools — EduCore";
 const DESCRIPTION = "Why teacher appraisal usually lives in a locked cabinet, and how EduCore keeps it structured — 1-5 scoring, an automatic rating, locked visibility.";
@@ -283,6 +284,7 @@ export default function TeacherPerformanceReviewsKenyaPost() {
           </div>
         </Reveal>
       </Section>
+      <RelatedGuides slug="teacher-performance-reviews-kenya-schools" />
     </>
   );
 }

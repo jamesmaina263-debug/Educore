@@ -11,6 +11,7 @@ import { BreadcrumbJsonLd, HOME_CRUMB } from "@/components/marketing/breadcrumb-
 import { ArticleJsonLd } from "@/components/marketing/article-json-ld";
 import { BlogByline } from "@/components/marketing/blog-byline";
 import { TRIAL_HREF, TRIAL_CTA_SHORT } from "@/lib/marketing/trial";
+import { RelatedGuides } from "@/components/marketing/related-guides";
 
 // ---------------------------------------------------------------------------
 // PUBLICATION GATE. Renders a 404 (and is noindex) whenever APPROVED is false.
@@ -197,6 +198,7 @@ export default function KenyanSchoolCaseStudyPost() {
           </div>
         </Reveal>
       </Section>
+      <RelatedGuides slug="gititu-high-school-case-study" />
     </>
   );
 }
