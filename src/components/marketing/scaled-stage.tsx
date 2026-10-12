@@ -4,7 +4,7 @@ import { useLayoutEffect, useRef, useState } from "react";
 
 // Renders children inside a fixed-size *desktop window* (designWidth x
 // designHeight) and scales the whole window down to fit its container
-// (never up). The box keeps its landscape aspect ratio at every viewport
+// (and up to 1.2x on very wide screens). The box keeps its landscape aspect ratio at every viewport
 // width, like a screenshot taken on a desktop -- content that doesn't fit is
 // simply cropped at the window edge, exactly as in a real screenshot.
 export function ScaledStage({
@@ -22,7 +22,7 @@ export function ScaledStage({
   useLayoutEffect(() => {
     const outer = outerRef.current;
     if (!outer) return;
-    const measure = () => setScale(Math.min(1, outer.clientWidth / designWidth));
+    const measure = () => setScale(Math.min(1.2, outer.clientWidth / designWidth));
     measure();
     const observer = new ResizeObserver(measure);
     observer.observe(outer);

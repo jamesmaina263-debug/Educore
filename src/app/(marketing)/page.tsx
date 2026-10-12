@@ -177,7 +177,10 @@ export default function MarketingHomePage() {
           </p>
           </div>
 
-          <div>
+          {/* Breaks out of the text container so the desktop screenshot is shown
+              as large as the page allows (up to 1440px) -- the sidebar's module
+              names only read clearly when the preview is big. */}
+          <div className="relative left-1/2 w-[min(calc(100vw-3rem),1440px)] -translate-x-1/2">
             <DashboardFrame />
             <p className="mt-3 text-center text-xs text-white/50">
               Illustrative preview — not actual account data.
