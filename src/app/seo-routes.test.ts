@@ -52,3 +52,35 @@ describe("llms.txt", () => {
     expect(body).toContain("KES 100");
   });
 });
+
+describe("robots does not block public pages", () => {
+  // robots.txt Disallow is a prefix match ("$" anchors the end). A bare
+  // "/finance" also blocks /finance-fees, which is exactly the bug this guards.
+  const blocks = (pattern: string, path: string) =>
+    pattern.endsWith("$") ? path === pattern.slice(0, -1) : path.startsWith(pattern);
+
+  it("allows every URL in the sitemap for every user-agent group", () => {
+    const rules = robots().rules as { userAgent: string | string[]; disallow?: string[] }[];
+    const paths = sitemap().map((e) => new URL(e.url).pathname);
+    expect(paths.length).toBeGreaterThan(10);
+    for (const rule of rules) {
+      for (const pattern of rule.disallow ?? []) {
+        for (const path of paths) {
+          expect(blocks(pattern, path), `Disallow: ${pattern} blocks public ${path}`).toBe(false);
+        }
+      }
+    }
+  });
+
+  it("still blocks the real authenticated app paths", () => {
+    const star = (robots().rules as { userAgent: string | string[]; disallow?: string[] }[]).find(
+      (r) => r.userAgent === "*",
+    )!;
+    const isBlocked = (path: string) => (star.disallow ?? []).some((p) => blocks(p, path));
+    for (const p of ["/dashboard", "/finance", "/finance/fees", "/ai", "/ai/chat", "/students/123", "/login"]) {
+      expect(isBlocked(p), p).toBe(true);
+    }
+    expect(isBlocked("/finance-fees")).toBe(false);
+    expect(isBlocked("/ai-automation")).toBe(false);
+  });
+});
