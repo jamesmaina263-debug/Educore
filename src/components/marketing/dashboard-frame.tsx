@@ -14,6 +14,7 @@ import {
   Users,
 } from "lucide-react";
 import { navGroups } from "@/components/app-shell/nav-items";
+import { ScaledStage } from "@/components/marketing/scaled-stage";
 import { cn } from "@/lib/utils";
 
 // The marketing site's signature element (see Phase 2 design plan).
@@ -31,6 +32,10 @@ import { cn } from "@/lib/utils";
 // EduCore is shown here and the preview can't drift out of date. The figures
 // are illustrative and internally consistent:
 //   invoiced 4.9M = collected 4.1M + outstanding 620K + discounted 150K + waived 30K
+
+// Width the dashboard is laid out at (a typical desktop app window). It is
+// scaled down to fit the hero, never reflowed -- see ScaledStage.
+const DESIGN_WIDTH = 900;
 
 const CURRENT_TERM = "Term 3, 2026";
 
@@ -114,17 +119,15 @@ function Panel({
   title,
   action,
   children,
-  className,
 }: {
   title: string;
   action: React.ReactNode;
   children: React.ReactNode;
-  className?: string;
 }) {
   return (
-    <div className={cn("rounded-lg border border-border bg-card", className)}>
-      <div className="flex items-center justify-between border-b border-border px-3 py-2">
-        <p className="text-[11px] font-semibold text-foreground">{title}</p>
+    <div className="rounded-lg border border-border bg-card">
+      <div className="flex items-center justify-between border-b border-border px-4 py-3">
+        <p className="text-sm font-semibold text-foreground">{title}</p>
         {action}
       </div>
       {children}
@@ -134,9 +137,27 @@ function Panel({
 
 function PanelButton({ children }: { children: React.ReactNode }) {
   return (
-    <span className="inline-flex items-center gap-1 rounded-md border border-border bg-card px-2 py-0.5 text-[9px] text-foreground">
+    <span className="inline-flex items-center gap-1 whitespace-nowrap rounded-md border border-border bg-card px-2.5 py-1 text-xs text-foreground">
       {children}
     </span>
+  );
+}
+
+function NavRow({
+  label,
+  icon: Icon,
+  hasChildren,
+}: {
+  label: string;
+  icon: React.ComponentType<{ className?: string }>;
+  hasChildren: boolean;
+}) {
+  return (
+    <li className="flex items-center gap-2 whitespace-nowrap rounded px-2 py-1 text-[11px] text-white/85">
+      <Icon className="h-3.5 w-3.5 shrink-0" />
+      <span className="flex-1 truncate">{label}</span>
+      {hasChildren ? <ChevronRight className="h-3 w-3 shrink-0 text-white/50" /> : null}
+    </li>
   );
 }
 
@@ -166,280 +187,290 @@ export function DashboardFrame({ className }: { className?: string }) {
           <span className="h-2.5 w-2.5 rounded-full bg-muted-foreground/25" />
           <span className="h-2.5 w-2.5 rounded-full bg-muted-foreground/25" />
           <span className="h-2.5 w-2.5 rounded-full bg-muted-foreground/25" />
-          <span className="ml-3 font-mono text-[11px] text-muted-foreground">
+          <span className="ml-3 truncate font-mono text-[11px] text-muted-foreground">
             app.educore.io/finance/dashboard
           </span>
         </div>
 
-        {/* Reconstructed Finance Dashboard -- real tokens, decorative only. */}
-        <div className="flex bg-background" aria-hidden="true">
-          {/* Sidebar -- rendered from the app's real navGroups. */}
-          <aside className="hidden w-[148px] shrink-0 flex-col bg-marketing-navy-900 py-3 text-white sm:flex">
-            <div className="flex items-center gap-2 border-b border-white/10 px-3 pb-3">
-              <ShieldCheck className="h-6 w-6 shrink-0 text-white" />
-              <div className="min-w-0">
-                <p className="truncate text-[11px] font-semibold leading-tight">
-                  Northgate Academy
-                </p>
-                <p className="truncate text-[7px] leading-tight text-white/60">
-                  School Management System
-                </p>
-              </div>
-            </div>
-
-            <p className="px-3 pt-2.5 text-[7px] font-semibold tracking-wider text-white/50">
-              MAIN
-            </p>
-            <ul className="mt-0.5 px-1.5">
-              {mainGroup?.items.map(({ label, icon: Icon, children }) => (
-                <li
-                  key={label}
-                  className="flex items-center gap-1.5 rounded px-1.5 py-[3px] text-[8.5px] text-white/85"
-                >
-                  <Icon className="h-2.5 w-2.5 shrink-0" />
-                  <span className="flex-1 truncate">{label}</span>
-                  {children ? <ChevronRight className="h-2 w-2 shrink-0 text-white/50" /> : null}
-                </li>
-              ))}
-            </ul>
-
-            <p className="px-3 pt-2.5 text-[7px] font-semibold tracking-wider text-white/50">
-              FINANCE
-            </p>
-            <ul className="mt-0.5 px-1.5">
-              {financeChildren.map(({ label }, i) => (
-                <li
-                  key={label}
-                  className={cn(
-                    "flex items-center gap-1.5 rounded px-1.5 py-[3px] text-[8.5px]",
-                    i === 0
-                      ? "bg-primary font-medium text-primary-foreground"
-                      : "text-white/80",
-                  )}
-                >
-                  <span className="h-1 w-1 shrink-0 rounded-full bg-current opacity-70" />
-                  <span className="truncate">{label}</span>
-                </li>
-              ))}
-            </ul>
-
-            <p className="px-3 pt-2.5 text-[7px] font-semibold tracking-wider text-white/50">
-              OTHER
-            </p>
-            <ul className="mt-0.5 px-1.5">
-              {otherGroup?.items.map(({ label, icon: Icon, children }) => (
-                <li
-                  key={label}
-                  className="flex items-center gap-1.5 rounded px-1.5 py-[3px] text-[8.5px] text-white/85"
-                >
-                  <Icon className="h-2.5 w-2.5 shrink-0" />
-                  <span className="flex-1 truncate">{label}</span>
-                  {children ? <ChevronRight className="h-2 w-2 shrink-0 text-white/50" /> : null}
-                </li>
-              ))}
-            </ul>
-          </aside>
-
-          {/* Main */}
-          <div className="min-w-0 flex-1 p-3">
-            {/* Top bar */}
-            <div className="flex items-center gap-2">
-              <Menu className="h-3.5 w-3.5 shrink-0 text-foreground" />
-              <div className="flex min-w-0 flex-1 items-center gap-1.5 rounded-md border border-border bg-card px-2 py-1">
-                <Search className="h-3 w-3 shrink-0 text-muted-foreground" />
-                <span className="truncate text-[9px] text-muted-foreground">
-                  Search students, staff, invoices...
-                </span>
-              </div>
-              <span className="hidden items-center gap-1 rounded-md border border-border bg-card px-2 py-1 text-[9px] text-foreground md:inline-flex">
-                <Calendar className="h-3 w-3" /> {CURRENT_TERM}
-              </span>
-              <span className="hidden items-center gap-1 rounded-md border border-border bg-card px-2 py-1 text-[9px] text-foreground md:inline-flex">
-                <Building2 className="h-3 w-3" /> Bursar Office
-              </span>
-              <span className="relative hidden sm:block">
-                <Bell className="h-3.5 w-3.5 text-foreground" />
-                <span className="absolute -right-1 -top-1 h-1.5 w-1.5 rounded-full bg-destructive" />
-              </span>
-              <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary text-[7px] font-semibold text-primary-foreground">
-                TO
-              </span>
-            </div>
-
-            {/* Page header */}
-            <div className="mt-3 flex items-start justify-between gap-2">
-              <div>
-                <p className="text-sm font-bold text-foreground">Finance Dashboard</p>
-                <p className="mt-0.5 text-[9px] text-muted-foreground">
-                  Home &rsaquo; Finance &rsaquo; Dashboard
-                </p>
-              </div>
-              <span className="inline-flex items-center gap-1.5 rounded-md bg-primary px-2 py-1 text-[9px] font-medium text-primary-foreground">
-                Generate Report <ChevronDown className="h-3 w-3" />
-              </span>
-            </div>
-
-            {/* Snapshot stats */}
-            <div className="mt-3 grid grid-cols-3 gap-2">
-              {STATS.map((stat) => (
-                <div key={stat.label} className="rounded-lg border border-border bg-card p-2">
-                  <p className="text-[8px] text-muted-foreground">{stat.label}</p>
-                  <p className={cn("mt-0.5 font-mono text-sm font-semibold", stat.tone)}>
-                    {stat.value}
+        {/* Finance Dashboard at a fixed desktop width, scaled to fit. */}
+        <ScaledStage designWidth={DESIGN_WIDTH}>
+          <div className="flex bg-background" aria-hidden="true">
+            {/* Sidebar -- rendered from the app's real navGroups. */}
+            <aside className="flex w-[190px] shrink-0 flex-col bg-marketing-navy-900 py-4 text-white">
+              <div className="flex items-center gap-2 border-b border-white/10 px-4 pb-4">
+                <ShieldCheck className="h-8 w-8 shrink-0 text-white" />
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold leading-tight">
+                    Northgate Academy
+                  </p>
+                  <p className="truncate text-[9px] leading-tight text-white/60">
+                    School Management System
                   </p>
                 </div>
-              ))}
-            </div>
+              </div>
 
-            {/* KPI cards */}
-            <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
-              {KPIS.map(({ label, value, caption, icon: Icon, iconClass, valueClass }) => (
-                <div key={label} className="rounded-lg border border-border bg-card p-2">
-                  <div className="flex items-start justify-between gap-1">
-                    <p className="text-[8px] font-medium uppercase leading-tight text-foreground">
-                      {label}
-                    </p>
-                    <span
-                      className={cn(
-                        "flex h-5 w-5 shrink-0 items-center justify-center rounded-full",
-                        iconClass,
-                      )}
-                    >
-                      <Icon className="h-2.5 w-2.5" />
-                    </span>
-                  </div>
-                  <p className={cn("mt-1 font-mono text-sm font-semibold", valueClass)}>{value}</p>
-                  <p className="mt-0.5 text-[8px] text-muted-foreground">{caption}</p>
+              <p className="px-4 pt-3 text-[9px] font-semibold tracking-wider text-white/50">
+                MAIN
+              </p>
+              <ul className="mt-1 px-2">
+                {mainGroup?.items.map((item) => (
+                  <NavRow
+                    key={item.label}
+                    label={item.label}
+                    icon={item.icon}
+                    hasChildren={Boolean(item.children)}
+                  />
+                ))}
+              </ul>
+
+              <p className="px-4 pt-3 text-[9px] font-semibold tracking-wider text-white/50">
+                FINANCE
+              </p>
+              <ul className="mt-1 px-2">
+                {financeChildren.map(({ label }, i) => (
+                  <li
+                    key={label}
+                    className={cn(
+                      "flex items-center gap-2 whitespace-nowrap rounded px-2 py-1 text-[11px]",
+                      i === 0
+                        ? "bg-primary font-medium text-primary-foreground"
+                        : "text-white/80",
+                    )}
+                  >
+                    <span className="h-1 w-1 shrink-0 rounded-full bg-current opacity-70" />
+                    <span className="truncate">{label}</span>
+                  </li>
+                ))}
+              </ul>
+
+              <p className="px-4 pt-3 text-[9px] font-semibold tracking-wider text-white/50">
+                OTHER
+              </p>
+              <ul className="mt-1 px-2">
+                {otherGroup?.items.map((item) => (
+                  <NavRow
+                    key={item.label}
+                    label={item.label}
+                    icon={item.icon}
+                    hasChildren={Boolean(item.children)}
+                  />
+                ))}
+              </ul>
+            </aside>
+
+            {/* Main */}
+            <div className="min-w-0 flex-1 p-4">
+              {/* Top bar */}
+              <div className="flex items-center gap-3">
+                <Menu className="h-4 w-4 shrink-0 text-foreground" />
+                <div className="flex min-w-0 flex-1 items-center gap-2 rounded-md border border-border bg-card px-3 py-1.5">
+                  <Search className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                  <span className="truncate text-xs text-muted-foreground">
+                    Search students, staff, invoices...
+                  </span>
                 </div>
-              ))}
-            </div>
+                <span className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-md border border-border bg-card px-3 py-1.5 text-xs text-foreground">
+                  <Calendar className="h-3.5 w-3.5" /> {CURRENT_TERM}
+                </span>
+                <span className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-md border border-border bg-card px-3 py-1.5 text-xs text-foreground">
+                  <Building2 className="h-3.5 w-3.5" /> Bursar Office
+                </span>
+                <span className="relative">
+                  <Bell className="h-4 w-4 text-foreground" />
+                  <span className="absolute -right-1 -top-1 h-2 w-2 rounded-full bg-destructive" />
+                </span>
+                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary text-[10px] font-semibold text-primary-foreground">
+                  TO
+                </span>
+              </div>
 
-            {/* Activity + collection summary */}
-            <div className="mt-2 grid gap-2 sm:grid-cols-2">
-              <Panel title="Recent Financial Activities" action={<PanelButton>View all</PanelButton>}>
-                <ul className="divide-y divide-border px-3">
-                  {ACTIVITIES.map(({ text, meta, amount, dot }) => (
-                    <li key={text} className="flex items-center gap-2 py-1.5">
-                      <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", dot)} />
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-[9px] font-medium text-foreground">{text}</p>
-                        <p className="truncate text-[7.5px] text-muted-foreground">{meta}</p>
-                      </div>
-                      <span className="font-mono text-[8px] text-foreground">{amount}</span>
-                    </li>
-                  ))}
-                </ul>
-              </Panel>
+              {/* Page header */}
+              <div className="mt-5 flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-2xl font-bold text-foreground">Finance Dashboard</p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Home &rsaquo; Finance &rsaquo; Dashboard
+                  </p>
+                </div>
+                <span className="inline-flex items-center gap-2 whitespace-nowrap rounded-md bg-primary px-3.5 py-2 text-xs font-medium text-primary-foreground">
+                  Generate Report <ChevronDown className="h-3.5 w-3.5" />
+                </span>
+              </div>
 
-              <Panel
-                title="Fee Collection Summary"
-                action={
-                  <PanelButton>
-                    This Term <ChevronDown className="h-2.5 w-2.5" />
-                  </PanelButton>
-                }
-              >
-                <div className="flex items-center gap-3 p-3">
-                  <div className="relative h-16 w-16 shrink-0">
-                    <svg viewBox="0 0 64 64" className="h-full w-full -rotate-90">
-                      <circle
-                        cx="32"
-                        cy="32"
-                        r="26"
-                        fill="none"
-                        strokeWidth="10"
-                        className="stroke-secondary"
-                      />
-                      {SUMMARY.map((seg, i) => {
-                        const offset = SUMMARY.slice(0, i).reduce((n, x) => n + x.pct, 0);
-                        return (
-                          <circle
-                            key={seg.label}
-                            cx="32"
-                            cy="32"
-                            r="26"
-                            fill="none"
-                            strokeWidth="10"
-                            pathLength={100}
-                            strokeDasharray={`${seg.pct} ${100 - seg.pct}`}
-                            strokeDashoffset={-offset}
-                            className={seg.stroke}
-                          />
-                        );
-                      })}
-                    </svg>
-                    <div className="absolute inset-0 flex flex-col items-center justify-center">
-                      <p className="font-mono text-[9px] font-semibold text-foreground">KES 4.9M</p>
-                      <p className="text-[7px] text-muted-foreground">Total</p>
-                    </div>
+              {/* Snapshot stats */}
+              <div className="mt-4 grid grid-cols-3 gap-3">
+                {STATS.map((stat) => (
+                  <div key={stat.label} className="rounded-lg border border-border bg-card p-3">
+                    <p className="text-xs text-muted-foreground">{stat.label}</p>
+                    <p className={cn("mt-1 font-mono text-xl font-semibold", stat.tone)}>
+                      {stat.value}
+                    </p>
                   </div>
-                  <ul className="min-w-0 flex-1 space-y-1">
-                    {SUMMARY.map(({ label, amount, pct, dot }) => (
-                      <li key={label} className="flex items-center gap-1.5 text-[8px]">
-                        <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", dot)} />
-                        <span className="flex-1 truncate text-foreground">{label}</span>
-                        <span className="font-mono text-muted-foreground">
-                          {amount} ({pct}%)
+                ))}
+              </div>
+
+              {/* KPI cards */}
+              <div className="mt-3 grid grid-cols-4 gap-3">
+                {KPIS.map(({ label, value, caption, icon: Icon, iconClass, valueClass }) => (
+                  <div key={label} className="rounded-lg border border-border bg-card p-3">
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="text-[10px] font-medium uppercase leading-tight text-foreground">
+                        {label}
+                      </p>
+                      <span
+                        className={cn(
+                          "flex h-7 w-7 shrink-0 items-center justify-center rounded-full",
+                          iconClass,
+                        )}
+                      >
+                        <Icon className="h-3.5 w-3.5" />
+                      </span>
+                    </div>
+                    <p className={cn("mt-2 font-mono text-xl font-semibold", valueClass)}>
+                      {value}
+                    </p>
+                    <p className="mt-1 text-[11px] text-muted-foreground">{caption}</p>
+                  </div>
+                ))}
+              </div>
+
+              {/* Activity + collection summary */}
+              <div className="mt-3 grid grid-cols-2 gap-3">
+                <Panel
+                  title="Recent Financial Activities"
+                  action={<PanelButton>View all</PanelButton>}
+                >
+                  <ul className="divide-y divide-border px-4">
+                    {ACTIVITIES.map(({ text, meta, amount, dot }) => (
+                      <li key={text} className="flex items-center gap-3 py-2.5">
+                        <span className={cn("h-2 w-2 shrink-0 rounded-full", dot)} />
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-xs font-medium text-foreground">{text}</p>
+                          <p className="truncate text-[10px] text-muted-foreground">{meta}</p>
+                        </div>
+                        <span className="whitespace-nowrap font-mono text-[11px] text-foreground">
+                          {amount}
                         </span>
                       </li>
                     ))}
                   </ul>
-                </div>
-              </Panel>
-            </div>
+                </Panel>
 
-            {/* Ageing + top outstanding */}
-            <div className="mt-2 grid gap-2 sm:grid-cols-2">
-              <Panel title="Outstanding by Age" action={<PanelButton>View Details</PanelButton>}>
-                <ul className="divide-y divide-border px-3 text-[9px]">
-                  {AGEING.map(({ label, amount, tone }) => (
-                    <li key={label} className="flex items-center justify-between py-1.5">
-                      <span className="text-muted-foreground">{label}</span>
-                      <span className={cn("font-mono font-semibold", tone)}>{amount}</span>
-                    </li>
-                  ))}
-                  <li className="flex items-center justify-between py-1.5 font-semibold">
-                    <span className="text-foreground">Total Outstanding</span>
-                    <span className="font-mono text-destructive">KES 620K</span>
-                  </li>
-                </ul>
-              </Panel>
-
-              <Panel title="Top Outstanding Students" action={<PanelButton>View All</PanelButton>}>
-                <ul className="divide-y divide-border px-3">
-                  {TOP_OUTSTANDING.map(({ name, cls, amount }) => (
-                    <li key={name} className="flex items-center gap-2 py-1.5">
-                      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-secondary text-muted-foreground">
-                        <Users className="h-2.5 w-2.5" />
-                      </span>
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-[9px] font-medium text-foreground">{name}</p>
-                        <p className="text-[7.5px] text-muted-foreground">{cls}</p>
+                <Panel
+                  title="Fee Collection Summary"
+                  action={
+                    <PanelButton>
+                      This Term <ChevronDown className="h-3 w-3" />
+                    </PanelButton>
+                  }
+                >
+                  <div className="flex items-center gap-4 p-4">
+                    <div className="relative h-24 w-24 shrink-0">
+                      <svg viewBox="0 0 64 64" className="h-full w-full -rotate-90">
+                        <circle
+                          cx="32"
+                          cy="32"
+                          r="26"
+                          fill="none"
+                          strokeWidth="10"
+                          className="stroke-secondary"
+                        />
+                        {SUMMARY.map((seg, i) => {
+                          const offset = SUMMARY.slice(0, i).reduce((n, x) => n + x.pct, 0);
+                          return (
+                            <circle
+                              key={seg.label}
+                              cx="32"
+                              cy="32"
+                              r="26"
+                              fill="none"
+                              strokeWidth="10"
+                              pathLength={100}
+                              strokeDasharray={`${seg.pct} ${100 - seg.pct}`}
+                              strokeDashoffset={-offset}
+                              className={seg.stroke}
+                            />
+                          );
+                        })}
+                      </svg>
+                      <div className="absolute inset-0 flex flex-col items-center justify-center">
+                        <p className="font-mono text-xs font-semibold text-foreground">KES 4.9M</p>
+                        <p className="text-[10px] text-muted-foreground">Total</p>
                       </div>
-                      <span className="font-mono text-[8px] font-semibold text-destructive">
-                        {amount}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              </Panel>
-            </div>
+                    </div>
+                    <ul className="min-w-0 flex-1 space-y-2">
+                      {SUMMARY.map(({ label, amount, pct, dot }) => (
+                        <li key={label} className="flex items-center gap-2 text-[11px]">
+                          <span className={cn("h-2 w-2 shrink-0 rounded-full", dot)} />
+                          <span className="flex-1 truncate text-foreground">{label}</span>
+                          <span className="whitespace-nowrap font-mono text-muted-foreground">
+                            {amount} ({pct}%)
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </Panel>
+              </div>
 
-            {/* Collection trend */}
-            <div className="mt-2 rounded-lg border border-border bg-card p-3">
-              <p className="mb-2 text-[9px] text-muted-foreground">Fee collection — last 6 terms</p>
-              <div className="flex h-12 items-end gap-1.5">
-                {TERM_BARS.map((h, i) => (
-                  <div
-                    key={i}
-                    className="flex-1 rounded-t bg-primary/70"
-                    style={{ height: `${h}%` }}
-                  />
-                ))}
+              {/* Ageing + top outstanding */}
+              <div className="mt-3 grid grid-cols-2 gap-3">
+                <Panel title="Outstanding by Age" action={<PanelButton>View Details</PanelButton>}>
+                  <ul className="divide-y divide-border px-4 text-xs">
+                    {AGEING.map(({ label, amount, tone }) => (
+                      <li key={label} className="flex items-center justify-between py-2.5">
+                        <span className="text-muted-foreground">{label}</span>
+                        <span className={cn("font-mono font-semibold", tone)}>{amount}</span>
+                      </li>
+                    ))}
+                    <li className="flex items-center justify-between py-2.5 font-semibold">
+                      <span className="text-foreground">Total Outstanding</span>
+                      <span className="font-mono text-destructive">KES 620K</span>
+                    </li>
+                  </ul>
+                </Panel>
+
+                <Panel
+                  title="Top Outstanding Students"
+                  action={<PanelButton>View All</PanelButton>}
+                >
+                  <ul className="divide-y divide-border px-4">
+                    {TOP_OUTSTANDING.map(({ name, cls, amount }) => (
+                      <li key={name} className="flex items-center gap-3 py-3">
+                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-secondary text-muted-foreground">
+                          <Users className="h-4 w-4" />
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-xs font-medium text-foreground">{name}</p>
+                          <p className="text-[10px] text-muted-foreground">{cls}</p>
+                        </div>
+                        <span className="whitespace-nowrap font-mono text-[11px] font-semibold text-destructive">
+                          {amount}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </Panel>
+              </div>
+
+              {/* Collection trend */}
+              <div className="mt-3 rounded-lg border border-border bg-card p-4">
+                <p className="mb-3 text-xs text-muted-foreground">
+                  Fee collection — last 6 terms
+                </p>
+                <div className="flex h-20 items-end gap-2">
+                  {TERM_BARS.map((h, i) => (
+                    <div
+                      key={i}
+                      className="flex-1 rounded-t bg-primary/70"
+                      style={{ height: `${h}%` }}
+                    />
+                  ))}
+                </div>
               </div>
             </div>
           </div>
-        </div>
+        </ScaledStage>
       </div>
     </div>
   );
