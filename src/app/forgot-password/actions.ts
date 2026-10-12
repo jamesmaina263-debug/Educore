@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getRealClientIp } from "@/lib/get-real-client-ip";
 import { sendSecurityAlert } from "@/lib/security-alert";
-import { SITE_URL } from "@/lib/site";
+import { resolveAuthRedirectOrigin } from "@/lib/auth/reset-link";
 
 export type ForgotPasswordState = { error: string | null; sent: boolean };
 
@@ -69,10 +69,13 @@ export async function requestPasswordReset(
     // own project-level rate limiting on this endpoint still applies.
   }
 
-  const origin =
+  // Never trust the request's Origin/Host for the emailed link: if it isn't on the Supabase
+  // Redirect URLs allowlist (e.g. the Vercel alias), Supabase silently swaps in the Site URL and
+  // the link lands on the marketing home page. Production always uses the canonical origin.
+  const origin = resolveAuthRedirectOrigin(
     requestHeaders.get("origin") ??
-    (requestHeaders.get("host") ? `https://${requestHeaders.get("host")}` : null) ??
-    SITE_URL;
+      (requestHeaders.get("host") ? `https://${requestHeaders.get("host")}` : null),
+  );
   // No tagSentryRequestContext() call here (unlike most other Server Actions): this entire flow
   // is, by design, always unauthenticated -- there is no point in this function where a session
   // exists to tag, so the call would be a guaranteed no-op every single time, not worth the extra
