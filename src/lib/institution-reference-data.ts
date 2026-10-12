@@ -153,3 +153,37 @@ export function isValidCurrencyCode(v: string): boolean {
 export function isValidStartingYear(v: number): boolean {
   return startingYearOptions().includes(v);
 }
+
+// ---- Country-based defaults (short signup form) ----
+// The short signup form only asks for country; currency and time zone are
+// derived from it so a visitor isn't made to pick from a 400-entry time-zone
+// list before they have seen the product. Both must stay members of
+// CURRENCY_CODES / timezoneOptions() so the same DB-facing validation holds.
+
+const COUNTRY_CURRENCY: Record<string, CurrencyCode> = {
+  KE: "KES", UG: "UGX", TZ: "TZS", RW: "RWF", BI: "BIF", SS: "SSP", ET: "ETB",
+  ZA: "ZAR", NG: "NGN", GH: "GHS", EG: "EGP", MA: "MAD", ZM: "ZMW", MW: "MWK",
+  MZ: "MZN", GB: "GBP", US: "USD", CA: "CAD", AU: "AUD", IN: "INR", AE: "AED",
+  SA: "SAR", CN: "CNY", JP: "JPY",
+  IE: "EUR", DE: "EUR", FR: "EUR", IT: "EUR", ES: "EUR", PT: "EUR", NL: "EUR",
+  BE: "EUR", FI: "EUR",
+};
+
+const COUNTRY_TIMEZONE: Record<string, string> = {
+  KE: "Africa/Nairobi", UG: "Africa/Kampala", TZ: "Africa/Dar_es_Salaam",
+  RW: "Africa/Kigali", BI: "Africa/Bujumbura", SS: "Africa/Juba",
+  ET: "Africa/Addis_Ababa", SO: "Africa/Mogadishu", ZA: "Africa/Johannesburg",
+  NG: "Africa/Lagos", GH: "Africa/Accra", ZM: "Africa/Lusaka",
+  ZW: "Africa/Harare", MW: "Africa/Blantyre", MZ: "Africa/Maputo",
+  EG: "Africa/Cairo", GB: "Europe/London", IN: "Asia/Kolkata", AE: "Asia/Dubai",
+};
+
+/** Currency + IANA time zone to use when the signer didn't choose them. */
+export function defaultsForCountry(code: string): { currencyCode: CurrencyCode; gmtTimezone: string } {
+  const zones = timezoneOptions();
+  const tz = COUNTRY_TIMEZONE[code];
+  return {
+    currencyCode: COUNTRY_CURRENCY[code] ?? "USD",
+    gmtTimezone: tz && zones.includes(tz) ? tz : zones.includes("UTC") ? "UTC" : zones[0],
+  };
+}
