@@ -3,9 +3,15 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 const h = vi.hoisted(() => {
   const insert = vi.fn();
   const rpc = vi.fn();
-  const from = vi.fn(() => ({ insert }));
+  // Duplicate lookup: from().select().eq().eq().gte().limit() -> { data, error }
+  const recent = vi.fn();
+  const chain: Record<string, unknown> = {};
+  for (const m of ["select", "eq", "gte"]) chain[m] = () => chain;
+  chain.limit = () => recent();
+  const from = vi.fn(() => ({ insert, ...chain }));
   return {
     insert,
+    recent,
     rpc,
     from,
     createClient: vi.fn(),
@@ -35,7 +41,9 @@ function form(overrides: Record<string, string> = {}) {
     school_name: "Sunrise Academy",
     role: "Principal",
     email: "Jane@Sunrise.ac.ke",
-    phone: "0700000000",
+    phone: "0700 000 000",
+    contact_method: "whatsapp",
+    request_type: "callback",
     student_count: "450",
     message: "Please demo",
     rendered_at: String(Date.now() - 10_000),
@@ -50,6 +58,7 @@ describe("submitDemoRequest", () => {
     vi.clearAllMocks();
     h.rpc.mockResolvedValue({ data: true, error: null });
     h.insert.mockResolvedValue({ error: null });
+    h.recent.mockResolvedValue({ data: [], error: null });
   });
 
   it("inserts through the admin client and never touches the anon client", async () => {
@@ -65,7 +74,7 @@ describe("submitDemoRequest", () => {
       email: "Jane@Sunrise.ac.ke",
       phone: "0700000000",
       student_count: 450,
-      message: "Please demo",
+      message: "Contact via: WhatsApp\nPreferred time: callback requested as soon as possible\n\nPlease demo",
     });
     expect(h.markIncompleteLeadCompleted).toHaveBeenCalledTimes(1);
   });
@@ -120,4 +129,64 @@ describe("submitDemoRequest", () => {
     expect(h.rpc).not.toHaveBeenCalled();
     expect(h.insert).not.toHaveBeenCalled();
   });
+
+  it("requires a phone number and a contact method", async () => {
+    const noPhone = await submitDemoRequest({ status: "idle" }, form({ phone: "" }));
+    expect(noPhone).toMatchObject({ status: "error", field: "phone" });
+    const noMethod = await submitDemoRequest({ status: "idle" }, form({ contact_method: "" }));
+    expect(noMethod).toMatchObject({ status: "error", field: "contact_method" });
+    expect(h.insert).not.toHaveBeenCalled();
+  });
+
+  it("rejects a role outside the offered list", async () => {
+    const res = await submitDemoRequest({ status: "idle" }, form({ role: "<b>x</b>" }));
+    expect(res).toMatchObject({ status: "error", field: "role" });
+  });
+
+  it("stores an unconfirmed preferred time in the message block", async () => {
+    const res = await submitDemoRequest(
+      { status: "idle" },
+      form({ request_type: "scheduled", preferred_date: soon(), time_window: "afternoon" }),
+    );
+    expect(res).toEqual({ status: "success" });
+    const stored = h.insert.mock.calls[0][0].message as string;
+    expect(stored).toContain("Afternoon (12:00–17:00) EAT (NOT yet confirmed");
+  });
+
+  it("rejects a scheduled request in the past", async () => {
+    const res = await submitDemoRequest(
+      { status: "idle" },
+      form({ request_type: "scheduled", preferred_date: "2020-01-01", time_window: "morning" }),
+    );
+    expect(res).toMatchObject({ status: "error", field: "preferred_date" });
+    expect(h.insert).not.toHaveBeenCalled();
+  });
+
+  it("treats a repeat of the same phone + school as already received, without a second insert", async () => {
+    h.recent.mockResolvedValue({ data: [{ id: "abc" }], error: null });
+    const res = await submitDemoRequest({ status: "idle" }, form());
+    expect(res).toEqual({ status: "success" });
+    expect(h.insert).not.toHaveBeenCalled();
+  });
+
+  it("never reports success for a duplicate that was not actually stored", async () => {
+    // Lookup finds nothing (the earlier attempt failed to save) -> the retry must insert.
+    h.insert.mockResolvedValueOnce({ error: { code: "XX000", message: "boom" } });
+    expect((await submitDemoRequest({ status: "idle" }, form())).status).toBe("error");
+    h.insert.mockResolvedValueOnce({ error: null });
+    expect((await submitDemoRequest({ status: "idle" }, form())).status).toBe("success");
+    expect(h.insert).toHaveBeenCalledTimes(2);
+  });
+
+  it("still saves the lead if the duplicate lookup itself fails", async () => {
+    h.recent.mockResolvedValue({ data: null, error: { message: "db down" } });
+    const res = await submitDemoRequest({ status: "idle" }, form());
+    expect(res).toEqual({ status: "success" });
+    expect(h.insert).toHaveBeenCalledTimes(1);
+  });
 });
+
+/** A valid preferred date: two days from now in Nairobi. */
+function soon(): string {
+  return new Date(Date.now() + 2 * 24 * 60 * 60 * 1000 + 3 * 60 * 60 * 1000).toISOString().slice(0, 10);
+}

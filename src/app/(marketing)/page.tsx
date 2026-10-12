@@ -139,28 +139,31 @@ export default function MarketingHomePage() {
   return (
     <>
       {/* 1 & 2 & 3 & 4 — Hero: value proposition, primary/secondary CTA, Dashboard Frame */}
-      <Section tone="navy" className="pt-16 sm:pt-20">
+      <Section tone="navy" className="pt-8 sm:pt-20">
         <div className="grid items-center gap-16 lg:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)]">
           <Eyebrow tone="light">School Management System for Kenya</Eyebrow>
-          <h1 className="mt-5 text-4xl font-extrabold leading-[1.1] tracking-tight sm:text-5xl lg:text-[3.25rem]">
+          <h1 className="mt-4 text-3xl font-extrabold leading-[1.1] tracking-tight sm:mt-5 sm:text-5xl lg:text-[3.25rem]">
             School management software built for Kenyan schools.
           </h1>
-          <p className="mt-6 max-w-lg text-lg text-white/70">
-            EduCore connects admissions, academics, finance, attendance,
-            communication, and school operations in one secure platform —
-            with M-Pesa fee reconciliation and CBC grading built in from
-            day one, not bolted on later.
+          <p className="mt-4 max-w-lg text-base text-white/70 sm:mt-6 sm:text-lg">
+            Stop chasing fees across spreadsheets, WhatsApp groups and paper registers.
+            <span className="hidden sm:inline">
+              {" "}
+              EduCore puts admissions, academics, M-Pesa fee reconciliation, attendance and parent
+              communication in one secure platform, built for school owners, principals and
+              bursars.
+            </span>
           </p>
-          <div className="mt-9 flex flex-wrap items-center gap-4">
-            <MarketingButton size="lg" asChild>
-              <Link href={TRIAL_HREF}>
-                {TRIAL_CTA_LABEL} <ArrowRight className="h-4 w-4" />
+          <div className="mt-6 flex flex-col gap-3 sm:mt-9 sm:flex-row sm:flex-wrap sm:items-center sm:gap-4">
+            <MarketingButton size="lg" asChild className="w-full sm:w-auto">
+              <Link href="/contact">
+                Book a Personalised Demo <ArrowRight className="h-4 w-4" />
               </Link>
             </MarketingButton>
-            <MarketingButton size="lg" variant="outline-on-dark" asChild>
-              <Link href="/contact">Book a Demo</Link>
+            <MarketingButton size="lg" variant="outline-on-dark" asChild className="w-full sm:w-auto">
+              <Link href={TRIAL_HREF}>{TRIAL_CTA_LABEL}</Link>
             </MarketingButton>
-            <MarketingButton size="lg" variant="ghost-on-dark" asChild>
+            <MarketingButton size="lg" variant="ghost-on-dark" asChild className="w-full sm:w-auto">
               <Link
                 href="https://wa.me/254702904562?text=Hi%2C%20I%27d%20like%20to%20know%20more%20about%20EduCore%20for%20my%20school."
                 target="_blank"
@@ -170,7 +173,10 @@ export default function MarketingHomePage() {
               </Link>
             </MarketingButton>
           </div>
-          <p className="mt-4 text-sm font-medium text-white/70">{TRIAL_TERMS}</p>
+          <p className="mt-4 text-sm font-medium text-white/70">
+            Demo: tell us when suits you and we aim to reply within two hours. Trial:{" "}
+            {TRIAL_TERMS}
+          </p>
           <p className="mt-6 text-xs font-medium uppercase tracking-[0.14em] text-white/50">
             Built for modern schools &bull; Secure &bull; Cloud-based &bull; Scalable
           </p>

@@ -31,8 +31,8 @@ export default function ContactPage() {
           Tell us about your school. We&apos;ll take it from there.
         </h1>
         <p className="mt-5 max-w-xl text-lg leading-relaxed text-white/70">
-          A few details are enough to get started — we&apos;ll follow up to
-          set up a walkthrough shaped around how your school actually runs.
+          Share your phone number and how you&apos;d like to be reached. We aim to contact you
+          within two hours to arrange a walkthrough shaped around how your school actually runs.
         </p>
         <p className="mt-4 max-w-xl text-base leading-relaxed text-white/70">
           Would rather try it first?{" "}
@@ -54,10 +54,12 @@ export default function ContactPage() {
                 <Clock className="mt-0.5 h-5 w-5 flex-shrink-0 text-marketing-blue" strokeWidth={1.75} />
                 <div>
                   <p className="text-sm font-semibold text-marketing-navy-950">
-                    Quick turnaround
+                    What happens next
                   </p>
-                  <p className="mt-1 text-sm leading-relaxed text-marketing-navy-900/65">
-                    We follow up on every submission to find a time that works.
+                  <p className="mt-1 text-sm leading-relaxed text-marketing-navy-900/75">
+                    We aim to contact you within two hours by WhatsApp, phone or email,
+                    whichever you choose. Pick a preferred day if you like — it&apos;s a
+                    request until we confirm it with you.
                   </p>
                 </div>
               </div>
@@ -67,7 +69,7 @@ export default function ContactPage() {
                   <p className="text-sm font-semibold text-marketing-navy-950">
                     No obligation
                   </p>
-                  <p className="mt-1 text-sm leading-relaxed text-marketing-navy-900/65">
+                  <p className="mt-1 text-sm leading-relaxed text-marketing-navy-900/75">
                     A demo is a conversation, not a commitment — come with
                     questions.
                   </p>
@@ -79,9 +81,9 @@ export default function ContactPage() {
                   <p className="text-sm font-semibold text-marketing-navy-950">
                     One quick form
                   </p>
-                  <p className="mt-1 text-sm leading-relaxed text-marketing-navy-900/65">
-                    Just your name, school, role, and contact details — enough
-                    for us to reach out and take it from there.
+                  <p className="mt-1 text-sm leading-relaxed text-marketing-navy-900/75">
+                    Your name, school, role, phone and email — about a minute.
+                    Everything else is optional.
                   </p>
                 </div>
               </div>
@@ -91,7 +93,7 @@ export default function ContactPage() {
                   <p className="text-sm font-semibold text-marketing-navy-950">
                     Prefer to reach us directly?
                   </p>
-                  <p className="mt-1 text-sm leading-relaxed text-marketing-navy-900/65">
+                  <p className="mt-1 text-sm leading-relaxed text-marketing-navy-900/75">
                     WhatsApp{" "}
                     <a
                       href="https://wa.me/254702904562"
