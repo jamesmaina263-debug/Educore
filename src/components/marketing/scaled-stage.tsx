@@ -8,38 +8,55 @@ import { useLayoutEffect, useRef, useState } from "react";
 // width, like a screenshot taken on a desktop -- content that doesn't fit is
 // simply cropped at the window edge, exactly as in a real screenshot.
 //
-// Optional `compact`: below `compact.below` px of viewport width the window
-// switches to a narrower/taller design size and the stage gets
-// data-compact="true" (it is also a `group`), so children can restyle with
-// Tailwind's `group-data-[compact=true]:` variants -- e.g. hide a sidebar.
+// Optional narrower layouts. Below `compact.below` px of viewport width (phones)
+// or `tablet.below` px (tablets) the window switches to its own design size
+// and the stage gets data-compact="true" / data-tablet="true" (it is also a
+// `group`), so children can restyle with Tailwind's
+// `group-data-[compact=true]:` / `group-data-[tablet=true]:` variants -- e.g.
+// hide a sidebar. The CSS aspect ratios below use Tailwind's `max-sm` (640px)
+// and `max-lg` (1024px); keep `compact.below` / `tablet.below` in sync.
 export type CompactStage = { below: number; width: number; height: number };
 
 export function ScaledStage({
   designWidth,
   designHeight,
   compact,
+  tablet,
   children,
 }: {
   designWidth: number;
   designHeight: number;
   compact?: CompactStage;
+  tablet?: CompactStage;
   children: React.ReactNode;
 }) {
   const outerRef = useRef<HTMLDivElement>(null);
   const [scale, setScale] = useState(0.45);
-  const [isCompact, setIsCompact] = useState(false);
+  const [mode, setMode] = useState<"desktop" | "tablet" | "compact">("desktop");
 
   const compactBelow = compact?.below;
   const compactWidth = compact?.width;
+  const tabletBelow = tablet?.below;
+  const tabletWidth = tablet?.width;
   useLayoutEffect(() => {
     const outer = outerRef.current;
     if (!outer) return;
     const measure = () => {
-      const useCompact =
-        compactBelow !== undefined && window.innerWidth < compactBelow;
-      const width = useCompact && compactWidth ? compactWidth : designWidth;
-      setIsCompact(useCompact);
-      setScale(Math.min(useCompact ? 1.4 : 1.2, outer.clientWidth / width));
+      const vw = window.innerWidth;
+      const next =
+        compactBelow !== undefined && vw < compactBelow
+          ? "compact"
+          : tabletBelow !== undefined && vw < tabletBelow
+            ? "tablet"
+            : "desktop";
+      const width =
+        next === "compact" && compactWidth
+          ? compactWidth
+          : next === "tablet" && tabletWidth
+            ? tabletWidth
+            : designWidth;
+      setMode(next);
+      setScale(Math.min(next === "desktop" ? 1.2 : 1.4, outer.clientWidth / width));
     };
     measure();
     const observer = new ResizeObserver(measure);
@@ -49,10 +66,11 @@ export function ScaledStage({
       observer.disconnect();
       window.removeEventListener("resize", measure);
     };
-  }, [designWidth, compactBelow, compactWidth]);
+  }, [designWidth, compactBelow, compactWidth, tabletBelow, tabletWidth]);
 
-  const width = isCompact && compact ? compact.width : designWidth;
-  const height = isCompact && compact ? compact.height : designHeight;
+  const active = mode === "compact" ? compact : mode === "tablet" ? tablet : undefined;
+  const width = active ? active.width : designWidth;
+  const height = active ? active.height : designHeight;
 
   return (
     <div
@@ -61,22 +79,30 @@ export function ScaledStage({
       // between server render and hydration on phones. `max-sm` (< 640px)
       // must match the `below` value passed in `compact`.
       className={
-        compact
-          ? "relative w-full overflow-hidden aspect-(--stage-ratio) max-sm:aspect-(--stage-ratio-compact)"
+        compact || tablet
+          ? "relative w-full overflow-hidden aspect-(--stage-ratio) max-lg:aspect-(--stage-ratio-tablet) max-sm:aspect-(--stage-ratio-compact)"
           : "relative w-full overflow-hidden"
       }
       style={
-        compact
+        compact || tablet
           ? ({
               "--stage-ratio": `${designWidth} / ${designHeight}`,
-              "--stage-ratio-compact": `${compact.width} / ${compact.height}`,
+              "--stage-ratio-tablet": tablet
+                ? `${tablet.width} / ${tablet.height}`
+                : `${designWidth} / ${designHeight}`,
+              "--stage-ratio-compact": compact
+                ? `${compact.width} / ${compact.height}`
+                : tablet
+                  ? `${tablet.width} / ${tablet.height}`
+                  : `${designWidth} / ${designHeight}`,
             } as React.CSSProperties)
           : { aspectRatio: `${designWidth} / ${designHeight}` }
       }
     >
       <div
         className="group absolute left-0 top-0 overflow-hidden"
-        data-compact={isCompact ? "true" : "false"}
+        data-compact={mode === "compact" ? "true" : "false"}
+        data-tablet={mode === "tablet" ? "true" : "false"}
         style={{
           width,
           height,
