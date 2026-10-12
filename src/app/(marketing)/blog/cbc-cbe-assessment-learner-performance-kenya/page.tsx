@@ -242,7 +242,16 @@ export default function CbcCbeAssessmentLearnerPerformancePost() {
             distinguish exceptional performance from good performance within
             the same broad level. Day-to-day classroom assessment, the kind
             EduCore records at the sub-strand level, uses the four-level
-            scale above directly.
+            scale above directly. Separately, school-based assessment from
+            Grades 7 and 8 also counts toward a learner&apos;s KJSEA score;
+            see our guide to{" "}
+            <Link
+              href="/blog/kjsea-sba-records-kenya-schools"
+              className="font-semibold underline underline-offset-4"
+            >
+              KJSEA and school-based assessment records
+            </Link>
+            .
           </p>
         </Reveal>
       </Section>
