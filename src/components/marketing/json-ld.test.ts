@@ -16,6 +16,11 @@ describe("marketing JSON-LD", () => {
     expect(org.areaServed.name).toBe("Kenya");
     expect(org.sameAs.length).toBeGreaterThan(0);
     for (const url of org.sameAs) expect(url).toMatch(/^https:\/\//);
+    expect(org.sameAs.some((u) => u.includes("maps.google.com/?cid="))).toBe(true);
+  });
+
+  it("publishes the same phone number the site and Business Profile show", () => {
+    expect(buildOrganizationJsonLd().telephone).toBe("+254702904562");
   });
 
   it("SoftwareApplication carries offers (required for Google rich results)", () => {
