@@ -55,28 +55,36 @@ export function CookieNotice() {
 
   if (!open) return null;
 
+  // Slim by design: one row on sm+ (text left, equal Accept/Decline buttons
+  // right) so it doesn't cover the hero dashboard preview; a compact stacked
+  // bar full-width at the bottom on phones. Left-anchored on sm+ so it stays
+  // clear of the exit-intent card, which sits bottom-right.
   return (
     <div
       role="region"
       aria-label="Cookie notice"
-      className="fixed inset-x-0 bottom-0 z-40 flex justify-center px-4 pb-4 sm:inset-x-auto sm:bottom-4 sm:left-4 sm:px-0"
+      className="fixed inset-x-0 bottom-0 z-40 sm:inset-x-auto sm:bottom-4 sm:left-4 sm:max-w-3xl sm:px-0"
     >
-      <div className="w-full max-w-md rounded-lg border border-white/10 bg-marketing-navy-950 p-4 text-white shadow-xl">
-        <p className="text-sm text-white/80">
+      <div className="flex flex-col gap-2.5 border-t border-white/10 bg-marketing-navy-950 px-4 py-3 text-white shadow-xl sm:flex-row sm:items-center sm:gap-5 sm:rounded-lg sm:border sm:py-2.5">
+        <p className="text-[13px] leading-snug text-white/80 sm:text-sm">
           We use cookies to measure how this site and our Google ads perform. The site works the
           same if you decline.{" "}
           <Link href="/privacy" className="underline underline-offset-2 hover:text-white">
             Privacy Policy
           </Link>
         </p>
-        <div className="mt-3 flex gap-3">
-          <MarketingButton size="sm" className="flex-1" onClick={() => choose("accepted")}>
+        <div className="flex shrink-0 gap-3">
+          <MarketingButton
+            size="sm"
+            className="flex-1 sm:min-w-24 sm:flex-none"
+            onClick={() => choose("accepted")}
+          >
             Accept
           </MarketingButton>
           <MarketingButton
             size="sm"
             variant="outline-on-dark"
-            className="flex-1"
+            className="flex-1 sm:min-w-24 sm:flex-none"
             onClick={() => choose("declined")}
           >
             Decline
