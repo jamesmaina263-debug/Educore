@@ -1,4 +1,4 @@
-import { SITE_URL, SITE_NAME, SOCIAL_PROFILES } from "@/lib/site";
+import { SITE_URL, SITE_NAME, SITE_PHONE, SOCIAL_PROFILES } from "@/lib/site";
 
 // Site-wide structured data for the marketing site only (rendered from
 // (marketing)/layout.tsx, not the root layout -- this must never appear on
@@ -24,6 +24,7 @@ export function buildOrganizationJsonLd() {
     },
     // EduCore sells to Kenyan schools only (current scope).
     areaServed: { "@type": "Country", name: "Kenya" },
+    telephone: SITE_PHONE,
     sameAs: SOCIAL_PROFILES,
   };
 }
