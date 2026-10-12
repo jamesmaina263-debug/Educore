@@ -2,23 +2,19 @@
 
 import { headers } from "next/headers";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { createClient } from "@/lib/supabase/server";
+import { SITE_URL } from "@/lib/site";
+import { cleanSignupText, toE164 } from "@/lib/signup-fields";
 import { slugify } from "@/lib/slug";
 import { getRealClientIp } from "@/lib/get-real-client-ip";
 import { sendSecurityAlert } from "@/lib/security-alert";
-import { safeStorageFilename } from "@/lib/storage-path";
-import { generateTemporaryPassword, temporaryPasswordExpiry } from "@/lib/temporary-password";
+import { generateTemporaryPassword } from "@/lib/temporary-password";
 import { verifyTurnstileToken } from "@/lib/turnstile";
 import { parseAttributionFormData } from "@/lib/marketing/attribution-fields";
 import {
   isValidTitle,
   isValidSchoolType,
-  isValidCycle,
-  isValidOwnershipType,
-  isValidInstitutionType,
-  isValidCountryCode,
-  isValidCurrencyCode,
   isValidStartingYear,
-  timezoneOptions,
 } from "@/lib/institution-reference-data";
 
 export type Plan = {
@@ -71,46 +67,33 @@ async function getTrialPlan(
 export type SignupState = {
   error: string | null;
   success?: boolean;
-  // Set only by the honeypot branch below. success is true (so bots see a
-  // convincing fake success screen and don't retry) but no account was
-  // actually created -- callers that treat success as a conversion signal
-  // (e.g. the sign_up GTM event in signup-form.tsx) must check this and
-  // skip firing when it's true.
   honeypot?: boolean;
   schoolName?: string;
   email?: string;
-  temporaryPassword?: string;
+  /** False when the account was created but the set-password email could not be sent. */
+  emailSent?: boolean;
 };
 
-const URL_FIELDS = [
-  ["website", "Website"],
-  ["facebook_url", "Facebook"],
-  ["twitter_url", "Twitter"],
-  ["instagram_url", "Instagram"],
-  ["youtube_url", "YouTube"],
-  ["cloud_folder_url", "Cloud Folder"],
-] as const;
+// Profile defaults for a Kenyan self-serve signup. Nothing in the app reads these after signup
+// except currency_code (a print page), and they stay editable by the school later, so they are
+// not asked for up front. Everything else in the old long form was optional or unused.
+const DEFAULT_COUNTRY = "KE";
+const DEFAULT_CURRENCY = "KES";
+const DEFAULT_TIMEZONE = "Africa/Nairobi";
 
-// Loose but real E.164-ish check — the form now serves any country, not
-// just Kenya, so this can't be as strict as the guardian-phone regex in
-// apply/[slug]/actions.ts.
-const PHONE_RE = /^\+?[1-9]\d{7,14}$/;
-
-function trimmed(formData: FormData, key: string): string {
-  return String(formData.get(key) ?? "").trim();
+function nairobiYear(): number {
+  return new Date(Date.now() + 3 * 60 * 60 * 1000).getUTCFullYear();
 }
 
 export async function signUpSchool(
   _prevState: SignupState,
   formData: FormData,
 ): Promise<SignupState> {
-  // Honeypot: a real applicant never fills this hidden field in.
-  const honeypot = trimmed(formData, "company_website");
-  if (honeypot) {
-    return { error: null, success: true, honeypot: true, schoolName: "—", email: "—", temporaryPassword: "—" };
+  // Honeypot: a bot that fills every field gets a convincing fake success and no account.
+  if (cleanSignupText(formData.get("company_website"), 200)) {
+    return { error: null, success: true, honeypot: true, schoolName: "—", email: "—", emailSent: true };
   }
 
-  // Minimum-fill-time check, same convention as apply/[slug]/actions.ts.
   const loadedAtRaw = Number(formData.get("form_loaded_at") ?? 0);
   if (loadedAtRaw && Date.now() - loadedAtRaw < 2500) {
     return { error: "Please take a moment to review your details before submitting." };
@@ -123,14 +106,9 @@ export async function signUpSchool(
     return { error: e instanceof Error ? e.message : "Signup is not configured yet." };
   }
 
-  // SECURITY: use the last (trusted, edge-appended) X-Forwarded-For entry,
-  // not the first (caller-controlled) -- see getRealClientIp.ts.
-  const forwardedFor = (await headers()).get("x-forwarded-for");
-  const clientIp = getRealClientIp(forwardedFor);
+  const requestHeaders = await headers();
+  const clientIp = getRealClientIp(requestHeaders.get("x-forwarded-for"));
 
-  // Abuse guard — this endpoint is public/unauthenticated and a successful
-  // call creates a real Supabase Auth user + school + trial subscription +
-  // storage write. Same rate-limit primitive/limits as before.
   const { data: withinLimit } = await adminClient.rpc("increment_and_check_rate_limit", {
     p_bucket: `signup:${clientIp}`,
     p_max_events: 5,
@@ -144,161 +122,81 @@ export async function signUpSchool(
     return { error: "Too many signup attempts from this network. Please try again later." };
   }
 
-  // Mandatory CAPTCHA check — before touching the database at all.
-  const captchaToken = trimmed(formData, "cf-turnstile-response");
+  const captchaToken = cleanSignupText(formData.get("cf-turnstile-response"), 4096);
   const captchaOk = await verifyTurnstileToken(captchaToken, clientIp);
   if (!captchaOk) {
     return { error: "CAPTCHA verification failed. Please try again." };
   }
 
-  // ---- Field extraction ----
-  const title = trimmed(formData, "title");
-  const ownerName = trimmed(formData, "owner_name");
-  const schoolType = trimmed(formData, "school_type");
+  // Required: who you are, your school, and how to reach you.
+  const ownerName = cleanSignupText(formData.get("owner_name"), 120);
+  const schoolName = cleanSignupText(formData.get("school_name"), 200);
+  const phoneRaw = cleanSignupText(formData.get("phone"), 40);
+  const email = cleanSignupText(formData.get("email"), 254).toLowerCase();
 
-  const schoolName = trimmed(formData, "school_name");
-  const description = trimmed(formData, "description");
-  const cycleType = trimmed(formData, "cycle_type");
-  const ownershipType = trimmed(formData, "ownership_type");
-  const institutionType = trimmed(formData, "institution_type");
-  const phone = trimmed(formData, "phone");
-  const email = trimmed(formData, "email");
-  const countryCode = trimmed(formData, "country_code");
-  const address = trimmed(formData, "address");
-  const startingAcademicYearRaw = trimmed(formData, "starting_academic_year");
-  const gmtTimezone = trimmed(formData, "gmt_timezone");
-  const currencyCode = trimmed(formData, "currency_code");
-
-  const website = trimmed(formData, "website");
-  const facebookUrl = trimmed(formData, "facebook_url");
-  const twitterUrl = trimmed(formData, "twitter_url");
-  const instagramUrl = trimmed(formData, "instagram_url");
-  const youtubeUrl = trimmed(formData, "youtube_url");
-  const cloudFolderUrl = trimmed(formData, "cloud_folder_url");
-
-  const logoFile = formData.get("logo");
-
-  // ---- Required-field validation ----
   const missing: string[] = [];
-  if (!title) missing.push("Your Title");
-  if (!ownerName) missing.push("Your Name");
-  if (!schoolType) missing.push("School Type");
-  if (!schoolName) missing.push("Institution Name");
-  if (!description) missing.push("Institution Description");
-  if (!cycleType) missing.push("Cycles");
-  if (!ownershipType) missing.push("Organisation State");
-  if (!institutionType) missing.push("Type");
-  if (!phone) missing.push("Phone");
+  if (!ownerName) missing.push("Your name");
+  if (!schoolName) missing.push("School name");
+  if (!phoneRaw) missing.push("Phone");
   if (!email) missing.push("Email");
-  if (!countryCode) missing.push("Country");
-  if (!address) missing.push("Address");
-  if (!startingAcademicYearRaw) missing.push("Year");
-  if (!gmtTimezone) missing.push("GMT Timezone");
-  if (!currencyCode) missing.push("Currency Code");
   if (missing.length > 0) {
     return { error: `Please fill in: ${missing.join(", ")}.` };
   }
 
-  // ---- Value validation (never trust the client Select options) ----
-  if (!isValidTitle(title)) return { error: "Please select a valid title." };
-  if (!isValidSchoolType(schoolType)) return { error: "Please select a valid school type." };
-  if (!isValidCycle(cycleType)) return { error: "Please select a valid cycle." };
-  if (!isValidOwnershipType(ownershipType)) return { error: "Please select a valid organisation state." };
-  if (!isValidInstitutionType(institutionType)) return { error: "Please select a valid institution type." };
-  if (!isValidCountryCode(countryCode)) return { error: "Please select a valid country." };
-  if (!isValidCurrencyCode(currencyCode)) return { error: "Please select a valid currency code." };
-  if (!timezoneOptions().includes(gmtTimezone)) return { error: "Please select a valid time zone." };
-  const startingAcademicYear = Number(startingAcademicYearRaw);
-  if (!Number.isInteger(startingAcademicYear) || !isValidStartingYear(startingAcademicYear)) {
-    return { error: "Please select a valid year." };
-  }
-  if (!PHONE_RE.test(phone)) {
-    return { error: "Please enter a valid phone number, e.g. +2547XXXXXXXX." };
+  const phone = toE164(phoneRaw);
+  if (!phone) {
+    return { error: "Enter a valid phone number, e.g. 0712 345 678 or +254 712 345 678." };
   }
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     return { error: "Please enter a valid email address." };
   }
 
-  const urlValues: Record<string, string> = {
-    website,
-    facebook_url: facebookUrl,
-    twitter_url: twitterUrl,
-    instagram_url: instagramUrl,
-    youtube_url: youtubeUrl,
-    cloud_folder_url: cloudFolderUrl,
-  };
-  for (const [key, label] of URL_FIELDS) {
-    const value = urlValues[key];
-    if (!value) continue; // all optional
-    try {
-      const parsed = new URL(value);
-      if (parsed.protocol !== "http:" && parsed.protocol !== "https:") throw new Error("bad protocol");
-    } catch {
-      return { error: `Please enter a valid ${label} URL, or leave it blank.` };
-    }
-  }
+  // Optional extras; when provided they are still validated against the reference lists.
+  const title = cleanSignupText(formData.get("title"), 40);
+  const schoolType = cleanSignupText(formData.get("school_type"), 60);
+  const address = cleanSignupText(formData.get("address"), 300);
+  if (title && !isValidTitle(title)) return { error: "Please select a valid title." };
+  if (schoolType && !isValidSchoolType(schoolType)) return { error: "Please select a valid school type." };
 
-  let logoToUpload: File | null = null;
-  if (logoFile instanceof File && logoFile.size > 0) {
-    const MAX_LOGO_BYTES = 2 * 1024 * 1024; // matches the school-logos bucket's file_size_limit
-    // SVG is deliberately excluded: it can carry script, and logos are served from a public bucket.
-    const ALLOWED_LOGO_TYPES = ["image/png", "image/jpeg", "image/webp"];
-    if (logoFile.size > MAX_LOGO_BYTES) {
-      return { error: "Logo must be 2MB or smaller." };
-    }
-    if (!ALLOWED_LOGO_TYPES.includes(logoFile.type)) {
-      return { error: "Logo must be a PNG, JPEG, or WebP image." };
-    }
-    logoToUpload = logoFile;
-  }
-
-  // ---- Plan (auto-assigned — see getTrialPlan above) ----
   const plan = await getTrialPlan(adminClient);
   if (!plan) {
     return { error: "Signup is temporarily unavailable — no active plan is configured. Please contact support." };
   }
 
-  // ---- 1. Owner auth account, with a generated temporary password ----
-  // (chosen over asking the signer to pick one, since the screenshot spec
-  // has no password field — the same must_change_password convention
-  // src/app/(app)/settings/actions.ts already uses for staff invites).
-  const temporaryPassword = generateTemporaryPassword();
+  // The password is random and never shown or sent to anyone: the owner sets their own through
+  // the emailed link below, which also proves they control the address. (Previously a temporary
+  // password was displayed on screen, so anyone could open a trial under someone else's email.)
   const { data: created, error: userError } = await adminClient.auth.admin.createUser({
     email,
-    password: temporaryPassword,
+    password: generateTemporaryPassword(),
     email_confirm: true,
   });
   if (userError || !created.user) {
+    if (userError && /already|registered|exists/i.test(userError.message)) {
+      return {
+        error:
+          "An account with this email already exists. Sign in, or use “Forgot password” on the sign-in page to set a new password.",
+      };
+    }
     return { error: userError?.message ?? "Could not create your account." };
   }
 
-  // ---- 2. The school itself, trialing from day one ----
-  const baseSlug = slugify(schoolName);
-  const slug = `${baseSlug}-${created.user.id.slice(0, 6)}`;
+  const slug = `${slugify(schoolName)}-${created.user.id.slice(0, 6)}`;
+  const startingYear = nairobiYear();
   const { data: school, error: schoolError } = await adminClient
     .from("schools")
     .insert({
       name: schoolName,
       slug,
       status: "trial",
-      description,
-      school_type: schoolType,
-      cycle_type: cycleType,
-      ownership_type: ownershipType,
-      institution_type: institutionType,
+      school_type: schoolType || null,
       phone,
       email,
-      country_code: countryCode,
-      address,
-      starting_academic_year: startingAcademicYear,
-      gmt_timezone: gmtTimezone,
-      currency_code: currencyCode,
-      website: website || null,
-      facebook_url: facebookUrl || null,
-      twitter_url: twitterUrl || null,
-      instagram_url: instagramUrl || null,
-      youtube_url: youtubeUrl || null,
-      cloud_folder_url: cloudFolderUrl || null,
+      address: address || null,
+      country_code: DEFAULT_COUNTRY,
+      currency_code: DEFAULT_CURRENCY,
+      gmt_timezone: DEFAULT_TIMEZONE,
+      starting_academic_year: isValidStartingYear(startingYear) ? startingYear : null,
     })
     .select("id")
     .single();
@@ -307,7 +205,6 @@ export async function signUpSchool(
     return { error: schoolError?.message ?? "Could not create the school." };
   }
 
-  // ---- 3. Owner's school_users row ----
   const { data: ownerRole } = await adminClient
     .from("roles")
     .select("id")
@@ -323,13 +220,15 @@ export async function signUpSchool(
     auth_user_id: created.user.id,
     school_id: school.id,
     role_id: ownerRole.id,
-    title,
+    title: title || null,
     full_name: ownerName,
     email,
     phone,
     status: "active",
-    must_change_password: true,
-    temp_password_expires_at: temporaryPasswordExpiry(),
+    // The owner chooses their own password via the emailed link, so there is no temporary
+    // password to force a change of.
+    must_change_password: false,
+    temp_password_expires_at: null,
   });
   if (linkError) {
     await adminClient.from("schools").delete().eq("id", school.id);
@@ -337,7 +236,6 @@ export async function signUpSchool(
     return { error: linkError.message };
   }
 
-  // ---- 4. Start the trial ----
   const { error: trialError } = await adminClient.rpc("start_trial_subscription", {
     p_school_id: school.id,
     p_plan_id: plan.id,
@@ -350,12 +248,7 @@ export async function signUpSchool(
     return { error: trialError.message };
   }
 
-  // ---- 4b. Marketing attribution (best-effort — never fails the signup) ----
-  // Which ad/campaign brought this school in, so a paying customer can later
-  // be traced to the Google Ads click (gclid) and reported back as a
-  // conversion. Written to its own isolated table, after the school is fully
-  // created, so nothing here can affect signup: a missing table (migration not
-  // applied yet), a database error, or no attribution at all is simply skipped.
+  // Marketing attribution is best-effort and must never affect the signup itself.
   try {
     const attribution = parseAttributionFormData(formData);
     if (Object.values(attribution).some((v) => v !== null)) {
@@ -370,27 +263,28 @@ export async function signUpSchool(
     console.warn("signup attribution not stored", e instanceof Error ? e.message : e);
   }
 
-  // ---- 5. Logo upload (optional, best-effort — never fails the signup) ----
-  if (logoToUpload) {
-    const path = `${school.id}/logo-${Date.now()}-${safeStorageFilename(logoToUpload.name)}`;
-    const { error: uploadError } = await adminClient.storage
-      .from("school-logos")
-      .upload(path, logoToUpload, { contentType: logoToUpload.type });
-    if (!uploadError) {
-      const { data: publicUrlData } = adminClient.storage.from("school-logos").getPublicUrl(path);
-      await adminClient.from("schools").update({ logo_url: publicUrlData.publicUrl }).eq("id", school.id);
+  // Same mechanism and redirect as the existing "Forgot password" page: the link lands on
+  // /auth/confirm, which signs the owner in, then /reset-password, which sets the password and
+  // sends them to /dashboard. If sending fails the account still exists, so say so plainly
+  // instead of leaving the owner stuck (they can request the same email from Forgot password).
+  const origin =
+    requestHeaders.get("origin") ??
+    (requestHeaders.get("host") ? `https://${requestHeaders.get("host")}` : null) ??
+    SITE_URL;
+  let emailSent = true;
+  try {
+    const supabase = await createClient();
+    const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${origin}/auth/confirm?next=/reset-password`,
+    });
+    if (resetError) {
+      emailSent = false;
+      console.error("signup: set-password email failed", resetError.status ?? resetError.code);
     }
+  } catch (e) {
+    emailSent = false;
+    console.error("signup: set-password email threw", e instanceof Error ? e.message : e);
   }
 
-  // No auto-sign-in: unlike the old password-the-user-chose flow, this
-  // password is generated for them and needs to be shown once. Signing
-  // them in here would redirect straight past that screen. They confirm it
-  // and continue to /login from the success state instead.
-  return {
-    error: null,
-    success: true,
-    schoolName,
-    email,
-    temporaryPassword,
-  };
+  return { error: null, success: true, schoolName, email, emailSent };
 }
