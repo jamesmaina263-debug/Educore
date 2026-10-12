@@ -186,12 +186,12 @@ function NavRow({
   return (
     <div
       className={cn(
-        "flex items-center gap-2.5 rounded-md px-2.5 py-[2.5px] text-[13px] font-medium leading-5",
+        "flex items-center gap-2.5 rounded-md px-2.5 py-[2.5px] text-sm font-medium leading-5",
         active ? "bg-sidebar-primary/10 text-sidebar-primary" : "text-sidebar-foreground/80",
       )}
     >
       <Icon className="size-4 shrink-0" />
-      <span className="flex-1 text-left">{label}</span>
+      <span className="flex-1 whitespace-nowrap text-left">{label}</span>
       {hasChildren ? <ChevronDown className="size-3.5 shrink-0" /> : null}
     </div>
   );
@@ -343,7 +343,7 @@ export function DashboardFrame({ className }: { className?: string }) {
         <ScaledStage designWidth={DESIGN_WIDTH} designHeight={DESIGN_HEIGHT}>
           <div className="flex h-full bg-background" aria-hidden="true">
             {/* Sidebar -- every module, rendered from the real navGroups. */}
-            <aside className="flex w-56 shrink-0 flex-col overflow-hidden border-r border-sidebar-border bg-sidebar">
+            <aside className="flex w-64 shrink-0 flex-col overflow-hidden border-r border-sidebar-border bg-sidebar">
               <div className="flex h-14 items-center border-b border-sidebar-border px-4 text-sm font-semibold text-sidebar-foreground">
                 {SCHOOL}
               </div>
