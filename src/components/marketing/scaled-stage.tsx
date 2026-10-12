@@ -2,50 +2,44 @@
 
 import { useLayoutEffect, useRef, useState } from "react";
 
-// Renders children at a fixed *desktop* width and scales the whole thing down
-// to fit its container (never up). The dashboard preview is a picture of the
-// desktop app, so it must keep its desktop layout at every viewport width
-// instead of reflowing into a cramped mobile arrangement.
+// Renders children inside a fixed-size *desktop window* (designWidth x
+// designHeight) and scales the whole window down to fit its container
+// (never up). The box keeps its landscape aspect ratio at every viewport
+// width, like a screenshot taken on a desktop -- content that doesn't fit is
+// simply cropped at the window edge, exactly as in a real screenshot.
 export function ScaledStage({
   designWidth,
+  designHeight,
   children,
 }: {
   designWidth: number;
+  designHeight: number;
   children: React.ReactNode;
 }) {
   const outerRef = useRef<HTMLDivElement>(null);
-  const innerRef = useRef<HTMLDivElement>(null);
-  const [scale, setScale] = useState(0.6);
-  const [height, setHeight] = useState<number | null>(null);
+  const [scale, setScale] = useState(0.45);
 
   useLayoutEffect(() => {
     const outer = outerRef.current;
-    const inner = innerRef.current;
-    if (!outer || !inner) return;
-
-    const measure = () => {
-      const next = Math.min(1, outer.clientWidth / designWidth);
-      setScale(next);
-      setHeight(inner.offsetHeight * next);
-    };
+    if (!outer) return;
+    const measure = () => setScale(Math.min(1, outer.clientWidth / designWidth));
     measure();
-
     const observer = new ResizeObserver(measure);
     observer.observe(outer);
-    observer.observe(inner);
     return () => observer.disconnect();
   }, [designWidth]);
 
   return (
     <div
       ref={outerRef}
-      className="w-full overflow-hidden"
-      style={height === null ? undefined : { height }}
+      className="relative w-full overflow-hidden"
+      style={{ aspectRatio: `${designWidth} / ${designHeight}` }}
     >
       <div
-        ref={innerRef}
+        className="absolute left-0 top-0 overflow-hidden"
         style={{
           width: designWidth,
+          height: designHeight,
           transform: `scale(${scale})`,
           transformOrigin: "top left",
         }}
