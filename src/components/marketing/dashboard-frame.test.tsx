@@ -4,32 +4,41 @@ import { navGroups } from "@/components/app-shell/nav-items";
 import { DashboardFrame } from "./dashboard-frame";
 
 describe("DashboardFrame", () => {
-  const html = renderToStaticMarkup(<DashboardFrame />);
-  const decode = (s: string) => s.replace(/&amp;/g, "&");
-  const text = decode(html);
+  const text = renderToStaticMarkup(<DashboardFrame />).replace(/&amp;/g, "&");
 
   it("keeps the illustrative school name", () => {
     expect(text).toContain("Northgate Academy");
   });
 
-  it("shows every top-level module from the real app navigation", () => {
+  it("shows every module from the real app navigation", () => {
     for (const group of navGroups) {
+      expect(text, `missing group: ${group.label}`).toContain(group.label);
       for (const item of group.items) {
-        if (group.label === "Finance") continue; // rendered via its children
         expect(text, `missing module: ${item.label}`).toContain(item.label);
       }
     }
   });
 
-  it("shows every Finance sub-page from the real app navigation", () => {
-    const finance = navGroups.find((g) => g.label === "Finance")!.items[0];
-    for (const child of finance.children ?? []) {
-      expect(text, `missing finance page: ${child.label}`).toContain(child.label);
+  it("mirrors the real Dashboard page sections", () => {
+    for (const section of [
+      "Record payment",
+      "Enrolled students",
+      "Fees collected (term)",
+      "Attendance today",
+      "Outstanding balance",
+      "Operations",
+      "Fee collection vs. invoiced",
+      "Attendance rate by class",
+      "Enrollment trend",
+      "Requires your attention",
+      "Latest invoices",
+    ]) {
+      expect(text, `missing section: ${section}`).toContain(section);
     }
   });
 
   it("uses the headline figures and a current term", () => {
-    for (const figure of ["812", "96.2%", "23", "KES 4.1M", "KES 620K", "Term 3, 2026"]) {
+    for (const figure of ["812", "96.2%", "KES 4,100,000", "KES 620,000", "Term 3, 2026"]) {
       expect(text).toContain(figure);
     }
   });

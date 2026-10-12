@@ -1,145 +1,173 @@
 import {
+  ArrowDownRight,
+  ArrowUpRight,
   Bell,
-  Building2,
-  Calendar,
+  CalendarCheck,
   ChevronDown,
-  ChevronRight,
-  CircleAlert,
-  Download,
-  FileText,
-  Menu,
+  CircleDollarSign,
+  Database,
+  Plus,
   Search,
-  ShieldCheck,
-  Tag,
   Users,
+  Wallet,
 } from "lucide-react";
 import { navGroups } from "@/components/app-shell/nav-items";
 import { ScaledStage } from "@/components/marketing/scaled-stage";
+import { StatusBadge } from "@/components/status-badge";
 import { cn } from "@/lib/utils";
 
 // The marketing site's signature element (see Phase 2 design plan).
 // Deliberately two-toned: the outer "stage" (browser chrome, gold rim-light,
 // navy backdrop) is marketing art -- it exists to frame and present. The
-// inner content strictly reuses the app's real design tokens (--primary blue,
-// --success, --border, --muted, ...) so what's shown is the actual EduCore
-// visual language, not an invented mockup. This is how the design plan keeps
-// the brief's "never invent products or capabilities" rule honest at the
-// pixel level, not just the copy level.
+// inner content is a faithful picture of the real EduCore app: the same
+// sidebar (rendered from the app's own `navGroups`, so every module that
+// exists is shown and the preview can't drift), the same top bar, and the
+// same Dashboard page layout, built from the app's real design tokens and
+// StatusBadge.
 //
-// Content: the Finance Dashboard (Bursar view) for the illustrative tenant
-// "Northgate Academy". The sidebar is rendered from the app's own `navGroups`
-// (the same source the real app shell uses), so every module that exists in
-// EduCore is shown here and the preview can't drift out of date. The figures
-// are illustrative and internally consistent:
-//   invoiced 4.9M = collected 4.1M + outstanding 620K + discounted 150K + waived 30K
+// It is a picture of the DESKTOP app, so it is laid out at a fixed desktop
+// width and scaled down to fit (see ScaledStage) rather than reflowed.
+//
+// Figures are illustrative for the demo tenant "Northgate Academy" and are
+// internally consistent:
+//   invoiced 4,900,000 = weekly invoiced bars below; collected 4,100,000 =
+//   weekly collected bars (83.7%); attendance 781 / 812 = 96.2%.
 
-// Width the dashboard is laid out at (a typical desktop app window). It is
-// scaled down to fit the hero, never reflowed -- see ScaledStage.
-const DESIGN_WIDTH = 900;
+const DESIGN_WIDTH = 1200;
 
-const CURRENT_TERM = "Term 3, 2026";
+const SCHOOL = "Northgate Academy";
+const TERM = "Term 3, 2026";
 
-const mainGroup = navGroups.find((g) => g.label === "Main");
-const financeGroup = navGroups.find((g) => g.label === "Finance");
-const otherGroup = navGroups.find((g) => g.label === "Other");
-const financeChildren = financeGroup?.items[0]?.children ?? [];
-
-const STATS = [
-  { label: "Students", value: "812", tone: "text-foreground" },
-  { label: "Attendance today", value: "96.2%", tone: "text-success" },
-  { label: "Open admissions", value: "23", tone: "text-warning" },
-];
-
-const KPIS = [
+const METRICS = [
   {
-    label: "Invoiced this term",
-    value: "KES 4.9M",
-    caption: "Total invoiced",
-    icon: FileText,
+    label: "Enrolled students",
+    value: "812",
+    delta: "+46",
+    up: true,
+    note: `admitted ${TERM}`,
+    icon: Users,
     iconClass: "bg-info-subtle text-info",
-    valueClass: "text-foreground",
   },
   {
-    label: "Collected",
-    value: "KES 4.1M",
-    caption: "Total collected",
-    icon: Download,
+    label: "Fees collected (term)",
+    value: "KES 4,100,000",
+    delta: "83.7%",
+    up: true,
+    note: "of KES 4,900,000 invoiced",
+    icon: CircleDollarSign,
     iconClass: "bg-success-subtle text-success",
-    valueClass: "text-info",
   },
   {
-    label: "Discounted",
-    value: "KES 150K",
-    caption: "Total discounted",
-    icon: Tag,
-    iconClass: "bg-warning-subtle text-warning",
-    valueClass: "text-foreground",
+    label: "Attendance today",
+    value: "96.2%",
+    delta: "On target",
+    up: true,
+    note: "781 of 812 present",
+    icon: CalendarCheck,
+    iconClass: "bg-violet-500/10 text-violet-600",
   },
   {
-    label: "Outstanding",
-    value: "KES 620K",
-    caption: "Total outstanding",
-    icon: CircleAlert,
+    label: "Outstanding balance",
+    value: "KES 620,000",
+    delta: "64 students",
+    up: false,
+    note: "with a balance owing",
+    icon: Database,
     iconClass: "bg-destructive-subtle text-destructive",
-    valueClass: "text-destructive",
   },
 ];
 
-// pct values are shares of the KES 4.9M invoiced total and sum to 100.
-const SUMMARY = [
-  { label: "Collected", amount: "KES 4.1M", pct: 83.7, dot: "bg-success", stroke: "stroke-success" },
-  { label: "Outstanding", amount: "KES 620K", pct: 12.6, dot: "bg-destructive", stroke: "stroke-destructive" },
-  { label: "Discounted", amount: "KES 150K", pct: 3.1, dot: "bg-warning", stroke: "stroke-warning" },
-  { label: "Waived", amount: "KES 30K", pct: 0.6, dot: "bg-info", stroke: "stroke-info" },
+const OPERATIONS = [
+  { label: "Boarding beds available", value: "46 / 240", note: "1 dormitory at capacity" },
+  { label: "Sick bay right now", value: "2", note: "students checked in" },
+  { label: "Inventory alerts", value: "3", note: "items at/below reorder level" },
+  { label: "Transport fleet", value: "9", note: "1 route full" },
+  { label: "Staff attendance today", value: "94%", note: "47 of 50 marked present" },
+  { label: "Open discipline cases", value: "4", note: "open/investigating/pending action" },
 ];
 
-const AGEING = [
-  { label: "0 - 30 Days", amount: "KES 310K", tone: "text-success" },
-  { label: "31 - 60 Days", amount: "KES 180K", tone: "text-warning" },
-  { label: "61 - 90 Days", amount: "KES 90K", tone: "text-warning" },
-  { label: "90+ Days", amount: "KES 40K", tone: "text-destructive" },
+// KES thousands. Sums: invoiced 4,900 ; collected 4,100.
+const COLLECTION = [
+  { week: "Wk 1", collected: 1850, invoiced: 2900 },
+  { week: "Wk 2", collected: 720, invoiced: 640 },
+  { week: "Wk 3", collected: 560, invoiced: 480 },
+  { week: "Wk 4", collected: 410, invoiced: 380 },
+  { week: "Wk 5", collected: 280, invoiced: 260 },
+  { week: "Wk 6", collected: 150, invoiced: 140 },
+  { week: "Wk 7", collected: 80, invoiced: 60 },
+  { week: "Wk 8", collected: 50, invoiced: 40 },
 ];
 
-const ACTIVITIES = [
-  { text: "M-Pesa payment received", meta: "Grade 7 · 2 min ago", amount: "KES 45,000", dot: "bg-success" },
-  { text: "Payment reconciled", meta: "Grade 5 · 18 min ago", amount: "KES 22,000", dot: "bg-info" },
-  { text: "Invoice generated", meta: "Form 2 · 1 hr ago", amount: "KES 38,500", dot: "bg-primary" },
-  { text: "Waiver approved", meta: "Grade 8 · 3 hrs ago", amount: "KES 10,000", dot: "bg-warning" },
+// Mean = 96.2%.
+const ATTENDANCE = [
+  { classroom: "Grade 7A", rate: 98 },
+  { classroom: "Grade 7B", rate: 97 },
+  { classroom: "Grade 8A", rate: 95 },
+  { classroom: "Grade 8B", rate: 96 },
+  { classroom: "Form 1", rate: 97 },
+  { classroom: "Form 2", rate: 94 },
 ];
 
-const TOP_OUTSTANDING = [
-  { name: "Brian Otieno", cls: "Grade 8", amount: "KES 48,500" },
-  { name: "Mercy Wanjiru", cls: "Grade 6", amount: "KES 41,200" },
-  { name: "Kevin Mutua", cls: "Form 2", amount: "KES 36,000" },
+const ENROLLMENT = [
+  { term: "T2 '25", students: 731 },
+  { term: "T3 '25", students: 748 },
+  { term: "T1 '26", students: 779 },
+  { term: "T2 '26", students: 797 },
+  { term: "T3 '26", students: 812 },
 ];
 
-const TERM_BARS = [38, 52, 47, 61, 58, 74];
+const TASKS = [
+  {
+    label: "3 of 24 classes haven't submitted attendance",
+    owner: "Class teachers",
+    tone: "danger" as const,
+    badge: "Overdue",
+  },
+  {
+    label: "KES 130,000 overdue beyond 60 days",
+    owner: "Bursar office",
+    tone: "danger" as const,
+    badge: "Overdue",
+  },
+  {
+    label: "1 transport route is full",
+    owner: "Transport office",
+    tone: "info" as const,
+    badge: "Full",
+  },
+  {
+    label: "4 open disciplinary cases",
+    owner: "Discipline & Welfare office",
+    tone: "warning" as const,
+    badge: "Open",
+  },
+];
+
+const INVOICES = [
+  { student: "Mercy Wanjiru", amount: "KES 38,500", status: "paid", tone: "success" as const },
+  { student: "Kevin Mutua", amount: "KES 42,000", status: "partially paid", tone: "warning" as const },
+  { student: "Faith Achieng", amount: "KES 36,000", status: "paid", tone: "success" as const },
+  { student: "Brian Otieno", amount: "KES 48,500", status: "issued", tone: "info" as const },
+  { student: "Amina Hassan", amount: "KES 41,200", status: "paid", tone: "success" as const },
+];
 
 function Panel({
   title,
-  action,
+  meta,
   children,
 }: {
   title: string;
-  action: React.ReactNode;
+  meta?: string;
   children: React.ReactNode;
 }) {
   return (
-    <div className="rounded-lg border border-border bg-card">
-      <div className="flex items-center justify-between border-b border-border px-4 py-3">
-        <p className="text-sm font-semibold text-foreground">{title}</p>
-        {action}
-      </div>
-      {children}
-    </div>
-  );
-}
-
-function PanelButton({ children }: { children: React.ReactNode }) {
-  return (
-    <span className="inline-flex items-center gap-1 whitespace-nowrap rounded-md border border-border bg-card px-2.5 py-1 text-xs text-foreground">
-      {children}
-    </span>
+    <section className="panel flex flex-col">
+      <header className="flex items-center justify-between border-b border-border px-4 py-2.5">
+        <h2 className="text-[0.8125rem] font-semibold">{title}</h2>
+        {meta && <span className="text-[0.6875rem] text-muted-foreground">{meta}</span>}
+      </header>
+      <div className="flex-1 p-4">{children}</div>
+    </section>
   );
 }
 
@@ -147,17 +175,135 @@ function NavRow({
   label,
   icon: Icon,
   hasChildren,
+  active,
 }: {
   label: string;
   icon: React.ComponentType<{ className?: string }>;
   hasChildren: boolean;
+  active?: boolean;
 }) {
   return (
-    <li className="flex items-center gap-2 whitespace-nowrap rounded px-2 py-1 text-[11px] text-white/85">
-      <Icon className="h-3.5 w-3.5 shrink-0" />
-      <span className="flex-1 truncate">{label}</span>
-      {hasChildren ? <ChevronRight className="h-3 w-3 shrink-0 text-white/50" /> : null}
-    </li>
+    <div
+      className={cn(
+        "flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-sm font-medium",
+        active ? "bg-sidebar-primary/10 text-sidebar-primary" : "text-sidebar-foreground/80",
+      )}
+    >
+      <Icon className="size-4 shrink-0" />
+      <span className="flex-1 text-left">{label}</span>
+      {hasChildren ? <ChevronDown className="size-3.5 shrink-0" /> : null}
+    </div>
+  );
+}
+
+/** Bar chart drawn with plain markup -- same look as the app's recharts charts. */
+function BarChart({
+  data,
+  height = 190,
+  max,
+  ticks,
+  format = (v: number) => String(v),
+}: {
+  data: { label: string; values: { v: number; color: string }[] }[];
+  height?: number;
+  max: number;
+  ticks: number[];
+  format?: (v: number) => string;
+}) {
+  return (
+    <div className="flex gap-2" style={{ height: height + 22 }}>
+      <div className="relative w-8 shrink-0" style={{ height }}>
+        {ticks.map((t) => (
+          <span
+            key={t}
+            className="absolute right-0 -translate-y-1/2 text-[11px] text-muted-foreground"
+            style={{ bottom: `${(t / max) * 100}%` }}
+          >
+            {t}
+          </span>
+        ))}
+      </div>
+      <div className="flex min-w-0 flex-1 flex-col">
+        <div className="relative flex items-end justify-around" style={{ height }}>
+          {ticks.map((t) => (
+            <div
+              key={t}
+              className="absolute inset-x-0 border-t border-border"
+              style={{ bottom: `${(t / max) * 100}%` }}
+            />
+          ))}
+          {data.map((group) => (
+            <div key={group.label} className="relative z-10 flex items-end gap-0.5">
+              {group.values.map((bar, i) => (
+                <div key={i} className="flex flex-col items-center justify-end" style={{ height }}>
+                  <span className="mb-0.5 text-[11px] text-foreground">{format(bar.v)}</span>
+                  <div
+                    className="w-3.5 rounded-t-sm"
+                    style={{
+                      height: `${(bar.v / max) * (height - 18)}px`,
+                      background: bar.color,
+                    }}
+                  />
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+        <div className="flex justify-around pt-1.5">
+          {data.map((group) => (
+            <span key={group.label} className="text-[11px] text-muted-foreground">
+              {group.label}
+            </span>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function EnrollmentChart() {
+  const w = 300;
+  const h = 150;
+  const min = 700;
+  const max = 840;
+  const pts = ENROLLMENT.map((d, i) => {
+    const x = 12 + (i * (w - 24)) / (ENROLLMENT.length - 1);
+    const y = h - ((d.students - min) / (max - min)) * (h - 12) - 4;
+    return { x, y, ...d };
+  });
+  return (
+    <svg viewBox={`0 0 ${w} ${h + 18}`} className="w-full">
+      {[700, 740, 780, 820].map((t) => {
+        const y = h - ((t - min) / (max - min)) * (h - 12) - 4;
+        return (
+          <g key={t}>
+            <line x1="0" x2={w} y1={y} y2={y} stroke="var(--border)" />
+            <text x="0" y={y - 3} fontSize="9" fill="var(--muted-foreground)">
+              {t}
+            </text>
+          </g>
+        );
+      })}
+      <polyline
+        points={pts.map((p) => `${p.x},${p.y}`).join(" ")}
+        fill="none"
+        stroke="var(--chart-2)"
+        strokeWidth="2"
+        strokeLinejoin="round"
+      />
+      {pts.map((p) => (
+        <text
+          key={p.term}
+          x={p.x}
+          y={h + 14}
+          fontSize="10"
+          textAnchor="middle"
+          fill="var(--muted-foreground)"
+        >
+          {p.term}
+        </text>
+      ))}
+    </svg>
   );
 }
 
@@ -188,286 +334,245 @@ export function DashboardFrame({ className }: { className?: string }) {
           <span className="h-2.5 w-2.5 rounded-full bg-muted-foreground/25" />
           <span className="h-2.5 w-2.5 rounded-full bg-muted-foreground/25" />
           <span className="ml-3 truncate font-mono text-[11px] text-muted-foreground">
-            app.educore.io/finance/dashboard
+            app.educore.io/dashboard
           </span>
         </div>
 
-        {/* Finance Dashboard at a fixed desktop width, scaled to fit. */}
+        {/* The real app shell + Dashboard page, at desktop width, scaled to fit. */}
         <ScaledStage designWidth={DESIGN_WIDTH}>
           <div className="flex bg-background" aria-hidden="true">
-            {/* Sidebar -- rendered from the app's real navGroups. */}
-            <aside className="flex w-[190px] shrink-0 flex-col bg-marketing-navy-900 py-4 text-white">
-              <div className="flex items-center gap-2 border-b border-white/10 px-4 pb-4">
-                <ShieldCheck className="h-8 w-8 shrink-0 text-white" />
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-semibold leading-tight">
-                    Northgate Academy
-                  </p>
-                  <p className="truncate text-[9px] leading-tight text-white/60">
-                    School Management System
-                  </p>
-                </div>
+            {/* Sidebar -- every module, rendered from the real navGroups. */}
+            <aside className="flex w-56 shrink-0 flex-col border-r border-sidebar-border bg-sidebar">
+              <div className="flex h-14 items-center border-b border-sidebar-border px-4 text-sm font-semibold text-sidebar-foreground">
+                {SCHOOL}
               </div>
-
-              <p className="px-4 pt-3 text-[9px] font-semibold tracking-wider text-white/50">
-                MAIN
-              </p>
-              <ul className="mt-1 px-2">
-                {mainGroup?.items.map((item) => (
-                  <NavRow
-                    key={item.label}
-                    label={item.label}
-                    icon={item.icon}
-                    hasChildren={Boolean(item.children)}
-                  />
+              <nav className="flex flex-col gap-3 p-2">
+                {navGroups.map((group) => (
+                  <div key={group.label} className="flex flex-col gap-0.5">
+                    <p className="px-2.5 pb-1 pt-1 text-[10px] font-semibold uppercase tracking-wider text-sidebar-foreground/40">
+                      {group.label}
+                    </p>
+                    {group.items.map((item) => (
+                      <NavRow
+                        key={item.href}
+                        label={item.label}
+                        icon={item.icon}
+                        hasChildren={Boolean(item.children?.length)}
+                        active={item.href === "/dashboard"}
+                      />
+                    ))}
+                  </div>
                 ))}
-              </ul>
-
-              <p className="px-4 pt-3 text-[9px] font-semibold tracking-wider text-white/50">
-                FINANCE
-              </p>
-              <ul className="mt-1 px-2">
-                {financeChildren.map(({ label }, i) => (
-                  <li
-                    key={label}
-                    className={cn(
-                      "flex items-center gap-2 whitespace-nowrap rounded px-2 py-1 text-[11px]",
-                      i === 0
-                        ? "bg-primary font-medium text-primary-foreground"
-                        : "text-white/80",
-                    )}
-                  >
-                    <span className="h-1 w-1 shrink-0 rounded-full bg-current opacity-70" />
-                    <span className="truncate">{label}</span>
-                  </li>
-                ))}
-              </ul>
-
-              <p className="px-4 pt-3 text-[9px] font-semibold tracking-wider text-white/50">
-                OTHER
-              </p>
-              <ul className="mt-1 px-2">
-                {otherGroup?.items.map((item) => (
-                  <NavRow
-                    key={item.label}
-                    label={item.label}
-                    icon={item.icon}
-                    hasChildren={Boolean(item.children)}
-                  />
-                ))}
-              </ul>
+              </nav>
             </aside>
 
-            {/* Main */}
-            <div className="min-w-0 flex-1 p-4">
+            <div className="flex min-w-0 flex-1 flex-col">
               {/* Top bar */}
-              <div className="flex items-center gap-3">
-                <Menu className="h-4 w-4 shrink-0 text-foreground" />
-                <div className="flex min-w-0 flex-1 items-center gap-2 rounded-md border border-border bg-card px-3 py-1.5">
-                  <Search className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                  <span className="truncate text-xs text-muted-foreground">
-                    Search students, staff, invoices...
+              <header className="flex h-14 shrink-0 items-center gap-3 border-b border-border bg-surface px-4">
+                <div className="flex h-8 max-w-sm flex-1 items-center gap-2 rounded-md border border-border bg-background px-2.5 text-sm text-muted-foreground">
+                  <Search className="size-3.5" />
+                  <span className="flex-1 text-left">Search…</span>
+                  <kbd className="rounded border border-border bg-surface px-1 font-mono text-[10px]">
+                    ⌘K
+                  </kbd>
+                </div>
+                <div className="ml-auto flex items-center gap-1">
+                  <span className="relative p-2">
+                    <Bell className="size-4 text-foreground" />
+                    <span className="absolute right-1.5 top-1.5 size-2 rounded-full bg-destructive" />
+                  </span>
+                  <span className="ml-1 flex items-center gap-2 p-1 pr-2">
+                    <span className="flex size-7 items-center justify-center rounded-full bg-muted text-xs font-medium">
+                      TO
+                    </span>
+                    <span className="text-sm font-medium">Thomas O.</span>
                   </span>
                 </div>
-                <span className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-md border border-border bg-card px-3 py-1.5 text-xs text-foreground">
-                  <Calendar className="h-3.5 w-3.5" /> {CURRENT_TERM}
-                </span>
-                <span className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-md border border-border bg-card px-3 py-1.5 text-xs text-foreground">
-                  <Building2 className="h-3.5 w-3.5" /> Bursar Office
-                </span>
-                <span className="relative">
-                  <Bell className="h-4 w-4 text-foreground" />
-                  <span className="absolute -right-1 -top-1 h-2 w-2 rounded-full bg-destructive" />
-                </span>
-                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary text-[10px] font-semibold text-primary-foreground">
-                  TO
-                </span>
-              </div>
+              </header>
 
-              {/* Page header */}
-              <div className="mt-5 flex items-start justify-between gap-3">
-                <div>
-                  <p className="text-2xl font-bold text-foreground">Finance Dashboard</p>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    Home &rsaquo; Finance &rsaquo; Dashboard
-                  </p>
-                </div>
-                <span className="inline-flex items-center gap-2 whitespace-nowrap rounded-md bg-primary px-3.5 py-2 text-xs font-medium text-primary-foreground">
-                  Generate Report <ChevronDown className="h-3.5 w-3.5" />
-                </span>
-              </div>
-
-              {/* Snapshot stats */}
-              <div className="mt-4 grid grid-cols-3 gap-3">
-                {STATS.map((stat) => (
-                  <div key={stat.label} className="rounded-lg border border-border bg-card p-3">
-                    <p className="text-xs text-muted-foreground">{stat.label}</p>
-                    <p className={cn("mt-1 font-mono text-xl font-semibold", stat.tone)}>
-                      {stat.value}
-                    </p>
-                  </div>
-                ))}
-              </div>
-
-              {/* KPI cards */}
-              <div className="mt-3 grid grid-cols-4 gap-3">
-                {KPIS.map(({ label, value, caption, icon: Icon, iconClass, valueClass }) => (
-                  <div key={label} className="rounded-lg border border-border bg-card p-3">
-                    <div className="flex items-start justify-between gap-2">
-                      <p className="text-[10px] font-medium uppercase leading-tight text-foreground">
-                        {label}
+              {/* Dashboard page */}
+              <main className="p-6">
+                <div className="flex flex-col gap-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h1 className="text-lg font-semibold">Dashboard</h1>
+                      <p className="text-sm text-muted-foreground">
+                        {SCHOOL} · {TERM}
                       </p>
-                      <span
-                        className={cn(
-                          "flex h-7 w-7 shrink-0 items-center justify-center rounded-full",
-                          iconClass,
-                        )}
-                      >
-                        <Icon className="h-3.5 w-3.5" />
-                      </span>
                     </div>
-                    <p className={cn("mt-2 font-mono text-xl font-semibold", valueClass)}>
-                      {value}
-                    </p>
-                    <p className="mt-1 text-[11px] text-muted-foreground">{caption}</p>
+                    <span className="inline-flex h-8 items-center gap-1.5 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground">
+                      <Plus className="size-4" /> Record payment
+                    </span>
                   </div>
-                ))}
-              </div>
 
-              {/* Activity + collection summary */}
-              <div className="mt-3 grid grid-cols-2 gap-3">
-                <Panel
-                  title="Recent Financial Activities"
-                  action={<PanelButton>View all</PanelButton>}
-                >
-                  <ul className="divide-y divide-border px-4">
-                    {ACTIVITIES.map(({ text, meta, amount, dot }) => (
-                      <li key={text} className="flex items-center gap-3 py-2.5">
-                        <span className={cn("h-2 w-2 shrink-0 rounded-full", dot)} />
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate text-xs font-medium text-foreground">{text}</p>
-                          <p className="truncate text-[10px] text-muted-foreground">{meta}</p>
+                  <div className="grid grid-cols-4 gap-3">
+                    {METRICS.map((m) => (
+                      <div key={m.label} className="panel px-4 py-3">
+                        <div className="flex items-start justify-between gap-2">
+                          <p className="label-eyebrow">{m.label}</p>
+                          <span
+                            className={cn(
+                              "flex size-8 shrink-0 items-center justify-center rounded-full",
+                              m.iconClass,
+                            )}
+                          >
+                            <m.icon className="size-4" />
+                          </span>
                         </div>
-                        <span className="whitespace-nowrap font-mono text-[11px] text-foreground">
-                          {amount}
-                        </span>
-                      </li>
+                        <p
+                          className="mt-1.5 whitespace-nowrap text-2xl font-semibold tracking-tight"
+                          data-numeric
+                        >
+                          {m.value}
+                        </p>
+                        <p className="mt-1 flex items-center gap-1.5 text-[0.75rem] text-muted-foreground">
+                          <span
+                            className={
+                              m.up
+                                ? "inline-flex items-center gap-0.5 font-medium text-success"
+                                : "inline-flex items-center gap-0.5 font-medium text-warning"
+                            }
+                          >
+                            {m.up ? (
+                              <ArrowUpRight className="size-3.5" />
+                            ) : (
+                              <ArrowDownRight className="size-3.5" />
+                            )}
+                            {m.delta}
+                          </span>
+                          {m.note}
+                        </p>
+                      </div>
                     ))}
-                  </ul>
-                </Panel>
+                  </div>
 
-                <Panel
-                  title="Fee Collection Summary"
-                  action={
-                    <PanelButton>
-                      This Term <ChevronDown className="h-3 w-3" />
-                    </PanelButton>
-                  }
-                >
-                  <div className="flex items-center gap-4 p-4">
-                    <div className="relative h-24 w-24 shrink-0">
-                      <svg viewBox="0 0 64 64" className="h-full w-full -rotate-90">
-                        <circle
-                          cx="32"
-                          cy="32"
-                          r="26"
-                          fill="none"
-                          strokeWidth="10"
-                          className="stroke-secondary"
+                  <div className="panel px-4 py-3">
+                    <p className="label-eyebrow mb-2">Operations</p>
+                    <div className="grid grid-cols-6 gap-x-4 gap-y-3">
+                      {OPERATIONS.map((op) => (
+                        <div key={op.label}>
+                          <p className="text-[0.6875rem] text-muted-foreground">{op.label}</p>
+                          <p className="text-base font-semibold tracking-tight" data-numeric>
+                            {op.value}
+                          </p>
+                          <p className="text-[0.6875rem] text-muted-foreground">{op.note}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-3">
+                    <div className="col-span-2">
+                      <Panel title="Fee collection vs. invoiced" meta="KES thousands · this term">
+                        <div className="mb-1 flex items-center gap-3 text-xs text-muted-foreground">
+                          <span className="flex items-center gap-1.5">
+                            <span className="size-2 rounded-full" style={{ background: "var(--chart-1)" }} />
+                            Collected
+                          </span>
+                          <span className="flex items-center gap-1.5">
+                            <span className="size-2 rounded-full" style={{ background: "var(--chart-5)" }} />
+                            Invoiced
+                          </span>
+                        </div>
+                        <BarChart
+                          max={3000}
+                          ticks={[0, 1000, 2000, 3000]}
+                          data={COLLECTION.map((d) => ({
+                            label: d.week,
+                            values: [
+                              { v: d.collected, color: "var(--chart-1)" },
+                              { v: d.invoiced, color: "var(--chart-5)" },
+                            ],
+                          }))}
                         />
-                        {SUMMARY.map((seg, i) => {
-                          const offset = SUMMARY.slice(0, i).reduce((n, x) => n + x.pct, 0);
-                          return (
-                            <circle
-                              key={seg.label}
-                              cx="32"
-                              cy="32"
-                              r="26"
-                              fill="none"
-                              strokeWidth="10"
-                              pathLength={100}
-                              strokeDasharray={`${seg.pct} ${100 - seg.pct}`}
-                              strokeDashoffset={-offset}
-                              className={seg.stroke}
-                            />
-                          );
-                        })}
-                      </svg>
-                      <div className="absolute inset-0 flex flex-col items-center justify-center">
-                        <p className="font-mono text-xs font-semibold text-foreground">KES 4.9M</p>
-                        <p className="text-[10px] text-muted-foreground">Total</p>
+                      </Panel>
+                    </div>
+                    <Panel title="Attendance rate by class" meta="Today">
+                      <BarChart
+                        max={100}
+                        ticks={[0, 25, 50, 75, 100]}
+                        format={(v) => `${v}%`}
+                        data={ATTENDANCE.map((d) => ({
+                          label: d.classroom.replace("Grade ", "Gr "),
+                          values: [{ v: d.rate, color: "var(--chart-1)" }],
+                        }))}
+                      />
+                    </Panel>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-3">
+                    <Panel title="Enrollment trend" meta="Last 5 terms">
+                      <EnrollmentChart />
+                    </Panel>
+
+                    <Panel title="Requires your attention" meta={`${TASKS.length} items`}>
+                      <ul className="-my-1 divide-y divide-border">
+                        {TASKS.map((t) => (
+                          <li key={t.label} className="flex items-start justify-between gap-3 py-2.5">
+                            <div className="min-w-0">
+                              <p className="truncate text-[0.8125rem] font-medium">{t.label}</p>
+                              <p className="text-[0.6875rem] text-muted-foreground">{t.owner}</p>
+                            </div>
+                            <StatusBadge tone={t.tone} label={t.badge} />
+                          </li>
+                        ))}
+                      </ul>
+                    </Panel>
+
+                    <Panel title="Latest invoices" meta={TERM}>
+                      <div className="-mx-4 -my-4 overflow-hidden">
+                        <table className="table-dense w-full">
+                          <thead className="bg-muted/60">
+                            <tr>
+                              <th>Student</th>
+                              <th className="text-right">Amount</th>
+                              <th>Status</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {INVOICES.map((inv) => (
+                              <tr key={inv.student}>
+                                <td className="max-w-[10rem] truncate">{inv.student}</td>
+                                <td className="text-right" data-numeric>
+                                  {inv.amount}
+                                </td>
+                                <td>
+                                  <StatusBadge tone={inv.tone} label={inv.status} />
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </Panel>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="panel-interactive flex items-center gap-3 px-4 py-3">
+                      <span className="grid size-8 place-items-center rounded-md bg-primary-subtle text-primary">
+                        <CalendarCheck className="size-4" />
+                      </span>
+                      <div>
+                        <p className="text-[0.8125rem] font-medium">Mark today&apos;s attendance</p>
+                        <p className="text-[0.6875rem] text-muted-foreground">
+                          3 of 24 classes still pending
+                        </p>
                       </div>
                     </div>
-                    <ul className="min-w-0 flex-1 space-y-2">
-                      {SUMMARY.map(({ label, amount, pct, dot }) => (
-                        <li key={label} className="flex items-center gap-2 text-[11px]">
-                          <span className={cn("h-2 w-2 shrink-0 rounded-full", dot)} />
-                          <span className="flex-1 truncate text-foreground">{label}</span>
-                          <span className="whitespace-nowrap font-mono text-muted-foreground">
-                            {amount} ({pct}%)
-                          </span>
-                        </li>
-                      ))}
-                    </ul>
+                    <div className="panel-interactive flex items-center gap-3 px-4 py-3">
+                      <span className="grid size-8 place-items-center rounded-md bg-primary-subtle text-primary">
+                        <Wallet className="size-4" />
+                      </span>
+                      <div>
+                        <p className="text-[0.8125rem] font-medium">Review outstanding balances</p>
+                        <p className="text-[0.6875rem] text-muted-foreground">
+                          64 students with a balance owing
+                        </p>
+                      </div>
+                    </div>
                   </div>
-                </Panel>
-              </div>
-
-              {/* Ageing + top outstanding */}
-              <div className="mt-3 grid grid-cols-2 gap-3">
-                <Panel title="Outstanding by Age" action={<PanelButton>View Details</PanelButton>}>
-                  <ul className="divide-y divide-border px-4 text-xs">
-                    {AGEING.map(({ label, amount, tone }) => (
-                      <li key={label} className="flex items-center justify-between py-2.5">
-                        <span className="text-muted-foreground">{label}</span>
-                        <span className={cn("font-mono font-semibold", tone)}>{amount}</span>
-                      </li>
-                    ))}
-                    <li className="flex items-center justify-between py-2.5 font-semibold">
-                      <span className="text-foreground">Total Outstanding</span>
-                      <span className="font-mono text-destructive">KES 620K</span>
-                    </li>
-                  </ul>
-                </Panel>
-
-                <Panel
-                  title="Top Outstanding Students"
-                  action={<PanelButton>View All</PanelButton>}
-                >
-                  <ul className="divide-y divide-border px-4">
-                    {TOP_OUTSTANDING.map(({ name, cls, amount }) => (
-                      <li key={name} className="flex items-center gap-3 py-3">
-                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-secondary text-muted-foreground">
-                          <Users className="h-4 w-4" />
-                        </span>
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate text-xs font-medium text-foreground">{name}</p>
-                          <p className="text-[10px] text-muted-foreground">{cls}</p>
-                        </div>
-                        <span className="whitespace-nowrap font-mono text-[11px] font-semibold text-destructive">
-                          {amount}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                </Panel>
-              </div>
-
-              {/* Collection trend */}
-              <div className="mt-3 rounded-lg border border-border bg-card p-4">
-                <p className="mb-3 text-xs text-muted-foreground">
-                  Fee collection — last 6 terms
-                </p>
-                <div className="flex h-20 items-end gap-2">
-                  {TERM_BARS.map((h, i) => (
-                    <div
-                      key={i}
-                      className="flex-1 rounded-t bg-primary/70"
-                      style={{ height: `${h}%` }}
-                    />
-                  ))}
                 </div>
-              </div>
+              </main>
             </div>
           </div>
         </ScaledStage>
