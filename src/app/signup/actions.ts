@@ -106,6 +106,42 @@ function trimmed(formData: FormData, key: string): string {
   return String(formData.get(key) ?? "").trim();
 }
 
+/**
+ * Undo a half-finished signup. Creating a school seeds default rows (inventory categories and
+ * items, leave types, ...) and several of those foreign keys are NO ACTION, so deleting the
+ * school row alone fails and used to leave an orphaned school behind with nobody noticing.
+ * Children go first, every step is checked and logged, and the auth user is always removed so
+ * the visitor can retry with the same email.
+ */
+async function rollbackSignup(
+  adminClient: ReturnType<typeof createAdminClient>,
+  userId: string,
+  schoolId?: string,
+): Promise<void> {
+  const failed: string[] = [];
+  const attempt = async (step: string, run: () => PromiseLike<{ error: { message?: string } | null }>) => {
+    try {
+      const result = await run();
+      if (result?.error) failed.push(`${step}: ${result.error.message ?? "error"}`);
+    } catch (e) {
+      failed.push(`${step}: ${e instanceof Error ? e.message : "threw"}`);
+    }
+  };
+
+  if (schoolId) {
+    await attempt("school_users", () => adminClient.from("school_users").delete().eq("auth_user_id", userId));
+    for (const table of ["school_subscriptions", "inventory_items", "inventory_categories"] as const) {
+      await attempt(table, () => adminClient.from(table).delete().eq("school_id", schoolId));
+    }
+    await attempt("schools", () => adminClient.from("schools").delete().eq("id", schoolId));
+  }
+  await attempt("auth user", () => adminClient.auth.admin.deleteUser(userId));
+
+  if (failed.length > 0) {
+    console.error("signup rollback incomplete", { schoolId, userId, failed });
+  }
+}
+
 export async function signUpSchool(
   _prevState: SignupState,
   formData: FormData,
@@ -322,7 +358,7 @@ export async function signUpSchool(
     .select("id")
     .single();
   if (schoolError || !school) {
-    await adminClient.auth.admin.deleteUser(created.user.id);
+    await rollbackSignup(adminClient, created.user.id);
     return { error: schoolError?.message ?? "Could not create the school." };
   }
 
@@ -333,8 +369,7 @@ export async function signUpSchool(
     .eq("name", "school_owner")
     .single();
   if (!ownerRole) {
-    await adminClient.from("schools").delete().eq("id", school.id);
-    await adminClient.auth.admin.deleteUser(created.user.id);
+    await rollbackSignup(adminClient, created.user.id, school.id);
     return { error: "Owner role is not configured — contact support." };
   }
 
@@ -353,8 +388,7 @@ export async function signUpSchool(
     temp_password_expires_at: null,
   });
   if (linkError) {
-    await adminClient.from("schools").delete().eq("id", school.id);
-    await adminClient.auth.admin.deleteUser(created.user.id);
+    await rollbackSignup(adminClient, created.user.id, school.id);
     // A phone number can belong to only one active account across the whole platform
     // (uq_school_users_active_phone). Never show the raw Postgres error to the visitor.
     if (linkError.code === "23505" || /uq_school_users_active_phone/.test(linkError.message)) {
@@ -373,9 +407,7 @@ export async function signUpSchool(
     p_trial_days: 30,
   });
   if (trialError) {
-    await adminClient.from("school_users").delete().eq("auth_user_id", created.user.id);
-    await adminClient.from("schools").delete().eq("id", school.id);
-    await adminClient.auth.admin.deleteUser(created.user.id);
+    await rollbackSignup(adminClient, created.user.id, school.id);
     return { error: trialError.message };
   }
 
