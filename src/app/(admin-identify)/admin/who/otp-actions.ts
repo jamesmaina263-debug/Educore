@@ -13,6 +13,17 @@ import {
   type AdminOperator,
 } from "@/lib/admin-operator";
 import { setAdminOperatorCookie } from "@/lib/admin-operator-server";
+import { getAdminMfaState } from "@/lib/admin-mfa";
+
+
+// When MFA is enforced, the operator name is established ONLY by verifying that person's
+// authenticator (admin/mfa/actions.ts). Calling these older paths directly must not be a way
+// around it, in particular the James-exempt shortcut below.
+async function mfaRetiresNamePicker(): Promise<boolean> {
+  const supabase = await createClient();
+  return (await getAdminMfaState(supabase)).required;
+}
+const MFA_RETIRED_ERROR = "Identity is confirmed by your authenticator app. Open /admin/mfa.";
 
 type ActionResult = { error: string } | { success: true };
 type ConfirmResult = { error: string } | { success: true; next: string };
@@ -39,6 +50,7 @@ async function requireSuperAdminSession() {
 // unchanged -- nothing new to build or tune for abuse resistance.
 export async function requestOperatorCode(operator: AdminOperator): Promise<ActionResult> {
   if (!isAdminOperator(operator)) return { error: "Unrecognized person." };
+  if (await mfaRetiresNamePicker()) return { error: MFA_RETIRED_ERROR };
 
   const supabase = await requireSuperAdminSession();
   if (!supabase) return { error: "Your session has expired. Please sign in again." };
@@ -72,6 +84,7 @@ export async function confirmOperatorCode(
 ): Promise<ConfirmResult> {
   if (!isAdminOperator(operator)) return { error: "Unrecognized person." };
   if (!/^\d{6}$/.test(code)) return { error: "Enter the 6-digit code." };
+  if (await mfaRetiresNamePicker()) return { error: MFA_RETIRED_ERROR };
 
   const supabase = await requireSuperAdminSession();
   if (!supabase) return { error: "Your session has expired. Please sign in again." };
@@ -107,6 +120,7 @@ export async function identifyOperatorWithoutCode(
   next: string,
 ): Promise<ConfirmResult> {
   if (!isAdminOperator(operator)) return { error: "Unrecognized person." };
+  if (await mfaRetiresNamePicker()) return { error: MFA_RETIRED_ERROR };
   if (operatorRequiresOtp(operator)) return { error: "This person must verify with an emailed code." };
 
   const supabase = await requireSuperAdminSession();
