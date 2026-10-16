@@ -2,11 +2,14 @@
 
 import { headers } from "next/headers";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { createClient } from "@/lib/supabase/server";
+import { SITE_URL } from "@/lib/site";
+import { toE164 } from "@/lib/signup-fields";
 import { slugify } from "@/lib/slug";
 import { getRealClientIp } from "@/lib/get-real-client-ip";
 import { sendSecurityAlert } from "@/lib/security-alert";
 import { safeStorageFilename } from "@/lib/storage-path";
-import { generateTemporaryPassword, temporaryPasswordExpiry } from "@/lib/temporary-password";
+import { generateTemporaryPassword } from "@/lib/temporary-password";
 import { verifyTurnstileToken } from "@/lib/turnstile";
 import { parseAttributionFormData } from "@/lib/marketing/attribution-fields";
 import {
@@ -81,7 +84,8 @@ export type SignupState = {
   honeypot?: boolean;
   schoolName?: string;
   email?: string;
-  temporaryPassword?: string;
+  /** False when the account was created but the set-password email could not be sent. */
+  emailSent?: boolean;
 };
 
 const URL_FIELDS = [
@@ -109,7 +113,7 @@ export async function signUpSchool(
   // Honeypot: a real applicant never fills this hidden field in.
   const honeypot = trimmed(formData, "company_website");
   if (honeypot) {
-    return { error: null, success: true, honeypot: true, schoolName: "—", email: "—", temporaryPassword: "—" };
+    return { error: null, success: true, honeypot: true, schoolName: "—", email: "—", emailSent: true };
   }
 
   // Minimum-fill-time check, same convention as apply/[slug]/actions.ts.
@@ -163,7 +167,7 @@ export async function signUpSchool(
   const cycleType = trimmed(formData, "cycle_type");
   const ownershipType = trimmed(formData, "ownership_type");
   const institutionType = trimmed(formData, "institution_type");
-  const phone = trimmed(formData, "phone");
+  const phoneInput = trimmed(formData, "phone");
   const email = trimmed(formData, "email");
   const countryCode = trimmed(formData, "country_code");
   const address = trimmed(formData, "address");
@@ -190,7 +194,7 @@ export async function signUpSchool(
   const missing: string[] = [];
   if (!ownerName) missing.push("Your Name");
   if (!schoolName) missing.push("Institution Name");
-  if (!phone) missing.push("Phone");
+  if (!phoneInput) missing.push("Phone");
   if (!email) missing.push("Email");
   if (!countryCode) missing.push("Country");
   if (missing.length > 0) {
@@ -216,8 +220,11 @@ export async function signUpSchool(
   const countryDefaults = defaultsForCountry(countryCode);
   const currencyCode = currencyCodeRaw || countryDefaults.currencyCode;
   const gmtTimezone = gmtTimezoneRaw || countryDefaults.gmtTimezone;
-  if (!PHONE_RE.test(phone)) {
-    return { error: "Please enter a valid phone number, e.g. +2547XXXXXXXX." };
+  // Accepts the way Kenyans actually type numbers (0712 345 678 -> +254712345678) as well as
+  // everything the previous rule accepted, so no number that worked before is rejected now.
+  const phone = toE164(phoneInput) ?? (PHONE_RE.test(phoneInput) ? phoneInput : null);
+  if (!phone) {
+    return { error: "Please enter a valid phone number, e.g. 0712 345 678 or +254 712 345 678." };
   }
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     return { error: "Please enter a valid email address." };
@@ -266,13 +273,21 @@ export async function signUpSchool(
   // (chosen over asking the signer to pick one, since the screenshot spec
   // has no password field — the same must_change_password convention
   // src/app/(app)/settings/actions.ts already uses for staff invites).
-  const temporaryPassword = generateTemporaryPassword();
+  // The password is random and never shown or sent to anyone: the owner sets their own through
+  // the emailed link below, which also proves they control this address. (It used to be
+  // displayed on screen, so anyone could open a trial under someone else's email.)
   const { data: created, error: userError } = await adminClient.auth.admin.createUser({
     email,
-    password: temporaryPassword,
+    password: generateTemporaryPassword(),
     email_confirm: true,
   });
   if (userError || !created.user) {
+    if (userError && /already|registered|exists/i.test(userError.message)) {
+      return {
+        error:
+          "An account with this email already exists. Sign in, or use “Forgot password” on the sign-in page to set a new password.",
+      };
+    }
     return { error: userError?.message ?? "Could not create your account." };
   }
 
@@ -332,12 +347,22 @@ export async function signUpSchool(
     email,
     phone,
     status: "active",
-    must_change_password: true,
-    temp_password_expires_at: temporaryPasswordExpiry(),
+    // The owner chooses their own password via the emailed link, so there is no temporary
+    // password to force a change of.
+    must_change_password: false,
+    temp_password_expires_at: null,
   });
   if (linkError) {
     await adminClient.from("schools").delete().eq("id", school.id);
     await adminClient.auth.admin.deleteUser(created.user.id);
+    // A phone number can belong to only one active account across the whole platform
+    // (uq_school_users_active_phone). Never show the raw Postgres error to the visitor.
+    if (linkError.code === "23505" || /uq_school_users_active_phone/.test(linkError.message)) {
+      return {
+        error:
+          "This phone number is already registered to another account. Use a different number, or sign in if it is yours.",
+      };
+    }
     return { error: linkError.message };
   }
 
@@ -386,15 +411,36 @@ export async function signUpSchool(
     }
   }
 
-  // No auto-sign-in: unlike the old password-the-user-chose flow, this
-  // password is generated for them and needs to be shown once. Signing
-  // them in here would redirect straight past that screen. They confirm it
-  // and continue to /login from the success state instead.
+  // ---- 6. Set-password email ----
+  // Same mechanism and redirect as the "Forgot password" page: the link lands on /auth/confirm,
+  // which signs the owner in, then /reset-password, which sets their password and sends them to
+  // /dashboard. If sending fails the account still exists, so say so plainly instead of leaving
+  // the owner stuck (they can request the same email from Forgot password).
+  const requestHeaders = await headers();
+  const origin =
+    requestHeaders.get("origin") ??
+    (requestHeaders.get("host") ? `https://${requestHeaders.get("host")}` : null) ??
+    SITE_URL;
+  let emailSent = true;
+  try {
+    const supabase = await createClient();
+    const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${origin}/auth/confirm?next=/reset-password`,
+    });
+    if (resetError) {
+      emailSent = false;
+      console.error("signup: set-password email failed", resetError.status ?? resetError.code);
+    }
+  } catch (e) {
+    emailSent = false;
+    console.error("signup: set-password email threw", e instanceof Error ? e.message : e);
+  }
+
   return {
     error: null,
     success: true,
     schoolName,
     email,
-    temporaryPassword,
+    emailSent,
   };
 }

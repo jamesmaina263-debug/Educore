@@ -7,6 +7,13 @@ import { logAdminAction } from "@/lib/log-admin-action";
 import { geminiGenerateContentUrl, geminiHeaders } from "@/lib/ai/report-card-comment";
 import { isUuid } from "@/lib/sales/pipeline";
 import {
+  buildOverpassQuery,
+  discoverySourceNote,
+  isKenyaCounty,
+  parseOverpassResponse,
+  type DiscoveryKinds,
+} from "@/lib/outbound/discovery";
+import {
   MAX_SCORE_BATCH,
   buildScoringPrompt,
   parseProspectCsv,
@@ -52,6 +59,81 @@ export async function importOutboundProspects(
   return { success: true, inserted, skipped, warnings: parsed.value.warnings };
 }
 
+// Public Overpass instances, tried in order. Be a polite client: identify ourselves, one county per
+// request, and never retry in a tight loop.
+const OVERPASS_ENDPOINTS = ["https://overpass-api.de/api/interpreter", "https://overpass.kumi.systems/api/interpreter"];
+
+async function fetchOverpass(query: string): Promise<unknown> {
+  let lastError = "no endpoint answered";
+  for (const endpoint of OVERPASS_ENDPOINTS) {
+    try {
+      const res = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded", "User-Agent": "EduCore-Outreach/1.0 (school discovery)" },
+        body: new URLSearchParams({ data: query }).toString(),
+        signal: AbortSignal.timeout(55_000),
+        cache: "no-store",
+      });
+      if (!res.ok) {
+        lastError = `${new URL(endpoint).host} responded ${res.status}`;
+        continue;
+      }
+      return await res.json();
+    } catch (e) {
+      lastError = `${new URL(endpoint).host}: ${e instanceof Error ? e.message : "request failed"}`;
+    }
+  }
+  throw new Error(lastError);
+}
+
+/**
+ * Finds schools (and, optionally, kindergartens) in one county from OpenStreetMap and stages them
+ * for review. Staging only: nothing is scored, approved or sent by this call.
+ */
+export async function discoverSchoolsByCounty(
+  county: string,
+  kinds: string,
+): Promise<
+  | { error: string }
+  | { success: true; found: number; inserted: number; skipped: number; truncated: number; withContact: number }
+> {
+  if (!isKenyaCounty(county)) return { error: "Choose a county from the list." };
+  if (kinds !== "all" && kinds !== "kindergartens" && kinds !== "schools") return { error: "Invalid school kind." };
+
+  let data: unknown;
+  try {
+    data = await fetchOverpass(buildOverpassQuery(county, kinds as DiscoveryKinds));
+  } catch (e) {
+    console.error("discoverSchoolsByCounty: overpass failed", e instanceof Error ? e.message : e);
+    return { error: "The map data service didn't respond. Wait a minute and try again, or try a smaller county first." };
+  }
+
+  const { rows, truncated } = parseOverpassResponse(data, county);
+  if (rows.length === 0) return { error: `No named schools were found for ${county}. OpenStreetMap coverage varies by county.` };
+
+  const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
+  const { data: result, error } = await supabase.rpc("admin_import_outbound_prospects", {
+    p_rows: rows,
+    p_source_note: discoverySourceNote(county, new Date()),
+  });
+  if (error) return { error: error.message };
+
+  const r = (result ?? {}) as { inserted?: number; skipped?: number };
+  const inserted = r.inserted ?? 0;
+  const skipped = r.skipped ?? 0;
+  void logAdminAction(supabase, "discover_outbound_prospects", { county, kinds, found: rows.length, inserted, skipped });
+  revalidatePath(PATH);
+  return {
+    success: true,
+    found: rows.length,
+    inserted,
+    skipped,
+    truncated,
+    withContact: rows.filter((x) => x.email || x.phone).length,
+  };
+}
+
 export async function scoreOutboundProspects(
   ids: string[],
 ): Promise<{ error: string } | { success: true; scored: number; failed: number }> {
@@ -67,7 +149,7 @@ export async function scoreOutboundProspects(
   // RLS limits this read to platform super admins, so a non-admin just gets nothing back.
   const { data: rows, error: readErr } = await supabase
     .from("outbound_prospects")
-    .select("id, school_name, town_county, school_type, website, contact_name, contact_role, student_count, status")
+    .select("id, school_name, town_county, school_type, school_level, website, contact_name, contact_role, student_count, status")
     .in("id", ids);
   if (readErr) return { error: readErr.message };
   if (!rows || rows.length === 0) return { error: "Those prospects weren't found." };

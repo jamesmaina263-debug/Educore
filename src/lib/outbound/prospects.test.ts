@@ -3,6 +3,7 @@ import {
   MAX_IMPORT_ROWS,
   buildScoringPrompt,
   normalizePhone,
+  normalizeSchoolLevel,
   normalizeSchoolType,
   normalizeWebsite,
   parseCsv,
@@ -33,6 +34,14 @@ describe("normalizers", () => {
     expect(normalizeSchoolType("Public/Government")).toBe("public");
     expect(normalizeSchoolType("Faith-based")).toBe("other");
     expect(normalizeSchoolType("")).toBeNull();
+  });
+  it("maps school levels, recognising kindergartens", () => {
+    expect(normalizeSchoolLevel("Nursery")).toBe("kindergarten");
+    expect(normalizeSchoolLevel("PP1 / Pre-primary")).toBe("kindergarten");
+    expect(normalizeSchoolLevel("Primary School")).toBe("primary");
+    expect(normalizeSchoolLevel("Senior High")).toBe("secondary");
+    expect(normalizeSchoolLevel("Tertiary")).toBe("other");
+    expect(normalizeSchoolLevel("")).toBeNull();
   });
   it("cleans phones and rejects junk", () => {
     expect(normalizePhone("+254 712 345 678")).toBe("+254712345678");
