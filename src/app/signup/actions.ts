@@ -355,6 +355,14 @@ export async function signUpSchool(
   if (linkError) {
     await adminClient.from("schools").delete().eq("id", school.id);
     await adminClient.auth.admin.deleteUser(created.user.id);
+    // A phone number can belong to only one active account across the whole platform
+    // (uq_school_users_active_phone). Never show the raw Postgres error to the visitor.
+    if (linkError.code === "23505" || /uq_school_users_active_phone/.test(linkError.message)) {
+      return {
+        error:
+          "This phone number is already registered to another account. Use a different number, or sign in if it is yours.",
+      };
+    }
     return { error: linkError.message };
   }
 
