@@ -149,6 +149,21 @@ describe("signUpSchool", () => {
     expect(inserted("schools")).toBeUndefined();
   });
 
+  it("shows a readable message, and rolls back, when the phone number is already taken", async () => {
+    h.results["school_users.insert"] = {
+      error: {
+        code: "23505",
+        message: 'duplicate key value violates unique constraint "uq_school_users_active_phone"',
+      },
+    };
+    const res = await signUpSchool({ error: null }, form());
+    expect(res.error).toMatch(/phone number is already registered/i);
+    expect(res.error).not.toMatch(/duplicate key|constraint|uq_/i);
+    expect(h.deleteUser).toHaveBeenCalledWith("abcdef123456");
+    expect(h.calls.filter((c) => c.op === "delete").map((c) => c.table)).toContain("schools");
+    expect(h.resetPasswordForEmail).not.toHaveBeenCalled();
+  });
+
   it("fakes success for a honeypot hit without creating anything", async () => {
     const res = await signUpSchool({ error: null }, form({ company_website: "spam.com" }));
     expect(res).toMatchObject({ success: true, honeypot: true });
