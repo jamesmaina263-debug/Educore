@@ -163,9 +163,18 @@ export async function getOverviewStats(dateRange: GaDateRangeInput): Promise<Ove
     // future edit adds a dimension and `rows` becomes a real breakdown.
     metricAggregations: ["TOTAL"],
   });
-  const row = result?.totals?.[0] ?? result?.rows?.[0];
+  // null === the request itself failed (config/auth/network/non-2xx) -- the dashboard shows "—".
+  if (!result) return null;
+  const row = result.totals?.[0] ?? result.rows?.[0];
   const values = row?.metricValues;
-  if (!values || values.length < 6) return null;
+  // GA4 omits `rows`/`totals` entirely when a period has no processed traffic yet (always true
+  // early in "Today", since standard reports lag by hours). That's a successful response with a
+  // real zero, not a failure -- report it as 0 so an empty period isn't indistinguishable from a
+  // broken connection.
+  if (!values) {
+    return { visitors: 0, visits: 0, pageviews: 0, viewsPerVisit: 0, bounceRate: 0, visitDurationSeconds: 0 };
+  }
+  if (values.length < 6) return null;
   return {
     visitors: Number(values[0].value),
     visits: Number(values[1].value),
@@ -198,9 +207,10 @@ export async function getEngagedVisitors(dateRange: GaDateRangeInput): Promise<n
     metrics: [{ name: "engagedSessions" }],
     metricAggregations: ["TOTAL"],
   });
-  const row = result?.totals?.[0] ?? result?.rows?.[0];
+  if (!result) return null; // request failed
+  const row = result.totals?.[0] ?? result.rows?.[0];
   const value = row?.metricValues?.[0]?.value;
-  if (value === undefined) return null;
+  if (value === undefined) return 0; // successful response, no data for the period yet
   return Number(value);
 }
 
