@@ -11,6 +11,7 @@ import {
   Inbox,
   UserPlus,
   Briefcase,
+  Compass,
   Palette,
   RotateCcw,
   Mail,
@@ -75,6 +76,7 @@ const NAV_GROUPS: AdminNavGroup[] = [
       { href: "/admin/demo-requests", label: "Requests", icon: Inbox },
       { href: "/admin/leads", label: "Leads", icon: UserPlus },
       { href: "/admin/sales-pipeline", label: "Sales Pipeline", icon: Briefcase },
+      { href: "/admin/outreach", label: "Outreach", icon: Compass },
     ],
   },
   {
