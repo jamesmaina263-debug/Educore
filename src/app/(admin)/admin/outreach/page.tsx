@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { AdminOutreach, type OutboundProspectRow } from "@/components/admin/admin-outreach";
+import { summariseContactLog, type ContactLogRow } from "@/lib/outbound/contact";
 
 // "Find contacts" fetches several web pages per school and calls Gemini; allow the full minute.
 export const maxDuration = 60;
@@ -19,7 +20,7 @@ export default async function AdminOutreachPage() {
   const { data: isSuperAdmin } = await supabase.rpc("auth_is_super_admin");
   if (isSuperAdmin !== true) redirect("/dashboard");
 
-  const [prospectsRes, teamRes] = await Promise.all([
+  const [prospectsRes, teamRes, logRes] = await Promise.all([
     supabase
       .from("outbound_prospects")
       .select(
@@ -29,7 +30,16 @@ export default async function AdminOutreachPage() {
       .order("created_at", { ascending: false })
       .limit(1500),
     supabase.from("platform_team_members").select("id, name").eq("active", true).order("name"),
+    // Newest first; the helper keeps the latest event per prospect. If the contact-log migration has
+    // not been applied on this environment the page still works and the contact controls stay hidden.
+    supabase
+      .from("outbound_contact_log")
+      .select("prospect_id, channel, event, created_at")
+      .order("created_at", { ascending: false })
+      .limit(5000),
   ]);
+  const contactEnabled = !logRes.error;
+  const contactSummary = Object.fromEntries(summariseContactLog((logRes.data ?? []) as ContactLogRow[]));
 
   // Same posture as /admin/sales-pipeline: if the table isn't there yet, say so instead of crashing.
   if (prospectsRes.error) {
@@ -53,12 +63,14 @@ export default async function AdminOutreachPage() {
         <h1 className="text-lg font-semibold">Outreach</h1>
         <p className="text-sm text-muted-foreground">
           Find schools and kindergartens, let AI score them and draft a first message, then approve the ones worth
-          pursuing. Nothing is ever sent from this page. Visible to platform staff only.
+          pursuing. Nothing is ever sent from this page; copying a draft or marking it sent is logged by hand so nobody is contacted twice. Visible to platform staff only.
         </p>
       </div>
       <AdminOutreach
         prospects={(prospectsRes.data ?? []) as OutboundProspectRow[]}
         reps={(teamRes.data ?? []) as { id: string; name: string }[]}
+        contactEnabled={contactEnabled}
+        contactSummary={contactSummary}
       />
     </div>
   );

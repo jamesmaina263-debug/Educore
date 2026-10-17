@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
@@ -15,12 +15,23 @@ import {
   enrichOutboundProspects,
   discoverSchoolsByCounty,
   importOutboundProspects,
+  loadProspectContact,
+  logOutboundContact,
   promoteOutboundProspect,
+  recordProspectOptOut,
   reviewOutboundProspect,
   scoreOutboundProspects,
 } from "@/app/(admin)/admin/outreach/actions";
 import { KENYA_COUNTIES } from "@/lib/outbound/discovery";
 import { MAX_ENRICH_BATCH } from "@/lib/outbound/enrichment";
+import {
+  CHANNEL_LABELS,
+  contactBlockReason,
+  describeContactEvent,
+  type ContactChannel,
+  type ContactLogRow,
+  type ProspectContactSummary,
+} from "@/lib/outbound/contact";
 import { MAX_SCORE_BATCH, SCHOOL_LEVEL_LABELS, type OutboundSchoolLevel } from "@/lib/outbound/prospects";
 
 export type OutboundProspectRow = {
@@ -56,12 +67,34 @@ const STATUS: Record<OutboundProspectRow["status"], { label: string; tone: Tone 
 const FILTERS = ["all", "new", "scored", "approved", "rejected", "promoted"] as const;
 type Filter = (typeof FILTERS)[number];
 
+type ContactState = {
+  loading: boolean;
+  error: string | null;
+  blocked: { email: boolean; whatsapp: boolean } | null;
+  log: ContactLogRow[];
+};
+
+const OPT_OUT_LABELS: Record<string, string> = {
+  stop_reply: "Replied STOP",
+  requested: "Asked not to be contacted",
+  complained: "Complained",
+};
+
+function shortDate(iso: string): string {
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? "" : d.toLocaleDateString("en-KE", { day: "numeric", month: "short" });
+}
+
 export function AdminOutreach({
   prospects,
   reps,
+  contactEnabled,
+  contactSummary,
 }: {
   prospects: OutboundProspectRow[];
   reps: { id: string; name: string }[];
+  contactEnabled: boolean;
+  contactSummary: Record<string, ProspectContactSummary>;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -75,6 +108,10 @@ export function AdminOutreach({
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [open, setOpen] = useState<OutboundProspectRow | null>(null);
   const [promoteRep, setPromoteRep] = useState<string>("");
+  const [contact, setContact] = useState<ContactState | null>(null);
+  const [actor, setActor] = useState<string>("");
+  const [optReason, setOptReason] = useState<string>("stop_reply");
+  const openId = useRef<string | null>(null);
 
   const counts = useMemo(() => {
     const c: Record<string, number> = { all: prospects.length };
@@ -117,14 +154,89 @@ export function AdminOutreach({
     return p && p.status !== "promoted" && (!p.phone || !p.email);
   });
 
-  const copy = async (text: string) => {
+  const repName = (id: string | null | undefined) => reps.find((r) => r.id === id)?.name ?? null;
+
+  async function refreshContact(id: string) {
+    const r = await loadProspectContact(id);
+    if (openId.current !== id) return; // dialog moved on
+    if ("error" in r) setContact({ loading: false, error: r.error, blocked: null, log: [] });
+    else setContact({ loading: false, error: null, blocked: r.blocked, log: r.log });
+  }
+
+  function openProspect(p: OutboundProspectRow | null) {
+    setOpen(p);
+    openId.current = p?.id ?? null;
+    setContact(null);
+    if (p && contactEnabled) {
+      setContact({ loading: true, error: null, blocked: null, log: [] });
+      void refreshContact(p.id);
+    }
+  }
+
+  const contactValue = (p: OutboundProspectRow, ch: ContactChannel) => (ch === "email" ? p.email : p.phone);
+  const blockReason = (p: OutboundProspectRow, ch: ContactChannel) =>
+    contactBlockReason(
+      {
+        status: p.status,
+        contactStatus: p.contact_status,
+        contactValue: contactValue(p, ch),
+        blocked: contact?.blocked ? contact.blocked[ch] : null,
+      },
+      ch,
+    );
+
+  // Copy first, then log: browsers only allow clipboard writes inside the click, so we must not wait
+  // for the server before copying. The button is already disabled for anything the database would
+  // refuse; if it refuses anyway (e.g. an opt-out recorded a second ago) we say so.
+  const copyDraft = async (p: OutboundProspectRow, ch: ContactChannel, text: string) => {
+    if (contactEnabled && blockReason(p, ch)) return;
     try {
       await navigator.clipboard.writeText(text);
-      setNotice({ tone: "ok", text: "Copied." });
     } catch {
       setNotice({ tone: "error", text: "Couldn't copy. Select the text and copy it manually." });
+      return;
     }
+    if (!contactEnabled) {
+      setNotice({ tone: "ok", text: "Copied." });
+      return;
+    }
+    const r = await logOutboundContact(p.id, ch, "draft_copied", actor || null);
+    if ("error" in r) {
+      setNotice({ tone: "error", text: `Copied, but it was not logged: ${r.error}. Do not send it if this contact has opted out.` });
+    } else {
+      setNotice({ tone: "ok", text: "Copied and logged." });
+    }
+    void refreshContact(p.id);
+    router.refresh();
   };
+
+  function logEvent(p: OutboundProspectRow, ch: ContactChannel, event: "sent" | "replied") {
+    setNotice(null);
+    startTransition(async () => {
+      const r = await logOutboundContact(p.id, ch, event, actor || null);
+      if ("error" in r) setNotice({ tone: "error", text: r.error });
+      else {
+        setNotice({ tone: "ok", text: event === "sent" ? `${CHANNEL_LABELS[ch]} marked as sent.` : "Reply logged." });
+        void refreshContact(p.id);
+        router.refresh();
+      }
+    });
+  }
+
+  function optOut(p: OutboundProspectRow, ch: ContactChannel) {
+    const what = ch === "email" ? "email address" : "phone number";
+    if (!window.confirm(`Record that ${p.school_name} must not be contacted on this ${what}? This is permanent and also stops it being re-imported.`)) return;
+    setNotice(null);
+    startTransition(async () => {
+      const r = await recordProspectOptOut(p.id, ch, optReason);
+      if ("error" in r) setNotice({ tone: "error", text: r.error });
+      else {
+        setNotice({ tone: "ok", text: `${CHANNEL_LABELS[ch]} opt-out recorded.` });
+        void refreshContact(p.id);
+        router.refresh();
+      }
+    });
+  }
 
   return (
     <div className="flex flex-col gap-4">
@@ -357,9 +469,20 @@ export function AdminOutreach({
                       <td className="p-2 tabular-nums">{p.fit_score ?? "—"}</td>
                       <td className="p-2">
                         <StatusBadge tone={st.tone} label={st.label} />
+                        {contactEnabled && contactSummary[p.id]?.optedOut.length ? (
+                          <div className="mt-1 text-xs text-destructive">
+                            Opted out ({contactSummary[p.id].optedOut.map((c) => CHANNEL_LABELS[c as ContactChannel] ?? c).join(", ")})
+                          </div>
+                        ) : null}
+                        {contactEnabled && contactSummary[p.id]?.last ? (
+                          <div className="mt-1 text-xs text-muted-foreground">
+                            {describeContactEvent(contactSummary[p.id].last!.channel, contactSummary[p.id].last!.event)} ·{" "}
+                            {shortDate(contactSummary[p.id].last!.created_at)}
+                          </div>
+                        ) : null}
                       </td>
                       <td className="p-2">
-                        <Button size="sm" variant="outline" onClick={() => setOpen(p)}>
+                        <Button size="sm" variant="outline" onClick={() => openProspect(p)}>
                           Open
                         </Button>
                       </td>
@@ -372,7 +495,7 @@ export function AdminOutreach({
         )}
       </section>
 
-      <Dialog open={open !== null} onOpenChange={(o) => !o && setOpen(null)}>
+      <Dialog open={open !== null} onOpenChange={(o) => !o && openProspect(null)}>
         <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
           {open && (
             <>
@@ -448,21 +571,107 @@ export function AdminOutreach({
                       className="mt-2"
                       size="sm"
                       variant="outline"
-                      onClick={() => copy(`${open.draft_email_subject}\n\n${open.draft_email_body}`)}
+                      disabled={contactEnabled && blockReason(open, "email") !== null}
+                      onClick={() => copyDraft(open, "email", `${open.draft_email_subject}\n\n${open.draft_email_body}`)}
                     >
                       Copy email
                     </Button>
+                    {contactEnabled && blockReason(open, "email") && (
+                      <p className="mt-1 text-xs text-muted-foreground">{blockReason(open, "email")}</p>
+                    )}
                   </div>
                   <div className="rounded border border-border p-3">
                     <div className="mb-1 text-xs font-medium">WhatsApp</div>
                     <p className="whitespace-pre-wrap">{open.draft_whatsapp}</p>
-                    <Button className="mt-2" size="sm" variant="outline" onClick={() => copy(open.draft_whatsapp ?? "")}>
+                    <Button
+                      className="mt-2"
+                      size="sm"
+                      variant="outline"
+                      disabled={contactEnabled && blockReason(open, "whatsapp") !== null}
+                      onClick={() => copyDraft(open, "whatsapp", open.draft_whatsapp ?? "")}
+                    >
                       Copy WhatsApp
                     </Button>
+                    {contactEnabled && blockReason(open, "whatsapp") && (
+                      <p className="mt-1 text-xs text-muted-foreground">{blockReason(open, "whatsapp")}</p>
+                    )}
                   </div>
                 </div>
               ) : (
                 <p className="text-sm text-muted-foreground">Not scored yet. Select it in the list and use “Score &amp; draft”.</p>
+              )}
+
+              {contactEnabled && (open.status === "approved" || open.status === "promoted") && (
+                <div className="flex flex-col gap-3 rounded border border-border p-3 text-sm">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="text-xs font-medium">Contact log (recorded by hand; not proof of delivery)</div>
+                    <Select value={actor} onValueChange={setActor}>
+                      <SelectTrigger aria-label="Who is logging" className="h-8 w-[11rem] text-[0.8125rem]">
+                        <SelectValue placeholder="Logging as… (optional)" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {reps.map((r) => (
+                          <SelectItem key={r.id} value={r.id}>
+                            {r.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  {contact?.error && <p className="text-xs text-destructive">Couldn&apos;t load contact status: {contact.error}</p>}
+                  {(["email", "whatsapp"] as const).map((ch) => {
+                    const reason = blockReason(open, ch);
+                    return (
+                      <div key={ch} className="flex flex-wrap items-center gap-2">
+                        <span className="w-20 text-xs font-medium">{CHANNEL_LABELS[ch]}</span>
+                        <Button size="sm" variant="outline" disabled={pending || reason !== null} onClick={() => logEvent(open, ch, "sent")}>
+                          Mark as sent
+                        </Button>
+                        <Button size="sm" variant="outline" disabled={pending || !contactValue(open, ch)} onClick={() => logEvent(open, ch, "replied")}>
+                          They replied
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="text-destructive"
+                          disabled={pending || !contactValue(open, ch) || contact?.blocked?.[ch] === true}
+                          onClick={() => optOut(open, ch)}
+                        >
+                          {contact?.blocked?.[ch] ? "Opted out" : "Opt out…"}
+                        </Button>
+                      </div>
+                    );
+                  })}
+                  <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                    <span>Opt-out reason:</span>
+                    <Select value={optReason} onValueChange={setOptReason}>
+                      <SelectTrigger aria-label="Opt-out reason" className="h-8 w-[14rem] text-[0.8125rem]">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {Object.entries(OPT_OUT_LABELS).map(([v, label]) => (
+                          <SelectItem key={v} value={v}>
+                            {label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  {contact?.loading ? (
+                    <p className="text-xs text-muted-foreground">Loading history…</p>
+                  ) : contact && contact.log.length > 0 ? (
+                    <ul className="flex flex-col gap-1 text-xs">
+                      {contact.log.map((l, i) => (
+                        <li key={l.id ?? i}>
+                          {describeContactEvent(l.channel, l.event)} · {shortDate(l.created_at)}
+                          {repName(l.performed_by) ? ` · ${repName(l.performed_by)}` : ""}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">Nothing logged yet.</p>
+                  )}
+                </div>
               )}
 
               <div className="flex flex-wrap items-center gap-2 border-t border-border pt-3">
@@ -531,7 +740,7 @@ export function AdminOutreach({
                     onClick={() => {
                       if (window.confirm(`Delete ${open.school_name}? This can't be undone.`)) {
                         run(() => deleteOutboundProspect(open.id), () => "Deleted.");
-                        setOpen(null);
+                        openProspect(null);
                       }
                     }}
                   >

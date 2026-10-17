@@ -30,6 +30,12 @@ import {
 } from "@/lib/outbound/enrichment";
 import { safeFetchPage } from "@/lib/outbound/safe-fetch";
 import {
+  isContactChannel,
+  isOptOutReason,
+  validateContactInput,
+  type ContactLogRow,
+} from "@/lib/outbound/contact";
+import {
   MAX_SCORE_BATCH,
   buildScoringPrompt,
   parseProspectCsv,
@@ -485,4 +491,131 @@ export async function deleteOutboundProspect(id: string): Promise<ActionResult> 
   void logAdminAction(supabase, "delete_outbound_prospect", { prospect_id: id });
   revalidatePath(PATH);
   return { success: true };
+}
+
+// ---------------------------------------------------------------------------------------------
+// Contact log + opt-outs (20261017120000_outbound_contact_log_and_opt_outs.sql). The log is
+// manual and self-reported: it records what a rep says they did, never delivery. The database
+// refuses unapproved prospects, unusable contacts and opted-out contacts; the UI mirrors that.
+// Audit-log detail carries ids, channel and event only, never an address or phone number.
+// ---------------------------------------------------------------------------------------------
+
+export type ProspectContactState = {
+  success: true;
+  blocked: { email: boolean; whatsapp: boolean };
+  log: ContactLogRow[];
+};
+
+/** Called when a prospect's dialog opens: current opt-out status per channel plus its recent history. */
+export async function loadProspectContact(id: string): Promise<{ error: string } | ProspectContactState> {
+  if (!isUuid(id)) return { error: "Invalid prospect id." };
+
+  const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
+
+  const { data: prospect, error: pErr } = await supabase
+    .from("outbound_prospects")
+    .select("email, phone")
+    .eq("id", id)
+    .maybeSingle();
+  if (pErr) return { error: pErr.message };
+  if (!prospect) return { error: "Outbound prospect not found." };
+
+  const [emailBlocked, waBlocked, logRes] = await Promise.all([
+    prospect.email
+      ? supabase.rpc("admin_is_outbound_contact_blocked", { p_channel: "email", p_identifier: prospect.email })
+      : Promise.resolve({ data: false, error: null }),
+    prospect.phone
+      ? supabase.rpc("admin_is_outbound_contact_blocked", { p_channel: "whatsapp", p_identifier: prospect.phone })
+      : Promise.resolve({ data: false, error: null }),
+    supabase
+      .from("outbound_contact_log")
+      .select("id, channel, event, created_at, performed_by, note")
+      .eq("prospect_id", id)
+      .order("created_at", { ascending: false })
+      .limit(25),
+  ]);
+  if (emailBlocked.error) return { error: emailBlocked.error.message };
+  if (waBlocked.error) return { error: waBlocked.error.message };
+  if (logRes.error) return { error: logRes.error.message };
+
+  return {
+    success: true,
+    blocked: { email: emailBlocked.data === true, whatsapp: waBlocked.data === true },
+    log: (logRes.data ?? []) as ContactLogRow[],
+  };
+}
+
+export async function logOutboundContact(
+  prospectId: string,
+  channel: string,
+  event: string,
+  performedBy: string | null,
+  note?: string,
+): Promise<ActionResult> {
+  if (!isUuid(prospectId)) return { error: "Invalid prospect id." };
+  if (performedBy !== null && !isUuid(performedBy)) return { error: "Invalid team member." };
+  const checked = validateContactInput(channel, event, note);
+  if (!checked.ok) return { error: checked.error };
+
+  const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
+  const { error } = await supabase.rpc("admin_log_outbound_contact", {
+    p_prospect_id: prospectId,
+    p_channel: checked.channel,
+    p_event: checked.event,
+    p_performed_by: performedBy,
+    p_note: checked.note,
+  });
+  if (error) return { error: error.message };
+
+  void logAdminAction(supabase, "log_outbound_contact", {
+    prospect_id: prospectId,
+    channel: checked.channel,
+    event: checked.event,
+  });
+  revalidatePath(PATH);
+  return { success: true };
+}
+
+/**
+ * Record a STOP / "do not contact" for a prospect's own email address or phone number. The identifier
+ * is read from the prospect row on the server (never taken from the browser), so what is blocked is
+ * exactly what the drafts would have been sent to.
+ */
+export async function recordProspectOptOut(
+  prospectId: string,
+  channel: string,
+  reason: string,
+): Promise<{ error: string } | { success: true; matched: number }> {
+  if (!isUuid(prospectId)) return { error: "Invalid prospect id." };
+  if (!isContactChannel(channel)) return { error: "Unknown channel." };
+  if (!isOptOutReason(reason)) return { error: "Invalid reason." };
+
+  const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
+
+  const { data: prospect, error: pErr } = await supabase
+    .from("outbound_prospects")
+    .select("email, phone")
+    .eq("id", prospectId)
+    .maybeSingle();
+  if (pErr) return { error: pErr.message };
+  if (!prospect) return { error: "Outbound prospect not found." };
+
+  const identifier = channel === "email" ? prospect.email : prospect.phone;
+  if (!identifier) return { error: channel === "email" ? "No email address on file." : "No phone number on file." };
+
+  const { data, error } = await supabase.rpc("admin_record_outbound_opt_out", {
+    p_channel: channel,
+    p_identifier: identifier,
+    p_reason: reason,
+    p_note: null,
+  });
+  if (error) return { error: error.message };
+
+  const matched = typeof data === "number" ? data : 0;
+  void logAdminAction(supabase, "record_outbound_opt_out", { prospect_id: prospectId, channel, reason, matched });
+  revalidatePath(PATH);
+  return { success: true, matched };
 }
