@@ -11,6 +11,7 @@ import { LiveVisitorsPanel } from "@/components/admin/analytics/live-visitors-pa
 import { KeyEventsChart } from "@/components/admin/analytics/key-events-chart";
 import { ChannelPerformanceList } from "@/components/admin/analytics/channel-performance-list";
 import { ConversionFunnel, type FunnelStage } from "@/components/admin/analytics/conversion-funnel";
+import { GrowthReport } from "@/components/admin/analytics/growth-report";
 import {
   DEMO_PARTIAL_RETENTION_DAYS,
   startsBeyondPartialRetention,
@@ -540,6 +541,8 @@ export default async function AdminAnalyticsPage({
           .
         </p>
       </div>
+
+      <GrowthReport startIso={startIso} endIso={endIso} />
     </div>
   );
 }
