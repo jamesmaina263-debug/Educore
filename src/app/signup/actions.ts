@@ -3,7 +3,7 @@
 import { headers } from "next/headers";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
-import { SITE_URL } from "@/lib/site";
+import { resolveAuthRedirectOrigin } from "@/lib/auth/reset-link";
 import { toE164 } from "@/lib/signup-fields";
 import { slugify } from "@/lib/slug";
 import { getRealClientIp } from "@/lib/get-real-client-ip";
@@ -449,10 +449,14 @@ export async function signUpSchool(
   // /dashboard. If sending fails the account still exists, so say so plainly instead of leaving
   // the owner stuck (they can request the same email from Forgot password).
   const requestHeaders = await headers();
-  const origin =
+  // Never trust the request's Origin/Host for the emailed link: if it isn't on the Supabase
+  // Redirect URLs allowlist (e.g. the Vercel alias), Supabase silently swaps in the Site URL and
+  // the link lands on the marketing home page. Production always uses the canonical origin
+  // (same helper as Forgot password, #576).
+  const origin = resolveAuthRedirectOrigin(
     requestHeaders.get("origin") ??
-    (requestHeaders.get("host") ? `https://${requestHeaders.get("host")}` : null) ??
-    SITE_URL;
+      (requestHeaders.get("host") ? `https://${requestHeaders.get("host")}` : null),
+  );
   let emailSent = true;
   try {
     const supabase = await createClient();

@@ -9,6 +9,7 @@ const h = vi.hoisted(() => {
   const resetPasswordForEmail = vi.fn();
   const verifyTurnstileToken = vi.fn();
   const sendSecurityAlert = vi.fn();
+  const state = { origin: "https://www.educoreafrica.com" };
 
   function builder(table: string) {
     const b: Record<string, unknown> = {};
@@ -26,11 +27,11 @@ const h = vi.hoisted(() => {
     return b;
   }
   const admin = { from: (t: string) => builder(t), rpc, auth: { admin: { createUser, deleteUser } } };
-  return { calls, results, createUser, deleteUser, rpc, resetPasswordForEmail, verifyTurnstileToken, sendSecurityAlert, admin };
+  return { state, calls, results, createUser, deleteUser, rpc, resetPasswordForEmail, verifyTurnstileToken, sendSecurityAlert, admin };
 });
 
 vi.mock("next/headers", () => ({
-  headers: async () => new Headers({ "x-forwarded-for": "203.0.113.9", origin: "https://www.educoreafrica.com" }),
+  headers: async () => new Headers({ "x-forwarded-for": "203.0.113.9", origin: h.state.origin }),
 }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => h.admin }));
 vi.mock("@/lib/supabase/server", () => ({
@@ -99,6 +100,20 @@ describe("signUpSchool", () => {
     expect(h.resetPasswordForEmail).toHaveBeenCalledWith("jane@sunrise.ac.ke", {
       redirectTo: "https://www.educoreafrica.com/auth/confirm?next=/reset-password",
     });
+  });
+
+  it("always uses the canonical origin in production, whatever address the request came from", async () => {
+    vi.stubEnv("VERCEL_ENV", "production");
+    h.state.origin = "https://educore-beige.vercel.app";
+    try {
+      await signUpSchool({ error: null }, form());
+      expect(h.resetPasswordForEmail.mock.calls[0][1].redirectTo).toMatch(
+        /^https:\/\/www\.educoreafrica\.com\/auth\/confirm\?next=\/reset-password$/,
+      );
+    } finally {
+      vi.unstubAllEnvs();
+      h.state.origin = "https://www.educoreafrica.com";
+    }
   });
 
   it("still succeeds, and says the email failed, when the set-password email cannot be sent", async () => {
