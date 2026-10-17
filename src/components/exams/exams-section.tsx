@@ -141,11 +141,11 @@ export function ExamsSection({
                 New exam
               </Button>
             </DialogTrigger>
-            <DialogContent className="max-w-2xl">
+            <DialogContent className="flex max-h-[90vh] max-w-2xl flex-col">
               <DialogHeader>
                 <DialogTitle>New exam</DialogTitle>
               </DialogHeader>
-              <div className="space-y-4">
+              <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pr-1">
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                   <div className="space-y-1.5 col-span-2">
                     <Label>Name</Label>
@@ -201,7 +201,23 @@ export function ExamsSection({
 
                 <div className="space-y-1.5">
                   <Label>Subjects examined (max score applies across all selected classes)</Label>
-                  <div className="flex flex-col gap-2 rounded-md border border-border p-3">
+                  <div className="flex items-center gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => setSelectedSubjects(new Set(subjects.map((s) => s.id)))}
+                    >
+                      Select all
+                    </Button>
+                    <Button type="button" size="sm" variant="ghost" onClick={() => setSelectedSubjects(new Set())}>
+                      Clear
+                    </Button>
+                    <span className="text-xs text-muted-foreground">
+                      {selectedSubjects.size} of {subjects.length} selected
+                    </span>
+                  </div>
+                  <div className="flex max-h-64 flex-col gap-2 overflow-y-auto rounded-md border border-border p-3">
                     {subjects.map((s) => (
                       <div key={s.id} className="flex items-center gap-2">
                         <Checkbox
