@@ -4,7 +4,10 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { isCustomCategory } from "@/lib/admission-document-requirements";
 import {
+  addDocumentRequirement,
+  deleteDocumentRequirement,
   updateDocumentRequirement,
   type DocumentRequirementRow,
 } from "@/app/(app)/settings/admission-documents/actions";
@@ -15,6 +18,28 @@ export function DocumentRequirementsPanel({ rows, canWrite }: { rows: DocumentRe
   const [error, setError] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
+  const [newLabel, setNewLabel] = useState("");
+  const [newRequired, setNewRequired] = useState(true);
+
+  function add() {
+    setError(null);
+    startTransition(async () => {
+      const result = await addDocumentRequirement(newLabel, newRequired);
+      if ("error" in result) { setError(result.error); return; }
+      setNewLabel("");
+      router.refresh();
+    });
+  }
+
+  function remove(row: DocumentRequirementRow) {
+    if (!window.confirm(`Remove "${row.label}" from the admission checklist? Files already uploaded are kept.`)) return;
+    setError(null);
+    startTransition(async () => {
+      const result = await deleteDocumentRequirement(row.id);
+      if ("error" in result) { setError(result.error); return; }
+      router.refresh();
+    });
+  }
 
   function save(id: string, changes: { required?: boolean; label?: string }) {
     setError(null);
@@ -54,6 +79,9 @@ export function DocumentRequirementsPanel({ rows, canWrite }: { rows: DocumentRe
               {canWrite && editingId !== row.id && (
                 <Button size="sm" variant="ghost" onClick={() => { setDraft(row.label); setEditingId(row.id); setError(null); }}>Rename</Button>
               )}
+              {canWrite && isCustomCategory(row.category) && editingId !== row.id && (
+                <Button size="sm" variant="ghost" onClick={() => remove(row)} disabled={pending}>Remove</Button>
+              )}
               <label className="flex items-center gap-2 text-sm">
                 <input
                   type="checkbox"
@@ -68,6 +96,26 @@ export function DocumentRequirementsPanel({ rows, canWrite }: { rows: DocumentRe
         ))}
         {rows.length === 0 && <li className="px-3 py-4 text-sm text-muted-foreground">No document types are set up for this school.</li>}
       </ul>
+
+      {canWrite && (
+        <div className="space-y-2 rounded-md border border-border p-3">
+          <p className="text-sm font-medium">Add a document your school requires</p>
+          <div className="flex flex-wrap items-center gap-2">
+            <Input
+              value={newLabel}
+              onChange={(e) => setNewLabel(e.target.value)}
+              placeholder="e.g. Immunization Card"
+              maxLength={60}
+              className="w-64 max-w-full"
+            />
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={newRequired} onChange={(e) => setNewRequired(e.target.checked)} />
+              Required
+            </label>
+            <Button size="sm" onClick={add} disabled={pending || !newLabel.trim()}>{pending ? "Adding…" : "Add document"}</Button>
+          </div>
+        </div>
+      )}
 
       {!canWrite && <p className="text-xs text-muted-foreground">You can view these settings but need admissions access to change them.</p>}
       {error && <p className="text-sm text-destructive" role="alert">{error}</p>}
