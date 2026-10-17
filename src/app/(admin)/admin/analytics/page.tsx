@@ -90,6 +90,12 @@ export default async function AdminAnalyticsPage({
   const { startIso, endIso, label } = resolveDateRange(period, customRange);
   const gaRange: [string, string] = [startIso, endIso];
   const prior = priorPeriod(startIso, endIso);
+  // resolveDateRange builds its dates in UTC, so "today" is compared in UTC too. GA4's standard
+  // reports lag by hours, so a range that ends today is incomplete; a single-day "Today" view
+  // compared with a full prior day would always read as a large drop, so that % is hidden.
+  const todayIso = new Date().toISOString().slice(0, 10);
+  const endsToday = endIso === todayIso;
+  const isPartialDay = startIso === endIso && endsToday;
   const granularity: TimeGranularity =
     rawGranularity === "day" || rawGranularity === "week" || rawGranularity === "month"
       ? rawGranularity
@@ -287,20 +293,26 @@ export default async function AdminAnalyticsPage({
           label="Visitors"
           value={overview ? overview.visitors.toLocaleString() : "—"}
           sub={gaConfigured ? undefined : "Google Analytics not connected"}
-          changePercent={overview && priorOverview ? percentChange(overview.visitors, priorOverview.visitors) : undefined}
+          changePercent={
+            !isPartialDay && overview && priorOverview ? percentChange(overview.visitors, priorOverview.visitors) : undefined
+          }
         />
         <KpiCard
           label="Sessions"
           value={overview ? overview.visits.toLocaleString() : "—"}
           sub={gaConfigured ? undefined : "Google Analytics not connected"}
-          changePercent={overview && priorOverview ? percentChange(overview.visits, priorOverview.visits) : undefined}
+          changePercent={
+            !isPartialDay && overview && priorOverview ? percentChange(overview.visits, priorOverview.visits) : undefined
+          }
         />
         <KpiCard
           label="Page views"
           value={overview ? overview.pageviews.toLocaleString() : "—"}
           sub={gaConfigured ? undefined : "Google Analytics not connected"}
           changePercent={
-            overview && priorOverview ? percentChange(overview.pageviews, priorOverview.pageviews) : undefined
+            !isPartialDay && overview && priorOverview
+              ? percentChange(overview.pageviews, priorOverview.pageviews)
+              : undefined
           }
         />
         <KpiCard label="Demo requests" value={demoRequestCount} changePercent={demoRequestChange} />
@@ -321,6 +333,14 @@ export default async function AdminAnalyticsPage({
           />
           <KpiCard label="Bounce rate" value={`${overview.bounceRate.toFixed(1)}%`} />
         </div>
+      )}
+
+      {gaConfigured && endsToday && (
+        <p className="text-xs text-muted-foreground">
+          Google Analytics totals for today can lag by a few hours, so they may read low (or 0) even while
+          visitors are on the site. The live count below is current.
+          {isPartialDay ? " The comparison with the prior period is hidden for a partial day." : ""}
+        </p>
       )}
 
       {gaConfigured && realtimeVisitors !== null && (
