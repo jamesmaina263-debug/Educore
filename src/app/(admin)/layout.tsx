@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getAdminOperator } from "@/lib/admin-operator-server";
+import { getAdminMfaState, isSuperAdminAnyAal } from "@/lib/admin-mfa";
 import { logout } from "@/app/login/actions";
 import { AdminConsoleFrame } from "@/components/admin/admin-console-frame";
 
@@ -22,13 +23,26 @@ export default async function AdminRouteGroupLayout({ children }: { children: Re
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
+  // Step 1: is this a platform admin at all (regardless of MFA)? Not one -> out.
+  if (!(await isSuperAdminAnyAal(supabase))) redirect("/dashboard");
+
+  // Step 2: MFA. Only active once the owner has switched enforcement on in the database
+  // (public.set_admin_mfa_required(true)); until then this is a no-op. The database also refuses
+  // super-admin access to a non-aal2 session, so this redirect is UX, not the control.
+  const mfa = await getAdminMfaState(supabase);
+  if (mfa.required && mfa.currentLevel !== "aal2") redirect("/admin/mfa");
+
   const { data: isSuperAdmin } = await supabase.rpc("auth_is_super_admin");
-  if (isSuperAdmin !== true) redirect("/dashboard");
+  if (isSuperAdmin !== true) {
+    // aal2 but still refused: the account has a verified authenticator that is not on the pinned list.
+    redirect(mfa.required ? "/admin/mfa?reason=unrecognized-factor" : "/dashboard");
+  }
 
   // Shared login: every session must say which person is using it (see lib/admin-operator.ts)
-  // before any admin page renders, so the activity log can attribute what they do.
+  // before any admin page renders, so the activity log can attribute what they do. With MFA on,
+  // the name comes from the authenticator that was verified, not from a self-declared picker.
   const operator = await getAdminOperator();
-  if (!operator) redirect("/admin/who");
+  if (!operator) redirect(mfa.required ? "/admin/mfa" : "/admin/who");
 
   const { data: currentUser } = await supabase
     .from("school_users")
