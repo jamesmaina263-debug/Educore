@@ -94,10 +94,11 @@ export default function PrivacyPage() {
             <p className="mt-3 text-marketing-navy-900/75">
               If you use the contact/demo request form on this site, we
               collect the information you provide: your name, school name,
-              role, email address, and phone number and message if you
-              choose to include them. The form has two steps. When you press
-              Continue after the first step (name, school, email, and
-              optional phone), we save those details straight away so our
+              role, email address, and phone number, how you would like us
+              to contact you, and, if you choose, a preferred day and time
+              for your demo, your approximate student numbers, and a message. The form has two steps. When you press
+              Continue after the first step (name, school, phone, and
+              email), we save those details straight away so our
               team can follow up about your demo, even if you don&apos;t
               finish the second step. If you don&apos;t complete the form, we
               delete those saved details after 60 days. If you arrived via a marketing link

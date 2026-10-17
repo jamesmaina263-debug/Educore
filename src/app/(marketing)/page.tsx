@@ -139,27 +139,27 @@ export default function MarketingHomePage() {
   return (
     <>
       {/* 1 & 2 & 3 & 4 — Hero: value proposition, primary/secondary CTA, Dashboard Frame */}
-      <Section tone="navy" className="pt-16 sm:pt-20">
-        <div className="flex flex-col gap-14">
-          <div className="max-w-3xl">
+      <Section tone="navy" className="pt-10 sm:pt-12 sm:pb-20">
+        <div className="flex flex-col gap-8 sm:gap-10">
+          <div className="max-w-4xl">
           <Eyebrow tone="light">School Management System for Kenya</Eyebrow>
-          <h1 className="mt-5 text-4xl font-extrabold leading-[1.1] tracking-tight sm:text-5xl lg:text-[3.25rem]">
+          <h1 className="mt-4 text-balance text-4xl font-extrabold leading-[1.1] tracking-tight sm:text-5xl">
             School management software built for Kenyan schools.
           </h1>
-          <p className="mt-6 max-w-lg text-lg text-white/70">
+          <p className="mt-4 max-w-3xl text-base text-white/70 sm:text-lg">
             EduCore connects admissions, academics, finance, attendance,
             communication, and school operations in one secure platform —
             with M-Pesa fee reconciliation and CBC grading built in from
             day one, not bolted on later.
           </p>
-          <div className="mt-9 flex flex-wrap items-center gap-4">
+          <div className="mt-6 flex flex-wrap items-center gap-3 sm:gap-4">
             <MarketingButton size="lg" asChild>
-              <Link href={TRIAL_HREF}>
-                {TRIAL_CTA_LABEL} <ArrowRight className="h-4 w-4" />
+              <Link href="/contact">
+                Book a Personalised Demo <ArrowRight className="h-4 w-4" />
               </Link>
             </MarketingButton>
             <MarketingButton size="lg" variant="outline-on-dark" asChild>
-              <Link href="/contact">Book a Demo</Link>
+              <Link href={TRIAL_HREF}>{TRIAL_CTA_LABEL}</Link>
             </MarketingButton>
             <MarketingButton size="lg" variant="ghost-on-dark" asChild>
               <Link
@@ -171,9 +171,8 @@ export default function MarketingHomePage() {
               </Link>
             </MarketingButton>
           </div>
-          <p className="mt-4 text-sm font-medium text-white/70">{TRIAL_TERMS}</p>
-          <p className="mt-6 text-xs font-medium uppercase tracking-[0.14em] text-white/50">
-            Built for modern schools &bull; Secure &bull; Cloud-based &bull; Scalable
+          <p className="mt-3 text-sm font-medium text-white/70">
+            Demo: tell us when suits you and we aim to reply within two hours. Trial: {TRIAL_TERMS}
           </p>
           </div>
 
@@ -184,6 +183,9 @@ export default function MarketingHomePage() {
             <DashboardFrame />
             <p className="mt-3 text-center text-xs text-white/50">
               Illustrative preview — not actual account data.
+            </p>
+            <p className="mt-5 text-center text-xs font-medium uppercase tracking-[0.14em] text-white/50">
+              Built for modern schools &bull; Secure &bull; Cloud-based &bull; Scalable
             </p>
           </div>
         </div>

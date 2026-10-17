@@ -41,6 +41,10 @@ const DESIGN_HEIGHT = 840; // 3:2 -- a laptop-screen screenshot
 // narrower, taller crop (no sidebar, 2x2 KPI cards, fee chart only) that is
 // scaled far less, so the headline figures stay legible.
 const COMPACT = { below: 640, width: 520, height: 760 };
+// Tablets (640-1023px): keep the full dashboard (KPIs, operations, charts)
+// but drop the 256px sidebar and lay out at 900px instead of 1280px, so the
+// scale is ~0.65-1.0 instead of ~0.45-0.75.
+const TABLET = { below: 1024, width: 900, height: 750 };
 
 const SCHOOL = "Northgate Academy";
 const TERM = "Term 3, 2026";
@@ -352,10 +356,11 @@ export function DashboardFrame({ className }: { className?: string }) {
           designWidth={DESIGN_WIDTH}
           designHeight={DESIGN_HEIGHT}
           compact={COMPACT}
+          tablet={TABLET}
         >
           <div className="flex h-full bg-background text-foreground" aria-hidden="true">
             {/* Sidebar -- every module, rendered from the real navGroups. */}
-            <aside className="flex w-64 shrink-0 flex-col overflow-hidden border-r border-sidebar-border bg-sidebar group-data-[compact=true]:hidden">
+            <aside className="flex w-64 shrink-0 flex-col overflow-hidden border-r border-sidebar-border bg-sidebar group-data-[compact=true]:hidden group-data-[tablet=true]:hidden">
               <div className="flex h-14 items-center border-b border-sidebar-border px-4 text-sm font-semibold text-sidebar-foreground">
                 {SCHOOL}
               </div>
@@ -433,7 +438,7 @@ export function DashboardFrame({ className }: { className?: string }) {
                           </span>
                         </div>
                         <p
-                          className="mt-1.5 whitespace-nowrap text-2xl font-semibold tracking-tight group-data-[compact=true]:text-xl"
+                          className="mt-1.5 whitespace-nowrap text-2xl font-semibold tracking-tight group-data-[compact=true]:text-xl group-data-[tablet=true]:text-xl"
                           data-numeric
                         >
                           {m.value}
@@ -474,8 +479,8 @@ export function DashboardFrame({ className }: { className?: string }) {
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-3 gap-3 group-data-[compact=true]:grid-cols-1">
-                    <div className="col-span-2 group-data-[compact=true]:col-span-1">
+                  <div className="grid grid-cols-3 gap-3 group-data-[compact=true]:grid-cols-1 group-data-[tablet=true]:grid-cols-1">
+                    <div className="col-span-2 group-data-[compact=true]:col-span-1 group-data-[tablet=true]:col-span-1">
                       <Panel title="Fee collection vs. invoiced" meta="KES thousands · this term">
                         <div className="mb-3 flex items-center gap-3 text-xs text-muted-foreground">
                           <span className="flex items-center gap-1.5">
@@ -500,7 +505,7 @@ export function DashboardFrame({ className }: { className?: string }) {
                         />
                       </Panel>
                     </div>
-                    <Panel title="Attendance rate by class" meta="Today" className="group-data-[compact=true]:hidden">
+                    <Panel title="Attendance rate by class" meta="Today" className="group-data-[compact=true]:hidden group-data-[tablet=true]:hidden">
                       <BarChart
                         max={100}
                         ticks={[0, 25, 50, 75, 100]}

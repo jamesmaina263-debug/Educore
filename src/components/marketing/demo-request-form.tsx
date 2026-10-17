@@ -3,7 +3,7 @@
 import { useActionState, useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { CheckCircle2 } from "lucide-react";
+import { CheckCircle2, Loader2 } from "lucide-react";
 import { sendGTMEvent } from "@next/third-parties/google";
 
 import { submitDemoRequest, type DemoRequestState } from "@/app/(marketing)/contact/actions";
@@ -11,86 +11,133 @@ import { saveDemoContactStep } from "@/app/(marketing)/contact/partial-lead-acti
 import { MarketingButton } from "@/components/marketing/button";
 import { getStoredAttribution } from "@/lib/attribution";
 import { ATTRIBUTION_KEYS } from "@/lib/marketing/attribution-fields";
+import {
+  CONTACT_METHODS,
+  ROLE_OPTIONS,
+  TIME_WINDOWS,
+  formatPreferredDate,
+  todayInNairobi,
+  type ContactMethod,
+  type RequestType,
+  type TimeWindow,
+} from "@/lib/marketing/demo-request";
 import { getStoredCtaSource } from "@/lib/cta-source";
 
 const initialState: DemoRequestState = { status: "idle" };
 
-const ROLE_OPTIONS = [
-  "School Owner",
-  "Principal",
-  "Administrator",
-  "Teacher",
-  "Finance",
-  "Other",
-];
+// Shown to visitors as the follow-up promise. Keep in sync with what the team can deliver.
+const FOLLOW_UP = "within two hours";
 
 // Step 1 fields, validated with the browser's own constraint validation before Continue saves
 // them. Their values are then carried into step 2 as hidden inputs (see the form below).
-const STEP_ONE_FIELDS = ["name", "school_name", "email", "phone"] as const;
-type ContactDetails = Record<(typeof STEP_ONE_FIELDS)[number], string>;
-const EMPTY_CONTACT: ContactDetails = { name: "", school_name: "", email: "", phone: "" };
+const STEP_ONE_FIELDS = ["name", "school_name", "phone", "email"] as const;
+type StepOneField = (typeof STEP_ONE_FIELDS)[number];
+type ContactDetails = Record<StepOneField, string>;
+const EMPTY_CONTACT: ContactDetails = { name: "", school_name: "", phone: "", email: "" };
+
+// Step 2 values are controlled so a server error never blanks what the visitor already chose.
+type Details = {
+  role: string;
+  contactMethod: ContactMethod;
+  requestType: RequestType;
+  preferredDate: string;
+  timeWindow: TimeWindow | "";
+  studentCount: string;
+  message: string;
+};
+const EMPTY_DETAILS: Details = {
+  role: "",
+  contactMethod: "whatsapp",
+  requestType: "callback",
+  preferredDate: "",
+  timeWindow: "",
+  studentCount: "",
+  message: "",
+};
 
 export function DemoRequestForm() {
   const [state, formAction, pending] = useActionState(submitDemoRequest, initialState);
   // Two-step form: step 1 (contact details) is saved server-side the moment the visitor
-  // presses Continue, so a visitor who never finishes step 2 is still a lead. Step 2 holds the
-  // rest of the request and the real submit. See partial-lead-actions.ts.
+  // presses Continue, so a visitor who never finishes step 2 is still a lead that the admin
+  // console shows under "incomplete". Step 2 holds the rest of the request and the real submit.
   const [step, setStep] = useState<1 | 2>(1);
   const [savingContact, startSavingContact] = useTransition();
   const [contactError, setContactError] = useState<string | null>(null);
   // Step-1 values that were saved. Kept in state (not read back from the DOM) because React 19
-  // resets uncontrolled form fields after a form action finishes -- if the final submit errors,
-  // anything only held in an input would be blanked. Step 2 re-submits them as hidden inputs,
-  // which a form reset does not clear.
+  // resets uncontrolled form fields after a form action finishes. Step 2 re-submits them as
+  // hidden inputs, which a form reset does not clear.
   const [contact, setContact] = useState<ContactDetails>(EMPTY_CONTACT);
+  const [details, setDetails] = useState<Details>(EMPTY_DETAILS);
+  // Nairobi calendar-day limits for the date picker. The picker only renders after the visitor
+  // chooses "specific day", so this never appears in server-rendered HTML.
+  const [dateBounds] = useState(() => {
+    const min = todayInNairobi();
+    const max = new Date(`${min}T00:00:00Z`);
+    max.setUTCDate(max.getUTCDate() + 60);
+    return { min, max: max.toISOString().slice(0, 10) };
+  });
   const formRef = useRef<HTMLFormElement>(null);
   const pathname = usePathname();
   const [renderedAt] = useState(() => Date.now());
-  // Read once at mount, not on every render -- whatever was captured
-  // earlier in this session by MarketingAnalytics (see
-  // src/lib/attribution.ts). Empty strings if nothing was captured (direct
-  // visit, no UTM params anywhere in this session) -- the server action
+  // Read once at mount -- whatever was captured earlier in this session by MarketingAnalytics
+  // (see src/lib/attribution.ts). Empty strings if nothing was captured; the server action
   // treats an empty string the same as "not provided".
   const [attribution] = useState(() => getStoredAttribution());
-  // Mirrors whatever handleRoleChange last pushed to dataLayer -- kept here
-  // too so the submit-time event below can read it directly as a React
-  // value instead of re-deriving it, without changing how GTM itself reads
-  // it (still the contact_form_role_selected -> DLV v2 path, see that
-  // handler's comment).
-  const [selectedRole, setSelectedRole] = useState("");
-  // Guards the "Demo Form Started" push below so it fires once per mount,
-  // not once per field -- see handleFormFocus.
+  // Guards the "Demo Form Started" push so it fires once per mount, not once per field.
   const [formStarted, setFormStarted] = useState(false);
+  // Latest values for the page-hide handler, which must not re-subscribe on every keystroke.
+  const live = useRef({ started: false, done: false, step: 1 as 1 | 2, abandonSent: false });
+  useEffect(() => {
+    live.current.started = formStarted;
+    live.current.done = state.status === "success";
+    live.current.step = step;
+  });
 
-  // Fires on first focus into any field in the form (React attaches
-  // "onFocus" at the root via a focusin listener since React 17, so this
-  // form-level handler catches focus on any descendant input/select/
-  // textarea without instrumenting each field separately). Matches the
-  // exact "Demo Form Started" goal name the admin analytics page's funnel
-  // row (src/app/(admin)/admin/analytics/page.tsx) already reads via GA4's
-  // getGoalBreakdown() -- no dashboard change needed, it was already
-  // looking for this name. "Started" = first focus rather than first blur,
-  // so it still captures a mobile visitor who focuses a field then
-  // abandons without ever blurring it. Needs a matching GTM container
-  // change (GA4 Event tag on a Custom Event trigger named "Demo Form
-  // Started") -- not committable from this repo.
+  // "Demo Form Started": first focus into any field (React delegates focus to the root, so this
+  // form-level handler catches every descendant). First focus rather than first blur, so a
+  // mobile visitor who focuses a field then leaves is still counted. Event name matches the
+  // goal the admin analytics funnel already reads.
   function handleFormFocus() {
     if (formStarted) return;
     setFormStarted(true);
     sendGTMEvent({ event: "Demo Form Started" });
   }
 
+  // Best-effort abandonment signal: the visitor started the form and hid/left the page without a
+  // confirmed submit. Fires at most once per page view and carries only the step number. Mobile
+  // browsers can suspend pages before a tag flushes, so treat this count as approximate; the
+  // incomplete-lead list in the admin console remains the source of truth for step-1 drop-offs.
+  useEffect(() => {
+    function onHide() {
+      const l = live.current;
+      if (document.visibilityState !== "hidden") return;
+      if (!l.started || l.done || l.abandonSent) return;
+      l.abandonSent = true;
+      sendGTMEvent({ event: "Demo Form Abandoned", form_step: l.step });
+    }
+    document.addEventListener("visibilitychange", onHide);
+    return () => document.removeEventListener("visibilitychange", onHide);
+  }, []);
+
   // Moves keyboard/screen-reader focus to the first step-2 field when the step changes.
   useEffect(() => {
     if (step === 2) document.getElementById("role")?.focus();
   }, [step]);
+
+  function reportValidationError(formStep: 1 | 2, field: string) {
+    // Field NAME only -- never the value, never the message text.
+    sendGTMEvent({ event: "Demo Form Validation Error", form_step: formStep, error_field: field });
+  }
 
   function handleContinue() {
     const form = formRef.current;
     if (!form) return;
     for (const field of STEP_ONE_FIELDS) {
       const el = form.elements.namedItem(field) as HTMLInputElement | null;
-      if (el && !el.reportValidity()) return;
+      if (el && !el.reportValidity()) {
+        reportValidationError(1, field);
+        return;
+      }
     }
     setContactError(null);
     const data = new FormData(form);
@@ -101,6 +148,7 @@ export function DemoRequestForm() {
       const result = await saveDemoContactStep(data);
       if (result.status === "error") {
         setContactError(result.message);
+        reportValidationError(1, "server");
         return;
       }
       // Needs a matching GTM container change to reach GA4 (like "Demo Form Started" above).
@@ -119,32 +167,47 @@ export function DemoRequestForm() {
     handleContinue();
   }
 
+  // A second submit while one is in flight (double tap, Enter held down) is dropped here; the
+  // server additionally ignores an identical phone + school within 10 minutes.
+  function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+    if (pending) event.preventDefault();
+  }
+
+  // A server-side validation failure on a step-1 field sends the visitor back to step 1.
+  // (Derived during render, React's documented pattern for resetting state when an input changes.)
+  const [seenState, setSeenState] = useState(state);
+  if (state !== seenState) {
+    setSeenState(state);
+    if (state.status === "error" && state.field && isStepOneField(state.field)) setStep(1);
+  }
+
+  // Report which field failed (name only, never the value) and move focus to it.
+  useEffect(() => {
+    if (state.status !== "error") return;
+    reportValidationError(2, state.field ?? "server");
+    const target = state.field;
+    if (target) {
+      // Wait a frame so a step change has rendered the target field.
+      requestAnimationFrame(() => document.getElementById(fieldId(target))?.focus());
+    }
+  }, [state]);
+
   useEffect(() => {
     if (state.status === "success") {
-      // Matches the exact "Demo Request Submitted" goal name the admin
-      // analytics page's funnel row already reads (falling back to the
-      // real marketing_demo_requests count if this is absent -- see that
-      // page's demoFormSubmitted). Sent alongside, not instead of, the
-      // existing contact_form_submit event below: that one is already
-      // wired to GTM's contact_sales/generate_lead conversion tags with
-      // its full attribution payload, and this repo has no way to confirm
-      // whether renaming it would break an existing GTM trigger, so it's
-      // left untouched. Needs the same GTM container change as above.
+      // "Demo Request Submitted": exact goal name the admin analytics funnel already reads.
+      // Sent alongside, not instead of, contact_form_submit below, which is already wired to
+      // GTM's contact_sales/generate_lead tags.
       sendGTMEvent({ event: "Demo Request Submitted" });
-      // Dedicated conversion event: contact_form_context (above) fires on
-      // mount, before the visitor has picked a role or submitted anything,
-      // so it can't carry contact_form_role or represent an actual
-      // completed submission -- it's context, not a conversion. This fires
-      // exactly once, only on a confirmed successful submission, with the
-      // full payload GA4's contact_sales / generate_lead tags should
-      // actually key off. cta_* re-read from storage (not from the
-      // contact_form_context push above) since that's the same
-      // source-of-truth the earlier push used and it hasn't changed.
+      // Fires exactly once, only on a confirmed successful submission. Non-content only:
+      // identifiers for the page/campaign/CTA and two non-identifying form choices -- never
+      // name, school, phone, email or message.
       const cta = getStoredCtaSource();
       sendGTMEvent({
         event: "contact_form_submit",
         page_path: window.location.pathname,
-        contact_form_role: selectedRole,
+        contact_form_role: details.role,
+        contact_form_preferred_method: details.contactMethod,
+        contact_form_request_type: details.requestType,
         cta_location: cta.location ?? "",
         cta_label: cta.label ?? "",
         cta_tier: cta.tier ?? "",
@@ -156,15 +219,8 @@ export function DemoRequestForm() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.status]);
 
-  // Pushes UTM attribution + on-site CTA context into dataLayer once, at
-  // mount -- not read live off the DOM at submit time, so this can't hit
-  // the same undefined-at-submit race the role field had (see the
-  // "JS - Contact Form Role" fix below). Values are already known the
-  // instant this component renders (attribution captured earlier this
-  // session; CTA context captured on whichever /contact link was just
-  // clicked, see src/lib/cta-source.ts) -- pushing immediately just makes
-  // them available to GTM well before any eventual submit. Non-content
-  // only: page/campaign/CTA identifiers, never name/email/phone/message.
+  // Pushes UTM attribution + on-site CTA context into dataLayer once, at mount, so GTM reads
+  // already-present values at submit time. Non-content only.
   useEffect(() => {
     const cta = getStoredCtaSource();
     sendGTMEvent({
@@ -176,128 +232,151 @@ export function DemoRequestForm() {
       cta_label: cta.label ?? "",
       cta_tier: cta.tier ?? "",
     });
-    // attribution is captured once via useState(() => ...) and never
-    // changes for the life of this component -- safe as a dep, won't
-    // cause a second push.
   }, [attribution]);
 
-  // GTM's "JS - Contact Form Role" variable was reading document.getElementById
-  // ("role") live at submit time, racing the Server Action's success-state
-  // swap (which unmounts the form, including #role, the instant the request
-  // resolves) -- resolved to undefined in every Preview-mode test. Fix:
-  // capture the role the moment it's chosen and push it straight into
-  // dataLayer, so GTM's variable/trigger reads an already-present value at
-  // submit time instead of reading a DOM node that may already be gone.
-  // Non-content only -- the role selection itself, never name/email/phone/
-  // message. GTM-side still needs a matching change: point the
-  // contact_sales / generate_lead role condition at a Data Layer Variable
-  // (Version 2) named "contact_form_role" instead of the old DOM-reading
-  // Custom JS variable.
+  function setDetail<K extends keyof Details>(key: K, value: Details[K]) {
+    setDetails((d) => ({ ...d, [key]: value }));
+  }
+
   function handleRoleChange(event: React.ChangeEvent<HTMLSelectElement>) {
-    setSelectedRole(event.target.value);
+    setDetail("role", event.target.value);
+    // Pushed at selection time so GTM never reads a DOM node that has already unmounted.
     sendGTMEvent({ event: "contact_form_role_selected", contact_form_role: event.target.value });
   }
 
   if (state.status === "success") {
+    const method = CONTACT_METHODS.find((m) => m.value === details.contactMethod)?.label ?? "";
+    const scheduled =
+      details.requestType === "scheduled" && details.preferredDate && details.timeWindow;
+    const windowLabel = TIME_WINDOWS.find((w) => w.value === details.timeWindow)?.label;
     return (
       <div
         role="status"
-        className="flex flex-col items-center rounded-xl border border-marketing-navy-950/10 bg-marketing-canvas px-8 py-12 text-center"
+        className="flex flex-col items-center rounded-xl border border-marketing-navy-950/10 bg-marketing-canvas px-6 py-10 text-center sm:px-8 sm:py-12"
       >
-        <CheckCircle2 className="h-10 w-10 text-marketing-blue" strokeWidth={1.5} />
-        <p className="mt-4 text-lg font-semibold text-marketing-navy-950">
-          Thanks — we&apos;ve got it.
+        <CheckCircle2 className="h-10 w-10 text-marketing-blue" strokeWidth={1.5} aria-hidden="true" />
+        <p className="mt-4 text-lg font-semibold text-marketing-navy-950">Request received</p>
+        <p className="mt-2 max-w-sm text-sm leading-relaxed text-marketing-navy-900/75">
+          We aim to contact you {FOLLOW_UP} by {method.toLowerCase()} to{" "}
+          {scheduled ? "confirm a time" : "arrange your demo"}.
         </p>
-        <p className="mt-2 max-w-sm text-sm leading-relaxed text-marketing-navy-900/70">
-          Someone from EduCore will get back to you shortly to set up a time.
+        {scheduled && (
+          <p className="mt-3 max-w-sm rounded-md bg-white px-3 py-2 text-sm text-marketing-navy-900/80">
+            You asked for <strong>{formatPreferredDate(details.preferredDate)}</strong>,{" "}
+            {windowLabel}. This is a preference, not a confirmed booking — we&apos;ll confirm it or
+            suggest the nearest alternative.
+          </p>
+        )}
+        <p className="mt-4 text-xs text-marketing-navy-900/70">
+          Need us sooner?{" "}
+          <a
+            href="https://wa.me/254702904562?text=Hi%2C%20I%20just%20requested%20an%20EduCore%20demo."
+            className="font-medium text-marketing-blue underline underline-offset-2"
+          >
+            WhatsApp +254 702 904562
+          </a>
         </p>
       </div>
     );
   }
 
+  const errorField = state.status === "error" ? state.field : undefined;
+
   return (
     <form
       ref={formRef}
       action={formAction}
+      onSubmit={handleSubmit}
       onFocus={handleFormFocus}
+      aria-busy={pending}
       className="flex flex-col gap-5"
     >
       {/* Bot mitigation, not a visible/functional field for real users:
-          - honeypot ("company_website") is hidden from sighted users via CSS
-            and never announced by a screen reader (aria-hidden + tabIndex -1
-            + hidden from the accessibility tree), so a human never fills it,
-            but most naive form-filling bots do.
-          - "rendered_at" lets the server reject submissions completed faster
-            than any human could plausibly fill this form (see actions.ts).
-          Neither collects anything from real visitors or touches product data. */}
+          - honeypot ("company_website") is hidden from sighted users via CSS and never announced
+            by a screen reader (aria-hidden + tabIndex -1), so a human never fills it, but most
+            naive form-filling bots do.
+          - "rendered_at" lets the server reject submissions completed faster than any human
+            could plausibly fill this form (see actions.ts). */}
       <div aria-hidden="true" className="absolute left-[-9999px] top-auto h-px w-px overflow-hidden">
         <label htmlFor="company_website">Company website</label>
-        <input
-          id="company_website"
-          name="company_website"
-          type="text"
-          tabIndex={-1}
-          autoComplete="off"
-        />
+        <input id="company_website" name="company_website" type="text" tabIndex={-1} autoComplete="off" />
       </div>
       <input type="hidden" name="rendered_at" value={renderedAt} />
       <input type="hidden" name="source_page" value={pathname} />
-      {/* Marketing attribution, forwarded silently -- see src/lib/attribution.ts.
-          Never shown or asked of the visitor; empty/absent if nothing was
-          captured this session. */}
+      {/* Marketing attribution, forwarded silently -- see src/lib/attribution.ts. */}
       {ATTRIBUTION_KEYS.map((key) => (
         <input key={key} type="hidden" name={key} value={attribution[key] ?? ""} />
       ))}
 
-      <p className="text-xs font-medium uppercase tracking-wide text-marketing-navy-900/60">
-        Step {step} of 2 — {step === 1 ? "Your contact details" : "About your school"}
+      <p className="text-xs font-medium uppercase tracking-wide text-marketing-navy-900/70">
+        Step {step} of 2 — {step === 1 ? "Your contact details" : "Your demo preferences"}
       </p>
 
       {step === 1 && (
         <div className="flex flex-col gap-5" onKeyDown={handleStepOneKeyDown}>
           <div className="grid gap-5 sm:grid-cols-2">
-            <Field label="Your name" htmlFor="name">
+            <Field label="Your name" htmlFor="name" invalid={errorField === "name"}>
               <input
                 id="name"
                 name="name"
                 type="text"
                 required
+                maxLength={120}
                 defaultValue={contact.name}
                 autoComplete="name"
+                aria-invalid={errorField === "name" || undefined}
                 className={inputClass}
               />
             </Field>
-            <Field label="School name" htmlFor="school_name">
+            <Field label="School name" htmlFor="school_name" invalid={errorField === "school_name"}>
               <input
                 id="school_name"
                 name="school_name"
                 type="text"
                 required
+                maxLength={200}
                 defaultValue={contact.school_name}
+                autoComplete="organization"
+                aria-invalid={errorField === "school_name" || undefined}
                 className={inputClass}
               />
             </Field>
           </div>
 
           <div className="grid gap-5 sm:grid-cols-2">
-            <Field label="Email" htmlFor="email">
-              <input
-                id="email"
-                name="email"
-                type="email"
-                required
-                defaultValue={contact.email}
-                autoComplete="email"
-                className={inputClass}
-              />
-            </Field>
-            <Field label="Phone" htmlFor="phone" optional>
+            <Field
+              label="Phone (WhatsApp or calls)"
+              htmlFor="phone"
+              hint="e.g. 0712 345 678"
+              invalid={errorField === "phone"}
+            >
               <input
                 id="phone"
                 name="phone"
                 type="tel"
+                inputMode="tel"
+                required
+                minLength={9}
+                maxLength={20}
+                pattern="[+0-9\s().\-]{9,20}"
+                title="Enter a phone number, e.g. 0712 345 678"
                 defaultValue={contact.phone}
                 autoComplete="tel"
+                aria-invalid={errorField === "phone" || undefined}
+                className={inputClass}
+              />
+            </Field>
+            <Field label="Email" htmlFor="email" invalid={errorField === "email"}>
+              <input
+                id="email"
+                name="email"
+                type="email"
+                inputMode="email"
+                required
+                maxLength={254}
+                defaultValue={contact.email}
+                autoComplete="email"
+                aria-invalid={errorField === "email" || undefined}
                 className={inputClass}
               />
             </Field>
@@ -317,7 +396,13 @@ export function DemoRequestForm() {
               disabled={savingContact}
               className="w-full sm:w-auto sm:self-start"
             >
-              {savingContact ? "Saving..." : "Continue"}
+              {savingContact ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> Saving...
+                </>
+              ) : (
+                "Continue"
+              )}
             </MarketingButton>
             {/* Disclosure for saving step 1 before the final submit -- keep in sync with the
                 "What we collect" section of /privacy. */}
@@ -340,53 +425,158 @@ export function DemoRequestForm() {
           ))}
           <div className="flex flex-wrap items-center justify-between gap-2 rounded-md bg-marketing-canvas px-3 py-2 text-sm text-marketing-navy-900/80">
             <span>
-              Booking for <strong className="font-semibold">{contact.name}</strong> at{" "}
+              Demo for <strong className="font-semibold">{contact.name}</strong> at{" "}
               <strong className="font-semibold">{contact.school_name}</strong>
             </span>
             <button
               type="button"
               onClick={() => setStep(1)}
-              className="text-marketing-blue underline-offset-2 hover:underline"
+              className="min-h-11 px-2 text-marketing-blue underline-offset-2 hover:underline"
             >
               Edit details
             </button>
           </div>
 
-          <div className="grid gap-5 sm:grid-cols-2">
-            <Field label="Your role" htmlFor="role">
-              <select
-                id="role"
-                name="role"
-                required
-                defaultValue=""
-                onChange={handleRoleChange}
-                className={inputClass}
-              >
-                <option value="" disabled>
-                  Select a role
+          <Field label="Your role" htmlFor="role" invalid={errorField === "role"}>
+            <select
+              id="role"
+              name="role"
+              required
+              value={details.role}
+              onChange={handleRoleChange}
+              aria-invalid={errorField === "role" || undefined}
+              className={inputClass}
+            >
+              <option value="" disabled>
+                Select a role
+              </option>
+              {ROLE_OPTIONS.map((r) => (
+                <option key={r} value={r}>
+                  {r}
                 </option>
-                {ROLE_OPTIONS.map((r) => (
-                  <option key={r} value={r}>
-                    {r}
-                  </option>
-                ))}
-              </select>
-            </Field>
-            <Field label="Roughly how many students?" htmlFor="student_count" optional>
-              <input
-                id="student_count"
-                name="student_count"
-                type="number"
-                min={0}
-                inputMode="numeric"
-                className={inputClass}
-              />
-            </Field>
-          </div>
-
-          <Field label="Anything specific you'd like us to cover?" htmlFor="message" optional>
-            <textarea id="message" name="message" rows={4} className={inputClass} />
+              ))}
+            </select>
           </Field>
+
+          <fieldset className="flex flex-col gap-2">
+            <legend className="text-sm font-medium text-marketing-navy-950">
+              How should we reach you?
+            </legend>
+            <div className="flex flex-wrap gap-2">
+              {CONTACT_METHODS.map((m) => (
+                <Choice
+                  key={m.value}
+                  name="contact_method"
+                  value={m.value}
+                  checked={details.contactMethod === m.value}
+                  onChange={() => setDetail("contactMethod", m.value)}
+                >
+                  {m.label}
+                </Choice>
+              ))}
+            </div>
+          </fieldset>
+
+          <fieldset className="flex flex-col gap-2">
+            <legend className="text-sm font-medium text-marketing-navy-950">
+              When would you like your demo?
+            </legend>
+            <div className="flex flex-wrap gap-2">
+              <Choice
+                name="request_type"
+                value="callback"
+                checked={details.requestType === "callback"}
+                onChange={() => setDetail("requestType", "callback")}
+              >
+                Call me back as soon as possible
+              </Choice>
+              <Choice
+                name="request_type"
+                value="scheduled"
+                checked={details.requestType === "scheduled"}
+                onChange={() => setDetail("requestType", "scheduled")}
+              >
+                I&apos;d prefer a specific day
+              </Choice>
+            </div>
+            <p className="text-xs leading-relaxed text-marketing-navy-900/70">
+              {details.requestType === "callback"
+                ? `We aim to contact you ${FOLLOW_UP} to agree a time.`
+                : "Tell us what suits you. It isn't booked until we confirm it with you — we'll suggest the nearest alternative if that slot is taken."}
+            </p>
+          </fieldset>
+
+          {details.requestType === "scheduled" && (
+            <div className="grid gap-5 sm:grid-cols-2">
+              <Field label="Preferred day" htmlFor="preferred_date" invalid={errorField === "preferred_date"}>
+                <input
+                  id="preferred_date"
+                  name="preferred_date"
+                  type="date"
+                  required
+                  min={dateBounds.min}
+                  max={dateBounds.max}
+                  value={details.preferredDate}
+                  onChange={(e) => setDetail("preferredDate", e.target.value)}
+                  aria-invalid={errorField === "preferred_date" || undefined}
+                  className={inputClass}
+                />
+              </Field>
+              <Field label="Preferred time (EAT)" htmlFor="time_window" invalid={errorField === "time_window"}>
+                <select
+                  id="time_window"
+                  name="time_window"
+                  required
+                  value={details.timeWindow}
+                  onChange={(e) => setDetail("timeWindow", e.target.value as TimeWindow)}
+                  aria-invalid={errorField === "time_window" || undefined}
+                  className={inputClass}
+                >
+                  <option value="" disabled>
+                    Choose a time
+                  </option>
+                  {TIME_WINDOWS.map((w) => (
+                    <option key={w.value} value={w.value}>
+                      {w.label}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+            </div>
+          )}
+
+          <details className="rounded-md border border-marketing-navy-950/10 px-3 py-2">
+            <summary className="min-h-11 cursor-pointer py-2 text-sm font-medium text-marketing-navy-950">
+              Anything else we should know? (optional)
+            </summary>
+            <div className="mt-2 flex flex-col gap-5 pb-2">
+              <Field label="Roughly how many students?" htmlFor="student_count" optional invalid={errorField === "student_count"}>
+                <input
+                  id="student_count"
+                  name="student_count"
+                  type="number"
+                  min={0}
+                  max={100000}
+                  step={1}
+                  inputMode="numeric"
+                  value={details.studentCount}
+                  onChange={(e) => setDetail("studentCount", e.target.value)}
+                  className={inputClass}
+                />
+              </Field>
+              <Field label="Anything specific you'd like us to cover?" htmlFor="message" optional>
+                <textarea
+                  id="message"
+                  name="message"
+                  rows={3}
+                  maxLength={1500}
+                  value={details.message}
+                  onChange={(e) => setDetail("message", e.target.value)}
+                  className={inputClass}
+                />
+              </Field>
+            </div>
+          </details>
         </>
       )}
 
@@ -397,37 +587,98 @@ export function DemoRequestForm() {
       )}
 
       {step === 2 && (
-        <MarketingButton type="submit" size="lg" disabled={pending} className="w-full sm:w-auto">
-          {pending ? "Sending..." : "Book a Demo"}
-        </MarketingButton>
+        <div className="flex flex-col gap-2">
+          <MarketingButton type="submit" size="lg" disabled={pending} className="w-full sm:w-auto sm:self-start">
+            {pending ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> Sending your request...
+              </>
+            ) : (
+              "Request my demo"
+            )}
+          </MarketingButton>
+          <p className="text-xs leading-relaxed text-marketing-navy-900/70">
+            This sends a request — your demo isn&apos;t confirmed until we get back to you, which we
+            aim to do {FOLLOW_UP}. No obligation, no payment.
+          </p>
+        </div>
       )}
     </form>
   );
 }
 
+function isStepOneField(field: string): field is StepOneField {
+  return (STEP_ONE_FIELDS as readonly string[]).includes(field);
+}
+
+function fieldId(field: string): string {
+  return field === "contact_method" || field === "request_type" ? "role" : field;
+}
+
+// 16px text stops iOS Safari zooming the page when a field is focused, and min-h-11 (44px)
+// meets the recommended touch-target size.
 const inputClass =
-  "w-full rounded-md border border-marketing-navy-950/15 bg-white px-3 py-2 text-sm text-marketing-navy-950 shadow-sm placeholder:text-marketing-navy-900/60 focus:outline-none focus:ring-2 focus:ring-marketing-blue/40 focus:border-marketing-blue";
+  "min-h-11 w-full rounded-md border border-marketing-navy-950/20 bg-white px-3 py-2 text-base text-marketing-navy-950 shadow-sm placeholder:text-marketing-navy-900/60 focus:outline-none focus:ring-2 focus:ring-marketing-blue/40 focus:border-marketing-blue aria-[invalid=true]:border-destructive";
 
 function Field({
   label,
   htmlFor,
   optional,
+  hint,
+  invalid,
   children,
 }: {
   label: string;
   htmlFor: string;
   optional?: boolean;
+  hint?: string;
+  invalid?: boolean;
   children: React.ReactNode;
 }) {
   return (
-    <div className="flex flex-col gap-1.5">
+    <div className="flex flex-col gap-1.5" data-invalid={invalid || undefined}>
       <label htmlFor={htmlFor} className="text-sm font-medium text-marketing-navy-950">
         {label}
-        {optional && (
-          <span className="ml-1 font-normal text-marketing-navy-900/60">(optional)</span>
-        )}
+        {optional && <span className="ml-1 font-normal text-marketing-navy-900/70">(optional)</span>}
       </label>
       {children}
+      {hint && <p className="text-xs text-marketing-navy-900/70">{hint}</p>}
     </div>
+  );
+}
+
+// A radio styled as a large tappable pill. The input is visually hidden but stays focusable and
+// announced by screen readers; the label carries the 44px touch target.
+function Choice({
+  name,
+  value,
+  checked,
+  onChange,
+  children,
+}: {
+  name: string;
+  value: string;
+  checked: boolean;
+  onChange: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <label
+      className={`flex min-h-11 cursor-pointer items-center rounded-md border px-4 py-2 text-sm font-medium transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-marketing-blue/50 ${
+        checked
+          ? "border-marketing-blue bg-marketing-blue/5 text-marketing-navy-950"
+          : "border-marketing-navy-950/20 bg-white text-marketing-navy-900/80 hover:border-marketing-navy-950/40"
+      }`}
+    >
+      <input
+        type="radio"
+        name={name}
+        value={value}
+        checked={checked}
+        onChange={onChange}
+        className="sr-only"
+      />
+      {children}
+    </label>
   );
 }

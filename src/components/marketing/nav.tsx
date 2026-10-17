@@ -40,10 +40,10 @@ export function MarketingNav() {
 
         <div className="flex items-center gap-3">
           <Link
-            href="/contact"
-            className="hidden text-sm font-medium text-white/80 hover:text-white lg:inline"
+            href={TRIAL_HREF}
+            className="hidden text-sm font-medium text-white/80 hover:text-white md:inline"
           >
-            Book a Demo
+            {TRIAL_CTA_SHORT}
           </Link>
           <Link
             href="/login"
@@ -51,8 +51,10 @@ export function MarketingNav() {
           >
             Sign in
           </Link>
-          <MarketingButton asChild size="sm">
-            <Link href={TRIAL_HREF}>{TRIAL_CTA_SHORT}</Link>
+          {/* Primary conversion path, visible at every screen size (on phones the rest of the
+              header collapses into the menu). */}
+          <MarketingButton asChild size="sm" className="h-11 sm:h-9">
+            <Link href="/contact">Book a Demo</Link>
           </MarketingButton>
           <MobileNav />
         </div>

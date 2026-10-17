@@ -1,8 +1,17 @@
-import type { NextRequest } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
 import { updateSession } from "@/lib/supabase/middleware";
+import { rootAuthFallback } from "@/lib/auth/reset-link";
 import { resolveSlugRouting, applySlugRouting } from "@/lib/school-slug-routing";
 
 export async function proxy(request: NextRequest) {
+  // Safety net: a password-reset link that still lands on "/" (Supabase appends ?code= or
+  // ?error_code= there when redirect_to isn't honoured) is forwarded to the real handler instead
+  // of dead-ending on the marketing home page. Matches only "/" with those params.
+  const authFallback = rootAuthFallback(request.nextUrl);
+  if (authFallback) {
+    return NextResponse.redirect(new URL(authFallback, request.url));
+  }
+
   const { response: sessionResponse, isAuthenticated } = await updateSession(request);
 
   // updateSession already decided to redirect (protected route, no session)

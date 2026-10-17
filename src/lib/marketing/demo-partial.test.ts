@@ -16,10 +16,11 @@ const valid = {
   name: "Jane Wanjiru",
   school_name: "Sunrise Academy",
   email: "jane@sunrise.ac.ke",
+  phone: "0712 345 678",
 };
 
 describe("parseDemoContactStep", () => {
-  it("accepts the three required fields and treats phone as optional", () => {
+  it("accepts the four required fields and normalises the phone number", () => {
     const res = parseDemoContactStep(form(valid));
     expect(res).toEqual({
       ok: true,
@@ -27,17 +28,17 @@ describe("parseDemoContactStep", () => {
         name: "Jane Wanjiru",
         schoolName: "Sunrise Academy",
         email: "jane@sunrise.ac.ke",
-        phone: null,
+        phone: "0712345678",
       },
     });
   });
 
-  it("trims values and keeps a provided phone number", () => {
+  it("trims values and normalises an international phone number", () => {
     const res = parseDemoContactStep(
       form({ ...valid, name: "  Jane  ", phone: " +254 700 000 000 " }),
     );
     expect(res.ok && res.value.name).toBe("Jane");
-    expect(res.ok && res.value.phone).toBe("+254 700 000 000");
+    expect(res.ok && res.value.phone).toBe("+254700000000");
   });
 
   it("lowercases the email so it can be matched exactly later", () => {
@@ -45,10 +46,18 @@ describe("parseDemoContactStep", () => {
     expect(res.ok && res.value.email).toBe("jane@sunrise.ac.ke");
   });
 
-  it.each(["name", "school_name", "email"])("rejects a missing %s", (field) => {
+  it.each(["name", "school_name", "email", "phone"])("rejects a missing %s", (field) => {
     const res = parseDemoContactStep(form({ ...valid, [field]: "   " }));
     expect(res.ok).toBe(false);
   });
+
+  it.each(["abc", "12345", "0712-ABC-678", "+".repeat(10), "1".repeat(16)])(
+    "rejects an implausible phone number %s",
+    (phone) => {
+      const res = parseDemoContactStep(form({ ...valid, phone }));
+      expect(res.ok).toBe(false);
+    },
+  );
 
   it("rejects a malformed email", () => {
     const res = parseDemoContactStep(form({ ...valid, email: "not-an-email" }));
@@ -57,11 +66,10 @@ describe("parseDemoContactStep", () => {
 
   it("caps oversized values instead of storing them whole", () => {
     const res = parseDemoContactStep(
-      form({ ...valid, name: "n".repeat(500), school_name: "s".repeat(500), phone: "1".repeat(500) }),
+      form({ ...valid, name: "n".repeat(500), school_name: "s".repeat(500) }),
     );
     expect(res.ok && res.value.name.length).toBe(120);
     expect(res.ok && res.value.schoolName.length).toBe(200);
-    expect(res.ok && res.value.phone?.length).toBe(40);
   });
 
   it("rejects an email longer than the RFC limit", () => {
