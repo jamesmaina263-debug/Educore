@@ -475,11 +475,18 @@ export async function getRealtimeVisitorCount(): Promise<number | null> {
         next: { revalidate: 30 },
       }),
     );
-    if (!res.ok) return null;
+    if (!res.ok) {
+      console.error(`GA4 runRealtimeReport failed: ${res.status} ${await res.text()}`);
+      return null;
+    }
     const data = (await res.json()) as Ga4ReportResponse;
     const value = data.rows?.[0]?.metricValues?.[0]?.value ?? data.totals?.[0]?.metricValues?.[0]?.value;
-    return value !== undefined ? Number(value) : null;
-  } catch {
+    // GA4's Realtime API omits `rows` entirely when nobody has been active in the window, so a
+    // successful response with no rows is a real zero. Returning null here hid the whole
+    // "active visitors" line whenever the site was quiet, indistinguishable from a failure.
+    return value !== undefined ? Number(value) : 0;
+  } catch (err) {
+    console.error("GA4 runRealtimeReport threw", err);
     return null;
   }
 }

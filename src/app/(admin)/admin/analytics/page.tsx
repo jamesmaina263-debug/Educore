@@ -348,7 +348,7 @@ export default async function AdminAnalyticsPage({
 
       {gaConfigured && realtimeVisitors !== null && (
         <p className="text-xs text-muted-foreground">
-          {realtimeVisitors} visitor{realtimeVisitors === 1 ? "" : "s"} active right now.
+          {realtimeVisitors} visitor{realtimeVisitors === 1 ? "" : "s"} active in the last 30 minutes.
         </p>
       )}
 
