@@ -2,17 +2,20 @@ export function BreakdownList({
   title,
   rows,
   valueLabel = "Visitors",
+  emptyMessage = "No data for this period.",
 }: {
   title: string;
   rows: { label: string; value: number }[];
   valueLabel?: string;
+  /** Shown when there are no rows. Lets the page say "still processing" instead of implying nothing happened. */
+  emptyMessage?: string;
 }) {
   const max = Math.max(1, ...rows.map((r) => r.value));
   return (
     <div className="panel p-4">
       <p className="mb-3 text-sm font-medium">{title}</p>
       {rows.length === 0 ? (
-        <p className="text-xs text-muted-foreground">No data for this period.</p>
+        <p className="text-xs text-muted-foreground">{emptyMessage}</p>
       ) : (
         <ul className="flex flex-col gap-2">
           {rows.map((row) => (

@@ -143,6 +143,31 @@ export async function cancelInvoiceAction(invoiceId: string, reason: string): Pr
   return { success: true };
 }
 
+/**
+ * Hard-deletes an invoice with its payments and history. Platform super admin only (re-checked in SQL).
+ * The SQL function returns a snapshot of what was removed; it is written to the admin activity log
+ * because that log is all that remains of the invoice afterwards.
+ */
+export async function deleteInvoicePermanentlyAction(
+  invoiceId: string,
+  confirmNumber: string,
+  reason: string,
+): Promise<ActionResult<{ invoiceNumber: string }>> {
+  if (!clean(confirmNumber)) return { error: "Type the invoice number to confirm." };
+  const supabase = await ctx();
+  const { data, error } = await supabase.rpc("delete_platform_invoice_permanently", {
+    p_invoice_id: invoiceId,
+    p_confirm_number: clean(confirmNumber),
+    p_reason: clean(reason),
+  });
+  if (error) return { error: error.message };
+  const snapshot = (data ?? {}) as Record<string, unknown>;
+  void logAdminAction(supabase, "delete_platform_invoice_permanently", { invoice_id: invoiceId, ...snapshot });
+  refresh();
+  revalidatePath("/settings/billing");
+  return { success: true, invoiceNumber: String(snapshot.invoice_number ?? "") };
+}
+
 export async function adjustInvoiceAction(invoiceId: string, discountKes: number, reason: string): Promise<ActionResult> {
   if (!Number.isFinite(discountKes) || discountKes < 0) return { error: "Enter a discount of zero or more." };
   const supabase = await ctx();

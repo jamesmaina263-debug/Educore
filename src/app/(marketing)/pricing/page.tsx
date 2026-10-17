@@ -9,6 +9,7 @@ import { Reveal } from "@/components/marketing/reveal";
 import { PricingCard } from "@/components/marketing/pricing-card";
 import { BreadcrumbJsonLd, HOME_CRUMB } from "@/components/marketing/breadcrumb-json-ld";
 import { TRIAL_CTA_LABEL, TRIAL_CTA_SHORT, TRIAL_HREF } from "@/lib/marketing/trial";
+import { RelatedGuides } from "@/components/marketing/related-guides";
 
 const TITLE = "School Management System Pricing Kenya — EduCore";
 const DESCRIPTION =
@@ -212,6 +213,7 @@ export default function PricingPage() {
           </div>
         </Reveal>
       </Section>
+      <RelatedGuides page="/pricing" />
     </>
   );
 }

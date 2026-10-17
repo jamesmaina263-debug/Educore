@@ -7,6 +7,7 @@ import { Eyebrow } from "@/components/marketing/eyebrow";
 import { Section } from "@/components/marketing/section";
 import { Reveal } from "@/components/marketing/reveal";
 import { BreadcrumbJsonLd, HOME_CRUMB } from "@/components/marketing/breadcrumb-json-ld";
+import { RelatedGuides } from "@/components/marketing/related-guides";
 
 const TITLE = "Security & Data Privacy — EduCore Kenya";
 const DESCRIPTION = "How EduCore protects student, parent, and financial data: per-school isolation, role-based permissions, an audit log, server-side M-Pesa checks.";
@@ -162,6 +163,7 @@ export default function SecurityPage() {
           </MarketingButton>
         </Reveal>
       </Section>
+      <RelatedGuides page="/security" />
     </>
   );
 }

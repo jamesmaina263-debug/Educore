@@ -9,6 +9,7 @@ import { Reveal } from "@/components/marketing/reveal";
 import { BreadcrumbJsonLd, HOME_CRUMB } from "@/components/marketing/breadcrumb-json-ld";
 import { ArticleJsonLd } from "@/components/marketing/article-json-ld";
 import { BlogByline } from "@/components/marketing/blog-byline";
+import { RelatedGuides } from "@/components/marketing/related-guides";
 
 const SLUG = "kicd-curriculum-design-strands-sub-strands-explained";
 const PATH = `/blog/${SLUG}`;
@@ -335,6 +336,7 @@ export default function KicdCurriculumDesignPost() {
           </div>
         </Reveal>
       </Section>
+      <RelatedGuides slug="kicd-curriculum-design-strands-sub-strands-explained" />
     </>
   );
 }

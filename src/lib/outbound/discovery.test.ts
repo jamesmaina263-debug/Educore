@@ -1,0 +1,82 @@
+import { describe, expect, it } from "vitest";
+import {
+  KENYA_COUNTIES,
+  buildOverpassQuery,
+  classifyLevel,
+  discoverySourceNote,
+  isKenyaCounty,
+  parseOverpassResponse,
+} from "./discovery";
+
+describe("buildOverpassQuery", () => {
+  it("targets schools and kindergartens in the county by default", () => {
+    const q = buildOverpassQuery("Nakuru", "all");
+    expect(q).toContain("^(school|kindergarten)$");
+    expect(q).toContain('"name"~"^Nakuru( City)?( County)?$"');
+    expect(q).toContain("out center tags");
+  });
+  it("can target kindergartens only", () => {
+    expect(buildOverpassQuery("Nairobi", "kindergartens")).toContain("^(kindergarten)$");
+  });
+  it("makes hyphens, spaces and apostrophes wildcard-tolerant", () => {
+    expect(buildOverpassQuery("Elgeyo-Marakwet", "all")).toContain("^Elgeyo.Marakwet(");
+    expect(buildOverpassQuery("Murang'a", "all")).toContain("^Murang.a(");
+  });
+});
+
+describe("county list", () => {
+  it("has all 47 counties and rejects anything else", () => {
+    expect(KENYA_COUNTIES).toHaveLength(47);
+    expect(isKenyaCounty("Mombasa")).toBe(true);
+    expect(isKenyaCounty('Nakuru"];out;')).toBe(false);
+  });
+});
+
+describe("classifyLevel", () => {
+  it("prefers amenity, then isced, then name", () => {
+    expect(classifyLevel({ amenity: "kindergarten" }, "Sunshine")).toBe("kindergarten");
+    expect(classifyLevel({ amenity: "school", "isced:level": "1" }, "Sunshine")).toBe("primary");
+    expect(classifyLevel({ amenity: "school", "isced:level": "2;3" }, "Sunshine")).toBe("secondary");
+    expect(classifyLevel({ amenity: "school" }, "Little Stars Nursery School")).toBe("kindergarten");
+    expect(classifyLevel({ amenity: "school" }, "Moi High School")).toBe("secondary");
+    expect(classifyLevel({ amenity: "school" }, "Moi Academy")).toBe("other");
+  });
+});
+
+describe("parseOverpassResponse", () => {
+  const data = {
+    elements: [
+      { type: "node", id: 1, tags: { amenity: "school", name: "Sunrise Academy", "operator:type": "private", phone: "+254 712 345 678; +254 700 000 000", website: "sunrise.ac.ke", email: "Head@Sunrise.ac.ke", "addr:suburb": "Milimani" } },
+      { type: "way", id: 2, tags: { amenity: "kindergarten", name: "Tiny Tots Nursery" } },
+      { type: "node", id: 3, tags: { amenity: "school", name: "Sunrise Academy", "addr:suburb": "Milimani" } },
+      { type: "node", id: 4, tags: { amenity: "school" } },
+      { type: "node", id: 5, tags: { amenity: "school", name: "Kenya Primary", operator: "Ministry of Education" } },
+    ],
+  };
+  it("maps tags, dedupes, skips unnamed and sorts reachable schools first", () => {
+    const r = parseOverpassResponse(data, "Nakuru");
+    expect(r.rows.map((x) => x.school_name)).toEqual(["Sunrise Academy", "Tiny Tots Nursery", "Kenya Primary"]);
+    expect(r.rows[0]).toMatchObject({
+      town_county: "Milimani, Nakuru",
+      school_type: "private",
+      phone: "+254712345678",
+      website: "https://sunrise.ac.ke",
+      email: "head@sunrise.ac.ke",
+    });
+    expect(r.rows[1]).toMatchObject({ school_level: "kindergarten", town_county: "Nakuru", phone: null });
+    expect(r.rows[2]).toMatchObject({ school_type: "public", school_level: "primary" });
+    expect(r.truncated).toBe(0);
+  });
+  it("is safe on garbage", () => {
+    expect(parseOverpassResponse(null, "Nakuru").rows).toEqual([]);
+    expect(parseOverpassResponse({ elements: "x" }, "Nakuru").rows).toEqual([]);
+  });
+});
+
+describe("discoverySourceNote", () => {
+  it("carries the ODbL attribution and date", () => {
+    expect(discoverySourceNote("Nakuru", new Date("2026-10-16T10:00:00Z"))).toBe(
+      "OpenStreetMap contributors (ODbL), Nakuru County, discovered 2026-10-16",
+    );
+  });
+});

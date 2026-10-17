@@ -10,6 +10,7 @@ import { ModuleBlock } from "@/components/marketing/module-block";
 import { MiniFrame } from "@/components/marketing/mini-frame";
 import { Badge } from "@/components/ui/badge";
 import { BreadcrumbJsonLd, HOME_CRUMB } from "@/components/marketing/breadcrumb-json-ld";
+import { RelatedGuides } from "@/components/marketing/related-guides";
 
 const TITLE = "CBC School Management System — EduCore Kenya";
 const DESCRIPTION = "A CBC school management system that handles 8-4-4 numeric grading side by side, set per school, grade, or class. Built for Kenya's curriculum.";
@@ -187,6 +188,7 @@ export default function CbcSchoolManagementPage() {
           </MarketingButton>
         </Reveal>
       </Section>
+      <RelatedGuides page="/cbc-school-management" />
     </>
   );
 }

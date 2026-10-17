@@ -9,6 +9,7 @@ import { Reveal } from "@/components/marketing/reveal";
 import { BreadcrumbJsonLd, HOME_CRUMB } from "@/components/marketing/breadcrumb-json-ld";
 import { ArticleJsonLd } from "@/components/marketing/article-json-ld";
 import { BlogByline } from "@/components/marketing/blog-byline";
+import { RelatedGuides } from "@/components/marketing/related-guides";
 
 const SLUG = "data-protection-act-kenya-schools-guide";
 const PATH = `/blog/${SLUG}`;
@@ -426,6 +427,7 @@ export default function DataProtectionActKenyaSchoolsGuidePost() {
           </div>
         </Reveal>
       </Section>
+      <RelatedGuides slug="data-protection-act-kenya-schools-guide" />
     </>
   );
 }

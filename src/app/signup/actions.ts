@@ -2,11 +2,14 @@
 
 import { headers } from "next/headers";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { createClient } from "@/lib/supabase/server";
+import { resolveAuthRedirectOrigin } from "@/lib/auth/reset-link";
+import { toE164 } from "@/lib/signup-fields";
 import { slugify } from "@/lib/slug";
 import { getRealClientIp } from "@/lib/get-real-client-ip";
 import { sendSecurityAlert } from "@/lib/security-alert";
 import { safeStorageFilename } from "@/lib/storage-path";
-import { generateTemporaryPassword, temporaryPasswordExpiry } from "@/lib/temporary-password";
+import { generateTemporaryPassword } from "@/lib/temporary-password";
 import { verifyTurnstileToken } from "@/lib/turnstile";
 import { parseAttributionFormData } from "@/lib/marketing/attribution-fields";
 import {
@@ -19,6 +22,8 @@ import {
   isValidCurrencyCode,
   isValidStartingYear,
   timezoneOptions,
+  startingYearOptions,
+  defaultsForCountry,
 } from "@/lib/institution-reference-data";
 
 export type Plan = {
@@ -79,7 +84,8 @@ export type SignupState = {
   honeypot?: boolean;
   schoolName?: string;
   email?: string;
-  temporaryPassword?: string;
+  /** False when the account was created but the set-password email could not be sent. */
+  emailSent?: boolean;
 };
 
 const URL_FIELDS = [
@@ -100,6 +106,42 @@ function trimmed(formData: FormData, key: string): string {
   return String(formData.get(key) ?? "").trim();
 }
 
+/**
+ * Undo a half-finished signup. Creating a school seeds default rows (inventory categories and
+ * items, leave types, ...) and several of those foreign keys are NO ACTION, so deleting the
+ * school row alone fails and used to leave an orphaned school behind with nobody noticing.
+ * Children go first, every step is checked and logged, and the auth user is always removed so
+ * the visitor can retry with the same email.
+ */
+async function rollbackSignup(
+  adminClient: ReturnType<typeof createAdminClient>,
+  userId: string,
+  schoolId?: string,
+): Promise<void> {
+  const failed: string[] = [];
+  const attempt = async (step: string, run: () => PromiseLike<{ error: { message?: string } | null }>) => {
+    try {
+      const result = await run();
+      if (result?.error) failed.push(`${step}: ${result.error.message ?? "error"}`);
+    } catch (e) {
+      failed.push(`${step}: ${e instanceof Error ? e.message : "threw"}`);
+    }
+  };
+
+  if (schoolId) {
+    await attempt("school_users", () => adminClient.from("school_users").delete().eq("auth_user_id", userId));
+    for (const table of ["school_subscriptions", "inventory_items", "inventory_categories"] as const) {
+      await attempt(table, () => adminClient.from(table).delete().eq("school_id", schoolId));
+    }
+    await attempt("schools", () => adminClient.from("schools").delete().eq("id", schoolId));
+  }
+  await attempt("auth user", () => adminClient.auth.admin.deleteUser(userId));
+
+  if (failed.length > 0) {
+    console.error("signup rollback incomplete", { schoolId, userId, failed });
+  }
+}
+
 export async function signUpSchool(
   _prevState: SignupState,
   formData: FormData,
@@ -107,7 +149,7 @@ export async function signUpSchool(
   // Honeypot: a real applicant never fills this hidden field in.
   const honeypot = trimmed(formData, "company_website");
   if (honeypot) {
-    return { error: null, success: true, honeypot: true, schoolName: "—", email: "—", temporaryPassword: "—" };
+    return { error: null, success: true, honeypot: true, schoolName: "—", email: "—", emailSent: true };
   }
 
   // Minimum-fill-time check, same convention as apply/[slug]/actions.ts.
@@ -161,13 +203,13 @@ export async function signUpSchool(
   const cycleType = trimmed(formData, "cycle_type");
   const ownershipType = trimmed(formData, "ownership_type");
   const institutionType = trimmed(formData, "institution_type");
-  const phone = trimmed(formData, "phone");
+  const phoneInput = trimmed(formData, "phone");
   const email = trimmed(formData, "email");
   const countryCode = trimmed(formData, "country_code");
   const address = trimmed(formData, "address");
   const startingAcademicYearRaw = trimmed(formData, "starting_academic_year");
-  const gmtTimezone = trimmed(formData, "gmt_timezone");
-  const currencyCode = trimmed(formData, "currency_code");
+  const gmtTimezoneRaw = trimmed(formData, "gmt_timezone");
+  const currencyCodeRaw = trimmed(formData, "currency_code");
 
   const website = trimmed(formData, "website");
   const facebookUrl = trimmed(formData, "facebook_url");
@@ -179,41 +221,46 @@ export async function signUpSchool(
   const logoFile = formData.get("logo");
 
   // ---- Required-field validation ----
+  // The signup form was cut down to the fields needed to create an account
+  // (name, school name, email, phone, country). Everything else is optional:
+  // when omitted, the school columns are left null (all nullable, and every
+  // reader already handles null) except year/currency/time zone, which get
+  // sensible defaults derived from the country. The longer fields are still
+  // accepted and validated if a client sends them.
   const missing: string[] = [];
-  if (!title) missing.push("Your Title");
   if (!ownerName) missing.push("Your Name");
-  if (!schoolType) missing.push("School Type");
   if (!schoolName) missing.push("Institution Name");
-  if (!description) missing.push("Institution Description");
-  if (!cycleType) missing.push("Cycles");
-  if (!ownershipType) missing.push("Organisation State");
-  if (!institutionType) missing.push("Type");
-  if (!phone) missing.push("Phone");
+  if (!phoneInput) missing.push("Phone");
   if (!email) missing.push("Email");
   if (!countryCode) missing.push("Country");
-  if (!address) missing.push("Address");
-  if (!startingAcademicYearRaw) missing.push("Year");
-  if (!gmtTimezone) missing.push("GMT Timezone");
-  if (!currencyCode) missing.push("Currency Code");
   if (missing.length > 0) {
     return { error: `Please fill in: ${missing.join(", ")}.` };
   }
 
   // ---- Value validation (never trust the client Select options) ----
-  if (!isValidTitle(title)) return { error: "Please select a valid title." };
-  if (!isValidSchoolType(schoolType)) return { error: "Please select a valid school type." };
-  if (!isValidCycle(cycleType)) return { error: "Please select a valid cycle." };
-  if (!isValidOwnershipType(ownershipType)) return { error: "Please select a valid organisation state." };
-  if (!isValidInstitutionType(institutionType)) return { error: "Please select a valid institution type." };
   if (!isValidCountryCode(countryCode)) return { error: "Please select a valid country." };
-  if (!isValidCurrencyCode(currencyCode)) return { error: "Please select a valid currency code." };
-  if (!timezoneOptions().includes(gmtTimezone)) return { error: "Please select a valid time zone." };
-  const startingAcademicYear = Number(startingAcademicYearRaw);
-  if (!Number.isInteger(startingAcademicYear) || !isValidStartingYear(startingAcademicYear)) {
-    return { error: "Please select a valid year." };
+  if (title && !isValidTitle(title)) return { error: "Please select a valid title." };
+  if (schoolType && !isValidSchoolType(schoolType)) return { error: "Please select a valid school type." };
+  if (cycleType && !isValidCycle(cycleType)) return { error: "Please select a valid cycle." };
+  if (ownershipType && !isValidOwnershipType(ownershipType)) return { error: "Please select a valid organisation state." };
+  if (institutionType && !isValidInstitutionType(institutionType)) return { error: "Please select a valid institution type." };
+  if (currencyCodeRaw && !isValidCurrencyCode(currencyCodeRaw)) return { error: "Please select a valid currency code." };
+  if (gmtTimezoneRaw && !timezoneOptions().includes(gmtTimezoneRaw)) return { error: "Please select a valid time zone." };
+  let startingAcademicYear = startingYearOptions()[0];
+  if (startingAcademicYearRaw) {
+    startingAcademicYear = Number(startingAcademicYearRaw);
+    if (!Number.isInteger(startingAcademicYear) || !isValidStartingYear(startingAcademicYear)) {
+      return { error: "Please select a valid year." };
+    }
   }
-  if (!PHONE_RE.test(phone)) {
-    return { error: "Please enter a valid phone number, e.g. +2547XXXXXXXX." };
+  const countryDefaults = defaultsForCountry(countryCode);
+  const currencyCode = currencyCodeRaw || countryDefaults.currencyCode;
+  const gmtTimezone = gmtTimezoneRaw || countryDefaults.gmtTimezone;
+  // Accepts the way Kenyans actually type numbers (0712 345 678 -> +254712345678) as well as
+  // everything the previous rule accepted, so no number that worked before is rejected now.
+  const phone = toE164(phoneInput) ?? (PHONE_RE.test(phoneInput) ? phoneInput : null);
+  if (!phone) {
+    return { error: "Please enter a valid phone number, e.g. 0712 345 678 or +254 712 345 678." };
   }
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     return { error: "Please enter a valid email address." };
@@ -262,13 +309,21 @@ export async function signUpSchool(
   // (chosen over asking the signer to pick one, since the screenshot spec
   // has no password field — the same must_change_password convention
   // src/app/(app)/settings/actions.ts already uses for staff invites).
-  const temporaryPassword = generateTemporaryPassword();
+  // The password is random and never shown or sent to anyone: the owner sets their own through
+  // the emailed link below, which also proves they control this address. (It used to be
+  // displayed on screen, so anyone could open a trial under someone else's email.)
   const { data: created, error: userError } = await adminClient.auth.admin.createUser({
     email,
-    password: temporaryPassword,
+    password: generateTemporaryPassword(),
     email_confirm: true,
   });
   if (userError || !created.user) {
+    if (userError && /already|registered|exists/i.test(userError.message)) {
+      return {
+        error:
+          "An account with this email already exists. Sign in, or use “Forgot password” on the sign-in page to set a new password.",
+      };
+    }
     return { error: userError?.message ?? "Could not create your account." };
   }
 
@@ -281,15 +336,15 @@ export async function signUpSchool(
       name: schoolName,
       slug,
       status: "trial",
-      description,
-      school_type: schoolType,
-      cycle_type: cycleType,
-      ownership_type: ownershipType,
-      institution_type: institutionType,
+      description: description || null,
+      school_type: schoolType || null,
+      cycle_type: cycleType || null,
+      ownership_type: ownershipType || null,
+      institution_type: institutionType || null,
       phone,
       email,
       country_code: countryCode,
-      address,
+      address: address || null,
       starting_academic_year: startingAcademicYear,
       gmt_timezone: gmtTimezone,
       currency_code: currencyCode,
@@ -303,7 +358,7 @@ export async function signUpSchool(
     .select("id")
     .single();
   if (schoolError || !school) {
-    await adminClient.auth.admin.deleteUser(created.user.id);
+    await rollbackSignup(adminClient, created.user.id);
     return { error: schoolError?.message ?? "Could not create the school." };
   }
 
@@ -314,8 +369,7 @@ export async function signUpSchool(
     .eq("name", "school_owner")
     .single();
   if (!ownerRole) {
-    await adminClient.from("schools").delete().eq("id", school.id);
-    await adminClient.auth.admin.deleteUser(created.user.id);
+    await rollbackSignup(adminClient, created.user.id, school.id);
     return { error: "Owner role is not configured — contact support." };
   }
 
@@ -323,17 +377,26 @@ export async function signUpSchool(
     auth_user_id: created.user.id,
     school_id: school.id,
     role_id: ownerRole.id,
-    title,
+    title: title || null,
     full_name: ownerName,
     email,
     phone,
     status: "active",
-    must_change_password: true,
-    temp_password_expires_at: temporaryPasswordExpiry(),
+    // The owner chooses their own password via the emailed link, so there is no temporary
+    // password to force a change of.
+    must_change_password: false,
+    temp_password_expires_at: null,
   });
   if (linkError) {
-    await adminClient.from("schools").delete().eq("id", school.id);
-    await adminClient.auth.admin.deleteUser(created.user.id);
+    await rollbackSignup(adminClient, created.user.id, school.id);
+    // A phone number can belong to only one active account across the whole platform
+    // (uq_school_users_active_phone). Never show the raw Postgres error to the visitor.
+    if (linkError.code === "23505" || /uq_school_users_active_phone/.test(linkError.message)) {
+      return {
+        error:
+          "This phone number is already registered to another account. Use a different number, or sign in if it is yours.",
+      };
+    }
     return { error: linkError.message };
   }
 
@@ -344,9 +407,7 @@ export async function signUpSchool(
     p_trial_days: 30,
   });
   if (trialError) {
-    await adminClient.from("school_users").delete().eq("auth_user_id", created.user.id);
-    await adminClient.from("schools").delete().eq("id", school.id);
-    await adminClient.auth.admin.deleteUser(created.user.id);
+    await rollbackSignup(adminClient, created.user.id, school.id);
     return { error: trialError.message };
   }
 
@@ -382,15 +443,40 @@ export async function signUpSchool(
     }
   }
 
-  // No auto-sign-in: unlike the old password-the-user-chose flow, this
-  // password is generated for them and needs to be shown once. Signing
-  // them in here would redirect straight past that screen. They confirm it
-  // and continue to /login from the success state instead.
+  // ---- 6. Set-password email ----
+  // Same mechanism and redirect as the "Forgot password" page: the link lands on /auth/confirm,
+  // which signs the owner in, then /reset-password, which sets their password and sends them to
+  // /dashboard. If sending fails the account still exists, so say so plainly instead of leaving
+  // the owner stuck (they can request the same email from Forgot password).
+  const requestHeaders = await headers();
+  // Never trust the request's Origin/Host for the emailed link: if it isn't on the Supabase
+  // Redirect URLs allowlist (e.g. the Vercel alias), Supabase silently swaps in the Site URL and
+  // the link lands on the marketing home page. Production always uses the canonical origin
+  // (same helper as Forgot password, #576).
+  const origin = resolveAuthRedirectOrigin(
+    requestHeaders.get("origin") ??
+      (requestHeaders.get("host") ? `https://${requestHeaders.get("host")}` : null),
+  );
+  let emailSent = true;
+  try {
+    const supabase = await createClient();
+    const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${origin}/auth/confirm?next=/reset-password`,
+    });
+    if (resetError) {
+      emailSent = false;
+      console.error("signup: set-password email failed", resetError.status ?? resetError.code);
+    }
+  } catch (e) {
+    emailSent = false;
+    console.error("signup: set-password email threw", e instanceof Error ? e.message : e);
+  }
+
   return {
     error: null,
     success: true,
     schoolName,
     email,
-    temporaryPassword,
+    emailSent,
   };
 }
