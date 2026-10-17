@@ -225,7 +225,11 @@ export async function scoreOutboundProspects(
       }
       usage = addUsage(usage, ai.usage);
 
-      const parsed = parseScoringResponse(ai.text);
+      const parsed = parseScoringResponse(ai.text, {
+        school_name: row.school_name,
+        contact_name: row.contact_name,
+        school_level: row.school_level,
+      });
       if (!parsed.ok) throw new Error(parsed.error);
 
       const v = parsed.value;
