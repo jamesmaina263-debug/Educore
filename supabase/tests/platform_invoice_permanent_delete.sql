@@ -1,4 +1,4 @@
--- Behavioural tests for permanent invoice deletion (20261017120000_platform_invoice_permanent_delete.sql).
+-- Behavioural tests for permanent invoice deletion (20261017133000_platform_invoice_permanent_delete.sql).
 -- Same safety model as platform_invoicing.sql: synthetic fixtures, impersonation via
 -- request.jwt.claims, and everything inside ONE transaction that ends in ROLLBACK, so nothing
 -- (including invoice numbers consumed from the counter) persists.
