@@ -12,7 +12,11 @@
 import { getEmailProvider } from "../_shared/email/index.ts";
 import { timingSafeEqual } from "../_shared/timingSafeEqual.ts";
 
-const PLATFORM_ADMIN_EMAIL = Deno.env.get("PLATFORM_ADMIN_EMAIL") ?? "admin@educore.co.ke";
+// The fallback must be a mailbox that exists. It used to be admin@educore.co.ke (a domain EduCore
+// does not own), so with PLATFORM_ADMIN_EMAIL unset every demo-request and lead-magnet alert went
+// there and Resend suppressed it -- the in-app notification worked but no email ever arrived.
+// Set PLATFORM_ADMIN_EMAIL (Supabase > Edge Functions > Secrets) to route alerts elsewhere.
+const PLATFORM_ADMIN_EMAIL = Deno.env.get("PLATFORM_ADMIN_EMAIL") ?? "admin@educoreafrica.com";
 // Used only for the demo-request-assignment notification (kind: demo_request_assigned),
 // so it reads as personally forwarded by the owner rather than a generic system email.
 // Same literal address already hardcoded in src/app/(admin)/admin/company-email/page.tsx
