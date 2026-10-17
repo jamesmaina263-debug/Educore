@@ -491,6 +491,134 @@ export async function getRealtimeVisitorCount(): Promise<number | null> {
   }
 }
 
+// ---- Live ("right now") snapshot -------------------------------------------------------------
+// The standard Data API (every other function in this file) is processed in batches and can lag
+// by hours, so a visitor who is on the site this minute can be missing from "Today" until GA4
+// catches up. The Realtime API is the only GA4 source that reflects the last ~30 minutes, so the
+// live panel on /admin/analytics is built entirely from it and is polled from the browser.
+// Never fabricates: a failed call yields null (panel shows an error), an empty response is a
+// genuine zero (the Realtime API omits `rows` when nobody is active).
+
+export type RealtimeSnapshot = {
+  activeUsers: number;
+  pageViews: number;
+  /** Active users per minute, index 0 = this minute, index 29 = 29 minutes ago. */
+  perMinute: number[];
+  topPages: { label: string; value: number }[];
+  locations: { label: string; value: number }[];
+  devices: { label: string; value: number }[];
+  events: { label: string; value: number }[];
+  fetchedAt: string;
+};
+
+// Same auth and error posture as runReport, but uncached: a live panel that serves a cached
+// response would just move the "why does it say zero" problem somewhere else.
+async function runRealtimeReport(body: Record<string, unknown>): Promise<Ga4ReportResponse | null> {
+  if (!PROPERTY_ID) return null;
+  const token = await getAccessToken();
+  if (!token) return null;
+  try {
+    const res = await withNetworkRetry(() =>
+      fetch(`${API_BASE_URL}/properties/${PROPERTY_ID}:runRealtimeReport`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+        cache: "no-store",
+      }),
+    );
+    if (!res.ok) {
+      console.error(`GA4 runRealtimeReport failed: ${res.status} ${await res.text()}`);
+      return null;
+    }
+    return (await res.json()) as Ga4ReportResponse;
+  } catch (err) {
+    console.error("GA4 runRealtimeReport threw", err);
+    return null;
+  }
+}
+
+function realtimeRows(
+  report: Ga4ReportResponse | null,
+): { dims: string[]; metrics: number[] }[] {
+  return (report?.rows ?? []).map((row) => ({
+    dims: (row.dimensionValues ?? []).map((d) => d.value),
+    metrics: (row.metricValues ?? []).map((m) => Number(m.value)),
+  }));
+}
+
+export async function getRealtimeSnapshot(): Promise<RealtimeSnapshot | null> {
+  if (!PROPERTY_ID) return null;
+  const [minutes, pages, places, devices, events] = await Promise.all([
+    runRealtimeReport({
+      dimensions: [{ name: "minutesAgo" }],
+      metrics: [{ name: "activeUsers" }],
+    }),
+    runRealtimeReport({
+      dimensions: [{ name: "unifiedScreenName" }],
+      metrics: [{ name: "activeUsers" }, { name: "screenPageViews" }],
+      metricAggregations: ["TOTAL"],
+      orderBys: [{ metric: { metricName: "screenPageViews" }, desc: true }],
+      limit: 8,
+    }),
+    runRealtimeReport({
+      dimensions: [{ name: "country" }, { name: "city" }],
+      metrics: [{ name: "activeUsers" }],
+      orderBys: [{ metric: { metricName: "activeUsers" }, desc: true }],
+      limit: 8,
+    }),
+    // TOTAL here is GA4's de-duplicated unique-user count -- summing the per-minute or
+    // per-page rows would double count anyone who browsed more than one page.
+    runRealtimeReport({
+      dimensions: [{ name: "deviceCategory" }],
+      metrics: [{ name: "activeUsers" }],
+      metricAggregations: ["TOTAL"],
+      orderBys: [{ metric: { metricName: "activeUsers" }, desc: true }],
+    }),
+    runRealtimeReport({
+      dimensions: [{ name: "eventName" }],
+      metrics: [{ name: "eventCount" }],
+      orderBys: [{ metric: { metricName: "eventCount" }, desc: true }],
+      limit: 8,
+    }),
+  ]);
+
+  // The unique-user total is the one number the panel cannot do without; if that call failed
+  // there is nothing honest to show.
+  if (!devices) return null;
+
+  const activeUsers = Number(devices.totals?.[0]?.metricValues?.[0]?.value ?? 0);
+  const pageViews = Number(pages?.totals?.[0]?.metricValues?.[1]?.value ?? 0);
+
+  const perMinute = Array.from({ length: 30 }, () => 0);
+  for (const { dims, metrics } of realtimeRows(minutes)) {
+    const idx = Number(dims[0]);
+    if (Number.isInteger(idx) && idx >= 0 && idx < 30) perMinute[idx] = metrics[0] ?? 0;
+  }
+
+  return {
+    activeUsers,
+    pageViews,
+    perMinute,
+    topPages: realtimeRows(pages).map(({ dims, metrics }) => ({
+      label: dims[0] || "(untitled)",
+      value: metrics[1] ?? 0,
+    })),
+    locations: realtimeRows(places).map(({ dims, metrics }) => ({
+      label: formatLocation(dims[1], dims[0]),
+      value: metrics[0] ?? 0,
+    })),
+    devices: realtimeRows(devices).map(({ dims, metrics }) => ({
+      label: dims[0] || "(unknown)",
+      value: metrics[0] ?? 0,
+    })),
+    events: realtimeRows(events).map(({ dims, metrics }) => ({
+      label: dims[0] || "(none)",
+      value: metrics[0] ?? 0,
+    })),
+    fetchedAt: new Date().toISOString(),
+  };
+}
+
 export type FunnelDetailRow = {
   source: string;
   page: string;
