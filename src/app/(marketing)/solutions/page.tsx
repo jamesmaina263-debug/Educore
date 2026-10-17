@@ -49,7 +49,7 @@ export default function SolutionsPage() {
       <BreadcrumbJsonLd items={[HOME_CRUMB, { name: "Solutions", path: "/solutions" }]} />
       {/* 1 — Hero */}
       <Section tone="navy" className="pb-14 pt-20 sm:pb-16 sm:pt-28">
-        <Eyebrow tone="dark">Solutions</Eyebrow>
+        <Eyebrow tone="light">Solutions</Eyebrow>
         <h1 className="mt-4 max-w-3xl text-4xl font-semibold tracking-tight text-white sm:text-5xl">
           One platform. A different job made easier for everyone in the building.
         </h1>

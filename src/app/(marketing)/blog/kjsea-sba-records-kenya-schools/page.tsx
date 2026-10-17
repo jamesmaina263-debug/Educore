@@ -132,7 +132,7 @@ export default function KjseaSbaRecordsKenyaSchoolsPost() {
 
       {/* 1 — Hero */}
       <Section tone="navy" className="pb-14 pt-20 sm:pb-16 sm:pt-28">
-        <Eyebrow tone="dark">Guide</Eyebrow>
+        <Eyebrow tone="light">Guide</Eyebrow>
         <h1 className="mt-4 max-w-3xl text-4xl font-semibold tracking-tight text-white sm:text-5xl">
           KJSEA and School-Based Assessment: The Grade 7–8 Records Your School Needs on File
         </h1>
