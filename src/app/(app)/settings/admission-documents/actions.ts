@@ -3,7 +3,12 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { tagSentryRequestContext } from "@/lib/observability/sentry-context";
-import { validateRequirementLabel } from "@/lib/admission-document-requirements";
+import {
+  MAX_REQUIREMENTS_PER_SCHOOL,
+  isCustomCategory,
+  makeCustomCategory,
+  validateRequirementLabel,
+} from "@/lib/admission-document-requirements";
 
 export interface DocumentRequirementRow {
   id: string;
@@ -63,6 +68,65 @@ export async function updateDocumentRequirement(
   if (!data || data.length === 0) return { error: "Requirement not found." };
 
   // Affects the wizard checklist, the public application form, and the status page.
+  revalidatePath("/settings", "layout");
+  revalidatePath("/admissions", "layout");
+  return { success: true };
+}
+
+export async function addDocumentRequirement(label: string, required: boolean): Promise<ActionResult> {
+  const { supabase, error } = await guard();
+  if (error) return { error };
+  const checked = validateRequirementLabel(label);
+  if (!checked.ok) return { error: checked.error };
+
+  const { data: schoolId } = await supabase.rpc("auth_school_id");
+  if (!schoolId) return { error: "Could not resolve your school." };
+
+  const { data: existing } = await supabase
+    .from("application_document_requirements")
+    .select("label, display_order")
+    .eq("school_id", schoolId);
+  const rows = existing ?? [];
+  if (rows.length >= MAX_REQUIREMENTS_PER_SCHOOL) {
+    return { error: `You can have at most ${MAX_REQUIREMENTS_PER_SCHOOL} admission documents.` };
+  }
+  if (rows.some((r) => r.label.toLowerCase() === checked.value.toLowerCase())) {
+    return { error: `"${checked.value}" is already on your list.` };
+  }
+
+  const { error: insertError } = await supabase.from("application_document_requirements").insert({
+    school_id: schoolId,
+    category: makeCustomCategory(checked.value),
+    label: checked.value,
+    required,
+    display_order: rows.reduce((max, r) => Math.max(max, r.display_order), 0) + 1,
+  });
+  if (insertError) return { error: insertError.message };
+
+  revalidatePath("/settings", "layout");
+  revalidatePath("/admissions", "layout");
+  return { success: true };
+}
+
+// Only school-defined documents can be removed. Already-uploaded files are not deleted; they simply
+// stop being part of the checklist. The built-in documents can only be switched to optional.
+export async function deleteDocumentRequirement(id: string): Promise<ActionResult> {
+  const { supabase, error } = await guard();
+  if (error) return { error };
+
+  const { data: row } = await supabase
+    .from("application_document_requirements")
+    .select("id, category")
+    .eq("id", id)
+    .maybeSingle();
+  if (!row) return { error: "Requirement not found." };
+  if (!isCustomCategory(row.category)) {
+    return { error: "Built-in documents can't be removed. Untick Required to make it optional." };
+  }
+
+  const { error: deleteError } = await supabase.from("application_document_requirements").delete().eq("id", id);
+  if (deleteError) return { error: deleteError.message };
+
   revalidatePath("/settings", "layout");
   revalidatePath("/admissions", "layout");
   return { success: true };
