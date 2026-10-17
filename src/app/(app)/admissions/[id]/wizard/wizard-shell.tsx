@@ -157,7 +157,7 @@ export function WizardShell({
             <AdmissionDetailsStep applicationId={applicationId} academicYears={data.academicYears} terms={data.terms} termsWithFeeStructure={data.termsWithFeeStructure} canReadFinance={data.canReadFinance} initial={data.application} boardingModuleEnabled={data.boardingModuleEnabled} />
           )}
           {current.id === "student" && (
-            <StudentStep applicationId={applicationId} applicantSummary={data.application} resultingStudentId={data.resultingStudentId} />
+            <StudentStep applicationId={applicationId} applicantSummary={data.application} resultingStudentId={data.resultingStudentId} currentAdmissionNumber={data.admissionNumber} />
           )}
           {current.id === "guardian" && (
             <GuardianStep applicationId={applicationId} resultingStudentId={data.resultingStudentId} />
