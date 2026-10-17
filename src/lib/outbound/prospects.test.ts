@@ -3,6 +3,7 @@ import {
   MAX_IMPORT_ROWS,
   buildScoringPrompt,
   normalizePhone,
+  normalizeManualContacts,
   normalizeSchoolLevel,
   normalizeSchoolType,
   normalizeWebsite,
@@ -158,5 +159,38 @@ describe("scoring prompt + response", () => {
     expect(parseScoringResponse("sure! here you go").ok).toBe(false);
     expect(parseScoringResponse(JSON.stringify({ ...good, whatsapp: "" })).ok).toBe(false);
     expect(parseScoringResponse(JSON.stringify({ ...good, fit_score: "high" })).ok).toBe(false);
+  });
+});
+
+describe("normalizeManualContacts", () => {
+  it("cleans valid input and turns blanks into nulls", () => {
+    const r = normalizeManualContacts({
+      contact_name: "  Jane Wanjiru ",
+      contact_role: "Head Teacher",
+      phone: "0712 345 678",
+      email: " Office@Sunrise.ac.ke ",
+      website: "sunrise.ac.ke",
+    });
+    expect(r).toEqual({
+      ok: true,
+      value: {
+        contact_name: "Jane Wanjiru",
+        contact_role: "Head Teacher",
+        phone: "0712345678",
+        email: "office@sunrise.ac.ke",
+        website: "https://sunrise.ac.ke",
+      },
+    });
+    const blank = normalizeManualContacts({});
+    expect(blank).toEqual({
+      ok: true,
+      value: { contact_name: null, contact_role: null, phone: null, email: null, website: null },
+    });
+  });
+  it("rejects bad email, phone and website with a specific message", () => {
+    expect(normalizeManualContacts({ email: "nope" })).toMatchObject({ ok: false, error: expect.stringContaining("email") });
+    expect(normalizeManualContacts({ phone: "12" })).toMatchObject({ ok: false, error: expect.stringContaining("phone") });
+    expect(normalizeManualContacts({ website: "not a url" })).toMatchObject({ ok: false, error: expect.stringContaining("website") });
+    expect(normalizeManualContacts({ contact_name: "x".repeat(201) }).ok).toBe(false);
   });
 });

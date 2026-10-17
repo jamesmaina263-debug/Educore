@@ -310,3 +310,59 @@ export function parseScoringResponse(raw: string): ParseScoringResult {
     },
   };
 }
+
+// ---------------------------------------------------------------------------------------------
+// Hand-typed contact details (the "Edit contacts" box). Everything is validated here so the
+// database function can stay a thin writer.
+// ---------------------------------------------------------------------------------------------
+
+export type ManualContactsInput = {
+  contact_name?: string;
+  contact_role?: string;
+  phone?: string;
+  email?: string;
+  website?: string;
+};
+
+export type ManualContacts = {
+  contact_name: string | null;
+  contact_role: string | null;
+  phone: string | null;
+  email: string | null;
+  website: string | null;
+};
+
+export type ManualContactsResult = { ok: true; value: ManualContacts } | { ok: false; error: string };
+
+export function normalizeManualContacts(input: ManualContactsInput): ManualContactsResult {
+  const t = (v: string | undefined) => (typeof v === "string" ? v.trim() : "");
+
+  const name = t(input.contact_name);
+  if (name.length > 200) return { ok: false, error: "The contact name is too long (max 200 characters)." };
+  const role = t(input.contact_role);
+  if (role.length > 100) return { ok: false, error: "The role is too long (max 100 characters)." };
+
+  const emailRaw = t(input.email).toLowerCase();
+  if (emailRaw && (emailRaw.length > 254 || !EMAIL_RE.test(emailRaw))) {
+    return { ok: false, error: "That email address doesn't look valid." };
+  }
+
+  const phoneRaw = t(input.phone);
+  const phone = phoneRaw ? normalizePhone(phoneRaw) : null;
+  if (phoneRaw && !phone) return { ok: false, error: "That phone number doesn't look valid (7 to 15 digits)." };
+
+  const websiteRaw = t(input.website);
+  const website = websiteRaw ? normalizeWebsite(websiteRaw) : null;
+  if (websiteRaw && !website) return { ok: false, error: "That website address doesn't look valid." };
+
+  return {
+    ok: true,
+    value: {
+      contact_name: name || null,
+      contact_role: role || null,
+      phone,
+      email: emailRaw || null,
+      website,
+    },
+  };
+}

@@ -21,6 +21,7 @@ import {
   recordProspectOptOut,
   reviewOutboundProspect,
   scoreOutboundProspects,
+  updateOutboundContacts,
 } from "@/app/(admin)/admin/outreach/actions";
 import { KENYA_COUNTIES } from "@/lib/outbound/discovery";
 import { MAX_ENRICH_BATCH } from "@/lib/outbound/enrichment";
@@ -106,7 +107,9 @@ export function AdminOutreach({
   const [csvSource, setCsvSource] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [open, setOpen] = useState<OutboundProspectRow | null>(null);
+  const [openSnap, setOpen] = useState<OutboundProspectRow | null>(null);
+  // The dialog shows the latest server data for the open row, not the snapshot from when it was opened.
+  const open = openSnap ? (prospects.find((p) => p.id === openSnap.id) ?? openSnap) : null;
   const [promoteRep, setPromoteRep] = useState<string>("");
   const [contact, setContact] = useState<ContactState | null>(null);
   const [actor, setActor] = useState<string>("");
@@ -379,8 +382,9 @@ export function AdminOutreach({
                   () => enrichOutboundProspects(enrichable),
                   (r) =>
                     `Found contact details for ${r.enriched}, nothing found for ${r.notFound}${Number(r.failed) > 0 ? `, ${r.failed} failed` : ""}. ` +
-                    `Found details are unverified: open each one, check the source link, then confirm.` +
-                    `${r.firstError && Number(r.enriched) === 0 ? ` (Lookup note: ${r.firstError})` : ""}`,
+                    `${Number(r.enriched) > 0 ? "Found details are unverified: open each one, check the source link, then confirm. " : ""}` +
+                    `${r.searchUnavailable ? `Web search was skipped: ${r.searchUnavailable} Schools with a website were still read directly; for the rest, open the school and type the contacts in. ` : ""}` +
+                    `${!r.searchUnavailable && r.note && Number(r.enriched) === 0 ? `(Lookup note: ${r.note})` : ""}`,
                 )
               }
             >
@@ -551,6 +555,16 @@ export function AdminOutreach({
                   </div>
                 )}
                 {open.contact_status === "verified" && <p className="mt-2 text-xs text-green-700">Confirmed by a person.</p>}
+                {open.status !== "promoted" && (
+                  <ContactEditor
+                    key={`${open.id}:${open.phone ?? ""}:${open.email ?? ""}:${open.website ?? ""}:${open.contact_name ?? ""}`}
+                    prospect={open}
+                    pending={pending}
+                    onSave={(fields) =>
+                      run(() => updateOutboundContacts(open.id, fields), () => "Contact details saved and marked as confirmed.")
+                    }
+                  />
+                )}
               </div>
 
               {open.fit_reason && (
@@ -752,6 +766,78 @@ export function AdminOutreach({
           )}
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+type ContactFields = { contact_name: string; contact_role: string; phone: string; email: string; website: string };
+
+/**
+ * Type contact details in by hand (e.g. after phoning the school office). Saving replaces the stored
+ * contact fields and marks them as confirmed by a person, so no source link is needed.
+ */
+function ContactEditor({
+  prospect,
+  pending,
+  onSave,
+}: {
+  prospect: OutboundProspectRow;
+  pending: boolean;
+  onSave: (fields: ContactFields) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [f, setF] = useState<ContactFields>({
+    contact_name: prospect.contact_name ?? "",
+    contact_role: prospect.contact_role ?? "",
+    phone: prospect.phone ?? "",
+    email: prospect.email ?? "",
+    website: prospect.website ?? "",
+  });
+  const set = (k: keyof ContactFields) => (e: React.ChangeEvent<HTMLInputElement>) => setF((p) => ({ ...p, [k]: e.target.value }));
+
+  if (!editing) {
+    return (
+      <Button className="mt-2" size="sm" variant="outline" onClick={() => setEditing(true)}>
+        Edit contacts
+      </Button>
+    );
+  }
+  return (
+    <div className="mt-3 flex flex-col gap-2 border-t border-border pt-3">
+      <p className="text-xs text-muted-foreground">
+        Type what you got from the school (for example by phone). Saving counts as confirmed. Leave a box empty to
+        clear it.
+      </p>
+      <div className="grid gap-2 sm:grid-cols-2">
+        <div className="flex flex-col gap-1">
+          <Label htmlFor="ce-name">Contact name</Label>
+          <Input id="ce-name" className="h-8 text-[0.8125rem]" value={f.contact_name} onChange={set("contact_name")} maxLength={200} />
+        </div>
+        <div className="flex flex-col gap-1">
+          <Label htmlFor="ce-role">Role</Label>
+          <Input id="ce-role" className="h-8 text-[0.8125rem]" value={f.contact_role} onChange={set("contact_role")} maxLength={100} placeholder="Head teacher, bursar…" />
+        </div>
+        <div className="flex flex-col gap-1">
+          <Label htmlFor="ce-phone">Phone</Label>
+          <Input id="ce-phone" className="h-8 text-[0.8125rem]" inputMode="tel" value={f.phone} onChange={set("phone")} maxLength={40} />
+        </div>
+        <div className="flex flex-col gap-1">
+          <Label htmlFor="ce-email">Email</Label>
+          <Input id="ce-email" className="h-8 text-[0.8125rem]" inputMode="email" value={f.email} onChange={set("email")} maxLength={254} />
+        </div>
+        <div className="flex flex-col gap-1 sm:col-span-2">
+          <Label htmlFor="ce-web">Website</Label>
+          <Input id="ce-web" className="h-8 text-[0.8125rem]" value={f.website} onChange={set("website")} maxLength={300} placeholder="school.ac.ke" />
+        </div>
+      </div>
+      <div className="flex gap-2">
+        <Button size="sm" disabled={pending} onClick={() => onSave(f)}>
+          Save contacts
+        </Button>
+        <Button size="sm" variant="outline" disabled={pending} onClick={() => setEditing(false)}>
+          Cancel
+        </Button>
+      </div>
     </div>
   );
 }

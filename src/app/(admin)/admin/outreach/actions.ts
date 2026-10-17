@@ -37,6 +37,8 @@ import {
 } from "@/lib/outbound/contact";
 import {
   MAX_SCORE_BATCH,
+  normalizeManualContacts,
+  type ManualContactsInput,
   buildScoringPrompt,
   parseProspectCsv,
   parseScoringResponse,
@@ -283,99 +285,102 @@ const CONTACT_PAGES = ["/", "/contact", "/contact-us", "/contacts", "/about", "/
 // some models; defaults to the model the rest of the app already uses.
 const GEMINI_ENRICH_MODEL = process.env.GEMINI_ENRICH_MODEL || GEMINI_OUTREACH_MODEL;
 
-/**
- * Finds missing contact details for one school WITHOUT guessing:
- *   1. scrape mailto:/tel: and visible contacts from the school's own site (deterministic);
- *   2. otherwise ask Gemini + Google Search to LOCATE a page, then fetch that page ourselves and keep a
- *      phone/email/name only if it literally appears in the page text.
- * Returns what to fill in (blank fields only), the page it came from, and how it was found.
- */
-async function enrichOne(
-  row: EnrichRow,
-  usage: { add: (u: AiUsage | null) => void },
-): Promise<{ add: Additions; sourceUrl: string; method: "scraped" | "ai_found" } | { error?: string }> {
+type Found = { add: Additions; sourceUrl: string; method: "scraped" | "ai_found" };
+
+const hasAny = (a: Additions) => Boolean(a.website || a.phone || a.email || a.contact_name);
+
+/** Phase 1: read the school's OWN website. Deterministic and uses no AI quota. */
+async function scrapeOne(row: EnrichRow): Promise<Found | null> {
+  if (!row.website || !isSafePublicUrl(row.website)) return null;
   const add: Additions = { website: null, phone: null, email: null, contact_name: null, contact_role: null };
   let sourceUrl: string | null = null;
-  let method: "scraped" | "ai_found" | null = null;
-  let lastError: string | undefined;
-
-  const havePhone = () => Boolean(row.phone || add.phone);
-  const haveEmail = () => Boolean(row.email || add.email);
-
-  // 1) The school's own website.
-  if (row.website && isSafePublicUrl(row.website)) {
-    for (const path of CONTACT_PAGES) {
-      if (havePhone() && haveEmail()) break;
-      const page = await safeFetchPage(new URL(path, row.website).toString());
-      if (!page) continue;
-      const found = extractContactsFromHtml(page.html);
-      if (!havePhone() && found.phones[0]) {
-        add.phone = found.phones[0];
+  for (const path of CONTACT_PAGES) {
+    if ((row.phone || add.phone) && (row.email || add.email)) break;
+    const page = await safeFetchPage(new URL(path, row.website).toString());
+    if (!page) continue;
+    const found = extractContactsFromHtml(page.html);
+    if (!(row.phone || add.phone) && found.phones[0]) {
+      add.phone = found.phones[0];
+      sourceUrl = page.url;
+    }
+    if (!(row.email || add.email)) {
+      const best = pickBestEmail(found.emails, row.website);
+      if (best) {
+        add.email = best;
         sourceUrl = page.url;
-        method = "scraped";
-      }
-      if (!haveEmail()) {
-        const best = pickBestEmail(found.emails, row.website);
-        if (best) {
-          add.email = best;
-          sourceUrl = page.url;
-          method = "scraped";
-        }
       }
     }
   }
+  return hasAny(add) && sourceUrl ? { add, sourceUrl, method: "scraped" } : null;
+}
 
-  // 2) AI-located page, then verified against the page text.
-  if (!havePhone() || !haveEmail()) {
-    const ai = await generatePlatformText({
-      task: "outreach_contact_lookup",
-      prompt: buildEnrichmentPrompt(row),
-      webSearch: true,
-      temperature: 0.1,
-      model: GEMINI_ENRICH_MODEL,
-      maxOutputTokens: 1024,
-      timeoutMs: 40_000,
-    });
-    if (!ai.ok) {
-      lastError = ai.error;
-    } else {
-      usage.add(ai.usage);
-      const parsed = parseEnrichmentResponse(ai.text);
-      if (!parsed.ok) {
-        lastError = parsed.error;
-      } else if (parsed.value.source_url) {
-        const [source, site] = await Promise.all([
-          safeFetchPage(parsed.value.source_url),
-          row.website ? Promise.resolve(null) : parsed.value.website ? safeFetchPage(parsed.value.website) : Promise.resolve(null),
-        ]);
-        const v = verifyFoundContacts(parsed.value, source?.text ?? null, site?.text ?? null, row.school_name);
-        let aiAdded = false;
-        if (!havePhone() && v.phone) { add.phone = v.phone; aiAdded = true; }
-        if (!haveEmail() && v.email) { add.email = v.email; aiAdded = true; }
-        if (!row.website && v.website) { add.website = v.website; aiAdded = true; }
-        if (!row.contact_name && v.contact_name) { add.contact_name = v.contact_name; add.contact_role = v.contact_role; aiAdded = true; }
-        if (aiAdded && source) {
-          sourceUrl = source.url;
-          method = "ai_found";
-        }
-      }
-    }
-  }
+/** Why a Google lookup was refused in a way that will repeat for every school (so we stop asking). */
+function quotaRefusal(error: string): string | null {
+  const m = /responded (\d{3})/.exec(error);
+  const status = m ? Number(m[1]) : 0;
+  if (status === 429) return "Google refused the web-search request (quota used up, or web search isn't included for this key).";
+  if (status === 403) return "Google refused the web-search request (this key isn't allowed to use web search).";
+  if (status === 400 || status === 404) return "Google doesn't support web search on the selected model (try setting GEMINI_ENRICH_MODEL).";
+  return null;
+}
 
-  if (!method || !sourceUrl || !(add.website || add.phone || add.email || add.contact_name)) {
-    return { error: lastError };
+/**
+ * Phase 2: ask Gemini + Google Search to LOCATE a page, then fetch it ourselves and keep a phone/email/
+ * name only if it literally appears in the page text. `current` is what the row already has after phase 1.
+ */
+async function aiOne(
+  row: EnrichRow,
+  current: { phone: boolean; email: boolean },
+  usage: { add: (u: AiUsage | null) => void },
+): Promise<{ found: Found | null; stop?: string; note?: string }> {
+  const ai = await generatePlatformText({
+    task: "outreach_contact_lookup",
+    prompt: buildEnrichmentPrompt(row),
+    webSearch: true,
+    temperature: 0.1,
+    model: GEMINI_ENRICH_MODEL,
+    maxOutputTokens: 1024,
+    timeoutMs: 40_000,
+  });
+  if (!ai.ok) return { found: null, stop: quotaRefusal(ai.error) ?? undefined, note: ai.error };
+  usage.add(ai.usage);
+
+  const parsed = parseEnrichmentResponse(ai.text);
+  if (!parsed.ok) return { found: null, note: parsed.error };
+  if (!parsed.value.source_url) return { found: null };
+
+  const [source, site] = await Promise.all([
+    safeFetchPage(parsed.value.source_url),
+    row.website ? Promise.resolve(null) : parsed.value.website ? safeFetchPage(parsed.value.website) : Promise.resolve(null),
+  ]);
+  if (!source) return { found: null };
+  const v = verifyFoundContacts(parsed.value, source.text, site?.text ?? null, row.school_name);
+  const add: Additions = { website: null, phone: null, email: null, contact_name: null, contact_role: null };
+  if (!current.phone && v.phone) add.phone = v.phone;
+  if (!current.email && v.email) add.email = v.email;
+  if (!row.website && v.website) add.website = v.website;
+  if (!row.contact_name && v.contact_name) {
+    add.contact_name = v.contact_name;
+    add.contact_role = v.contact_role;
   }
-  return { add, sourceUrl, method };
+  return hasAny(add) ? { found: { add, sourceUrl: source.url, method: "ai_found" } } : { found: null };
 }
 
 /**
  * Fills in missing website/phone/email/head-teacher for up to MAX_ENRICH_BATCH prospects. Found details
  * are stored UNVERIFIED with their source URL; a person must confirm them before promotion.
  * Never overwrites existing values. Sends nothing.
+ *
+ * Order matters for cost and reliability: every school's own website is read first (in parallel, no
+ * AI quota). Only schools still missing a phone or email go to the web-search step, one at a time, and
+ * the first quota/permission refusal from Google stops that step for the rest of the batch.
  */
 export async function enrichOutboundProspects(
   ids: string[],
-): Promise<{ error: string } | { success: true; enriched: number; notFound: number; failed: number; firstError?: string }> {
+): Promise<
+  | { error: string }
+  | { success: true; enriched: number; notFound: number; failed: number; searchUnavailable?: string; note?: string }
+> {
   if (!Array.isArray(ids) || ids.length === 0) return { error: "Choose at least one prospect." };
   if (ids.length > MAX_ENRICH_BATCH) return { error: `Find contacts for at most ${MAX_ENRICH_BATCH} prospects at a time.` };
   if (!ids.every(isUuid)) return { error: "Invalid prospect id." };
@@ -390,45 +395,107 @@ export async function enrichOutboundProspects(
   if (readErr) return { error: readErr.message };
   if (!rows || rows.length === 0) return { error: "Those prospects weren't found." };
 
-  // Contact lookup is optional: with AI off or unconfigured we still scrape the schools' own sites.
   let total: AiUsage = { promptTokens: 0, outputTokens: 0, totalTokens: 0 };
   const usage = { add: (u: AiUsage | null) => { total = addUsage(total, u); } };
   const todo = (rows as EnrichRow[]).filter((r) => r.status !== "promoted" && (!r.phone || !r.email));
 
-  const outcomes = await Promise.all(
-    todo.map(async (row) => {
-      const r = await enrichOne(row, usage);
-      if ("error" in r || !("add" in r)) return { kind: "none" as const, error: "error" in r ? r.error : undefined };
-      const { error } = await supabase.rpc("admin_set_outbound_prospect_contacts", {
-        p_id: row.id,
-        p_website: r.add.website,
-        p_phone: r.add.phone,
-        p_email: r.add.email,
-        p_contact_name: r.add.contact_name,
-        p_contact_role: r.add.contact_role,
-        p_source_url: r.sourceUrl,
-        p_method: r.method,
-      });
-      if (error) return { kind: "failed" as const, error: error.message };
-      return { kind: "enriched" as const };
-    }),
-  );
+  const save = async (row: EnrichRow, f: Found): Promise<boolean> => {
+    const { error } = await supabase.rpc("admin_set_outbound_prospect_contacts", {
+      p_id: row.id,
+      p_website: f.add.website,
+      p_phone: f.add.phone,
+      p_email: f.add.email,
+      p_contact_name: f.add.contact_name,
+      p_contact_role: f.add.contact_role,
+      p_source_url: f.sourceUrl,
+      p_method: f.method,
+    });
+    return !error;
+  };
 
-  const enriched = outcomes.filter((o) => o.kind === "enriched").length;
-  const failed = outcomes.filter((o) => o.kind === "failed").length;
-  const notFound = outcomes.filter((o) => o.kind === "none").length;
-  const firstError = outcomes.find((o) => "error" in o && o.error)?.error;
+  // Phase 1 (parallel): the schools' own websites.
+  const scraped = await Promise.all(todo.map((row) => scrapeOne(row)));
+  let enriched = 0;
+  let failed = 0;
+  const stillMissing: Array<{ row: EnrichRow; phone: boolean; email: boolean }> = [];
+  for (let i = 0; i < todo.length; i++) {
+    const row = todo[i];
+    const f = scraped[i];
+    if (f) {
+      if (await save(row, f)) enriched++;
+      else failed++;
+    }
+    const phone = Boolean(row.phone || f?.add.phone);
+    const email = Boolean(row.email || f?.add.email);
+    if (!phone || !email) stillMissing.push({ row, phone, email });
+  }
+
+  // Phase 2 (one at a time): web search for what's still missing; stop at the first quota refusal.
+  let searchUnavailable: string | undefined;
+  let note: string | undefined;
+  const alreadyCounted = new Set(todo.filter((_, i) => scraped[i]).map((r) => r.id));
+  for (const { row, phone, email } of stillMissing) {
+    if (searchUnavailable) break;
+    const r = await aiOne(row, { phone, email }, usage);
+    if (r.stop) {
+      searchUnavailable = r.stop;
+      break;
+    }
+    if (r.note && !note) note = r.note;
+    if (r.found) {
+      if (await save(row, r.found)) {
+        if (!alreadyCounted.has(row.id)) enriched++;
+      } else failed++;
+    }
+  }
+
+  const notFound = Math.max(0, todo.length - enriched - failed);
   void logAdminAction(supabase, "enrich_outbound_prospects", {
     enriched,
     notFound,
     failed,
+    search_unavailable: Boolean(searchUnavailable),
     model: GEMINI_ENRICH_MODEL,
     prompt_tokens: total.promptTokens,
     output_tokens: total.outputTokens,
     total_tokens: total.totalTokens,
   });
   revalidatePath(PATH);
-  return { success: true, enriched, notFound, failed, firstError };
+  return { success: true, enriched, notFound, failed, searchUnavailable, note };
+}
+
+/**
+ * Hand-typed contact details (e.g. after phoning the school office). They replace the stored contact
+ * fields and count as confirmed by a person. Validation here; the RPC re-checks permission and state.
+ */
+export async function updateOutboundContacts(id: string, input: ManualContactsInput): Promise<ActionResult> {
+  if (!isUuid(id)) return { error: "Invalid prospect id." };
+  const parsed = normalizeManualContacts(input);
+  if (!parsed.ok) return { error: parsed.error };
+  const v = parsed.value;
+
+  const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
+  const { error } = await supabase.rpc("admin_update_outbound_prospect_contacts", {
+    p_id: id,
+    p_website: v.website,
+    p_phone: v.phone,
+    p_email: v.email,
+    p_contact_name: v.contact_name,
+    p_contact_role: v.contact_role,
+  });
+  if (error) return { error: error.message };
+
+  // Which fields were set, never their values: contact details stay out of the audit log.
+  void logAdminAction(supabase, "update_outbound_contacts", {
+    prospect_id: id,
+    has_phone: Boolean(v.phone),
+    has_email: Boolean(v.email),
+    has_website: Boolean(v.website),
+    has_name: Boolean(v.contact_name),
+  });
+  revalidatePath(PATH);
+  return { success: true };
 }
 
 export async function confirmOutboundContacts(id: string): Promise<ActionResult> {
