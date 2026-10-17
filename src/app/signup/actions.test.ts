@@ -160,7 +160,7 @@ describe("signUpSchool", () => {
 
   it("rejects a disposable email address before creating anything", async () => {
     const res = await signUpSchool({ error: null }, form({ email: "wanjiru@mailinator.com" }));
-    expect(res.error).toMatch(/school's own email/i);
+    expect(res.error).toMatch(/permanent email address/i);
     expect(res.success).toBeUndefined();
     expect(h.createUser).not.toHaveBeenCalled();
     expect(inserted("schools")).toBeUndefined();
