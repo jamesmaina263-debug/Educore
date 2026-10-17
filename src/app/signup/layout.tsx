@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { GoogleTagManager } from "@next/third-parties/google";
 import { ConsentDefaults } from "@/components/marketing/consent-defaults";
+import { PageViewTracker } from "@/components/marketing/analytics";
 import { CookieNotice } from "@/components/marketing/cookie-notice";
 
 // /signup currently has no GTM coverage at all -- it isn't wrapped by
@@ -19,6 +20,7 @@ export default function SignupLayout({ children }: { children: ReactNode }) {
       {/* Must stay immediately before GoogleTagManager -- see ConsentDefaults. */}
       <ConsentDefaults />
       <GoogleTagManager gtmId="GTM-MGV2XHBB" />
+      <PageViewTracker />
       {children}
       <CookieNotice />
     </>

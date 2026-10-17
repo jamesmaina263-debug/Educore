@@ -11,9 +11,31 @@
 "use client";
 
 import { useEffect } from "react";
+import { usePathname } from "next/navigation";
 import { sendGTMEvent } from "@next/third-parties/google";
 import { captureAttribution } from "@/lib/attribution";
 import { captureCtaSource } from "@/lib/cta-source";
+import { createPageViewTracker } from "@/lib/spa-page-view";
+
+// Module scope on purpose: it must survive the (marketing) <-> /signup layout swap, which unmounts
+// one tracker component and mounts the other within the same document.
+const pageViewTracker = createPageViewTracker({
+  getTitle: () => document.title,
+  getLocation: () => window.location.href,
+  push: (event) => sendGTMEvent(event),
+  schedule: (fn, ms) => window.setTimeout(fn, ms),
+  cancel: (handle) => window.clearTimeout(handle as number),
+});
+
+// Sends one "spa_page_view" dataLayer event per client-side navigation, once the new page's title is
+// in place. See src/lib/spa-page-view.ts for why, and for the GTM/GA4 steps that go with it.
+export function PageViewTracker() {
+  const pathname = usePathname();
+  useEffect(() => {
+    pageViewTracker.onPathname(pathname);
+  }, [pathname]);
+  return null;
+}
 
 export function MarketingAnalytics() {
   // Attribution capture runs on every marketing-page mount. This is what
@@ -101,5 +123,5 @@ export function MarketingAnalytics() {
     return () => document.removeEventListener("click", handleClick);
   }, []);
 
-  return null;
+  return <PageViewTracker />;
 }
