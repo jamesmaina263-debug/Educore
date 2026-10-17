@@ -12,7 +12,7 @@ import { MfaPanel } from "./mfa-panel";
 export default async function AdminMfaPage({
   searchParams,
 }: {
-  searchParams: Promise<{ next?: string; reason?: string }>;
+  searchParams: Promise<{ next?: string; reason?: string; manage?: string }>;
 }) {
   const supabase = await createClient();
   const {
@@ -21,14 +21,16 @@ export default async function AdminMfaPage({
   if (!user) redirect("/login");
   if (!(await isSuperAdminAnyAal(supabase))) redirect("/dashboard");
 
-  const { next, reason } = await searchParams;
+  const { next, reason, manage } = await searchParams;
+  const managing = manage === "1";
   const nextPath = safeAdminNextPath(next);
 
   const state = await getAdminMfaState(supabase);
   const operator = await getAdminOperator();
 
   // Already fully signed in as a named operator -> nothing to do here.
-  if (state.currentLevel === "aal2" && operator && reason !== "unrecognized-factor") redirect(nextPath);
+  // (The sidebar link passes ?manage=1 so a signed-in operator can still reach this page to enrol someone.)
+  if (state.currentLevel === "aal2" && operator && reason !== "unrecognized-factor" && !managing) redirect(nextPath);
 
   const { data: factors } = await supabase.auth.mfa.listFactors();
   const verified = (factors?.all ?? [])
@@ -43,6 +45,7 @@ export default async function AdminMfaPage({
       verifiedFactors={verified}
       unenrolledOperators={ADMIN_OPERATORS.filter((name) => !enrolledNames.has(name))}
       unrecognizedFactor={reason === "unrecognized-factor"}
+      managing={managing}
       onSignOut={logout}
     />
   );

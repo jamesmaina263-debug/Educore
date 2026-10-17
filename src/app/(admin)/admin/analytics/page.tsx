@@ -18,6 +18,10 @@ import { GranularityTabs } from "@/components/admin/analytics/granularity-tabs";
 import {
   resolveDateRange,
   priorPeriod,
+  todayIso,
+  dayStartUtc,
+  dayEndUtc,
+  ANALYTICS_TIME_ZONE,
   percentChange,
   isValidIsoDate,
   defaultGranularity,
@@ -87,9 +91,14 @@ export default async function AdminAnalyticsPage({
   const customRange =
     period === "custom" && isValidIsoDate(from) && isValidIsoDate(to) && from <= to ? { from, to } : undefined;
   if (period === "custom" && !customRange) period = "7d";
-  const { startIso, endIso, label } = resolveDateRange(period, customRange);
+  // Days are bucketed in the GA4 property's time zone (Kenya Time) so "Today" matches what GA4 calls today.
+  const { startIso, endIso, label } = resolveDateRange(period, customRange, { timeZone: ANALYTICS_TIME_ZONE });
   const gaRange: [string, string] = [startIso, endIso];
   const prior = priorPeriod(startIso, endIso);
+  // GA4's standard reports lag by hours, so a range that ends today is incomplete; a single-day
+  // "Today" view compared with a full prior day would always read as a large drop, so that % is hidden.
+  const endsToday = endIso === todayIso(ANALYTICS_TIME_ZONE);
+  const isPartialDay = startIso === endIso && endsToday;
   const granularity: TimeGranularity =
     rawGranularity === "day" || rawGranularity === "week" || rawGranularity === "month"
       ? rawGranularity
@@ -103,20 +112,20 @@ export default async function AdminAnalyticsPage({
     supabase
       .from("marketing_demo_requests")
       .select("id, created_at, status, utm_source")
-      .gte("created_at", `${startIso}T00:00:00Z`)
-      .lte("created_at", `${endIso}T23:59:59Z`),
+      .gte("created_at", dayStartUtc(startIso))
+      .lte("created_at", dayEndUtc(endIso)),
     supabase
       .from("marketing_demo_requests")
       .select("id", { count: "exact", head: true })
-      .gte("created_at", `${prior.startIso}T00:00:00Z`)
-      .lte("created_at", `${prior.endIso}T23:59:59Z`),
+      .gte("created_at", dayStartUtc(prior.startIso))
+      .lte("created_at", dayEndUtc(prior.endIso)),
     // Everyone who pressed Continue on step 1 of the demo form and had their contact details
     // saved, whatever happened next (still open, contacted, or went on to submit).
     supabase
       .from("marketing_demo_partial_leads")
       .select("id", { count: "exact", head: true })
-      .gte("created_at", `${startIso}T00:00:00Z`)
-      .lte("created_at", `${endIso}T23:59:59Z`),
+      .gte("created_at", dayStartUtc(startIso))
+      .lte("created_at", dayEndUtc(endIso)),
   ]);
 
   const demoRequestCount = demoRequests?.length ?? 0;
@@ -287,20 +296,26 @@ export default async function AdminAnalyticsPage({
           label="Visitors"
           value={overview ? overview.visitors.toLocaleString() : "—"}
           sub={gaConfigured ? undefined : "Google Analytics not connected"}
-          changePercent={overview && priorOverview ? percentChange(overview.visitors, priorOverview.visitors) : undefined}
+          changePercent={
+            !isPartialDay && overview && priorOverview ? percentChange(overview.visitors, priorOverview.visitors) : undefined
+          }
         />
         <KpiCard
           label="Sessions"
           value={overview ? overview.visits.toLocaleString() : "—"}
           sub={gaConfigured ? undefined : "Google Analytics not connected"}
-          changePercent={overview && priorOverview ? percentChange(overview.visits, priorOverview.visits) : undefined}
+          changePercent={
+            !isPartialDay && overview && priorOverview ? percentChange(overview.visits, priorOverview.visits) : undefined
+          }
         />
         <KpiCard
           label="Page views"
           value={overview ? overview.pageviews.toLocaleString() : "—"}
           sub={gaConfigured ? undefined : "Google Analytics not connected"}
           changePercent={
-            overview && priorOverview ? percentChange(overview.pageviews, priorOverview.pageviews) : undefined
+            !isPartialDay && overview && priorOverview
+              ? percentChange(overview.pageviews, priorOverview.pageviews)
+              : undefined
           }
         />
         <KpiCard label="Demo requests" value={demoRequestCount} changePercent={demoRequestChange} />
@@ -321,6 +336,14 @@ export default async function AdminAnalyticsPage({
           />
           <KpiCard label="Bounce rate" value={`${overview.bounceRate.toFixed(1)}%`} />
         </div>
+      )}
+
+      {gaConfigured && endsToday && (
+        <p className="text-xs text-muted-foreground">
+          Google Analytics totals for today can lag by a few hours, so they may read low (or 0) even while
+          visitors are on the site. The live count below is current.
+          {isPartialDay ? " The comparison with the prior period is hidden for a partial day." : ""}
+        </p>
       )}
 
       {gaConfigured && realtimeVisitors !== null && (

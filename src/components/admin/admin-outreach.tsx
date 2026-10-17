@@ -10,7 +10,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
+  confirmOutboundContacts,
   deleteOutboundProspect,
+  enrichOutboundProspects,
   discoverSchoolsByCounty,
   importOutboundProspects,
   promoteOutboundProspect,
@@ -18,6 +20,7 @@ import {
   scoreOutboundProspects,
 } from "@/app/(admin)/admin/outreach/actions";
 import { KENYA_COUNTIES } from "@/lib/outbound/discovery";
+import { MAX_ENRICH_BATCH } from "@/lib/outbound/enrichment";
 import { MAX_SCORE_BATCH, SCHOOL_LEVEL_LABELS, type OutboundSchoolLevel } from "@/lib/outbound/prospects";
 
 export type OutboundProspectRow = {
@@ -29,6 +32,10 @@ export type OutboundProspectRow = {
   website: string | null;
   phone: string | null;
   email: string | null;
+  contact_name: string | null;
+  contact_role: string | null;
+  contact_status: "scraped" | "ai_found" | "verified" | null;
+  contact_source_url: string | null;
   source_note: string | null;
   fit_score: number | null;
   fit_reason: string | null;
@@ -103,6 +110,11 @@ export function AdminOutreach({
   const scorable = [...selected].filter((id) => {
     const s = prospects.find((p) => p.id === id)?.status;
     return s === "new" || s === "scored";
+  });
+
+  const enrichable = [...selected].filter((id) => {
+    const p = prospects.find((x) => x.id === id);
+    return p && p.status !== "promoted" && (!p.phone || !p.email);
   });
 
   const copy = async (text: string) => {
@@ -237,11 +249,30 @@ export function AdminOutreach({
               onClick={() =>
                 run(
                   () => scoreOutboundProspects(scorable),
-                  (r) => `Scored ${r.scored}${Number(r.failed) > 0 ? `, ${r.failed} failed (try again)` : ""}.`,
+                  (r) =>
+                    `Scored ${r.scored}${Number(r.failed) > 0 ? `, ${r.failed} failed (try again)` : ""}${
+                      Number(r.skipped) > 0 ? `, ${r.skipped} left for the next click (time limit)` : ""
+                    }.`,
                 )
               }
             >
               Score &amp; draft selected ({scorable.length}/{MAX_SCORE_BATCH})
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={pending || enrichable.length === 0 || enrichable.length > MAX_ENRICH_BATCH}
+              onClick={() =>
+                run(
+                  () => enrichOutboundProspects(enrichable),
+                  (r) =>
+                    `Found contact details for ${r.enriched}, nothing found for ${r.notFound}${Number(r.failed) > 0 ? `, ${r.failed} failed` : ""}. ` +
+                    `Found details are unverified: open each one, check the source link, then confirm.` +
+                    `${r.firstError && Number(r.enriched) === 0 ? ` (Lookup note: ${r.firstError})` : ""}`,
+                )
+              }
+            >
+              {pending ? "Working…" : `Find contacts (${enrichable.length}/${MAX_ENRICH_BATCH})`}
             </Button>
           </div>
         </div>
@@ -286,7 +317,7 @@ export function AdminOutreach({
               <tbody>
                 {visible.map((p) => {
                   const st = STATUS[p.status];
-                  const canSelect = p.status === "new" || p.status === "scored";
+                  const canSelect = p.status !== "promoted";
                   return (
                     <tr key={p.id} className="border-t border-border align-top">
                       <td className="p-2">
@@ -313,6 +344,11 @@ export function AdminOutreach({
                           <>
                             {p.phone && <div>{p.phone}</div>}
                             {p.email && <div>{p.email}</div>}
+                            {p.contact_status === "scraped" || p.contact_status === "ai_found" ? (
+                              <div className="text-[0.6875rem] text-amber-700">Unverified — check source</div>
+                            ) : p.contact_status === "verified" ? (
+                              <div className="text-[0.6875rem] text-green-700">Confirmed</div>
+                            ) : null}
                           </>
                         ) : (
                           <span className="text-muted-foreground">None found</span>
@@ -349,6 +385,50 @@ export function AdminOutreach({
                   {open.source_note ? ` — Source: ${open.source_note}` : ""}
                 </DialogDescription>
               </DialogHeader>
+
+              <div className="rounded border border-border p-3 text-sm">
+                <div className="mb-1 text-xs font-medium">Contact details</div>
+                {open.website || open.phone || open.email || open.contact_name ? (
+                  <ul className="flex flex-col gap-0.5">
+                    {open.contact_name && (
+                      <li>
+                        {open.contact_name}
+                        {open.contact_role ? `, ${open.contact_role}` : ""}
+                      </li>
+                    )}
+                    {open.phone && <li>{open.phone}</li>}
+                    {open.email && <li>{open.email}</li>}
+                    {open.website && <li>{open.website}</li>}
+                  </ul>
+                ) : (
+                  <p className="text-muted-foreground">None yet. Select it in the list and use “Find contacts”.</p>
+                )}
+                {open.contact_source_url && (
+                  <p className="mt-2 text-xs">
+                    Source:{" "}
+                    <a className="underline" href={open.contact_source_url} target="_blank" rel="noopener noreferrer">
+                      {open.contact_source_url}
+                    </a>
+                  </p>
+                )}
+                {(open.contact_status === "scraped" || open.contact_status === "ai_found") && (
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    <span className="text-xs text-amber-700">
+                      {open.contact_status === "ai_found" ? "Found by AI web search" : "Taken from the school's website"}
+                      {" "}— open the source and check before confirming.
+                    </span>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={pending}
+                      onClick={() => run(() => confirmOutboundContacts(open.id), () => "Contact details confirmed.")}
+                    >
+                      Confirm contacts
+                    </Button>
+                  </div>
+                )}
+                {open.contact_status === "verified" && <p className="mt-2 text-xs text-green-700">Confirmed by a person.</p>}
+              </div>
 
               {open.fit_reason && (
                 <p className="text-sm">

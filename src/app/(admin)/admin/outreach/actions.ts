@@ -4,7 +4,13 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { tagSentryRequestContext } from "@/lib/observability/sentry-context";
 import { logAdminAction } from "@/lib/log-admin-action";
-import { geminiGenerateContentUrl, geminiHeaders } from "@/lib/ai/report-card-comment";
+import {
+  addUsage,
+  aiDisabledReason,
+  generatePlatformText,
+  parseBudgetMs,
+  type AiUsage,
+} from "@/lib/ai/platform-ai";
 import { isUuid } from "@/lib/sales/pipeline";
 import {
   buildOverpassQuery,
@@ -13,6 +19,16 @@ import {
   parseOverpassResponse,
   type DiscoveryKinds,
 } from "@/lib/outbound/discovery";
+import {
+  MAX_ENRICH_BATCH,
+  buildEnrichmentPrompt,
+  extractContactsFromHtml,
+  isSafePublicUrl,
+  parseEnrichmentResponse,
+  pickBestEmail,
+  verifyFoundContacts,
+} from "@/lib/outbound/enrichment";
+import { safeFetchPage } from "@/lib/outbound/safe-fetch";
 import {
   MAX_SCORE_BATCH,
   buildScoringPrompt,
@@ -134,14 +150,25 @@ export async function discoverSchoolsByCounty(
   };
 }
 
+// How long one "Score & draft" click may keep starting new AI calls. Prospects not reached stay
+// selectable for the next click. Kept low by default so a click cannot outrun a small serverless
+// time limit (the free hosting plan's limit is unverified); raise OUTREACH_SCORE_BUDGET_MS once the
+// real limit is known.
+const DEFAULT_SCORE_BUDGET_MS = 8_000;
+
 export async function scoreOutboundProspects(
   ids: string[],
-): Promise<{ error: string } | { success: true; scored: number; failed: number }> {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) return { error: "AI scoring isn't configured: GEMINI_API_KEY is missing from the server environment." };
+): Promise<{ error: string } | { success: true; scored: number; failed: number; skipped: number }> {
   if (!Array.isArray(ids) || ids.length === 0) return { error: "Choose at least one prospect to score." };
   if (ids.length > MAX_SCORE_BATCH) return { error: `Score at most ${MAX_SCORE_BATCH} prospects at a time.` };
   if (!ids.every(isUuid)) return { error: "Invalid prospect id." };
+
+  // Fail fast, before any database read, when AI is switched off or not configured.
+  const off = aiDisabledReason("outreach_scoring");
+  if (off) return { error: off };
+  if (!process.env.GEMINI_API_KEY) {
+    return { error: "AI scoring isn't configured: GEMINI_API_KEY is missing from the server environment." };
+  }
 
   const supabase = await createClient();
   await tagSentryRequestContext(supabase);
@@ -154,26 +181,43 @@ export async function scoreOutboundProspects(
   if (readErr) return { error: readErr.message };
   if (!rows || rows.length === 0) return { error: "Those prospects weren't found." };
 
+  const budgetMs = parseBudgetMs(process.env.OUTREACH_SCORE_BUDGET_MS, DEFAULT_SCORE_BUDGET_MS, 2_000, 50_000);
+  const startedAt = Date.now();
+  let usage: AiUsage = { promptTokens: 0, outputTokens: 0, totalTokens: 0 };
   let scored = 0;
   let failed = 0;
+  let skipped = 0;
+  let aiStopped = false;
+
   for (const row of rows) {
     if (row.status !== "new" && row.status !== "scored") continue; // never re-score a reviewed row
+    const elapsed = Date.now() - startedAt;
+    if (aiStopped || elapsed >= budgetMs) {
+      skipped++;
+      continue;
+    }
     try {
-      const prompt = buildScoringPrompt(row as ProspectForScoring);
-      const res = await fetch(geminiGenerateContentUrl(apiKey, GEMINI_OUTREACH_MODEL), {
-        method: "POST",
-        headers: geminiHeaders(apiKey),
-        body: JSON.stringify({
-          contents: [{ role: "user", parts: [{ text: prompt }] }],
-          generationConfig: { temperature: 0.4, responseMimeType: "application/json" },
-        }),
+      const ai = await generatePlatformText({
+        task: "outreach_scoring",
+        prompt: buildScoringPrompt(row as ProspectForScoring),
+        json: true,
+        temperature: 0.4,
+        model: GEMINI_OUTREACH_MODEL,
+        maxOutputTokens: 1024,
+        timeoutMs: Math.min(20_000, Math.max(3_000, budgetMs - elapsed)),
       });
-      if (!res.ok) throw new Error(`Gemini responded ${res.status}`);
-      const body = (await res.json()) as {
-        candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
-      };
-      const text = body.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
-      const parsed = parseScoringResponse(text);
+      if (!ai.ok) {
+        // Switched off or unconfigured mid-run: stop calling, leave the rest for later.
+        if (ai.reason === "disabled" || ai.reason === "not_configured") {
+          aiStopped = true;
+          skipped++;
+          continue;
+        }
+        throw new Error(ai.error);
+      }
+      usage = addUsage(usage, ai.usage);
+
+      const parsed = parseScoringResponse(ai.text);
       if (!parsed.ok) throw new Error(parsed.error);
 
       const v = parsed.value;
@@ -193,9 +237,205 @@ export async function scoreOutboundProspects(
     }
   }
 
-  void logAdminAction(supabase, "score_outbound_prospects", { scored, failed });
+  void logAdminAction(supabase, "score_outbound_prospects", {
+    scored,
+    failed,
+    skipped,
+    model: GEMINI_OUTREACH_MODEL,
+    prompt_tokens: usage.promptTokens,
+    output_tokens: usage.outputTokens,
+    total_tokens: usage.totalTokens,
+  });
   revalidatePath(PATH);
-  return { success: true, scored, failed };
+  return { success: true, scored, failed, skipped };
+}
+
+type EnrichRow = {
+  id: string;
+  school_name: string;
+  town_county: string | null;
+  school_level: string | null;
+  website: string | null;
+  phone: string | null;
+  email: string | null;
+  contact_name: string | null;
+  contact_role: string | null;
+  status: string;
+};
+
+type Additions = {
+  website: string | null;
+  phone: string | null;
+  email: string | null;
+  contact_name: string | null;
+  contact_role: string | null;
+};
+
+const CONTACT_PAGES = ["/", "/contact", "/contact-us", "/contacts", "/about", "/about-us"];
+
+// Model for the web-search lookup. Overridable because the grounded-search tool is only available on
+// some models; defaults to the model the rest of the app already uses.
+const GEMINI_ENRICH_MODEL = process.env.GEMINI_ENRICH_MODEL || GEMINI_OUTREACH_MODEL;
+
+/**
+ * Finds missing contact details for one school WITHOUT guessing:
+ *   1. scrape mailto:/tel: and visible contacts from the school's own site (deterministic);
+ *   2. otherwise ask Gemini + Google Search to LOCATE a page, then fetch that page ourselves and keep a
+ *      phone/email/name only if it literally appears in the page text.
+ * Returns what to fill in (blank fields only), the page it came from, and how it was found.
+ */
+async function enrichOne(
+  row: EnrichRow,
+  usage: { add: (u: AiUsage | null) => void },
+): Promise<{ add: Additions; sourceUrl: string; method: "scraped" | "ai_found" } | { error?: string }> {
+  const add: Additions = { website: null, phone: null, email: null, contact_name: null, contact_role: null };
+  let sourceUrl: string | null = null;
+  let method: "scraped" | "ai_found" | null = null;
+  let lastError: string | undefined;
+
+  const havePhone = () => Boolean(row.phone || add.phone);
+  const haveEmail = () => Boolean(row.email || add.email);
+
+  // 1) The school's own website.
+  if (row.website && isSafePublicUrl(row.website)) {
+    for (const path of CONTACT_PAGES) {
+      if (havePhone() && haveEmail()) break;
+      const page = await safeFetchPage(new URL(path, row.website).toString());
+      if (!page) continue;
+      const found = extractContactsFromHtml(page.html);
+      if (!havePhone() && found.phones[0]) {
+        add.phone = found.phones[0];
+        sourceUrl = page.url;
+        method = "scraped";
+      }
+      if (!haveEmail()) {
+        const best = pickBestEmail(found.emails, row.website);
+        if (best) {
+          add.email = best;
+          sourceUrl = page.url;
+          method = "scraped";
+        }
+      }
+    }
+  }
+
+  // 2) AI-located page, then verified against the page text.
+  if (!havePhone() || !haveEmail()) {
+    const ai = await generatePlatformText({
+      task: "outreach_contact_lookup",
+      prompt: buildEnrichmentPrompt(row),
+      webSearch: true,
+      temperature: 0.1,
+      model: GEMINI_ENRICH_MODEL,
+      maxOutputTokens: 1024,
+      timeoutMs: 40_000,
+    });
+    if (!ai.ok) {
+      lastError = ai.error;
+    } else {
+      usage.add(ai.usage);
+      const parsed = parseEnrichmentResponse(ai.text);
+      if (!parsed.ok) {
+        lastError = parsed.error;
+      } else if (parsed.value.source_url) {
+        const [source, site] = await Promise.all([
+          safeFetchPage(parsed.value.source_url),
+          row.website ? Promise.resolve(null) : parsed.value.website ? safeFetchPage(parsed.value.website) : Promise.resolve(null),
+        ]);
+        const v = verifyFoundContacts(parsed.value, source?.text ?? null, site?.text ?? null, row.school_name);
+        let aiAdded = false;
+        if (!havePhone() && v.phone) { add.phone = v.phone; aiAdded = true; }
+        if (!haveEmail() && v.email) { add.email = v.email; aiAdded = true; }
+        if (!row.website && v.website) { add.website = v.website; aiAdded = true; }
+        if (!row.contact_name && v.contact_name) { add.contact_name = v.contact_name; add.contact_role = v.contact_role; aiAdded = true; }
+        if (aiAdded && source) {
+          sourceUrl = source.url;
+          method = "ai_found";
+        }
+      }
+    }
+  }
+
+  if (!method || !sourceUrl || !(add.website || add.phone || add.email || add.contact_name)) {
+    return { error: lastError };
+  }
+  return { add, sourceUrl, method };
+}
+
+/**
+ * Fills in missing website/phone/email/head-teacher for up to MAX_ENRICH_BATCH prospects. Found details
+ * are stored UNVERIFIED with their source URL; a person must confirm them before promotion.
+ * Never overwrites existing values. Sends nothing.
+ */
+export async function enrichOutboundProspects(
+  ids: string[],
+): Promise<{ error: string } | { success: true; enriched: number; notFound: number; failed: number; firstError?: string }> {
+  if (!Array.isArray(ids) || ids.length === 0) return { error: "Choose at least one prospect." };
+  if (ids.length > MAX_ENRICH_BATCH) return { error: `Find contacts for at most ${MAX_ENRICH_BATCH} prospects at a time.` };
+  if (!ids.every(isUuid)) return { error: "Invalid prospect id." };
+
+  const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
+
+  const { data: rows, error: readErr } = await supabase
+    .from("outbound_prospects")
+    .select("id, school_name, town_county, school_level, website, phone, email, contact_name, contact_role, status")
+    .in("id", ids);
+  if (readErr) return { error: readErr.message };
+  if (!rows || rows.length === 0) return { error: "Those prospects weren't found." };
+
+  // Contact lookup is optional: with AI off or unconfigured we still scrape the schools' own sites.
+  let total: AiUsage = { promptTokens: 0, outputTokens: 0, totalTokens: 0 };
+  const usage = { add: (u: AiUsage | null) => { total = addUsage(total, u); } };
+  const todo = (rows as EnrichRow[]).filter((r) => r.status !== "promoted" && (!r.phone || !r.email));
+
+  const outcomes = await Promise.all(
+    todo.map(async (row) => {
+      const r = await enrichOne(row, usage);
+      if ("error" in r || !("add" in r)) return { kind: "none" as const, error: "error" in r ? r.error : undefined };
+      const { error } = await supabase.rpc("admin_set_outbound_prospect_contacts", {
+        p_id: row.id,
+        p_website: r.add.website,
+        p_phone: r.add.phone,
+        p_email: r.add.email,
+        p_contact_name: r.add.contact_name,
+        p_contact_role: r.add.contact_role,
+        p_source_url: r.sourceUrl,
+        p_method: r.method,
+      });
+      if (error) return { kind: "failed" as const, error: error.message };
+      return { kind: "enriched" as const };
+    }),
+  );
+
+  const enriched = outcomes.filter((o) => o.kind === "enriched").length;
+  const failed = outcomes.filter((o) => o.kind === "failed").length;
+  const notFound = outcomes.filter((o) => o.kind === "none").length;
+  const firstError = outcomes.find((o) => "error" in o && o.error)?.error;
+  void logAdminAction(supabase, "enrich_outbound_prospects", {
+    enriched,
+    notFound,
+    failed,
+    model: GEMINI_ENRICH_MODEL,
+    prompt_tokens: total.promptTokens,
+    output_tokens: total.outputTokens,
+    total_tokens: total.totalTokens,
+  });
+  revalidatePath(PATH);
+  return { success: true, enriched, notFound, failed, firstError };
+}
+
+export async function confirmOutboundContacts(id: string): Promise<ActionResult> {
+  if (!isUuid(id)) return { error: "Invalid prospect id." };
+
+  const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
+  const { error } = await supabase.rpc("admin_confirm_outbound_prospect_contacts", { p_id: id });
+  if (error) return { error: error.message };
+
+  void logAdminAction(supabase, "confirm_outbound_contacts", { prospect_id: id });
+  revalidatePath(PATH);
+  return { success: true };
 }
 
 export async function reviewOutboundProspect(id: string, decision: string): Promise<ActionResult> {
