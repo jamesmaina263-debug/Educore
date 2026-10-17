@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
+import { PUBLISHED_PRICE_KES_PER_STUDENT_TERM } from "@/lib/growth/product-facts";
+import { TRIAL_TERMS } from "@/lib/marketing/trial";
 import {
   MAX_IMPORT_ROWS,
+  OUTREACH_OFFER,
+  assembleWhatsApp,
   buildScoringPrompt,
+  greetingName,
   normalizePhone,
   normalizeManualContacts,
   normalizeSchoolLevel,
@@ -10,6 +15,7 @@ import {
   parseCsv,
   parseProspectCsv,
   parseScoringResponse,
+  sanitizeOpening,
 } from "./prospects";
 
 describe("parseCsv", () => {
@@ -93,8 +99,8 @@ describe("parseProspectCsv", () => {
   });
 });
 
-describe("scoring prompt + response", () => {
-  it("builds a prompt containing only supplied facts and the no-invention rules", () => {
+describe("scoring prompt", () => {
+  it("contains only supplied facts and asks for an opening, not a whole email", () => {
     const p = buildScoringPrompt({
       school_name: "Sunrise Academy",
       town_county: "Nakuru",
@@ -107,13 +113,14 @@ describe("scoring prompt + response", () => {
     expect(p).toContain("Sunrise Academy");
     expect(p).toContain("Approximate students: 400");
     expect(p).not.toContain("Website:");
+    expect(p).toContain('"opening"');
+    expect(p).not.toContain('"email_body"');
     expect(p).toContain("never claim we visited");
   });
-
   it("grounds the prompt in the verified facts and bans endorsement and discount claims", () => {
     const p = buildScoringPrompt({
       school_name: "Sunrise Academy",
-      town_county: null,
+      town_county: "Nakuru",
       school_type: "private",
       school_level: "primary",
       website: null,
@@ -126,38 +133,116 @@ describe("scoring prompt + response", () => {
     expect(p).toMatch(/Never offer or imply a discount/);
     expect(p).not.toContain("simple learner progress reports");
   });
-
-  it("gives kindergartens the competency wording and no exam claims", () => {
+  it("keeps the fixed offer line in step with the marketing trial wording", () => {
+    expect(TRIAL_TERMS).toBe("30-day free trial. No card required.");
+    expect(OUTREACH_OFFER.pricePerStudentPerTermKes).toBe(PUBLISHED_PRICE_KES_PER_STUDENT_TERM);
+  });
+  it("steers kindergartens away from exams", () => {
     const p = buildScoringPrompt({
-      school_name: "Little Stars Nursery",
+      school_name: "Little Stars",
       town_county: null,
-      school_type: "private",
+      school_type: null,
       school_level: "kindergarten",
       website: null,
       contact_name: null,
       contact_role: null,
       student_count: null,
     });
+    expect(p).toContain("not exams");
     expect(p).toContain("competency-based learner progress reports");
     expect(p).toContain("Do not mention exams, KCPE, KCSE");
-    expect(p).not.toContain("simple learner progress reports");
   });
+});
+
+describe("parseScoringResponse + fixed draft template", () => {
   const good = {
     fit_score: 72.4,
     fit_reason: "Mid-size private school.",
-    email_subject: "Fees and CBC reports in one place",
-    email_body: "Hello, ...",
-    whatsapp: "Hi, ... reply STOP.",
+    email_subject: "One system for fees, attendance and report cards",
+    opening: "Following up on fees and preparing report cards each term can take a lot of a school's time.",
   };
+
   it("parses plain and fenced JSON and clamps the score", () => {
     const a = parseScoringResponse(JSON.stringify(good));
     expect(a.ok && a.value.fit_score).toBe(72);
     const b = parseScoringResponse("```json\n" + JSON.stringify({ ...good, fit_score: 250 }) + "\n```");
     expect(b.ok && b.value.fit_score).toBe(100);
   });
+
+  it("builds the email from fixed text: price, trial, links, sign-off and opt-out always present", () => {
+    const r = parseScoringResponse(JSON.stringify(good), { school_name: "Sunrise Academy", contact_name: "Jane Wanjiru", school_level: "primary" });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    const body = r.value.email_body;
+    expect(body.startsWith("Hello Jane Wanjiru,\n\n")).toBe(true);
+    expect(body).toContain(good.opening);
+    expect(body).toContain("Our pricing starts at KES 100 per student per term, with a 30-day free trial and no payment card required.");
+    expect(body).toContain("supported CBC competency-based reporting and marks-based grading");
+    expect(body).toContain("Would you be open to a brief online demonstration");
+    expect(body).toContain("Kind regards,\nEduCore Africa\nhttps://");
+    expect(body).toContain("/signup");
+    expect(body).toContain("just reply and we will not contact you again");
+  });
+
+  it("greets with plain 'Hello,' when the contact is missing or is really the school's name", () => {
+    const none = parseScoringResponse(JSON.stringify(good), { school_name: "Nyeri Junior School", contact_name: null });
+    expect(none.ok && none.value.email_body.startsWith("Hello,\n\n")).toBe(true);
+    const schoolish = parseScoringResponse(JSON.stringify(good), { school_name: "Nyeri Junior School", contact_name: "Nyeri Junior" });
+    expect(schoolish.ok && schoolish.value.email_body.startsWith("Hello,\n\n")).toBe(true);
+    const office = parseScoringResponse(JSON.stringify(good), { school_name: "X", contact_name: "School Office" });
+    expect(office.ok && office.value.email_body.startsWith("Hello,\n\n")).toBe(true);
+    expect(greetingName("Jane Wanjiru", "Sunrise Academy")).toBe("Jane Wanjiru");
+  });
+
+  it("rejects an AI opening that contains figures, prices, links or offers and uses the default instead", () => {
+    for (const bad of [
+      "Save 50% on your school software today with our amazing offer.",
+      "Our system costs KES 50 per student which is cheaper than anyone.",
+      "Visit https://example.com to learn how we can help your school.",
+      "Email us at sales@example.com for a free upgrade for your school.",
+      "short",
+    ]) {
+      const r = parseScoringResponse(JSON.stringify({ ...good, opening: bad }));
+      expect(r.ok && r.value.email_body).toContain("can take considerable time for a school");
+      expect(r.ok && r.value.email_body).not.toContain(bad);
+    }
+    expect(sanitizeOpening(undefined, null)).toContain("considerable time");
+  });
+
+  it("uses kindergarten wording (no exams or report cards) for kindergartens", () => {
+    const r = parseScoringResponse(JSON.stringify({ ...good, opening: undefined }), { school_level: "kindergarten" });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.value.email_body).toContain("kindergartens and nursery schools");
+    expect(r.value.email_body).toContain("competency-based learner progress reports");
+    expect(r.value.email_body).not.toContain("marks-based grading");
+    expect(r.value.email_body).not.toContain("simple learner progress reports");
+    expect(r.value.whatsapp).toContain("kindergartens run admissions");
+    expect(r.value.whatsapp).not.toContain("report cards");
+  });
+
+  it("stays level-neutral (no exam or report-card wording) when the level is unknown", () => {
+    const r = parseScoringResponse(JSON.stringify(good), { school_name: "Sunrise Academy" });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.value.email_body).not.toContain("marks-based grading");
+    expect(r.value.email_body).not.toContain("exam");
+    expect(r.value.whatsapp).not.toContain("report cards");
+    const primary = parseScoringResponse(JSON.stringify(good), { school_level: "primary" });
+    expect(primary.ok && primary.value.email_body).toContain("marks-based grading");
+  });
+
+  it("builds a WhatsApp message with the offer and a STOP line, from fixed text only", () => {
+    const w = assembleWhatsApp({ school_name: "Sunrise Academy", contact_name: "Jane Wanjiru" });
+    expect(w.startsWith("Hello Jane Wanjiru, this is EduCore Africa.")).toBe(true);
+    expect(w).toContain("from KES 100 per student per term with a 30-day free trial");
+    expect(w).toContain("Reply STOP");
+    expect(w.length).toBeLessThan(1000);
+  });
+
   it("rejects malformed or incomplete output", () => {
     expect(parseScoringResponse("sure! here you go").ok).toBe(false);
-    expect(parseScoringResponse(JSON.stringify({ ...good, whatsapp: "" })).ok).toBe(false);
+    expect(parseScoringResponse(JSON.stringify({ ...good, email_subject: "" })).ok).toBe(false);
     expect(parseScoringResponse(JSON.stringify({ ...good, fit_score: "high" })).ok).toBe(false);
   });
 });

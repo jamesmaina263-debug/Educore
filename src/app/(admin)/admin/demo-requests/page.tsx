@@ -25,6 +25,17 @@ export default async function AdminDemoRequestsPage() {
     .order("created_at", { ascending: false })
     .limit(200);
 
+  // Which requests are already in the sales pipeline. A separate query so that, if the page is deployed a
+  // moment before the migration that adds sales_lead_id, only this marker is missing and the list is not.
+  const { data: linkRows } = await supabase
+    .from("marketing_demo_requests")
+    .select("id, sales_lead_id")
+    .not("sales_lead_id", "is", null);
+  const leadLinks: Record<string, string> = {};
+  for (const l of (linkRows ?? []) as { id: string; sales_lead_id: string | null }[]) {
+    if (l.sales_lead_id) leadLinks[l.id] = l.sales_lead_id;
+  }
+
   const { data: teamMembers } = await supabase
     .from("platform_team_members")
     .select("id, name, email")
@@ -52,6 +63,7 @@ export default async function AdminDemoRequestsPage() {
       <AdminDemoRequestsTable
         rows={(requests ?? []) as DemoRequestRow[]}
         teamMembers={teamMembers ?? []}
+        leadLinks={leadLinks}
       />
       <AdminIncompleteDemoLeads rows={(incompleteLeads ?? []) as IncompleteDemoLeadRow[]} />
     </div>

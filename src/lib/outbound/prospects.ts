@@ -3,7 +3,8 @@
 // The school_type list must match the CHECK constraint in
 // supabase/migrations/20261016120000_outbound_prospecting.sql.
 
-import { renderProductFactsForPrompt } from "@/lib/growth/product-facts";
+import { PUBLISHED_PRICE_KES_PER_STUDENT_TERM, renderProductFactsForPrompt } from "@/lib/growth/product-facts";
+import { SITE_URL } from "@/lib/site";
 
 export const MAX_IMPORT_ROWS = 500;
 export const MAX_SCORE_BATCH = 10;
@@ -228,9 +229,100 @@ export type ScoringResult = {
 };
 
 /**
- * The model only ever sees facts we already hold about the school. It is told not to invent
- * anything (no claimed visits, no fake mutual contacts, no numbers, no prices) because these
- * drafts go to strangers under EduCore's name.
+ * What the AI actually writes: a score, a one-line reason, a subject and ONE short opening
+ * paragraph. Everything else in a draft (what EduCore does, the price, the free trial, the links,
+ * the sign-off and the opt-out line) is fixed text assembled below, so the model can never reword
+ * an offer or invent one. Product claims come from src/lib/growth/product-facts.ts (every claim there
+ * has evidence in the repo); price and trial come from the same sources the marketing site uses.
+ */
+export const OUTREACH_OFFER = {
+  pricePerStudentPerTermKes: PUBLISHED_PRICE_KES_PER_STUDENT_TERM,
+  // Must match TRIAL_TERMS in src/lib/marketing/trial.ts ("30-day free trial. No card required.");
+  // prospects.test.ts fails if that wording changes so this cannot drift silently.
+  trialDays: 30,
+} as const;
+
+const OFFER_LINE = `Our pricing starts at KES ${OUTREACH_OFFER.pricePerStudentPerTermKes} per student per term, with a ${OUTREACH_OFFER.trialDays}-day free trial and no payment card required.`;
+
+const DEFAULT_OPENING_SCHOOL =
+  "Managing admissions, student records, fee collection through M-Pesa, and end-of-term assessments can take considerable time for a school.";
+const DEFAULT_OPENING_KINDERGARTEN =
+  "Keeping up with admissions, fee collection and regular updates to parents can take a great deal of a kindergarten's time.";
+
+export type DraftContext = {
+  school_name?: string | null;
+  contact_name?: string | null;
+  school_level?: string | null;
+};
+
+/** The name to greet, or null when it's missing or just the school/office label ("Hello," instead). */
+export function greetingName(contactName: string | null | undefined, schoolName?: string | null): string | null {
+  const name = (contactName ?? "").trim();
+  if (!name) return null;
+  const norm = (v: string) => v.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  const n = norm(name);
+  const school = norm(schoolName ?? "");
+  if (school && (school.includes(n) || n.includes(school))) return null;
+  if (/\b(school|academy|office|admin|administrator|administration|principal|headteacher|head teacher|team|info)\b/.test(n)) return null;
+  return name;
+}
+
+/** The AI-written opening is only used if it is a plain short paragraph with no figures, prices or links. */
+export function sanitizeOpening(raw: unknown, level: OutboundSchoolLevel | null | undefined): string {
+  const fallback = level === "kindergarten" ? DEFAULT_OPENING_KINDERGARTEN : DEFAULT_OPENING_SCHOOL;
+  if (typeof raw !== "string") return fallback;
+  const t = raw.replace(/\s+/g, " ").trim();
+  if (t.length < 20 || t.length > 400) return fallback;
+  if (/[0-9%]|kes|ksh|http|www\.|@|free|discount|guarantee|approved|certified|accredited|official|endorse|kicd|knec|ministry|safaricom|simple/i.test(t)) return fallback;
+  return t;
+}
+
+const PRODUCT_PARAGRAPH = {
+  // PP1/PP2 and competency-based learner progress reports are verified facts for kindergartens;
+  // exam, grade and ranking wording is deliberately absent (see KINDERGARTEN_GUIDANCE).
+  kindergarten:
+    "EduCore Africa helps Kenyan kindergartens and nursery schools bring admissions, learner records, fee collection through M-Pesa, daily attendance and parent communication through SMS and WhatsApp together in one cloud-based system. It supports Pre-Primary (PP1 and PP2) classes and provides competency-based learner progress reports.",
+  // Level unknown (e.g. a CSV import with no level): stay level-neutral rather than risk exam talk for a nursery.
+  neutral:
+    "EduCore Africa helps Kenyan schools bring admissions, student records, fee collection through M-Pesa, student attendance and parent communication through SMS and WhatsApp together in one cloud-based school management system.",
+  full: "EduCore Africa helps Kenyan schools bring admissions, student records and fee collection through M-Pesa together in one cloud-based school management system. It also supports student attendance, parent communication through SMS and WhatsApp, and exam management and report cards, including supported CBC competency-based reporting and marks-based grading.",
+} as const;
+
+export function assembleEmailBody(openingRaw: unknown, ctx: DraftContext = {}): string {
+  const level = normalizeSchoolLevel(ctx.school_level ?? null);
+  const name = greetingName(ctx.contact_name, ctx.school_name);
+  const product = level === "kindergarten" ? PRODUCT_PARAGRAPH.kindergarten : level === null ? PRODUCT_PARAGRAPH.neutral : PRODUCT_PARAGRAPH.full;
+  return [
+    name ? `Hello ${name},` : "Hello,",
+    sanitizeOpening(openingRaw, level),
+    product,
+    OFFER_LINE,
+    "Would you be open to a brief online demonstration to see how EduCore could support your school?",
+    `Kind regards,\nEduCore Africa\n${SITE_URL}\n${SITE_URL}/signup`,
+    "If you would rather not hear from us, just reply and we will not contact you again.",
+  ].join("\n\n");
+}
+
+export function assembleWhatsApp(ctx: DraftContext = {}): string {
+  const level = normalizeSchoolLevel(ctx.school_level ?? null);
+  const name = greetingName(ctx.contact_name, ctx.school_name);
+  const what =
+    level === "kindergarten"
+      ? "kindergartens run admissions, fee collection through M-Pesa, attendance and parent updates"
+      : level === null
+        ? "schools run admissions, fee collection through M-Pesa, attendance and parent updates"
+        : "schools run admissions, fee collection through M-Pesa, attendance, parent updates and report cards";
+  return (
+    `Hello${name ? ` ${name}` : ""}, this is EduCore Africa. We help Kenyan ${what} in one cloud system, ` +
+    `from KES ${OUTREACH_OFFER.pricePerStudentPerTermKes} per student per term with a ${OUTREACH_OFFER.trialDays}-day free trial and no card needed. ` +
+    `Could we show you a short online demo? ${SITE_URL}\n` +
+    "Reply STOP and we will not message you again."
+  );
+}
+
+/**
+ * The model only ever sees facts we already hold about the school. It writes ONLY the score, a reason,
+ * a subject and a short opening paragraph (see OUTREACH_OFFER above for why).
  */
 export function buildScoringPrompt(p: ProspectForScoring): string {
   const level = normalizeSchoolLevel(p.school_level ?? null);
@@ -246,7 +338,7 @@ export function buildScoringPrompt(p: ProspectForScoring): string {
     .filter(Boolean)
     .join("\n");
 
-  return `You help EduCore, a Kenyan cloud school management system, decide which schools to approach and draft a first message.
+  return `You help EduCore, a Kenyan cloud school management system, decide which schools to approach.
 
 ${renderProductFactsForPrompt(level)}
 
@@ -256,11 +348,14 @@ ${facts}
 Return ONLY a JSON object with these keys:
 - "fit_score": integer 0-100. How likely this school is to benefit from and buy a school management system. Larger fee-paying schools with parent-communication and fee-collection needs score higher. If you know very little, score between 30 and 50, not high.
 - "fit_reason": one or two plain sentences explaining the score, using only the facts above.
-- "email_subject": under 70 characters, no clickbait, no ALL CAPS.
-- "email_body": 70-120 words, plain text, no markdown. Address the contact by name if given, otherwise "Hello". Mention one concrete benefit relevant to the school's type or size. End by inviting a reply or a short demo. Do not include an unsubscribe line or signature block; the sending system adds those.
-- "whatsapp": 40-70 words, friendly and brief, in the same spirit. Introduce EduCore, offer a short demo, and say they can reply STOP and we won't message again.
+- "email_subject": under 70 characters, plain and professional, no clickbait, no ALL CAPS, no exclamation marks.
+- "opening": ONE paragraph of 1-2 sentences (under 45 words) that opens a first email by naming an administrative burden a school like this typically faces (for example admissions, fee follow-up, assessments, or updating parents). Plain text. Do not greet, do not mention EduCore, and do not include any numbers, prices, percentages, offers, links or promises. ${
+    level === "kindergarten"
+      ? "This is a kindergarten/nursery: talk about admissions, fees and updating parents, not exams."
+      : "Keep it general to a Kenyan school."
+  }
 
-Hard rules: never claim we visited, spoke to, or were referred by anyone; never invent statistics, customers, awards, or prices; never mention competitors; do not imply the school asked to hear from us. Write in clear, respectful Kenyan business English.`;
+Hard rules: never claim we visited, spoke to, or were referred by anyone; never invent facts about the school or its current systems; never mention competitors. Write in clear, respectful Kenyan business English.`;
 }
 
 function stripFences(s: string): string {
@@ -275,8 +370,11 @@ const clip = (s: string, max: number) => s.trim().slice(0, max);
 
 export type ParseScoringResult = { ok: true; value: ScoringResult } | { ok: false; error: string };
 
-/** Validates the model's JSON. Anything missing or the wrong shape is an error, never a guess. */
-export function parseScoringResponse(raw: string): ParseScoringResult {
+/**
+ * Validates the model's JSON and assembles the final drafts. A missing or unsafe `opening` falls back
+ * to a fixed default paragraph rather than failing, since the rest of the email is fixed text.
+ */
+export function parseScoringResponse(raw: string, ctx: DraftContext = {}): ParseScoringResult {
   let data: unknown;
   try {
     data = JSON.parse(stripFences(raw));
@@ -293,10 +391,8 @@ export function parseScoringResponse(raw: string): ParseScoringResult {
   const str = (k: string) => (typeof o[k] === "string" ? (o[k] as string).trim() : "");
   const fit_reason = str("fit_reason");
   const email_subject = str("email_subject");
-  const email_body = str("email_body");
-  const whatsapp = str("whatsapp");
-  if (!fit_reason || !email_subject || !email_body || !whatsapp) {
-    return { ok: false, error: "AI scoring was missing one of the reason, email or WhatsApp drafts." };
+  if (!fit_reason || !email_subject) {
+    return { ok: false, error: "AI scoring was missing the reason or the email subject." };
   }
 
   return {
@@ -305,8 +401,8 @@ export function parseScoringResponse(raw: string): ParseScoringResult {
       fit_score,
       fit_reason: clip(fit_reason, 1000),
       email_subject: clip(email_subject, 200),
-      email_body: clip(email_body, 4000),
-      whatsapp: clip(whatsapp, 1000),
+      email_body: clip(assembleEmailBody(o.opening, ctx), 4000),
+      whatsapp: clip(assembleWhatsApp(ctx), 1000),
     },
   };
 }
