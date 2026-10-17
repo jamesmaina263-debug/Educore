@@ -19,7 +19,7 @@
 
 import { GEMINI_REPORT_CARD_MODEL, geminiGenerateContentUrl, geminiHeaders } from "@/lib/ai/report-card-comment";
 
-export type PlatformAiTask = "outreach_scoring";
+export type PlatformAiTask = "outreach_scoring" | "outreach_contact_lookup";
 
 export type AiUsage = { promptTokens: number; outputTokens: number; totalTokens: number };
 
@@ -82,8 +82,11 @@ export function extractUsage(body: GeminiBody): AiUsage | null {
 export type GeneratePlatformTextInput = {
   task: PlatformAiTask;
   prompt: string;
-  /** Ask the model for a JSON object (responseMimeType). */
+  /** Ask the model for a JSON object (responseMimeType). Ignored when webSearch is on: Gemini does not
+   *  allow structured-output mode together with the search tool, so callers must parse JSON from text. */
   json?: boolean;
+  /** Let the model use Google Search grounding (used to LOCATE public pages; callers must verify claims). */
+  webSearch?: boolean;
   temperature?: number;
   model?: string;
   maxOutputTokens?: number;
@@ -117,8 +120,9 @@ export async function generatePlatformText(input: GeneratePlatformTextInput): Pr
         generationConfig: {
           temperature: input.temperature ?? 0.4,
           maxOutputTokens: clampMaxOutputTokens(input.maxOutputTokens ?? 1024, env),
-          ...(input.json ? { responseMimeType: "application/json" } : {}),
+          ...(input.json && !input.webSearch ? { responseMimeType: "application/json" } : {}),
         },
+        ...(input.webSearch ? { tools: [{ google_search: {} }] } : {}),
       }),
       signal: AbortSignal.timeout(input.timeoutMs ?? DEFAULT_TIMEOUT_MS),
     });
@@ -139,7 +143,8 @@ export async function generatePlatformText(input: GeneratePlatformTextInput): Pr
     return { ok: false, reason: "empty", error: "The AI provider returned an unreadable response." };
   }
 
-  const text = body.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+  // Grounded (web search) answers can arrive split across several parts; join them all.
+  const text = (body.candidates?.[0]?.content?.parts ?? []).map((p) => p.text ?? "").join("");
   if (!text.trim()) return { ok: false, reason: "empty", error: "The AI provider returned no text." };
 
   return { ok: true, text, usage: extractUsage(body), model };

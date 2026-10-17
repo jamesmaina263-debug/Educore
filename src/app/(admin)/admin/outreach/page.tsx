@@ -2,6 +2,9 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { AdminOutreach, type OutboundProspectRow } from "@/components/admin/admin-outreach";
 
+// "Find contacts" fetches several web pages per school and calls Gemini; allow the full minute.
+export const maxDuration = 60;
+
 // Same auth gate as the other platform-admin pages: the (admin) layout already enforces
 // auth_is_super_admin(); this repeats it (defense in depth) and outbound_prospects' own RLS
 // select policy is gated on it too.
@@ -20,7 +23,7 @@ export default async function AdminOutreachPage() {
     supabase
       .from("outbound_prospects")
       .select(
-        "id, school_name, town_county, school_type, school_level, website, phone, email, source_note, fit_score, fit_reason, draft_email_subject, draft_email_body, draft_whatsapp, status",
+        "id, school_name, town_county, school_type, school_level, website, phone, email, contact_name, contact_role, contact_status, contact_source_url, source_note, fit_score, fit_reason, draft_email_subject, draft_email_body, draft_whatsapp, status",
       )
       .order("fit_score", { ascending: false, nullsFirst: false })
       .order("created_at", { ascending: false })

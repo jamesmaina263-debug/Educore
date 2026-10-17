@@ -114,6 +114,30 @@ describe("generatePlatformText", () => {
     expect(sent.generationConfig.responseMimeType).toBeUndefined();
   });
 
+  it("adds the Google Search tool (and no JSON mode) only when webSearch is requested, and joins split parts", async () => {
+    const fetchImpl = vi.fn(async () =>
+      new Response(
+        JSON.stringify({ candidates: [{ content: { parts: [{ text: '{"a":' }, { text: "1}" }] } }] }),
+        { status: 200 },
+      ),
+    );
+    const r = await generatePlatformText({
+      task: "outreach_contact_lookup",
+      prompt: "p",
+      json: true,
+      webSearch: true,
+      env: { GEMINI_API_KEY: "k" },
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    });
+    expect(r.ok && r.text).toBe('{"a":1}');
+    const sent = JSON.parse((fetchImpl.mock.calls[0] as unknown as [string, { body: string }])[1].body);
+    expect(sent.tools).toEqual([{ google_search: {} }]);
+    expect(sent.generationConfig.responseMimeType).toBeUndefined();
+  });
+  it("can switch contact lookup off on its own", () => {
+    expect(aiDisabledReason("outreach_contact_lookup", { PLATFORM_AI_DISABLED_TASKS: "outreach_contact_lookup" })).toMatch(/switched off/);
+    expect(aiDisabledReason("outreach_scoring", { PLATFORM_AI_DISABLED_TASKS: "outreach_contact_lookup" })).toBeNull();
+  });
   it("reports an HTTP failure without leaking the key", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(new Response("nope", { status: 429 }));
     const r = await generatePlatformText({ task: "outreach_scoring", prompt: "p", env, fetchImpl });
