@@ -19,10 +19,42 @@ function isoDate(d: Date): string {
   return d.toISOString().slice(0, 10);
 }
 
-function daysAgo(n: number): Date {
-  const d = new Date();
-  d.setUTCDate(d.getUTCDate() - n);
-  return d;
+// The GA4 property's reporting time zone (GA4 Admin > Property settings: "Kenya Time", UTC+3, no
+// DST). GA4 buckets every day in this zone, so the analytics page must work out "today" and day
+// boundaries in it too -- in UTC, "Today" asks GA4 for yesterday between 00:00 and 03:00 Nairobi.
+export const ANALYTICS_TIME_ZONE = "Africa/Nairobi";
+/** Fixed UTC offset of ANALYTICS_TIME_ZONE (Kenya has no daylight saving). */
+export const ANALYTICS_UTC_OFFSET = "+03:00";
+
+type RangeOptions = {
+  /** IANA zone used to decide which calendar day it is. Defaults to UTC, which the finance
+   *  overview page relies on; only the GA4 analytics page opts in to ANALYTICS_TIME_ZONE. */
+  timeZone?: string;
+  /** Clock override, for tests. */
+  now?: Date;
+};
+
+/** "YYYY-MM-DD" for `now` as seen in `timeZone`. */
+export function todayIso(timeZone = "UTC", now: Date = new Date()): string {
+  // The en-CA locale formats dates as YYYY-MM-DD.
+  return new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).format(now);
+}
+
+function daysAgoIso(n: number, timeZone: string, now: Date): string {
+  const [y, m, d] = todayIso(timeZone, now).split("-").map(Number);
+  const date = new Date(Date.UTC(y, m - 1, d));
+  date.setUTCDate(date.getUTCDate() - n);
+  return isoDate(date);
+}
+
+/** Start of a calendar day (in ANALYTICS_TIME_ZONE) as a UTC ISO timestamp, for database filters. */
+export function dayStartUtc(iso: string): string {
+  return new Date(`${iso}T00:00:00.000${ANALYTICS_UTC_OFFSET}`).toISOString();
+}
+
+/** End of a calendar day (in ANALYTICS_TIME_ZONE) as a UTC ISO timestamp, for database filters. */
+export function dayEndUtc(iso: string): string {
+  return new Date(`${iso}T23:59:59.999${ANALYTICS_UTC_OFFSET}`).toISOString();
 }
 
 // Maps a UI period key to a [start, end] ISO date pair covering the
@@ -36,20 +68,22 @@ function daysAgo(n: number): Date {
 export function resolveDateRange(
   period: PeriodKey,
   custom?: { from: string; to: string },
+  options: RangeOptions = {},
 ): { startIso: string; endIso: string; label: string } {
+  const { timeZone = "UTC", now = new Date() } = options;
+  const today = todayIso(timeZone, now);
   if (period === "today") {
-    const today = isoDate(new Date());
     return { startIso: today, endIso: today, label: "Today" };
   }
   if (period === "yesterday") {
-    const y = isoDate(daysAgo(1));
+    const y = daysAgoIso(1, timeZone, now);
     return { startIso: y, endIso: y, label: "Yesterday" };
   }
   if (period === "7d") {
-    return { startIso: isoDate(daysAgo(6)), endIso: isoDate(new Date()), label: "Last 7 days" };
+    return { startIso: daysAgoIso(6, timeZone, now), endIso: today, label: "Last 7 days" };
   }
   if (period === "30d") {
-    return { startIso: isoDate(daysAgo(29)), endIso: isoDate(new Date()), label: "Last 30 days" };
+    return { startIso: daysAgoIso(29, timeZone, now), endIso: today, label: "Last 30 days" };
   }
   if (period === "custom" && custom) {
     const { from, to } = custom;
@@ -59,9 +93,7 @@ export function resolveDateRange(
       label: from === to ? from : `${from} – ${to}`,
     };
   }
-  const start = isoDate(daysAgo(89));
-  const end = isoDate(new Date());
-  return { startIso: start, endIso: end, label: "Last 90 days" };
+  return { startIso: daysAgoIso(89, timeZone, now), endIso: today, label: "Last 90 days" };
 }
 
 // Equivalent-length prior period for a given [start, end] pair, so KPI

@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { safeAdminNextPath } from "@/lib/admin-operator";
 import { getAdminOperator } from "@/lib/admin-operator-server";
+import { getAdminMfaState, isSuperAdminAnyAal } from "@/lib/admin-mfa";
 import { OperatorPicker } from "./operator-picker";
 
 // Lives in its own route group (not under (admin)) on purpose: (admin)/layout.tsx sends anyone
@@ -23,10 +24,14 @@ export default async function WhoAreYouPage({
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const { data: isSuperAdmin } = await supabase.rpc("auth_is_super_admin");
-  if (isSuperAdmin !== true) redirect("/dashboard");
+  if (!(await isSuperAdminAnyAal(supabase))) redirect("/dashboard");
 
+  // With MFA enforced, identity comes from the verified authenticator -- the self-declared picker
+  // (and the emailed-code / James-exempt shortcuts) are retired.
+  const mfa = await getAdminMfaState(supabase);
   const { next } = await searchParams;
+  if (mfa.required) redirect(`/admin/mfa?next=${encodeURIComponent(safeAdminNextPath(next))}`);
+
   const current = await getAdminOperator();
 
   return <OperatorPicker next={safeAdminNextPath(next)} current={current} />;

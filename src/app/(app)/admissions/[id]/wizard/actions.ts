@@ -6,6 +6,7 @@ import { setSentryRequestContext } from "@/lib/observability/sentry-context";
 import type { Recipient } from "@/app/(app)/communication/actions";
 import { escapePostgrestOrValue } from "@/lib/postgrest-filter";
 import { safeStorageFilename } from "@/lib/storage-path";
+import { escapeIlike, friendlyAdmissionNumberError, validateAdmissionNumber } from "@/lib/admission-number";
 
 type ActionResult = { error: string } | { success: true };
 
@@ -273,9 +274,65 @@ export async function checkForDuplicateStudents(applicationId: string): Promise<
   return { success: true, candidates: Array.from(candidates.values()) };
 }
 
+// Advisory pre-check for a friendlier message; the database trigger + unique constraint remain
+// the authority (and are race-safe). RLS scopes this to the caller's own school.
+async function findAdmissionNumberClash(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  schoolId: string,
+  value: string,
+  excludeStudentId?: string,
+): Promise<string | null> {
+  let query = supabase
+    .from("students")
+    .select("id, first_name, last_name")
+    .eq("school_id", schoolId)
+    .ilike("admission_number", escapeIlike(value))
+    .limit(1);
+  if (excludeStudentId) query = query.neq("id", excludeStudentId);
+  const { data } = await query;
+  const hit = data?.[0];
+  return hit ? `Admission number ${value} is already assigned to ${hit.first_name} ${hit.last_name} in your school.` : null;
+}
+
+// Correct an existing number typed at Step 2, only while the student is still mid-admission
+// (not yet enrolled/active) — enrolled students' numbers are never touched here.
+export async function updatePendingAdmissionNumber(
+  applicationId: string,
+  rawNumber: string,
+): Promise<{ error: string } | { success: true; admissionNumber: string }> {
+  const checked = validateAdmissionNumber(rawNumber);
+  if (!checked.ok) return { error: checked.error };
+  const supabase = await createClient();
+  const { data: application } = await supabase
+    .from("applications")
+    .select("school_id, resulting_student_id")
+    .eq("id", applicationId)
+    .maybeSingle();
+  if (!application?.resulting_student_id) return { error: "Create the student record first." };
+  const { data: student } = await supabase
+    .from("students")
+    .select("id, status, admission_number")
+    .eq("id", application.resulting_student_id)
+    .maybeSingle();
+  if (!student) return { error: "Student not found." };
+  if (!["applied", "approved"].includes(student.status)) {
+    return { error: "This student is already enrolled; their admission number can no longer be changed here." };
+  }
+  if (student.admission_number === checked.value) return { success: true, admissionNumber: checked.value };
+  const clash = await findAdmissionNumberClash(supabase, application.school_id, checked.value, student.id);
+  if (clash) return { error: clash };
+  const { error } = await supabase.from("students").update({ admission_number: checked.value }).eq("id", student.id);
+  if (error) return { error: friendlyAdmissionNumberError(error.message, checked.value) ?? error.message };
+  revalidatePath(`/admissions/${applicationId}/wizard`);
+  revalidatePath("/students");
+  return { success: true, admissionNumber: checked.value };
+}
+
 export interface CreateOrLinkStudentInput {
-  // Ignored when creating (the students_before_insert trigger always assigns it) — kept only
-  // so link_existing_student_id calls can keep passing "" without a type error.
+  // Blank = automatic (assigned by the database at Complete Enrollment). Non-blank = the
+  // student's existing number from the school's register; validated here and again by the
+  // assign_admission_number() trigger / unique (school_id, admission_number) constraint.
+  // Ignored for link_existing_student_id calls.
   admission_number: string;
   upi_number?: string;
   override_duplicate: boolean;
@@ -325,12 +382,22 @@ export async function createOrLinkStudent(
     return { success: true, studentId: input.link_existing_student_id };
   }
 
+  let manualNumber = "";
+  if (input.admission_number.trim()) {
+    const checked = validateAdmissionNumber(input.admission_number);
+    if (!checked.ok) return { error: checked.error };
+    manualNumber = checked.value;
+    const clash = await findAdmissionNumberClash(supabase, application.school_id, manualNumber);
+    if (clash) return { error: clash };
+  }
+
   const { data: student, error: studentError } = await supabase
     .from("students")
     .insert({
       school_id: application.school_id,
-      // Always blank — students_before_insert assigns the real number atomically.
-      admission_number: "",
+      // Blank = automatic (the trigger assigns it atomically at enrollment); otherwise the
+      // school's existing number, preserved as typed.
+      admission_number: manualNumber,
       upi_number: input.upi_number || null,
       first_name: application.first_name,
       last_name: application.last_name,
@@ -343,7 +410,9 @@ export async function createOrLinkStudent(
     })
     .select("id, admission_number")
     .single();
-  if (studentError || !student) return { error: studentError?.message ?? "Could not create the student record." };
+  if (studentError || !student) {
+    return { error: friendlyAdmissionNumberError(studentError?.message ?? "", manualNumber) ?? studentError?.message ?? "Could not create the student record." };
+  }
 
   const { error: updateError } = await supabase
     .from("applications")

@@ -1,5 +1,6 @@
 "use server";
 
+import { isSuperAdminAnyAal } from "@/lib/admin-mfa";
 import { redirect } from "next/navigation";
 import { cookies, headers } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
@@ -160,7 +161,10 @@ export async function login(
   const cookieStore = await cookies();
   let destination = "/dashboard";
   try {
-    const { data: isSuperAdmin } = await supabase.rpc("auth_is_super_admin");
+    // "Any assurance level": right after the password step the session is aal1, and with admin
+    // MFA enforced auth_is_super_admin() is false until a code is verified. The admin layout
+    // then sends them to /admin/mfa.
+    const isSuperAdmin = await isSuperAdminAnyAal(supabase);
     if (isSuperAdmin) {
       clearSchoolSlugCookie(cookieStore);
       // Shared super-admin login: forget whoever used it last so the admin layout asks

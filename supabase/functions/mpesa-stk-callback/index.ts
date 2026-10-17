@@ -1,6 +1,7 @@
 import { createClient } from "jsr:@supabase/supabase-js@2.112.4";
 import { verifyCallbackSource } from "../_shared/mpesa/verifyCallbackSource.ts";
 import { sendSecurityAlert } from "../_shared/securityAlert.ts";
+import { MAX_CALLBACK_BODY_BYTES, parseStkCallback } from "../_shared/mpesa/parseStkCallback.ts";
 
 // Public webhook Safaricom calls directly -- no Supabase session, so this function must be
 // deployed with verify_jwt disabled (`supabase functions deploy mpesa-stk-callback --no-verify-jwt`).
@@ -17,11 +18,6 @@ import { sendSecurityAlert } from "../_shared/securityAlert.ts";
 // here just causes pointless retries; real failures are logged (console.error) instead, and
 // mpesa_stk_callback_confirm() is itself idempotent (matches Safaricom's own retry behavior on
 // the legitimate-duplicate-delivery case).
-
-interface StkCallbackItem {
-  Name: string;
-  Value?: string | number;
-}
 
 Deno.serve(async (req) => {
   const alwaysOk = () =>
@@ -95,29 +91,48 @@ Deno.serve(async (req) => {
       return alwaysOk();
     }
 
-    const body = await req.json();
-    const stkCallback = body?.Body?.stkCallback;
-    if (!stkCallback?.CheckoutRequestID) {
-      console.error("mpesa-stk-callback: missing Body.stkCallback.CheckoutRequestID", JSON.stringify(body));
+    // Cap the body before parsing: this endpoint is public, so never buffer an unbounded payload.
+    const declaredLength = Number(req.headers.get("content-length") ?? "0");
+    const rawBody = declaredLength > MAX_CALLBACK_BODY_BYTES ? null : await req.text();
+    if (rawBody === null || rawBody.length > MAX_CALLBACK_BODY_BYTES) {
+      console.error("mpesa-stk-callback: body too large", schoolId);
+      void sendSecurityAlert("M-Pesa callback rejected: oversized body", {
+        school_id: schoolId,
+        source_ip: sourceCheck.sourceIp ?? "unknown",
+      });
       return alwaysOk();
     }
 
-    const resultCode: number = stkCallback.ResultCode;
-    const resultDesc: string = stkCallback.ResultDesc ?? "";
-    const items: StkCallbackItem[] = stkCallback.CallbackMetadata?.Item ?? [];
-    const getItem = (name: string) => items.find((i) => i.Name === name)?.Value;
+    const parsed = parseStkCallback(JSON.parse(rawBody));
+    if (!parsed.ok) {
+      // Never log the body itself: it carries the payer's phone number.
+      console.error("mpesa-stk-callback: rejected callback --", parsed.reason, parsed.checkoutRequestId ?? "");
+      if (parsed.isSuccessCode) {
+        // A "success" Safaricom would not send. Leave the request pending (the STK Query
+        // reconciliation will resolve it against Daraja) and make sure a human sees it.
+        void sendSecurityAlert("M-Pesa callback rejected: success without valid Amount/Receipt", {
+          checkout_request_id: parsed.checkoutRequestId ?? "unknown",
+          school_id: schoolId,
+          source_ip: sourceCheck.sourceIp ?? "unknown",
+        });
+      }
+      return alwaysOk();
+    }
 
-    const amount = getItem("Amount");
-    const receiptNumber = getItem("MpesaReceiptNumber");
-    const phoneNumber = getItem("PhoneNumber");
+    const stkCallback = { CheckoutRequestID: parsed.checkoutRequestId };
+    const resultCode = parsed.resultCode;
+    const resultDesc = parsed.resultDesc;
+    const amount = parsed.amount;
+    const receiptNumber = parsed.receiptNumber;
+    const phoneNumber = parsed.phoneNumber;
 
     const { error } = await serviceClient.rpc("mpesa_stk_callback_confirm", {
       p_checkout_request_id: stkCallback.CheckoutRequestID,
       p_result_code: resultCode,
       p_result_desc: resultDesc,
-      p_receipt_number: typeof receiptNumber === "string" ? receiptNumber : null,
-      p_amount: typeof amount === "number" ? amount : null,
-      p_phone_number: phoneNumber != null ? String(phoneNumber) : null,
+      p_receipt_number: receiptNumber,
+      p_amount: amount,
+      p_phone_number: phoneNumber,
       // Bind the callback to the school whose token was validated above.
       p_school_id: schoolId,
     });
