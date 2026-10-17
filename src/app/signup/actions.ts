@@ -267,11 +267,12 @@ export async function signUpSchool(
     return { error: "Please enter a valid email address." };
   }
   // The owner proves they control the inbox by clicking the emailed set-password link, which is
-  // meaningless for a public throwaway inbox (anyone can open it). Ask for a real address.
+  // meaningless for a public throwaway inbox (anyone can open it). Ask for a permanent address
+  // (any real provider is fine, not just a school domain).
   if (isDisposableEmail(email)) {
     return {
       error:
-        "Please use your school's own email address. Temporary or disposable email addresses can't be used to start a trial.",
+        "Please use a permanent email address. Temporary or disposable email addresses can't be used to start a trial.",
     };
   }
 
