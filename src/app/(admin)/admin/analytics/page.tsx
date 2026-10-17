@@ -18,6 +18,10 @@ import { GranularityTabs } from "@/components/admin/analytics/granularity-tabs";
 import {
   resolveDateRange,
   priorPeriod,
+  todayIso,
+  dayStartUtc,
+  dayEndUtc,
+  ANALYTICS_TIME_ZONE,
   percentChange,
   isValidIsoDate,
   defaultGranularity,
@@ -87,14 +91,13 @@ export default async function AdminAnalyticsPage({
   const customRange =
     period === "custom" && isValidIsoDate(from) && isValidIsoDate(to) && from <= to ? { from, to } : undefined;
   if (period === "custom" && !customRange) period = "7d";
-  const { startIso, endIso, label } = resolveDateRange(period, customRange);
+  // Days are bucketed in the GA4 property's time zone (Kenya Time) so "Today" matches what GA4 calls today.
+  const { startIso, endIso, label } = resolveDateRange(period, customRange, { timeZone: ANALYTICS_TIME_ZONE });
   const gaRange: [string, string] = [startIso, endIso];
   const prior = priorPeriod(startIso, endIso);
-  // resolveDateRange builds its dates in UTC, so "today" is compared in UTC too. GA4's standard
-  // reports lag by hours, so a range that ends today is incomplete; a single-day "Today" view
-  // compared with a full prior day would always read as a large drop, so that % is hidden.
-  const todayIso = new Date().toISOString().slice(0, 10);
-  const endsToday = endIso === todayIso;
+  // GA4's standard reports lag by hours, so a range that ends today is incomplete; a single-day
+  // "Today" view compared with a full prior day would always read as a large drop, so that % is hidden.
+  const endsToday = endIso === todayIso(ANALYTICS_TIME_ZONE);
   const isPartialDay = startIso === endIso && endsToday;
   const granularity: TimeGranularity =
     rawGranularity === "day" || rawGranularity === "week" || rawGranularity === "month"
@@ -109,20 +112,20 @@ export default async function AdminAnalyticsPage({
     supabase
       .from("marketing_demo_requests")
       .select("id, created_at, status, utm_source")
-      .gte("created_at", `${startIso}T00:00:00Z`)
-      .lte("created_at", `${endIso}T23:59:59Z`),
+      .gte("created_at", dayStartUtc(startIso))
+      .lte("created_at", dayEndUtc(endIso)),
     supabase
       .from("marketing_demo_requests")
       .select("id", { count: "exact", head: true })
-      .gte("created_at", `${prior.startIso}T00:00:00Z`)
-      .lte("created_at", `${prior.endIso}T23:59:59Z`),
+      .gte("created_at", dayStartUtc(prior.startIso))
+      .lte("created_at", dayEndUtc(prior.endIso)),
     // Everyone who pressed Continue on step 1 of the demo form and had their contact details
     // saved, whatever happened next (still open, contacted, or went on to submit).
     supabase
       .from("marketing_demo_partial_leads")
       .select("id", { count: "exact", head: true })
-      .gte("created_at", `${startIso}T00:00:00Z`)
-      .lte("created_at", `${endIso}T23:59:59Z`),
+      .gte("created_at", dayStartUtc(startIso))
+      .lte("created_at", dayEndUtc(endIso)),
   ]);
 
   const demoRequestCount = demoRequests?.length ?? 0;
