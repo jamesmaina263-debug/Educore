@@ -237,7 +237,10 @@ export function AdminOutreach({
               onClick={() =>
                 run(
                   () => scoreOutboundProspects(scorable),
-                  (r) => `Scored ${r.scored}${Number(r.failed) > 0 ? `, ${r.failed} failed (try again)` : ""}.`,
+                  (r) =>
+                    `Scored ${r.scored}${Number(r.failed) > 0 ? `, ${r.failed} failed (try again)` : ""}${
+                      Number(r.skipped) > 0 ? `, ${r.skipped} left for the next click (time limit)` : ""
+                    }.`,
                 )
               }
             >

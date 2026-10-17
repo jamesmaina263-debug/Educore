@@ -3,6 +3,8 @@
 // The school_type list must match the CHECK constraint in
 // supabase/migrations/20261016120000_outbound_prospecting.sql.
 
+import { renderProductFactsForPrompt } from "@/lib/growth/product-facts";
+
 export const MAX_IMPORT_ROWS = 500;
 export const MAX_SCORE_BATCH = 10;
 
@@ -231,6 +233,7 @@ export type ScoringResult = {
  * drafts go to strangers under EduCore's name.
  */
 export function buildScoringPrompt(p: ProspectForScoring): string {
+  const level = normalizeSchoolLevel(p.school_level ?? null);
   const facts = [
     `School name: ${p.school_name}`,
     p.town_county ? `Location: ${p.town_county}` : null,
@@ -245,7 +248,7 @@ export function buildScoringPrompt(p: ProspectForScoring): string {
 
   return `You help EduCore, a Kenyan cloud school management system, decide which schools to approach and draft a first message.
 
-EduCore covers: admissions, attendance, CBC and 8-4-4 exams and report cards, fee collection with M-Pesa, and SMS/WhatsApp updates to parents. It is Kenya-first and multi-tenant.
+${renderProductFactsForPrompt(level)}
 
 What we know about the school (this is ALL we know):
 ${facts}
@@ -256,8 +259,6 @@ Return ONLY a JSON object with these keys:
 - "email_subject": under 70 characters, no clickbait, no ALL CAPS.
 - "email_body": 70-120 words, plain text, no markdown. Address the contact by name if given, otherwise "Hello". Mention one concrete benefit relevant to the school's type or size. End by inviting a reply or a short demo. Do not include an unsubscribe line or signature block; the sending system adds those.
 - "whatsapp": 40-70 words, friendly and brief, in the same spirit. Introduce EduCore, offer a short demo, and say they can reply STOP and we won't message again.
-
-If the level is kindergarten, pitch it as a kindergarten/nursery: parent communication, daily attendance, fee collection by M-Pesa and simple learner progress reports. Do not mention exams, KCPE or KCSE for kindergartens.
 
 Hard rules: never claim we visited, spoke to, or were referred by anyone; never invent statistics, customers, awards, or prices; never mention competitors; do not imply the school asked to hear from us. Write in clear, respectful Kenyan business English.`;
 }

@@ -4,7 +4,13 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { tagSentryRequestContext } from "@/lib/observability/sentry-context";
 import { logAdminAction } from "@/lib/log-admin-action";
-import { geminiGenerateContentUrl, geminiHeaders } from "@/lib/ai/report-card-comment";
+import {
+  addUsage,
+  aiDisabledReason,
+  generatePlatformText,
+  parseBudgetMs,
+  type AiUsage,
+} from "@/lib/ai/platform-ai";
 import { isUuid } from "@/lib/sales/pipeline";
 import {
   buildOverpassQuery,
@@ -134,14 +140,25 @@ export async function discoverSchoolsByCounty(
   };
 }
 
+// How long one "Score & draft" click may keep starting new AI calls. Prospects not reached stay
+// selectable for the next click. Kept low by default so a click cannot outrun a small serverless
+// time limit (the free hosting plan's limit is unverified); raise OUTREACH_SCORE_BUDGET_MS once the
+// real limit is known.
+const DEFAULT_SCORE_BUDGET_MS = 8_000;
+
 export async function scoreOutboundProspects(
   ids: string[],
-): Promise<{ error: string } | { success: true; scored: number; failed: number }> {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) return { error: "AI scoring isn't configured: GEMINI_API_KEY is missing from the server environment." };
+): Promise<{ error: string } | { success: true; scored: number; failed: number; skipped: number }> {
   if (!Array.isArray(ids) || ids.length === 0) return { error: "Choose at least one prospect to score." };
   if (ids.length > MAX_SCORE_BATCH) return { error: `Score at most ${MAX_SCORE_BATCH} prospects at a time.` };
   if (!ids.every(isUuid)) return { error: "Invalid prospect id." };
+
+  // Fail fast, before any database read, when AI is switched off or not configured.
+  const off = aiDisabledReason("outreach_scoring");
+  if (off) return { error: off };
+  if (!process.env.GEMINI_API_KEY) {
+    return { error: "AI scoring isn't configured: GEMINI_API_KEY is missing from the server environment." };
+  }
 
   const supabase = await createClient();
   await tagSentryRequestContext(supabase);
@@ -154,26 +171,43 @@ export async function scoreOutboundProspects(
   if (readErr) return { error: readErr.message };
   if (!rows || rows.length === 0) return { error: "Those prospects weren't found." };
 
+  const budgetMs = parseBudgetMs(process.env.OUTREACH_SCORE_BUDGET_MS, DEFAULT_SCORE_BUDGET_MS, 2_000, 50_000);
+  const startedAt = Date.now();
+  let usage: AiUsage = { promptTokens: 0, outputTokens: 0, totalTokens: 0 };
   let scored = 0;
   let failed = 0;
+  let skipped = 0;
+  let aiStopped = false;
+
   for (const row of rows) {
     if (row.status !== "new" && row.status !== "scored") continue; // never re-score a reviewed row
+    const elapsed = Date.now() - startedAt;
+    if (aiStopped || elapsed >= budgetMs) {
+      skipped++;
+      continue;
+    }
     try {
-      const prompt = buildScoringPrompt(row as ProspectForScoring);
-      const res = await fetch(geminiGenerateContentUrl(apiKey, GEMINI_OUTREACH_MODEL), {
-        method: "POST",
-        headers: geminiHeaders(apiKey),
-        body: JSON.stringify({
-          contents: [{ role: "user", parts: [{ text: prompt }] }],
-          generationConfig: { temperature: 0.4, responseMimeType: "application/json" },
-        }),
+      const ai = await generatePlatformText({
+        task: "outreach_scoring",
+        prompt: buildScoringPrompt(row as ProspectForScoring),
+        json: true,
+        temperature: 0.4,
+        model: GEMINI_OUTREACH_MODEL,
+        maxOutputTokens: 1024,
+        timeoutMs: Math.min(20_000, Math.max(3_000, budgetMs - elapsed)),
       });
-      if (!res.ok) throw new Error(`Gemini responded ${res.status}`);
-      const body = (await res.json()) as {
-        candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
-      };
-      const text = body.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
-      const parsed = parseScoringResponse(text);
+      if (!ai.ok) {
+        // Switched off or unconfigured mid-run: stop calling, leave the rest for later.
+        if (ai.reason === "disabled" || ai.reason === "not_configured") {
+          aiStopped = true;
+          skipped++;
+          continue;
+        }
+        throw new Error(ai.error);
+      }
+      usage = addUsage(usage, ai.usage);
+
+      const parsed = parseScoringResponse(ai.text);
       if (!parsed.ok) throw new Error(parsed.error);
 
       const v = parsed.value;
@@ -193,9 +227,17 @@ export async function scoreOutboundProspects(
     }
   }
 
-  void logAdminAction(supabase, "score_outbound_prospects", { scored, failed });
+  void logAdminAction(supabase, "score_outbound_prospects", {
+    scored,
+    failed,
+    skipped,
+    model: GEMINI_OUTREACH_MODEL,
+    prompt_tokens: usage.promptTokens,
+    output_tokens: usage.outputTokens,
+    total_tokens: usage.totalTokens,
+  });
   revalidatePath(PATH);
-  return { success: true, scored, failed };
+  return { success: true, scored, failed, skipped };
 }
 
 export async function reviewOutboundProspect(id: string, decision: string): Promise<ActionResult> {

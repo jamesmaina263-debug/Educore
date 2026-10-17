@@ -108,6 +108,39 @@ describe("scoring prompt + response", () => {
     expect(p).not.toContain("Website:");
     expect(p).toContain("never claim we visited");
   });
+
+  it("grounds the prompt in the verified facts and bans endorsement and discount claims", () => {
+    const p = buildScoringPrompt({
+      school_name: "Sunrise Academy",
+      town_county: null,
+      school_type: "private",
+      school_level: "primary",
+      website: null,
+      contact_name: null,
+      contact_role: null,
+      student_count: null,
+    });
+    expect(p).toContain("These are the ONLY product claims you may make");
+    expect(p).toMatch(/Never claim approval, certification, endorsement/);
+    expect(p).toMatch(/Never offer or imply a discount/);
+    expect(p).not.toContain("simple learner progress reports");
+  });
+
+  it("gives kindergartens the competency wording and no exam claims", () => {
+    const p = buildScoringPrompt({
+      school_name: "Little Stars Nursery",
+      town_county: null,
+      school_type: "private",
+      school_level: "kindergarten",
+      website: null,
+      contact_name: null,
+      contact_role: null,
+      student_count: null,
+    });
+    expect(p).toContain("competency-based learner progress reports");
+    expect(p).toContain("Do not mention exams, KCPE, KCSE");
+    expect(p).not.toContain("simple learner progress reports");
+  });
   const good = {
     fit_score: 72.4,
     fit_reason: "Mid-size private school.",
