@@ -5,6 +5,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { resolveAuthRedirectOrigin } from "@/lib/auth/reset-link";
 import { toE164 } from "@/lib/signup-fields";
+import { isDisposableEmail } from "@/lib/disposable-email";
 import { slugify } from "@/lib/slug";
 import { getRealClientIp } from "@/lib/get-real-client-ip";
 import { sendSecurityAlert } from "@/lib/security-alert";
@@ -264,6 +265,15 @@ export async function signUpSchool(
   }
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     return { error: "Please enter a valid email address." };
+  }
+  // The owner proves they control the inbox by clicking the emailed set-password link, which is
+  // meaningless for a public throwaway inbox (anyone can open it). Ask for a permanent address
+  // (any real provider is fine, not just a school domain).
+  if (isDisposableEmail(email)) {
+    return {
+      error:
+        "Please use a permanent email address. Temporary or disposable email addresses can't be used to start a trial.",
+    };
   }
 
   const urlValues: Record<string, string> = {
