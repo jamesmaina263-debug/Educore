@@ -168,28 +168,31 @@ export default async function AdminAnalyticsPage({
     ctaDetail,
   ] = gaConfigured
     ? await Promise.all([
+        // On the Today view (liveOnly) the lagging standard reports are hidden, so they are not
+        // fetched either: ~14 fewer simultaneous GA4 calls per page load, which keeps the live
+        // panel clear of Google's concurrent-request limit.
         getOverviewStats(gaRange),
         // Prior-period overview, for "vs. prior period" on Visitors/Sessions/
         // Page views -- same equivalent-length-window comparison already
         // used for the Demo requests KPI. Both windows are real [start, end]
         // ISO date pairs.
-        getOverviewStats([prior.startIso, prior.endIso]),
+        liveOnly ? null : getOverviewStats([prior.startIso, prior.endIso]),
         getEngagedVisitors(gaRange),
-        getTimeseries(gaRange, granularity),
-        getTopPages(gaRange, 10, engagedOnly),
-        getLandingPages(gaRange, 10, engagedOnly),
-        getExitPages(gaRange),
-        getTrafficSources(gaRange, 10, engagedOnly),
-        getUtmCampaigns(gaRange, 15, engagedOnly),
+        liveOnly ? null : getTimeseries(gaRange, granularity),
+        liveOnly ? null : getTopPages(gaRange, 10, engagedOnly),
+        liveOnly ? null : getLandingPages(gaRange, 10, engagedOnly),
+        liveOnly ? null : getExitPages(gaRange),
+        liveOnly ? null : getTrafficSources(gaRange, 10, engagedOnly),
+        liveOnly ? null : getUtmCampaigns(gaRange, 15, engagedOnly),
         getGoalBreakdown(gaRange),
-        getDeviceBreakdown(gaRange, engagedOnly),
-        getBrowserBreakdown(gaRange, 8, engagedOnly),
-        getOsBreakdown(gaRange, 8, engagedOnly),
-        getCountryBreakdown(gaRange, 10, engagedOnly),
-        getRegionBreakdown(gaRange, 10, engagedOnly),
+        liveOnly ? null : getDeviceBreakdown(gaRange, engagedOnly),
+        liveOnly ? null : getBrowserBreakdown(gaRange, 8, engagedOnly),
+        liveOnly ? null : getOsBreakdown(gaRange, 8, engagedOnly),
+        liveOnly ? null : getCountryBreakdown(gaRange, 10, engagedOnly),
+        liveOnly ? null : getRegionBreakdown(gaRange, 10, engagedOnly),
         getRealtimeVisitorCount(),
-        getKeyEventsTimeseries(gaRange, KEY_EVENT_NAMES, granularity),
-        getChannelPerformance(gaRange, 10),
+        liveOnly ? null : getKeyEventsTimeseries(gaRange, KEY_EVENT_NAMES, granularity),
+        liveOnly ? null : getChannelPerformance(gaRange, 10),
         getEngagedSessionDetail(gaRange),
         getCtaClickDetail(gaRange),
       ])

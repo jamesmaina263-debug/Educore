@@ -13,6 +13,7 @@ type Snapshot = {
   devices: Row[];
   events: Row[];
   fetchedAt: string;
+  stale?: boolean;
 };
 
 const POLL_MS = 30_000;
@@ -92,7 +93,9 @@ export function LiveVisitorsPanel({ initialActiveUsers }: { initialActiveUsers: 
           <p className="text-xs text-muted-foreground">
             {failed
               ? "Couldn't reach Google Analytics — retrying"
-              : ageSeconds === null
+              : snapshot?.stale
+                ? `Google is limiting requests — showing the reading from ${ageSeconds ?? 0}s ago`
+                : ageSeconds === null
                 ? "Loading…"
                 : `Updated ${ageSeconds < 5 ? "just now" : `${ageSeconds}s ago`} · refreshes every 30s`}
           </p>

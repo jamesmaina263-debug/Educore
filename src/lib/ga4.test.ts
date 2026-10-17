@@ -161,6 +161,77 @@ describe("getRealtimeSnapshot", () => {
   });
 });
 
+describe("getRealtimeSnapshot caching and rate limiting", () => {
+  const ok = { rows: [{ dimensionValues: [{ value: "desktop" }], metricValues: [{ value: "2" }] }], totals: [{ metricValues: [{ value: "2" }, { value: "5" }] }] };
+
+  it("makes its five calls one at a time", async () => {
+    let inFlight = 0;
+    let maxInFlight = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        inFlight++;
+        maxInFlight = Math.max(maxInFlight, inFlight);
+        await new Promise((r) => setTimeout(r, 1));
+        inFlight--;
+        return { ok: true, status: 200, json: async () => ok, text: async () => "" };
+      }),
+    );
+    const { getRealtimeSnapshot } = await loadGa4();
+    expect(await getRealtimeSnapshot()).not.toBeNull();
+    expect(maxInFlight).toBe(1);
+  });
+
+  it("serves a recent snapshot from cache and shares one build between concurrent callers", async () => {
+    const fetchMock = respondWith(ok);
+    const { getRealtimeSnapshot } = await loadGa4();
+    const [a, b] = await Promise.all([getRealtimeSnapshot(), getRealtimeSnapshot()]);
+    expect(a).toEqual(b);
+    expect(fetchMock).toHaveBeenCalledTimes(5);
+    await getRealtimeSnapshot();
+    expect(fetchMock).toHaveBeenCalledTimes(5);
+  });
+
+  it("stops at the first 429, makes no calls during the cool-down, then recovers", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      vi.setSystemTime(new Date("2026-10-17T10:00:00Z"));
+      const fetchMock = respondWith({ error: "quota" }, { ok: false, status: 429 });
+      const { getRealtimeSnapshot } = await loadGa4();
+      expect(await getRealtimeSnapshot()).toBeNull();
+      expect(fetchMock).toHaveBeenCalledTimes(1); // bailed out instead of firing all five
+      expect(await getRealtimeSnapshot()).toBeNull();
+      expect(fetchMock).toHaveBeenCalledTimes(1); // cool-down: no new Google calls
+      vi.setSystemTime(new Date("2026-10-17T10:01:05Z"));
+      respondWith(ok);
+      expect(await getRealtimeSnapshot()).not.toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("keeps serving the last good reading, marked stale, when Google then rate-limits", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      vi.setSystemTime(new Date("2026-10-17T10:00:00Z"));
+      respondWith(ok);
+      const { getRealtimeSnapshot } = await loadGa4();
+      const first = await getRealtimeSnapshot();
+      expect(first?.stale).toBeUndefined();
+      vi.setSystemTime(new Date("2026-10-17T10:00:30Z")); // past the 20s cache
+      respondWith({ error: "quota" }, { ok: false, status: 429 });
+      const second = await getRealtimeSnapshot();
+      expect(second?.stale).toBe(true);
+      expect(second?.activeUsers).toBe(first?.activeUsers);
+      vi.setSystemTime(new Date("2026-10-17T10:06:00Z")); // older than the 5-minute stale limit
+      respondWith({ error: "quota" }, { ok: false, status: 429 });
+      expect(await getRealtimeSnapshot()).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
 describe("getOverviewStats", () => {
   const range: [string, string] = ["2026-10-17", "2026-10-17"];
 
