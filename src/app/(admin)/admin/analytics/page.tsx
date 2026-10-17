@@ -100,10 +100,6 @@ export default async function AdminAnalyticsPage({
   // "Today" view compared with a full prior day would always read as a large drop, so that % is hidden.
   const endsToday = endIso === todayIso(ANALYTICS_TIME_ZONE);
   const isPartialDay = startIso === endIso && endsToday;
-  // "Today" with GA4 connected: Google's standard reports have not caught up yet, so this view
-  // leads with the live panel and the demo-request numbers from our own database instead of
-  // a wall of zeros. Yesterday and longer ranges are unaffected.
-  const liveOnly = isGa4Configured() && isPartialDay;
   const processingMessage = isPartialDay
     ? "Google is still processing today\u2019s data \u2014 see the live panel above."
     : undefined;
@@ -168,31 +164,28 @@ export default async function AdminAnalyticsPage({
     ctaDetail,
   ] = gaConfigured
     ? await Promise.all([
-        // On the Today view (liveOnly) the lagging standard reports are hidden, so they are not
-        // fetched either: ~14 fewer simultaneous GA4 calls per page load, which keeps the live
-        // panel clear of Google's concurrent-request limit.
         getOverviewStats(gaRange),
         // Prior-period overview, for "vs. prior period" on Visitors/Sessions/
         // Page views -- same equivalent-length-window comparison already
         // used for the Demo requests KPI. Both windows are real [start, end]
         // ISO date pairs.
-        liveOnly ? null : getOverviewStats([prior.startIso, prior.endIso]),
+        getOverviewStats([prior.startIso, prior.endIso]),
         getEngagedVisitors(gaRange),
-        liveOnly ? null : getTimeseries(gaRange, granularity),
-        liveOnly ? null : getTopPages(gaRange, 10, engagedOnly),
-        liveOnly ? null : getLandingPages(gaRange, 10, engagedOnly),
-        liveOnly ? null : getExitPages(gaRange),
-        liveOnly ? null : getTrafficSources(gaRange, 10, engagedOnly),
-        liveOnly ? null : getUtmCampaigns(gaRange, 15, engagedOnly),
+        getTimeseries(gaRange, granularity),
+        getTopPages(gaRange, 10, engagedOnly),
+        getLandingPages(gaRange, 10, engagedOnly),
+        getExitPages(gaRange),
+        getTrafficSources(gaRange, 10, engagedOnly),
+        getUtmCampaigns(gaRange, 15, engagedOnly),
         getGoalBreakdown(gaRange),
-        liveOnly ? null : getDeviceBreakdown(gaRange, engagedOnly),
-        liveOnly ? null : getBrowserBreakdown(gaRange, 8, engagedOnly),
-        liveOnly ? null : getOsBreakdown(gaRange, 8, engagedOnly),
-        liveOnly ? null : getCountryBreakdown(gaRange, 10, engagedOnly),
-        liveOnly ? null : getRegionBreakdown(gaRange, 10, engagedOnly),
+        getDeviceBreakdown(gaRange, engagedOnly),
+        getBrowserBreakdown(gaRange, 8, engagedOnly),
+        getOsBreakdown(gaRange, 8, engagedOnly),
+        getCountryBreakdown(gaRange, 10, engagedOnly),
+        getRegionBreakdown(gaRange, 10, engagedOnly),
         getRealtimeVisitorCount(),
-        liveOnly ? null : getKeyEventsTimeseries(gaRange, KEY_EVENT_NAMES, granularity),
-        liveOnly ? null : getChannelPerformance(gaRange, 10),
+        getKeyEventsTimeseries(gaRange, KEY_EVENT_NAMES, granularity),
+        getChannelPerformance(gaRange, 10),
         getEngagedSessionDetail(gaRange),
         getCtaClickDetail(gaRange),
       ])
@@ -307,42 +300,38 @@ export default async function AdminAnalyticsPage({
           actually returned data (priorOverview !== null); never a made-up
           0% for "not connected". */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        {!liveOnly && (
-          <>
-            <KpiCard
-              label="Visitors"
-              value={overview ? overview.visitors.toLocaleString() : "—"}
-              sub={gaConfigured ? undefined : "Google Analytics not connected"}
-              changePercent={
-                !isPartialDay && overview && priorOverview ? percentChange(overview.visitors, priorOverview.visitors) : undefined
-              }
-            />
-            <KpiCard
-              label="Sessions"
-              value={overview ? overview.visits.toLocaleString() : "—"}
-              sub={gaConfigured ? undefined : "Google Analytics not connected"}
-              changePercent={
-                !isPartialDay && overview && priorOverview ? percentChange(overview.visits, priorOverview.visits) : undefined
-              }
-            />
-            <KpiCard
-              label="Page views"
-              value={overview ? overview.pageviews.toLocaleString() : "—"}
-              sub={gaConfigured ? undefined : "Google Analytics not connected"}
-              changePercent={
-                !isPartialDay && overview && priorOverview
-                  ? percentChange(overview.pageviews, priorOverview.pageviews)
-                  : undefined
-              }
-            />
-          </>
-        )}
+        <KpiCard
+          label="Visitors"
+          value={overview ? overview.visitors.toLocaleString() : "—"}
+          sub={gaConfigured ? undefined : "Google Analytics not connected"}
+          changePercent={
+            !isPartialDay && overview && priorOverview ? percentChange(overview.visitors, priorOverview.visitors) : undefined
+          }
+        />
+        <KpiCard
+          label="Sessions"
+          value={overview ? overview.visits.toLocaleString() : "—"}
+          sub={gaConfigured ? undefined : "Google Analytics not connected"}
+          changePercent={
+            !isPartialDay && overview && priorOverview ? percentChange(overview.visits, priorOverview.visits) : undefined
+          }
+        />
+        <KpiCard
+          label="Page views"
+          value={overview ? overview.pageviews.toLocaleString() : "—"}
+          sub={gaConfigured ? undefined : "Google Analytics not connected"}
+          changePercent={
+            !isPartialDay && overview && priorOverview
+              ? percentChange(overview.pageviews, priorOverview.pageviews)
+              : undefined
+          }
+        />
         <KpiCard label="Demo requests" value={demoRequestCount} changePercent={demoRequestChange} />
       </div>
 
       {/* Engagement KPIs the spec asks for under Website Traffic --
           previously fetched by getOverviewStats but never rendered. */}
-      {gaConfigured && overview && !liveOnly && (
+      {gaConfigured && overview && (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           <KpiCard label="Pages / session" value={overview.viewsPerVisit.toFixed(2)} />
           <KpiCard
@@ -357,36 +346,17 @@ export default async function AdminAnalyticsPage({
         </div>
       )}
 
-      {liveOnly ? (
+      {gaConfigured && endsToday && (
         <p className="text-xs text-muted-foreground">
-          Today shows live activity and your own demo-request data. Google&apos;s detailed reports for today are
-          processed in batches and finish later, so they are hidden here rather than shown as zeros. Pick
-          Yesterday or Last 7 days to see them.
+          The cards above come from Google Analytics&apos; standard reports, which are processed in batches and can
+          trail real traffic by hours, so today&apos;s totals for this range may read low even while visitors are
+          on the site. The live panel below reads GA4&apos;s Realtime feed and is current.
         </p>
-      ) : (
-        gaConfigured &&
-        endsToday && (
-          <p className="text-xs text-muted-foreground">
-            The cards above come from Google Analytics&apos; standard reports, which are processed in batches and can
-            trail real traffic by hours, so today&apos;s totals for this range may read low even while visitors are
-            on the site. The live panel below reads GA4&apos;s Realtime feed and is current.
-          </p>
-        )
       )}
 
       {gaConfigured && <LiveVisitorsPanel initialActiveUsers={realtimeVisitors} />}
 
-      {liveOnly ? (
-        <div className="panel p-4">
-          <p className="text-sm font-medium">Website Analytics</p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Traffic trend, top pages, sources, countries and devices for today appear here once Google has
-            processed them. Until then the live panel above is the up-to-date view; switch to Yesterday or Last 7
-            days for the full breakdowns.
-          </p>
-        </div>
-      ) : (
-        <>
+      <>
           {/* Website Analytics -- explicitly its own labeled block, distinct from
               Search Console below, per the spec. */}
           <div>
@@ -488,8 +458,7 @@ export default async function AdminAnalyticsPage({
             )}
           </div>
 
-        </>
-      )}
+      </>
 
       {/* Search Console -- deliberately separate from Website Analytics above,
           per the spec's instruction never to blend the two data sources. */}
