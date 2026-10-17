@@ -93,7 +93,7 @@ export default function PricingPage() {
       <BreadcrumbJsonLd items={[HOME_CRUMB, { name: "Pricing", path: "/pricing" }]} />
       {/* 1 — Hero */}
       <Section tone="navy" className="pb-14 pt-20 sm:pb-16 sm:pt-28">
-        <Eyebrow tone="dark">Pricing</Eyebrow>
+        <Eyebrow tone="light">Pricing</Eyebrow>
         <h1 className="mt-4 max-w-3xl text-4xl font-semibold tracking-tight text-white sm:text-5xl">
           Three plans. Scaled to how many students you actually have.
         </h1>

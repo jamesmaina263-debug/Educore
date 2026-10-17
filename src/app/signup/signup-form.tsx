@@ -161,9 +161,9 @@ export function SignupForm() {
       </div>
 
       <div className="space-y-1.5">
-        <Label>Country</Label>
+        <Label htmlFor="country_code_trigger">Country</Label>
         <Select value={country} onValueChange={setCountry}>
-          <SelectTrigger className="h-11 text-base sm:text-sm">
+          <SelectTrigger id="country_code_trigger" className="h-11 text-base sm:text-sm">
             <SelectValue placeholder="Select" />
           </SelectTrigger>
           <SelectContent>

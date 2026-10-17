@@ -24,7 +24,7 @@ export default function TermsPage() {
     <>
       <BreadcrumbJsonLd items={[HOME_CRUMB, { name: "Terms of Service", path: "/terms" }]} />
       <Section tone="navy" className="pb-14 pt-20 sm:pb-16 sm:pt-28">
-        <Eyebrow tone="dark">Legal</Eyebrow>
+        <Eyebrow tone="light">Legal</Eyebrow>
         <h1 className="mt-4 max-w-3xl text-4xl font-semibold tracking-tight text-white sm:text-5xl">
           Terms of Service
         </h1>
