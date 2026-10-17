@@ -3,6 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { InvoiceStatusBadge } from "@/components/billing/invoice-status-badge";
 import { AdminBillingTermsForm, AdminInvoiceActions, AdminVoidPaymentButton } from "@/components/admin/admin-invoice-actions";
+import { AdminDeleteInvoicePanel } from "@/components/admin/admin-delete-invoice-panel";
 import { Button } from "@/components/ui/button";
 import { PAYMENT_METHOD_LABEL, formatDateOnly, formatInstantDate, formatKes, nairobiDateISO } from "@/lib/billing/format";
 import { INVOICE_COLUMNS, invoiceDescription, toInvoiceRecord } from "@/lib/billing/invoice-types";
@@ -285,6 +286,15 @@ export default async function AdminInvoiceDetailPage({ params }: { params: Promi
             discountPercent={Number(sub?.recurring_discount_percent ?? 0)}
             discountNote={sub?.discount_note ?? null}
             billingEmail={sub?.billing_email ?? null}
+          />
+          <AdminDeleteInvoicePanel
+            invoiceId={id}
+            invoiceNumber={inv.invoice_number}
+            schoolName={school?.name ?? "this school"}
+            status={inv.status}
+            amountPaid={inv.amount_paid_kes}
+            paymentCount={(payments ?? []).length}
+            sentAt={inv.sent_at}
           />
         </div>
       </div>
