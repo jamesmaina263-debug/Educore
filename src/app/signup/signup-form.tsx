@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState, useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { CheckCircle2, Loader2, Rocket } from "lucide-react";
+import { Loader2, MailCheck, Rocket, TriangleAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -59,37 +59,61 @@ export function SignupForm() {
   }, []);
 
   // Names resolved client-side via Intl.DisplayNames — see institution-reference-data.ts.
+  // Controlled, because React resets uncontrolled fields once a form action finishes: without
+  // this, any server-side error (bad phone, address already registered, ...) wiped everything
+  // the visitor had typed.
+  const [fields, setFields] = useState({ owner_name: "", school_name: "", email: "", phone: "" });
+  const bind = (name: keyof typeof fields) => ({
+    value: fields[name],
+    onChange: (e: React.ChangeEvent<HTMLInputElement>) => setFields((f) => ({ ...f, [name]: e.target.value })),
+    // 16px text stops iOS Safari zooming the page on focus; h-11 (44px) is the touch-target size.
+    className: "h-11 text-base sm:text-sm",
+  });
+
   const countries = COUNTRY_CODES.map((code) => ({ code, name: countryName(code) })).sort((a, b) =>
     a.name.localeCompare(b.name),
   );
 
   if (state.success) {
+    const sent = state.emailSent !== false;
     return (
-      <div className="animate-in fade-in zoom-in-95 space-y-4 rounded-lg border border-border bg-surface p-6 text-center shadow-raised duration-300">
-        <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-success-subtle text-success">
-          <CheckCircle2 className="h-7 w-7" strokeWidth={2} />
+      <div
+        role="status"
+        className="animate-in fade-in zoom-in-95 space-y-4 rounded-lg border border-border bg-surface p-6 text-center shadow-raised duration-300"
+      >
+        <div
+          className={`mx-auto flex h-12 w-12 items-center justify-center rounded-full ${
+            sent ? "bg-success-subtle text-success" : "bg-warning-subtle text-warning"
+          }`}
+        >
+          {sent ? <MailCheck className="h-7 w-7" strokeWidth={2} /> : <TriangleAlert className="h-7 w-7" strokeWidth={2} />}
         </div>
-        <h1 className="text-base font-semibold">Your institution is set up</h1>
-        <p className="text-sm text-muted-foreground">
-          We&apos;ve created <span className="font-medium text-foreground">{state.schoolName}</span>. Sign in
-          with the temporary password below — you&apos;ll be asked to choose a new one right away.
-        </p>
-        <div className="space-y-2 rounded-md border border-dashed border-border bg-muted/40 p-3 text-left">
-          <div>
-            <p className="text-xs text-muted-foreground">Email</p>
-            <p className="font-mono text-sm">{state.email}</p>
-          </div>
-          <div>
-            <p className="text-xs text-muted-foreground">Temporary password</p>
-            <p className="font-mono text-sm">{state.temporaryPassword}</p>
-          </div>
-        </div>
-        <p className="text-xs text-muted-foreground">
-          Copy this password now — it won&apos;t be shown again. It expires in 3 days if unused.
-        </p>
-        <Button asChild className="w-full">
-          <a href="/login">
-            Continue to sign in <Rocket className="h-4 w-4" />
+        {sent ? (
+          <>
+            <h1 className="text-base font-semibold">Check your email to finish</h1>
+            <p className="text-sm text-muted-foreground">
+              We&apos;ve created <span className="font-medium text-foreground">{state.schoolName}</span> and sent a
+              link to <span className="font-medium text-foreground">{state.email}</span>. Open it to choose your
+              password and go straight to your dashboard.
+            </p>
+            <p className="text-xs text-muted-foreground">
+              Open the link in this same browser. Nothing in your inbox after a few minutes? Check spam, or use
+              &ldquo;Forgot password&rdquo; on the sign-in page with the same email.
+            </p>
+          </>
+        ) : (
+          <>
+            <h1 className="text-base font-semibold">Your school is created — one more step</h1>
+            <p className="text-sm text-muted-foreground">
+              We created <span className="font-medium text-foreground">{state.schoolName}</span> but couldn&apos;t send
+              the set-password email just now. Use &ldquo;Forgot password&rdquo; with{" "}
+              <span className="font-medium text-foreground">{state.email}</span> and we&apos;ll send it again.
+            </p>
+          </>
+        )}
+        <Button asChild className="w-full" variant={sent ? "outline" : "default"}>
+          <a href={sent ? "/login" : "/forgot-password"}>
+            {sent ? "Go to sign in" : "Send me the link again"} <Rocket className="h-4 w-4" />
           </a>
         </Button>
       </div>
@@ -117,29 +141,29 @@ export function SignupForm() {
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div className="space-y-1.5">
           <Label htmlFor="owner_name">Your name</Label>
-          <Input id="owner_name" name="owner_name" required autoComplete="name" placeholder="e.g. Jane Wanjiru" />
+          <Input id="owner_name" name="owner_name" {...bind("owner_name")} required maxLength={120} autoComplete="name" placeholder="e.g. Jane Wanjiru" />
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="school_name">School name</Label>
-          <Input id="school_name" name="school_name" required placeholder="e.g. Sunrise Academy" />
+          <Input id="school_name" name="school_name" {...bind("school_name")} required maxLength={200} autoComplete="organization" placeholder="e.g. Sunrise Academy" />
         </div>
       </div>
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div className="space-y-1.5">
           <Label htmlFor="email">Email</Label>
-          <Input id="email" name="email" type="email" required autoComplete="email" placeholder="you@school.ac.ke" />
+          <Input id="email" name="email" type="email" inputMode="email" {...bind("email")} required maxLength={254} autoComplete="email" placeholder="you@school.ac.ke" />
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="phone">Phone</Label>
-          <Input id="phone" name="phone" type="tel" required autoComplete="tel" placeholder="+2547XXXXXXXX" />
+          <Input id="phone" name="phone" type="tel" inputMode="tel" {...bind("phone")} required maxLength={40} autoComplete="tel" placeholder="0712 345 678" />
         </div>
       </div>
 
       <div className="space-y-1.5">
         <Label>Country</Label>
         <Select value={country} onValueChange={setCountry}>
-          <SelectTrigger>
+          <SelectTrigger className="h-11 text-base sm:text-sm">
             <SelectValue placeholder="Select" />
           </SelectTrigger>
           <SelectContent>
