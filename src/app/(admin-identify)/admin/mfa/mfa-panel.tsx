@@ -17,6 +17,7 @@ export function MfaPanel({
   verifiedFactors,
   unenrolledOperators,
   unrecognizedFactor,
+  managing,
   onSignOut,
 }: {
   next: string;
@@ -24,6 +25,7 @@ export function MfaPanel({
   verifiedFactors: VerifiedFactor[];
   unenrolledOperators: readonly AdminOperator[];
   unrecognizedFactor: boolean;
+  managing: boolean;
   onSignOut: () => Promise<void>;
 }) {
   const router = useRouter();
@@ -77,6 +79,12 @@ export function MfaPanel({
               ? "The platform admin console needs a code from your authenticator app."
               : "Add your authenticator app now so the admin console can require it. Nothing is enforced until the owner switches it on."}
           </p>
+          {managing && required ? (
+            <p className="text-sm text-muted-foreground">
+              Adding a new authenticator pauses admin access for everyone until the platform owner re-approves the
+              authenticator list (see the runbook). Only add one when that owner is ready to do it.
+            </p>
+          ) : null}
           {unrecognizedFactor ? (
             <p className="text-sm text-destructive">
               This account has an authenticator that is not on the approved list. Ask the platform owner to review it.
