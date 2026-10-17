@@ -9,10 +9,21 @@ export const MAX_SCORE_BATCH = 10;
 export const SCHOOL_TYPES = ["public", "private", "other"] as const;
 export type OutboundSchoolType = (typeof SCHOOL_TYPES)[number];
 
+export const SCHOOL_LEVELS = ["kindergarten", "primary", "secondary", "other"] as const;
+export type OutboundSchoolLevel = (typeof SCHOOL_LEVELS)[number];
+
+export const SCHOOL_LEVEL_LABELS: Record<OutboundSchoolLevel, string> = {
+  kindergarten: "Kindergarten / nursery",
+  primary: "Primary",
+  secondary: "Secondary",
+  other: "Other",
+};
+
 export type ProspectRow = {
   school_name: string;
   town_county: string | null;
   school_type: OutboundSchoolType | null;
+  school_level: OutboundSchoolLevel | null;
   website: string | null;
   phone: string | null;
   email: string | null;
@@ -25,6 +36,7 @@ const HEADER_ALIASES: Record<keyof ProspectRow, string[]> = {
   school_name: ["school_name", "school", "name", "school name", "institution"],
   town_county: ["town_county", "county", "town", "location", "town/county", "sub_county", "sub county"],
   school_type: ["school_type", "type", "category", "ownership", "sponsor"],
+  school_level: ["school_level", "level", "stage", "school level"],
   website: ["website", "url", "web", "site"],
   phone: ["phone", "telephone", "tel", "mobile", "phone_number", "phone number"],
   email: ["email", "e-mail", "email_address", "email address"],
@@ -80,6 +92,15 @@ export function normalizeSchoolType(raw: string | null | undefined): OutboundSch
   if (!v) return null;
   if (v.startsWith("pub") || v === "government" || v === "gok") return "public";
   if (v.startsWith("priv") || v === "independent") return "private";
+  return "other";
+}
+
+export function normalizeSchoolLevel(raw: string | null | undefined): OutboundSchoolLevel | null {
+  const v = (raw ?? "").trim().toLowerCase();
+  if (!v) return null;
+  if (/(kinder|nursery|pre-?primary|pre-?school|playgroup|day ?care|ecde|early)/.test(v)) return "kindergarten";
+  if (/(primary|junior|lower)/.test(v)) return "primary";
+  if (/(secondary|high|senior)/.test(v)) return "secondary";
   return "other";
 }
 
@@ -167,6 +188,7 @@ export function parseProspectCsv(text: string): ParseImportResult {
       school_name: name,
       town_county: get("town_county").slice(0, 200) || null,
       school_type: normalizeSchoolType(get("school_type")),
+      school_level: normalizeSchoolLevel(get("school_level")),
       website: normalizeWebsite(get("website")),
       phone,
       email,
@@ -188,6 +210,7 @@ export type ProspectForScoring = {
   school_name: string;
   town_county: string | null;
   school_type: string | null;
+  school_level?: string | null;
   website: string | null;
   contact_name: string | null;
   contact_role: string | null;
@@ -212,6 +235,7 @@ export function buildScoringPrompt(p: ProspectForScoring): string {
     `School name: ${p.school_name}`,
     p.town_county ? `Location: ${p.town_county}` : null,
     p.school_type ? `Type: ${p.school_type}` : null,
+    p.school_level ? `Level: ${p.school_level}` : null,
     p.student_count !== null ? `Approximate students: ${p.student_count}` : null,
     p.website ? `Website: ${p.website}` : null,
     p.contact_name ? `Contact: ${p.contact_name}${p.contact_role ? ` (${p.contact_role})` : ""}` : null,
@@ -232,6 +256,8 @@ Return ONLY a JSON object with these keys:
 - "email_subject": under 70 characters, no clickbait, no ALL CAPS.
 - "email_body": 70-120 words, plain text, no markdown. Address the contact by name if given, otherwise "Hello". Mention one concrete benefit relevant to the school's type or size. End by inviting a reply or a short demo. Do not include an unsubscribe line or signature block; the sending system adds those.
 - "whatsapp": 40-70 words, friendly and brief, in the same spirit. Introduce EduCore, offer a short demo, and say they can reply STOP and we won't message again.
+
+If the level is kindergarten, pitch it as a kindergarten/nursery: parent communication, daily attendance, fee collection by M-Pesa and simple learner progress reports. Do not mention exams, KCPE or KCSE for kindergartens.
 
 Hard rules: never claim we visited, spoke to, or were referred by anyone; never invent statistics, customers, awards, or prices; never mention competitors; do not imply the school asked to hear from us. Write in clear, respectful Kenyan business English.`;
 }

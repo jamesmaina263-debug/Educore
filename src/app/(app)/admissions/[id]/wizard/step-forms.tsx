@@ -15,6 +15,7 @@ import {
   checkForDuplicateStudents,
   createOrLinkStudent,
   previewNextAdmissionNumberForWizard,
+  updatePendingAdmissionNumber,
   searchGuardians,
   linkGuardianToApplication,
   verifyDocumentAction,
@@ -41,6 +42,7 @@ import {
 } from "./actions";
 import { useOfflineSync } from "@/hooks/use-offline-sync";
 import { queueMutation } from "@/lib/offline/queue";
+import { validateAdmissionNumber } from "@/lib/admission-number";
 import { AdmissionsOfflineBanner } from "@/components/admissions/offline-banner";
 import { MpesaPushTrigger } from "@/components/finance/mpesa-push-trigger";
 import { DocumentPreviewButton } from "@/components/document-preview-dialog";
@@ -273,14 +275,21 @@ export function StudentStep({
   applicationId,
   applicantSummary,
   resultingStudentId,
+  currentAdmissionNumber,
 }: {
   applicationId: string;
   applicantSummary: { first_name: string; last_name: string; other_names?: string | null; date_of_birth: string; gender: string };
   resultingStudentId: string | null;
+  currentAdmissionNumber?: string | null;
 }) {
   const router = useRouter();
   const { online, pendingCount, failed, syncing, sync, discard } = useOfflineSync("admissions");
   const [admissionNumber, setAdmissionNumber] = useState<string | null>(null);
+  // "auto" = system assigns at enrollment; "existing" = school's own number from its register.
+  const [numberMode, setNumberMode] = useState<"auto" | "existing">("auto");
+  const [existingNumber, setExistingNumber] = useState("");
+  const [numberError, setNumberError] = useState<string | null>(null);
+  const [editingNumber, setEditingNumber] = useState(false);
 
   useEffect(() => {
     previewNextAdmissionNumberForWizard().then((result) => {
@@ -358,9 +367,14 @@ export function StudentStep({
 
   function createNew(overrideDuplicate: boolean) {
     setError(null);
+    setNumberError(null);
+    if (numberMode === "existing") {
+      const checked = validateAdmissionNumber(existingNumber);
+      if (!checked.ok) { setNumberError(checked.error); return; }
+    }
     startTransition(async () => {
       const result = await createOrLinkStudent(applicationId, {
-        admission_number: "",
+        admission_number: numberMode === "existing" ? existingNumber : "",
         override_duplicate: overrideDuplicate,
         overridden_candidate_ids: overrideDuplicate ? (candidates ?? []).map((c) => c.id) : undefined,
       });
@@ -368,6 +382,48 @@ export function StudentStep({
       router.refresh();
     });
   }
+
+  function saveCorrectedNumber() {
+    setNumberError(null);
+    startTransition(async () => {
+      const result = await updatePendingAdmissionNumber(applicationId, existingNumber);
+      if ("error" in result) { setNumberError(result.error); return; }
+      setEditingNumber(false);
+      router.refresh();
+    });
+  }
+
+  const numberPicker = (
+    <div className="space-y-2">
+      <Label>Admission number</Label>
+      <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
+        <label className="flex items-center gap-1.5">
+          <input type="radio" name="admission_number_mode" checked={numberMode === "auto"} onChange={() => { setNumberMode("auto"); setNumberError(null); }} />
+          Automatic{admissionNumber ? ` (next: ${admissionNumber})` : ""}
+        </label>
+        <label className="flex items-center gap-1.5">
+          <input type="radio" name="admission_number_mode" checked={numberMode === "existing"} onChange={() => setNumberMode("existing")} />
+          Use existing number
+        </label>
+      </div>
+      {numberMode === "existing" && (
+        <div className="space-y-1">
+          <Input
+            id="existing_admission_number"
+            value={existingNumber}
+            onChange={(e) => setExistingNumber(e.target.value)}
+            placeholder="e.g. LB/004/2026"
+            maxLength={30}
+            autoComplete="off"
+            className="w-full max-w-xs"
+          />
+          <p className="text-xs text-muted-foreground">Kept exactly as typed. It must not already be used by another student in your school.</p>
+        </div>
+      )}
+      {numberMode === "auto" && <p className="text-xs text-muted-foreground">The number is confirmed when enrollment is completed.</p>}
+      <ErrorText error={numberError} />
+    </div>
+  );
 
   function linkExisting(studentId: string) {
     setError(null);
@@ -392,6 +448,21 @@ export function StudentStep({
       <StepPanel title="Student">
         <p className="flex items-center gap-1.5 text-sm text-success"><SuccessDot />Student record linked ({applicantSummary.first_name} {applicantSummary.last_name}).</p>
         <Button size="sm" variant="ghost" onClick={() => setEditingIdentity(true)}>Edit details</Button>
+        <div className="space-y-1.5 text-sm">
+          <p>Admission number: <span className="font-medium">{currentAdmissionNumber ?? "assigned when enrollment is completed"}</span></p>
+          {editingNumber ? (
+            <div className="space-y-1.5">
+              <Input value={existingNumber} onChange={(e) => setExistingNumber(e.target.value)} placeholder="e.g. LB/004/2026" maxLength={30} autoComplete="off" className="w-full max-w-xs" />
+              <div className="flex gap-2">
+                <Button size="sm" onClick={saveCorrectedNumber} disabled={pending}>{pending ? "Saving…" : "Save number"}</Button>
+                <Button size="sm" variant="ghost" onClick={() => { setEditingNumber(false); setNumberError(null); }}>Cancel</Button>
+              </div>
+            </div>
+          ) : (
+            <Button size="sm" variant="ghost" onClick={() => { setExistingNumber(currentAdmissionNumber ?? ""); setEditingNumber(true); }}>Set / correct existing number</Button>
+          )}
+          <ErrorText error={numberError} />
+        </div>
       </StepPanel>
     );
   }
@@ -472,10 +543,7 @@ export function StudentStep({
             ))}
           </ul>
           <div className="mt-3 flex items-end gap-2">
-            <div className="space-y-1.5">
-              <Label htmlFor="admission_number">Admission number (new student)</Label>
-              <Input id="admission_number" value={admissionNumber ?? "Assigning…"} disabled readOnly className="w-48" />
-            </div>
+            {numberPicker}
             <Button size="sm" variant="destructive" onClick={() => createNew(true)} disabled={pending}>
               None of these — create new student
             </Button>
@@ -489,10 +557,7 @@ export function StudentStep({
 
       {candidates !== null && candidates.length === 0 && (
         <div className="flex items-end gap-2">
-          <div className="space-y-1.5">
-            <Label htmlFor="admission_number2">Admission number</Label>
-            <Input id="admission_number2" value={admissionNumber ?? "Assigning…"} disabled readOnly className="w-48" />
-          </div>
+          {numberPicker}
           <Button size="sm" onClick={() => createNew(false)} disabled={pending}>{pending ? "Creating…" : "Create student record"}</Button>
         </div>
       )}

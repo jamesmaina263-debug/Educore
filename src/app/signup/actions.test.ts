@@ -21,7 +21,7 @@ const h = vi.hoisted(() => {
     };
     b.delete = () => {
       calls.push({ table, op: "delete" });
-      return { eq: async () => ({ error: null }) };
+      return { eq: async () => results[`${table}.delete`] ?? { error: null } };
     };
     return b;
   }
@@ -67,6 +67,7 @@ describe("signUpSchool", () => {
     h.verifyTurnstileToken.mockResolvedValue(true);
     h.createUser.mockResolvedValue({ data: { user: { id: "abcdef123456" } }, error: null });
     h.resetPasswordForEmail.mockResolvedValue({ error: null });
+    h.deleteUser.mockResolvedValue({ error: null });
     h.results["subscription_plans.maybeSingle"] = { data: { id: "p1", code: "starter" } };
     h.results["schools.single"] = { data: { id: "s1" }, error: null };
     h.results["roles.single"] = { data: { id: "r1" } };
@@ -149,6 +150,40 @@ describe("signUpSchool", () => {
     expect(inserted("schools")).toBeUndefined();
   });
 
+  it("shows a readable message, and rolls back, when the phone number is already taken", async () => {
+    h.results["school_users.insert"] = {
+      error: {
+        code: "23505",
+        message: 'duplicate key value violates unique constraint "uq_school_users_active_phone"',
+      },
+    };
+    const res = await signUpSchool({ error: null }, form());
+    expect(res.error).toMatch(/phone number is already registered/i);
+    expect(res.error).not.toMatch(/duplicate key|constraint|uq_/i);
+    expect(h.deleteUser).toHaveBeenCalledWith("abcdef123456");
+    expect(h.calls.filter((c) => c.op === "delete").map((c) => c.table)).toContain("schools");
+    expect(h.resetPasswordForEmail).not.toHaveBeenCalled();
+  });
+
+  it("removes the school's seeded rows before the school itself when rolling back", async () => {
+    h.results["school_users.insert"] = { error: { code: "23505", message: "uq_school_users_active_phone" } };
+    await signUpSchool({ error: null }, form());
+    const order = h.calls.filter((c) => c.op === "delete").map((c) => c.table);
+    expect(order.indexOf("inventory_items")).toBeLessThan(order.indexOf("schools"));
+    expect(order.indexOf("inventory_categories")).toBeLessThan(order.indexOf("schools"));
+  });
+
+  it("still removes the auth user, logs, and returns the original error when the school delete fails", async () => {
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+    h.results["school_users.insert"] = { error: { code: "23505", message: "uq_school_users_active_phone" } };
+    h.results["schools.delete"] = { error: { message: "violates foreign key constraint" } };
+    const res = await signUpSchool({ error: null }, form());
+    expect(res.error).toMatch(/phone number is already registered/i);
+    expect(h.deleteUser).toHaveBeenCalledWith("abcdef123456");
+    expect(logged).toHaveBeenCalledWith("signup rollback incomplete", expect.objectContaining({ schoolId: "s1" }));
+    logged.mockRestore();
+  });
+
   it("fakes success for a honeypot hit without creating anything", async () => {
     const res = await signUpSchool({ error: null }, form({ company_website: "spam.com" }));
     expect(res).toMatchObject({ success: true, honeypot: true });
@@ -173,7 +208,13 @@ describe("signUpSchool", () => {
     const res = await signUpSchool({ error: null }, form());
     expect(res.error).toBe("trial failed");
     expect(h.deleteUser).toHaveBeenCalledWith("abcdef123456");
-    expect(h.calls.filter((c) => c.op === "delete").map((c) => c.table).sort()).toEqual(["school_users", "schools"]);
+    expect(h.calls.filter((c) => c.op === "delete").map((c) => c.table).sort()).toEqual([
+      "inventory_categories",
+      "inventory_items",
+      "school_subscriptions",
+      "school_users",
+      "schools",
+    ]);
     expect(h.resetPasswordForEmail).not.toHaveBeenCalled();
   });
 });
