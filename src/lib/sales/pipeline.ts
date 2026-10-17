@@ -35,6 +35,7 @@ export const SOURCES = [
   { value: "association", label: "Association / meeting" },
   { value: "inbound_web", label: "Inbound (website)" },
   { value: "whatsapp", label: "WhatsApp" },
+  { value: "outbound", label: "Outbound prospecting" },
   { value: "other", label: "Other" },
 ] as const;
 
