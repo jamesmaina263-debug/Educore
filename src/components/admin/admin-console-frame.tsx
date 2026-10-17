@@ -22,6 +22,7 @@ import {
   Blocks,
   Menu,
   FileUp,
+  ShieldCheck,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -87,6 +88,7 @@ const NAV_GROUPS: AdminNavGroup[] = [
       { href: "/admin/modules", label: "Modules", icon: Blocks },
       { href: "/admin/kicd-content", label: "KICD Content", icon: FileUp },
       { href: "/admin/activity-log", label: "Activity Log", icon: ScrollText },
+      { href: "/admin/mfa?manage=1", label: "Admin Security (MFA)", icon: ShieldCheck },
       { href: "/admin/demo-reset", label: "Demo Reset", icon: RotateCcw },
     ],
   },
