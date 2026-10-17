@@ -509,14 +509,19 @@ export type RealtimeSnapshot = {
   devices: { label: string; value: number }[];
   events: { label: string; value: number }[];
   fetchedAt: string;
+  /** True when Google refused the latest refresh and this is the last good reading, not a new one. */
+  stale?: boolean;
 };
 
 // Same auth and error posture as runReport, but uncached: a live panel that serves a cached
-// response would just move the "why does it say zero" problem somewhere else.
-async function runRealtimeReport(body: Record<string, unknown>): Promise<Ga4ReportResponse | null> {
-  if (!PROPERTY_ID) return null;
+// response would just move the "why does it say zero" problem somewhere else. `rateLimited`
+// distinguishes Google's 429 (back off and keep showing the last reading) from any other failure.
+async function runRealtimeReport(
+  body: Record<string, unknown>,
+): Promise<{ report: Ga4ReportResponse | null; rateLimited: boolean }> {
+  if (!PROPERTY_ID) return { report: null, rateLimited: false };
   const token = await getAccessToken();
-  if (!token) return null;
+  if (!token) return { report: null, rateLimited: false };
   try {
     const res = await withNetworkRetry(() =>
       fetch(`${API_BASE_URL}/properties/${PROPERTY_ID}:runRealtimeReport`, {
@@ -528,12 +533,12 @@ async function runRealtimeReport(body: Record<string, unknown>): Promise<Ga4Repo
     );
     if (!res.ok) {
       console.error(`GA4 runRealtimeReport failed: ${res.status} ${await res.text()}`);
-      return null;
+      return { report: null, rateLimited: res.status === 429 };
     }
-    return (await res.json()) as Ga4ReportResponse;
+    return { report: (await res.json()) as Ga4ReportResponse, rateLimited: false };
   } catch (err) {
     console.error("GA4 runRealtimeReport threw", err);
-    return null;
+    return { report: null, rateLimited: false };
   }
 }
 
@@ -546,45 +551,67 @@ function realtimeRows(
   }));
 }
 
-export async function getRealtimeSnapshot(): Promise<RealtimeSnapshot | null> {
-  if (!PROPERTY_ID) return null;
-  const [minutes, pages, places, devices, events] = await Promise.all([
-    runRealtimeReport({
-      dimensions: [{ name: "minutesAgo" }],
+// Google allows only ~10 simultaneous Realtime requests per property, and an admin page load plus
+// a few open tabs (each refreshing every 30s, each making 5 calls) can exceed that, so Google
+// answers 429. To stay well inside the limit the snapshot is built from one call at a time, kept
+// for SNAPSHOT_TTL_MS and shared by every caller on this server instance (concurrent callers wait
+// on the same in-flight build), and after a 429 no new calls are made for a cool-down while the
+// last good reading keeps being served, marked stale.
+const SNAPSHOT_TTL_MS = 20_000;
+const RATE_LIMIT_COOLDOWN_MS = 60_000;
+const STALE_MAX_AGE_MS = 5 * 60_000;
+
+let snapshotCache: { snapshot: RealtimeSnapshot; at: number } | null = null;
+let snapshotInFlight: Promise<RealtimeSnapshot | null> | null = null;
+let rateLimitedUntil = 0;
+
+function lastGoodSnapshot(now: number): RealtimeSnapshot | null {
+  if (!snapshotCache || now - snapshotCache.at >= STALE_MAX_AGE_MS) return null;
+  return { ...snapshotCache.snapshot, stale: true };
+}
+
+async function buildRealtimeSnapshot(): Promise<{ snapshot: RealtimeSnapshot | null; rateLimited: boolean }> {
+  // TOTAL on the device call is GA4's de-duplicated unique-user count -- summing the per-minute or
+  // per-page rows would double count anyone who browsed more than one page. It goes first because
+  // the panel has nothing honest to show without it.
+  const requests: Record<string, unknown>[] = [
+    {
+      dimensions: [{ name: "deviceCategory" }],
       metrics: [{ name: "activeUsers" }],
-    }),
-    runRealtimeReport({
+      metricAggregations: ["TOTAL"],
+      orderBys: [{ metric: { metricName: "activeUsers" }, desc: true }],
+    },
+    {
       dimensions: [{ name: "unifiedScreenName" }],
       metrics: [{ name: "activeUsers" }, { name: "screenPageViews" }],
       metricAggregations: ["TOTAL"],
       orderBys: [{ metric: { metricName: "screenPageViews" }, desc: true }],
       limit: 8,
-    }),
-    runRealtimeReport({
+    },
+    { dimensions: [{ name: "minutesAgo" }], metrics: [{ name: "activeUsers" }] },
+    {
       dimensions: [{ name: "country" }, { name: "city" }],
       metrics: [{ name: "activeUsers" }],
       orderBys: [{ metric: { metricName: "activeUsers" }, desc: true }],
       limit: 8,
-    }),
-    // TOTAL here is GA4's de-duplicated unique-user count -- summing the per-minute or
-    // per-page rows would double count anyone who browsed more than one page.
-    runRealtimeReport({
-      dimensions: [{ name: "deviceCategory" }],
-      metrics: [{ name: "activeUsers" }],
-      metricAggregations: ["TOTAL"],
-      orderBys: [{ metric: { metricName: "activeUsers" }, desc: true }],
-    }),
-    runRealtimeReport({
+    },
+    {
       dimensions: [{ name: "eventName" }],
       metrics: [{ name: "eventCount" }],
       orderBys: [{ metric: { metricName: "eventCount" }, desc: true }],
       limit: 8,
-    }),
-  ]);
+    },
+  ];
 
-  // The unique-user total is the one number the panel cannot do without; if that call failed
-  // there is nothing honest to show.
-  if (!devices) return null;
+  const reports: (Ga4ReportResponse | null)[] = [];
+  for (const body of requests) {
+    const { report, rateLimited } = await runRealtimeReport(body);
+    // Stop at the first 429 rather than piling more requests onto an exhausted quota.
+    if (rateLimited) return { snapshot: null, rateLimited: true };
+    reports.push(report);
+  }
+  const [devices, pages, minutes, places, events] = reports;
+  if (!devices) return { snapshot: null, rateLimited: false };
 
   const activeUsers = Number(devices.totals?.[0]?.metricValues?.[0]?.value ?? 0);
   const pageViews = Number(pages?.totals?.[0]?.metricValues?.[1]?.value ?? 0);
@@ -596,27 +623,52 @@ export async function getRealtimeSnapshot(): Promise<RealtimeSnapshot | null> {
   }
 
   return {
-    activeUsers,
-    pageViews,
-    perMinute,
-    topPages: realtimeRows(pages).map(({ dims, metrics }) => ({
-      label: dims[0] || "(untitled)",
-      value: metrics[1] ?? 0,
-    })),
-    locations: realtimeRows(places).map(({ dims, metrics }) => ({
-      label: formatLocation(dims[1], dims[0]),
-      value: metrics[0] ?? 0,
-    })),
-    devices: realtimeRows(devices).map(({ dims, metrics }) => ({
-      label: dims[0] || "(unknown)",
-      value: metrics[0] ?? 0,
-    })),
-    events: realtimeRows(events).map(({ dims, metrics }) => ({
-      label: dims[0] || "(none)",
-      value: metrics[0] ?? 0,
-    })),
-    fetchedAt: new Date().toISOString(),
+    rateLimited: false,
+    snapshot: {
+      activeUsers,
+      pageViews,
+      perMinute,
+      topPages: realtimeRows(pages).map(({ dims, metrics }) => ({
+        label: dims[0] || "(untitled)",
+        value: metrics[1] ?? 0,
+      })),
+      locations: realtimeRows(places).map(({ dims, metrics }) => ({
+        label: formatLocation(dims[1], dims[0]),
+        value: metrics[0] ?? 0,
+      })),
+      devices: realtimeRows(devices).map(({ dims, metrics }) => ({
+        label: dims[0] || "(unknown)",
+        value: metrics[0] ?? 0,
+      })),
+      events: realtimeRows(events).map(({ dims, metrics }) => ({
+        label: dims[0] || "(none)",
+        value: metrics[0] ?? 0,
+      })),
+      fetchedAt: new Date().toISOString(),
+    },
   };
+}
+
+export async function getRealtimeSnapshot(): Promise<RealtimeSnapshot | null> {
+  if (!PROPERTY_ID) return null;
+  const now = Date.now();
+  if (snapshotCache && now - snapshotCache.at < SNAPSHOT_TTL_MS) return snapshotCache.snapshot;
+  if (now < rateLimitedUntil) return lastGoodSnapshot(now);
+  if (snapshotInFlight) return snapshotInFlight;
+
+  snapshotInFlight = buildRealtimeSnapshot()
+    .then(({ snapshot, rateLimited }) => {
+      if (snapshot) {
+        snapshotCache = { snapshot, at: Date.now() };
+        return snapshot;
+      }
+      if (rateLimited) rateLimitedUntil = Date.now() + RATE_LIMIT_COOLDOWN_MS;
+      return lastGoodSnapshot(Date.now());
+    })
+    .finally(() => {
+      snapshotInFlight = null;
+    });
+  return snapshotInFlight;
 }
 
 export type FunnelDetailRow = {
