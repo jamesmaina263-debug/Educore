@@ -7,6 +7,7 @@ import { CustomRangePicker } from "@/components/admin/analytics/custom-range-pic
 import { BreakdownList } from "@/components/admin/analytics/breakdown-list";
 import { EngagedOnlyToggle } from "@/components/admin/analytics/engaged-only-toggle";
 import { TrafficTrendChart } from "@/components/admin/analytics/traffic-trend-chart";
+import { LiveVisitorsPanel } from "@/components/admin/analytics/live-visitors-panel";
 import { KeyEventsChart } from "@/components/admin/analytics/key-events-chart";
 import { ChannelPerformanceList } from "@/components/admin/analytics/channel-performance-list";
 import { ConversionFunnel, type FunnelStage } from "@/components/admin/analytics/conversion-funnel";
@@ -340,17 +341,14 @@ export default async function AdminAnalyticsPage({
 
       {gaConfigured && endsToday && (
         <p className="text-xs text-muted-foreground">
-          Google Analytics totals for today can lag by a few hours, so they may read low (or 0) even while
-          visitors are on the site. The live count below is current.
+          The cards above come from Google Analytics&apos; standard reports, which are processed in batches and can
+          trail real traffic by hours, so today&apos;s totals may read low (or 0) even while visitors are on the site.
+          The live panel below reads GA4&apos;s Realtime feed and is current.
           {isPartialDay ? " The comparison with the prior period is hidden for a partial day." : ""}
         </p>
       )}
 
-      {gaConfigured && realtimeVisitors !== null && (
-        <p className="text-xs text-muted-foreground">
-          {realtimeVisitors} visitor{realtimeVisitors === 1 ? "" : "s"} active in the last 30 minutes.
-        </p>
-      )}
+      {gaConfigured && <LiveVisitorsPanel initialActiveUsers={realtimeVisitors} />}
 
       {/* Website Analytics -- explicitly its own labeled block, distinct from
           Search Console below, per the spec. */}
