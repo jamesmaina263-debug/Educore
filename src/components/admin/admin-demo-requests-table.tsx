@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
@@ -18,6 +19,7 @@ import {
   setDemoRequestArchived,
   deleteDemoRequest,
   assignDemoRequest,
+  convertDemoRequestToLead,
 } from "@/app/(admin)/admin/demo-requests/actions";
 
 export type DemoRequestRow = {
@@ -63,15 +65,19 @@ function toneFor(status: string) {
 export function AdminDemoRequestsTable({
   rows,
   teamMembers,
+  leadLinks = {},
 }: {
   rows: DemoRequestRow[];
   teamMembers: TeamMember[];
+  /** request id -> sales lead id, for requests already in the pipeline. */
+  leadLinks?: Record<string, string>;
 }) {
   const router = useRouter();
   const [expanded, setExpanded] = useState<string | null>(null);
   const [showArchived, setShowArchived] = useState(false);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<DemoRequestRow | null>(null);
 
   const membersById = useMemo(() => new Map(teamMembers.map((m) => [m.id, m])), [teamMembers]);
@@ -97,6 +103,19 @@ export function AdminDemoRequestsTable({
       const res = await assignDemoRequest(id, teamMemberId);
       if ("error" in res) setError(res.error);
       else router.refresh();
+    });
+  }
+
+  function handleConvert(id: string) {
+    setError(null);
+    setNotice(null);
+    startTransition(async () => {
+      const res = await convertDemoRequestToLead(id);
+      if ("error" in res) setError(res.error);
+      else {
+        setNotice(res.message);
+        router.refresh();
+      }
     });
   }
 
@@ -127,6 +146,11 @@ export function AdminDemoRequestsTable({
       {error && (
         <p role="alert" className="text-sm text-danger">
           {error}
+        </p>
+      )}
+      {notice && (
+        <p role="status" className="text-sm text-success">
+          {notice}
         </p>
       )}
       <div className="panel">
@@ -178,7 +202,10 @@ export function AdminDemoRequestsTable({
                       {new Date(row.created_at).toLocaleString()}
                     </td>
                     <td className="font-medium">{row.name}</td>
-                    <td>{row.school_name}</td>
+                    <td>
+                      {row.school_name}
+                      {leadLinks[row.id] && <div className="text-xs text-muted-foreground">In sales pipeline</div>}
+                    </td>
                     <td>{row.role}</td>
                     <td>
                       <Select
@@ -275,6 +302,26 @@ export function AdminDemoRequestsTable({
                             <span className="text-muted-foreground">Message:</span>{" "}
                             {row.message ?? "—"}
                           </p>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-3 border-t border-border px-4 py-3 text-sm">
+                          {leadLinks[row.id] ? (
+                            <>
+                              <span className="text-muted-foreground">This request is in the sales pipeline.</span>
+                              <Link href="/admin/sales-pipeline" className="text-primary underline underline-offset-2">
+                                Open sales pipeline
+                              </Link>
+                            </>
+                          ) : (
+                            <>
+                              <Button size="sm" disabled={pending} onClick={() => handleConvert(row.id)}>
+                                {pending ? "Adding…" : "Add to sales pipeline"}
+                              </Button>
+                              <span className="text-xs text-muted-foreground">
+                                Creates one lead with a follow-up due today, or links to an existing lead for the same
+                                school. Nothing is sent to the visitor.
+                              </span>
+                            </>
+                          )}
                         </div>
                       </td>
                     </tr>
