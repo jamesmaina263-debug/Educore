@@ -228,13 +228,14 @@ export default async function AdminAnalyticsPage({
     : "From the database (step 1 of the demo form) — includes visitors GA4 can't see, so it can exceed the stage above";
 
   const funnelStages: FunnelStage[] = [
-    { label: "Website Visitors", value: overview?.visitors ?? null, note: isPartialDay ? processingMessage : undefined },
+    { label: "Website Visitors", value: overview?.visitors ?? null, note: isPartialDay && !overview?.visitors ? processingMessage : undefined },
     {
       label: "Engaged Visitors",
       value: engagedVisitors,
-      note: isPartialDay
-        ? processingMessage
-        : "GA4 engaged sessions (10s+ engaged, 2+ pageviews, or a conversion) — a session count, not unique users",
+      note:
+        isPartialDay && !engagedVisitors
+          ? processingMessage
+          : "GA4 engaged sessions (10s+ engaged, 2+ pageviews, or a conversion) — a session count, not unique users",
       detail: engagedDetail
         ? {
             columns: [
@@ -251,7 +252,7 @@ export default async function AdminAnalyticsPage({
     {
       label: "CTA Clicks",
       value: ctaClicks ?? null,
-      note: isPartialDay ? processingMessage : undefined,
+      note: isPartialDay && !ctaClicks ? processingMessage : undefined,
       detail: ctaDetail
         ? {
             columns: [
@@ -266,7 +267,7 @@ export default async function AdminAnalyticsPage({
           }
         : null,
     },
-    { label: "Demo Form Started", value: demoFormStarted, note: isPartialDay ? processingMessage : undefined },
+    { label: "Demo Form Started", value: demoFormStarted, note: isPartialDay && !demoFormStarted ? processingMessage : undefined },
     // Counted from the database, not GA4, so unlike the stages around it this includes
     // visitors GA4 can't see (declined cookies, blockers) -- it can exceed "Demo Form Started".
     // null ("Not tracked yet") on a query error rather than 0, so a broken query never reads as
