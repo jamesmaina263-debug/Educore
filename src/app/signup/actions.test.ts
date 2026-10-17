@@ -158,6 +158,14 @@ describe("signUpSchool", () => {
     expect(h.createUser).not.toHaveBeenCalled();
   });
 
+  it("rejects a disposable email address before creating anything", async () => {
+    const res = await signUpSchool({ error: null }, form({ email: "wanjiru@mailinator.com" }));
+    expect(res.error).toMatch(/school's own email/i);
+    expect(res.success).toBeUndefined();
+    expect(h.createUser).not.toHaveBeenCalled();
+    expect(inserted("schools")).toBeUndefined();
+  });
+
   it("gives a helpful message when the email already has an account", async () => {
     h.createUser.mockResolvedValue({ data: { user: null }, error: { message: "A user with this email address has already been registered" } });
     const res = await signUpSchool({ error: null }, form());
