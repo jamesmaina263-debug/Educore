@@ -303,38 +303,42 @@ export default async function AdminAnalyticsPage({
           actually returned data (priorOverview !== null); never a made-up
           0% for "not connected". */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <KpiCard
-          label="Visitors"
-          value={overview ? overview.visitors.toLocaleString() : "—"}
-          sub={gaConfigured ? undefined : "Google Analytics not connected"}
-          changePercent={
-            !isPartialDay && overview && priorOverview ? percentChange(overview.visitors, priorOverview.visitors) : undefined
-          }
-        />
-        <KpiCard
-          label="Sessions"
-          value={overview ? overview.visits.toLocaleString() : "—"}
-          sub={gaConfigured ? undefined : "Google Analytics not connected"}
-          changePercent={
-            !isPartialDay && overview && priorOverview ? percentChange(overview.visits, priorOverview.visits) : undefined
-          }
-        />
-        <KpiCard
-          label="Page views"
-          value={overview ? overview.pageviews.toLocaleString() : "—"}
-          sub={gaConfigured ? undefined : "Google Analytics not connected"}
-          changePercent={
-            !isPartialDay && overview && priorOverview
-              ? percentChange(overview.pageviews, priorOverview.pageviews)
-              : undefined
-          }
-        />
+        {!liveOnly && (
+          <>
+            <KpiCard
+              label="Visitors"
+              value={overview ? overview.visitors.toLocaleString() : "—"}
+              sub={gaConfigured ? undefined : "Google Analytics not connected"}
+              changePercent={
+                !isPartialDay && overview && priorOverview ? percentChange(overview.visitors, priorOverview.visitors) : undefined
+              }
+            />
+            <KpiCard
+              label="Sessions"
+              value={overview ? overview.visits.toLocaleString() : "—"}
+              sub={gaConfigured ? undefined : "Google Analytics not connected"}
+              changePercent={
+                !isPartialDay && overview && priorOverview ? percentChange(overview.visits, priorOverview.visits) : undefined
+              }
+            />
+            <KpiCard
+              label="Page views"
+              value={overview ? overview.pageviews.toLocaleString() : "—"}
+              sub={gaConfigured ? undefined : "Google Analytics not connected"}
+              changePercent={
+                !isPartialDay && overview && priorOverview
+                  ? percentChange(overview.pageviews, priorOverview.pageviews)
+                  : undefined
+              }
+            />
+          </>
+        )}
         <KpiCard label="Demo requests" value={demoRequestCount} changePercent={demoRequestChange} />
       </div>
 
       {/* Engagement KPIs the spec asks for under Website Traffic --
           previously fetched by getOverviewStats but never rendered. */}
-      {gaConfigured && overview && (
+      {gaConfigured && overview && !liveOnly && (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           <KpiCard label="Pages / session" value={overview.viewsPerVisit.toFixed(2)} />
           <KpiCard
@@ -349,117 +353,139 @@ export default async function AdminAnalyticsPage({
         </div>
       )}
 
-      {gaConfigured && endsToday && (
+      {liveOnly ? (
         <p className="text-xs text-muted-foreground">
-          The cards above come from Google Analytics&apos; standard reports, which are processed in batches and can
-          trail real traffic by hours, so today&apos;s totals may read low (or 0) even while visitors are on the site.
-          The live panel below reads GA4&apos;s Realtime feed and is current.
-          {isPartialDay ? " The comparison with the prior period is hidden for a partial day." : ""}
+          Today shows live activity and your own demo-request data. Google&apos;s detailed reports for today are
+          processed in batches and finish later, so they are hidden here rather than shown as zeros. Pick
+          Yesterday or Last 7 days to see them.
         </p>
+      ) : (
+        gaConfigured &&
+        endsToday && (
+          <p className="text-xs text-muted-foreground">
+            The cards above come from Google Analytics&apos; standard reports, which are processed in batches and can
+            trail real traffic by hours, so today&apos;s totals for this range may read low even while visitors are
+            on the site. The live panel below reads GA4&apos;s Realtime feed and is current.
+          </p>
+        )
       )}
 
       {gaConfigured && <LiveVisitorsPanel initialActiveUsers={realtimeVisitors} />}
 
-      {/* Website Analytics -- explicitly its own labeled block, distinct from
-          Search Console below, per the spec. */}
-      <div>
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-          <h2 className="text-sm font-semibold text-muted-foreground">Website Analytics</h2>
-          {gaConfigured && (
-            <EngagedOnlyToggle
-              active={engagedOnly}
-              period={period}
-              from={customRange?.from}
-              to={customRange?.to}
-              granularity={granularity}
-            />
-          )}
+      {liveOnly ? (
+        <div className="panel p-4">
+          <p className="text-sm font-medium">Website Analytics</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Traffic trend, top pages, sources, countries and devices for today appear here once Google has
+            processed them. Until then the live panel above is the up-to-date view; switch to Yesterday or Last 7
+            days for the full breakdowns.
+          </p>
         </div>
-        {!gaConfigured ? (
-          <NotConnectedCard
-            title="Google Analytics isn't connected"
-            instructions={[
-              "Create a Google Cloud service account with the Analytics Data API enabled.",
-              "Grant that service account Viewer access on the GA4 property (Admin \u2192 Property Access Management).",
-              "Set GOOGLE_SERVICE_ACCOUNT_JSON (the full service-account key JSON) and GA4_PROPERTY_ID as environment variables.",
-              'The "Events" breakdown below shows GA4\'s actual top event names \u2014 it only lines up with the CTA/demo-funnel labels above if GTM (GTM-MGV2XHBB) has been configured to fire matching events. As of now, nothing sends events named to match the "CTA Clicks"/"Demo Form Started" funnel rows above, so those will show as unavailable until that\u2019s wired up.',
-            ]}
-          />
-        ) : (
-          <div className="grid gap-3 lg:grid-cols-2">
-            <div className="lg:col-span-2">
-              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                <p className="text-sm font-medium">Traffic trend</p>
-                <GranularityTabs active={granularity} period={period} from={customRange?.from} to={customRange?.to} />
+      ) : (
+        <>
+          {/* Website Analytics -- explicitly its own labeled block, distinct from
+              Search Console below, per the spec. */}
+          <div>
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+              <h2 className="text-sm font-semibold text-muted-foreground">Website Analytics</h2>
+              {gaConfigured && (
+                <EngagedOnlyToggle
+                  active={engagedOnly}
+                  period={period}
+                  from={customRange?.from}
+                  to={customRange?.to}
+                  granularity={granularity}
+                />
+              )}
+            </div>
+            {!gaConfigured ? (
+              <NotConnectedCard
+                title="Google Analytics isn't connected"
+                instructions={[
+                  "Create a Google Cloud service account with the Analytics Data API enabled.",
+                  "Grant that service account Viewer access on the GA4 property (Admin \u2192 Property Access Management).",
+                  "Set GOOGLE_SERVICE_ACCOUNT_JSON (the full service-account key JSON) and GA4_PROPERTY_ID as environment variables.",
+                  'The "Events" breakdown below shows GA4\'s actual top event names \u2014 it only lines up with the CTA/demo-funnel labels above if GTM (GTM-MGV2XHBB) has been configured to fire matching events. As of now, nothing sends events named to match the "CTA Clicks"/"Demo Form Started" funnel rows above, so those will show as unavailable until that\u2019s wired up.',
+                ]}
+              />
+            ) : (
+              <div className="grid gap-3 lg:grid-cols-2">
+                <div className="lg:col-span-2">
+                  <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-sm font-medium">Traffic trend</p>
+                    <GranularityTabs active={granularity} period={period} from={customRange?.from} to={customRange?.to} />
+                  </div>
+                  <TrafficTrendChart data={timeseries ?? []} granularity={granularity} />
+                </div>
+                <div className="lg:col-span-2">
+                  <KeyEventsChart data={keyEventsSeries ?? []} eventNames={KEY_EVENT_NAMES} granularity={granularity} />
+                </div>
+                <ChannelPerformanceList rows={channelPerformance ?? []} />
+                <BreakdownList
+                  title="Top pages"
+                  rows={(topPages ?? []).map((r) => ({ label: r.label, value: r.visitors }))}
+                  valueLabel={engagedOnly ? "Engaged sessions" : "Visitors"}
+                />
+                <BreakdownList
+                  title="Landing pages"
+                  rows={(landingPages ?? []).map((r) => ({ label: r.label, value: r.visitors }))}
+                  valueLabel={engagedOnly ? "Engaged sessions" : "Visitors"}
+                />
+                <BreakdownList title="Exit pages" rows={(exitPages ?? []).map((r) => ({ label: r.label, value: r.visitors }))} />
+                <BreakdownList
+                  title="Traffic sources"
+                  rows={(sources ?? []).map((r) => ({ label: r.label, value: r.visitors }))}
+                  valueLabel={engagedOnly ? "Engaged sessions" : "Visitors"}
+                />
+                <BreakdownList
+                  title="Campaigns (UTM)"
+                  rows={(utmCampaigns ?? []).map((r) => ({
+                    label: `${r.source} / ${r.medium}${r.campaign !== "(none)" ? ` / ${r.campaign}` : ""}${
+                      r.content !== "(none)" ? ` / ${r.content}` : ""
+                    }`,
+                    value: r.visitors,
+                  }))}
+                  valueLabel={engagedOnly ? "Engaged sessions" : "Visitors"}
+                />
+                <BreakdownList
+                  // GA4's actual top event names, not filtered Plausible Goals --
+                  // see src/lib/ga4.ts's module-level note. Only overlaps with
+                  // the CTA/demo-funnel names above if GTM fires matching events.
+                  title="Top events (GA4)"
+                  rows={(goals ?? []).map((r) => ({ label: r.goal, value: r.events }))}
+                  valueLabel="Events"
+                />
+                <BreakdownList
+                  title="Country"
+                  rows={(countries ?? []).map((r) => ({ label: r.label, value: r.visitors }))}
+                  valueLabel={engagedOnly ? "Engaged sessions" : "Visitors"}
+                />
+                <BreakdownList
+                  title="Region"
+                  rows={(regions ?? []).map((r) => ({ label: r.label, value: r.visitors }))}
+                  valueLabel={engagedOnly ? "Engaged sessions" : "Visitors"}
+                />
+                <BreakdownList
+                  title="Device"
+                  rows={(devices ?? []).map((r) => ({ label: r.label, value: r.visitors }))}
+                  valueLabel={engagedOnly ? "Engaged sessions" : "Visitors"}
+                />
+                <BreakdownList
+                  title="Browser"
+                  rows={(browsers ?? []).map((r) => ({ label: r.label, value: r.visitors }))}
+                  valueLabel={engagedOnly ? "Engaged sessions" : "Visitors"}
+                />
+                <BreakdownList
+                  title="Operating system"
+                  rows={(oses ?? []).map((r) => ({ label: r.label, value: r.visitors }))}
+                  valueLabel={engagedOnly ? "Engaged sessions" : "Visitors"}
+                />
               </div>
-              <TrafficTrendChart data={timeseries ?? []} granularity={granularity} />
-            </div>
-            <div className="lg:col-span-2">
-              <KeyEventsChart data={keyEventsSeries ?? []} eventNames={KEY_EVENT_NAMES} granularity={granularity} />
-            </div>
-            <ChannelPerformanceList rows={channelPerformance ?? []} />
-            <BreakdownList
-              title="Top pages"
-              rows={(topPages ?? []).map((r) => ({ label: r.label, value: r.visitors }))}
-              valueLabel={engagedOnly ? "Engaged sessions" : "Visitors"}
-            />
-            <BreakdownList
-              title="Landing pages"
-              rows={(landingPages ?? []).map((r) => ({ label: r.label, value: r.visitors }))}
-              valueLabel={engagedOnly ? "Engaged sessions" : "Visitors"}
-            />
-            <BreakdownList title="Exit pages" rows={(exitPages ?? []).map((r) => ({ label: r.label, value: r.visitors }))} />
-            <BreakdownList
-              title="Traffic sources"
-              rows={(sources ?? []).map((r) => ({ label: r.label, value: r.visitors }))}
-              valueLabel={engagedOnly ? "Engaged sessions" : "Visitors"}
-            />
-            <BreakdownList
-              title="Campaigns (UTM)"
-              rows={(utmCampaigns ?? []).map((r) => ({
-                label: `${r.source} / ${r.medium}${r.campaign !== "(none)" ? ` / ${r.campaign}` : ""}${
-                  r.content !== "(none)" ? ` / ${r.content}` : ""
-                }`,
-                value: r.visitors,
-              }))}
-              valueLabel={engagedOnly ? "Engaged sessions" : "Visitors"}
-            />
-            <BreakdownList
-              // GA4's actual top event names, not filtered Plausible Goals --
-              // see src/lib/ga4.ts's module-level note. Only overlaps with
-              // the CTA/demo-funnel names above if GTM fires matching events.
-              title="Top events (GA4)"
-              rows={(goals ?? []).map((r) => ({ label: r.goal, value: r.events }))}
-              valueLabel="Events"
-            />
-            <BreakdownList
-              title="Country"
-              rows={(countries ?? []).map((r) => ({ label: r.label, value: r.visitors }))}
-              valueLabel={engagedOnly ? "Engaged sessions" : "Visitors"}
-            />
-            <BreakdownList
-              title="Region"
-              rows={(regions ?? []).map((r) => ({ label: r.label, value: r.visitors }))}
-              valueLabel={engagedOnly ? "Engaged sessions" : "Visitors"}
-            />
-            <BreakdownList
-              title="Device"
-              rows={(devices ?? []).map((r) => ({ label: r.label, value: r.visitors }))}
-              valueLabel={engagedOnly ? "Engaged sessions" : "Visitors"}
-            />
-            <BreakdownList
-              title="Browser"
-              rows={(browsers ?? []).map((r) => ({ label: r.label, value: r.visitors }))}
-              valueLabel={engagedOnly ? "Engaged sessions" : "Visitors"}
-            />
-            <BreakdownList
-              title="Operating system"
-              rows={(oses ?? []).map((r) => ({ label: r.label, value: r.visitors }))}
-              valueLabel={engagedOnly ? "Engaged sessions" : "Visitors"}
-            />
+            )}
           </div>
-        )}
-      </div>
+
+        </>
+      )}
 
       {/* Search Console -- deliberately separate from Website Analytics above,
           per the spec's instruction never to blend the two data sources. */}
