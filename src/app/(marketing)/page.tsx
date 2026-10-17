@@ -154,12 +154,12 @@ export default function MarketingHomePage() {
           </p>
           <div className="mt-6 flex flex-wrap items-center gap-3 sm:gap-4">
             <MarketingButton size="lg" asChild>
-              <Link href={TRIAL_HREF}>
-                {TRIAL_CTA_LABEL} <ArrowRight className="h-4 w-4" />
+              <Link href="/contact">
+                Book a Personalised Demo <ArrowRight className="h-4 w-4" />
               </Link>
             </MarketingButton>
             <MarketingButton size="lg" variant="outline-on-dark" asChild>
-              <Link href="/contact">Book a Demo</Link>
+              <Link href={TRIAL_HREF}>{TRIAL_CTA_LABEL}</Link>
             </MarketingButton>
             <MarketingButton size="lg" variant="ghost-on-dark" asChild>
               <Link
@@ -171,7 +171,9 @@ export default function MarketingHomePage() {
               </Link>
             </MarketingButton>
           </div>
-          <p className="mt-3 text-sm font-medium text-white/70">{TRIAL_TERMS}</p>
+          <p className="mt-3 text-sm font-medium text-white/70">
+            Demo: tell us when suits you and we aim to reply within two hours. Trial: {TRIAL_TERMS}
+          </p>
           </div>
 
           {/* Breaks out of the text container so the desktop screenshot is shown

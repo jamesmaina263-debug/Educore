@@ -11,18 +11,25 @@ import {
   legacyAttributionColumns,
   parseAttributionFormData,
 } from "@/lib/marketing/attribution-fields";
+import { buildStoredMessage, parseDemoRequest } from "@/lib/marketing/demo-request";
 
 export type DemoRequestState = {
   status: "idle" | "success" | "error";
   message?: string;
+  /** Which form field a validation error refers to, so the UI can focus it. Never user data. */
+  field?: string;
 };
+
+// A visitor who retries (double tap, slow connection, second tab) must not create a second
+// lead. An identical phone + school within this window is treated as the same request. This is
+// checked against what is actually stored, so a request that failed to save is never swallowed.
+const DUPLICATE_WINDOW_MS = 10 * 60 * 1000;
 
 // Simple, dependency-free bot mitigation for this public unauthenticated
 // insert endpoint -- no CAPTCHA/third-party service, since those add a
 // dependency and a privacy trade-off this form doesn't clearly need yet.
 // Covers the two cheapest classes of abuse (naive form-fillers, scripted
 // submits with no render delay) without adding friction for real visitors.
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MIN_FILL_TIME_MS = 1500;
 
 // Inserts into public.marketing_demo_requests, a table isolated from the
@@ -51,13 +58,6 @@ export async function submitDemoRequest(
     return { status: "success" };
   }
 
-  const name = String(formData.get("name") ?? "").trim();
-  const schoolName = String(formData.get("school_name") ?? "").trim();
-  const role = String(formData.get("role") ?? "").trim();
-  const email = String(formData.get("email") ?? "").trim();
-  const phone = String(formData.get("phone") ?? "").trim();
-  const studentCountRaw = String(formData.get("student_count") ?? "").trim();
-  const message = String(formData.get("message") ?? "").trim();
   // Marketing attribution (UTM tags and, for Google Ads clicks, the click ID),
   // forwarded silently from the form's hidden fields (see src/lib/attribution.ts)
   // -- never visitor-entered, so no validation beyond trimming/length-capping
@@ -66,21 +66,14 @@ export async function submitDemoRequest(
   // credit for a lead, they never gate submission or touch any other table.
   const attribution = parseAttributionFormData(formData);
 
-  if (!name || !schoolName || !role || !email) {
-    return {
-      status: "error",
-      message: "Name, school, role, and email are required.",
-    };
+  // All field rules (required fields, role whitelist, phone plausibility, contact method,
+  // preferred date window, length caps, control-character stripping) live in one shared module
+  // so the browser, this action and the tests agree. Runs before any database call.
+  const parsed = parseDemoRequest(formData);
+  if (!parsed.ok) {
+    return { status: "error", message: parsed.message, field: parsed.field };
   }
-
-  if (!EMAIL_RE.test(email)) {
-    return { status: "error", message: "Enter a valid email address." };
-  }
-
-  const studentCount = studentCountRaw ? Number(studentCountRaw) : null;
-  if (studentCount !== null && (!Number.isFinite(studentCount) || studentCount < 0)) {
-    return { status: "error", message: "Student count must be a positive number." };
-  }
+  const input = parsed.value;
 
   // Abuse guard: the honeypot and minimum-fill-time checks above only deter
   // unsophisticated bots -- both signals are client-supplied, so a deliberate
@@ -116,15 +109,33 @@ export async function submitDemoRequest(
   // No tagSentryRequestContext() call here: this is a public unauthenticated insert endpoint (see
   // the comment above) -- there is never a session to tag, so the call would be a guaranteed
   // no-op every time.
+  // Existing columns only: contact method and preferred time are written into `message` (see
+  // the note at the top of src/lib/marketing/demo-request.ts), so no schema change is needed and
+  // the admin console, new-lead email and assignment email show them as they are.
   const lead = {
-    name,
-    school_name: schoolName,
-    role,
-    email,
-    phone: phone || null,
-    student_count: studentCount,
-    message: message || null,
+    name: input.name,
+    school_name: input.schoolName,
+    role: input.role,
+    email: input.email,
+    phone: input.phone,
+    student_count: input.studentCount,
+    message: buildStoredMessage(input),
   };
+
+  // Duplicate guard. Fail open: if this lookup errors we still save the lead, because a
+  // duplicate row is far cheaper than a lost one.
+  const { data: recent, error: recentError } = await admin
+    .from("marketing_demo_requests")
+    .select("id")
+    .eq("phone", lead.phone)
+    .eq("school_name", lead.school_name)
+    .gte("created_at", new Date(Date.now() - DUPLICATE_WINDOW_MS).toISOString())
+    .limit(1);
+  if (!recentError && recent && recent.length > 0) {
+    await markIncompleteLeadCompleted(admin, normalizeLeadEmail(input.email));
+    return { status: "success" };
+  }
+
   let { error } = await admin
     .from("marketing_demo_requests")
     .insert({ ...lead, ...attribution });
@@ -147,7 +158,7 @@ export async function submitDemoRequest(
 
   // The visitor finished the form: close out any step-1 lead saved for this email (see
   // partial-lead-actions.ts) so it no longer shows as "started but didn't finish".
-  await markIncompleteLeadCompleted(admin, normalizeLeadEmail(email));
+  await markIncompleteLeadCompleted(admin, normalizeLeadEmail(input.email));
 
   return { status: "success" };
 }

@@ -8,7 +8,7 @@ const contact = {
   name: "Jane",
   schoolName: "Sunrise Academy",
   email: "jane@sunrise.ac.ke",
-  phone: null,
+  phone: "0712345678",
 };
 const attribution = parseAttributionFormData(new FormData());
 
