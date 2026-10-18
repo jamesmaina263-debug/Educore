@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { TrialFollowupView } from "@/components/admin/trial-followup";
 import { RECENTLY_EXPIRED_DAYS, buildTrialFollowup } from "@/lib/growth/trial-followup";
+import { summariseCheckins, type CheckinRow } from "@/lib/growth/trial-checkins";
 import {
   assembleTrialInputs,
   type LastActiveRow,
@@ -12,7 +13,9 @@ import {
 
 // Same auth gate as the other platform-admin pages: the (admin) layout already enforces super admin; this
 // repeats it (defense in depth). Reads existing tables only (no migration): schools, school_subscriptions,
-// school_users, and the admin_school_last_active() RPC the admin home page already uses.
+// school_users, and the admin_school_last_active() RPC the admin home page already uses; plus the
+// trial_checkins log (and platform_team_members for names). If the log cannot be read the page still loads
+// and says so, rather than implying nobody was contacted.
 export default async function AdminTrialFollowupPage() {
   const supabase = await createClient();
 
@@ -69,7 +72,7 @@ export default async function AdminTrialFollowupPage() {
     );
   }
 
-  const [schoolsRes, lastActiveRes, usersRes] = await Promise.all([
+  const [schoolsRes, lastActiveRes, usersRes, checkinsRes, teamRes] = await Promise.all([
     supabase.from("schools").select("id, name, slug, status, created_at").in("id", ids),
     supabase.rpc("admin_school_last_active"),
     // Active school users with their role: owners give the contact, everyone who is not a parent, student or
@@ -80,6 +83,13 @@ export default async function AdminTrialFollowupPage() {
       .in("school_id", ids)
       .eq("status", "active")
       .not("roles.name", "in", "(parent,student,super_admin)"),
+    supabase
+      .from("trial_checkins")
+      .select("school_id, created_at, channel, outcome, performed_by")
+      .in("school_id", ids)
+      .order("created_at", { ascending: false })
+      .limit(2000),
+    supabase.from("platform_team_members").select("id, name").eq("active", true).order("name"),
   ]);
 
   const firstError = schoolsRes.error ?? lastActiveRes.error ?? usersRes.error;
@@ -95,17 +105,25 @@ export default async function AdminTrialFollowupPage() {
     );
   }
 
+  const team = (teamRes.data ?? []) as { id: string; name: string }[];
+  const checkinsAvailable = !checkinsRes.error;
+  const checkins = summariseCheckins(
+    checkinsAvailable ? ((checkinsRes.data ?? []) as CheckinRow[]) : [],
+    new Map(team.map((m) => [m.id, m.name])),
+  );
+
   const inputs = assembleTrialInputs({
     subscriptions: subs,
     schools: (schoolsRes.data ?? []) as SchoolRow[],
     lastActive: (lastActiveRes.data ?? []) as LastActiveRow[],
     users: (usersRes.data ?? []) as SchoolUserRow[],
+    checkins,
   });
 
   return (
     <div className="flex flex-col gap-4">
       {header}
-      <TrialFollowupView data={buildTrialFollowup(inputs)} />
+      <TrialFollowupView data={buildTrialFollowup(inputs)} teamMembers={team} checkinsAvailable={checkinsAvailable} />
     </div>
   );
 }

@@ -42,10 +42,9 @@ If a query fails, the page says so and shows nothing rather than guessing.
 - "Trial day" is elapsed 24-hour periods since the subscription row was created, not calendar days.
 - Activity is the last sign-in or last-seen time of any user at the school. It cannot say what they did, and there is no
   per-day milestone history, so "setup progress" is limited to the staff-account count.
-- Nothing is recorded about who followed up. That belongs in the existing sales pipeline if a trial becomes a lead.
+- Who followed up is recorded by the check-in log: see `trial-checkin-log.md`.
 - The page is not paginated; it lists running trials plus recent expiries, which are small sets.
 
 ## Not covered (later Phase 2 work)
 
-Sending welcome or reminder messages (needs the WhatsApp/email provider decisions and consent rules), logging that a
-check-in happened, and automated nudges. Each needs explicit approval first.
+Sending welcome or reminder messages (needs the WhatsApp/email provider decisions and consent rules), and automated nudges. Each needs explicit approval first.
