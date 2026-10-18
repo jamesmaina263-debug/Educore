@@ -184,6 +184,15 @@ function Panel({
   );
 }
 
+// Same darker green as the other mock-up text (see the note above NavRow); StatusBadge itself is the
+// shared app component and is deliberately not changed.
+function mockupBadgeClass(tone: string): string | undefined {
+  return tone === "success" ? "text-[#007633]" : undefined;
+}
+
+// NOTE: the green/amber/sidebar-label colours in this illustrative mock-up are hard-coded a notch
+// darker than the app theme so the marketing page passes WCAG AA text contrast (4.5:1) on its white
+// and tinted panels. The real app (and shared theme tokens) is unchanged.
 function NavRow({
   label,
   icon: Icon,
@@ -199,7 +208,7 @@ function NavRow({
     <div
       className={cn(
         "flex items-center gap-2.5 rounded-md px-2.5 py-[2.5px] text-sm font-medium leading-5",
-        active ? "bg-sidebar-primary/10 text-sidebar-primary" : "text-sidebar-foreground/80",
+        active ? "bg-sidebar-primary/10 text-[#006f30]" : "text-sidebar-foreground/80",
       )}
     >
       <Icon className="size-4 shrink-0" />
@@ -367,7 +376,7 @@ export function DashboardFrame({ className }: { className?: string }) {
               <nav className="flex flex-col gap-2 p-2">
                 {navGroups.map((group) => (
                   <div key={group.label} className="flex flex-col">
-                    <p className="px-2.5 pb-0.5 pt-0.5 text-[11px] font-semibold uppercase tracking-wider text-sidebar-foreground/40">
+                    <p className="px-2.5 pb-0.5 pt-0.5 text-[11px] font-semibold uppercase tracking-wider text-sidebar-foreground/70">
                       {group.label}
                     </p>
                     {group.items.map((item) => (
@@ -447,8 +456,8 @@ export function DashboardFrame({ className }: { className?: string }) {
                           <span
                             className={
                               m.up
-                                ? "inline-flex items-center gap-0.5 font-medium text-success"
-                                : "inline-flex items-center gap-0.5 font-medium text-warning"
+                                ? "inline-flex items-center gap-0.5 font-medium text-[#007633]"
+                                : "inline-flex items-center gap-0.5 font-medium text-[#a75e00]"
                             }
                           >
                             {m.up ? (
@@ -531,7 +540,7 @@ export function DashboardFrame({ className }: { className?: string }) {
                               <p className="truncate text-[0.8125rem] font-medium">{t.label}</p>
                               <p className="text-xs text-muted-foreground">{t.owner}</p>
                             </div>
-                            <StatusBadge tone={t.tone} label={t.badge} />
+                            <StatusBadge tone={t.tone} label={t.badge} className={mockupBadgeClass(t.tone)} />
                           </li>
                         ))}
                       </ul>
@@ -555,7 +564,7 @@ export function DashboardFrame({ className }: { className?: string }) {
                                   {inv.amount}
                                 </td>
                                 <td>
-                                  <StatusBadge tone={inv.tone} label={inv.status} />
+                                  <StatusBadge tone={inv.tone} label={inv.status} className={mockupBadgeClass(inv.tone)} />
                                 </td>
                               </tr>
                             ))}
