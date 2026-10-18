@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getCachedUser } from "@/lib/supabase/get-user";
@@ -239,6 +240,15 @@ export default async function ReportCardsPage({
                 rows={markSheetRows}
                 logoUrl={schoolLogoUrl}
               />
+            )}
+            {rows.length > 0 && selectedExamId && selectedClassId && (
+              <Link
+                href={`/exams/report-cards/print?exam=${selectedExamId}&class=${selectedClassId}`}
+                target="_blank"
+                className="inline-flex h-8 items-center rounded-md border border-border px-3 text-sm hover:bg-muted"
+              >
+                Print all
+              </Link>
             )}
             {examOptions.length > 0 && (
               <ReportCardPicker

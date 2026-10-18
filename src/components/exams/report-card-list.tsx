@@ -122,7 +122,17 @@ export function ReportCardList({
           {rows.map((r) => (
             <div key={r.student_id} className="panel p-4">
               <div className="mb-2 flex items-center justify-between">
-                <p className="font-medium">{r.full_name}</p>
+                <div className="flex items-center gap-3">
+                  <p className="font-medium">{r.full_name}</p>
+                  <a
+                    href={`/exams/report-cards/print?exam=${examId}&student=${r.student_id}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
+                  >
+                    Print
+                  </a>
+                </div>
                 {r.average_score !== null && (
                   <p className="text-sm text-muted-foreground">
                     Average {r.average_score} {r.rank_in_stream ? `— Rank ${r.rank_in_stream} in stream` : ""}
