@@ -43,7 +43,7 @@ function countyNameRegex(county: KenyaCounty): string {
 export function buildOverpassQuery(county: KenyaCounty, kinds: DiscoveryKinds): string {
   const amenity = kinds === "kindergartens" ? "kindergarten" : kinds === "schools" ? "school" : "school|kindergarten";
   // Safe to interpolate: county is validated against the fixed KENYA_COUNTIES list (isKenyaCounty).
-  return `[out:json][timeout:60];
+  return `[out:json][timeout:25];
 area["ISO3166-1"="KE"]["admin_level"="2"]->.ke;
 area["boundary"="administrative"]["admin_level"="4"]["name"~"${countyNameRegex(county)}",i](area.ke)->.county;
 (
