@@ -28,6 +28,7 @@ import {
   pickBestEmail,
   verifyFoundContacts,
 } from "@/lib/outbound/enrichment";
+import { isOwnershipFilter } from "@/lib/outbound/ownership";
 import { safeFetchPage } from "@/lib/outbound/safe-fetch";
 import {
   isContactChannel,
@@ -117,12 +118,14 @@ async function fetchOverpass(query: string): Promise<unknown> {
 export async function discoverSchoolsByCounty(
   county: string,
   kinds: string,
+  ownership: string = "hide_public",
 ): Promise<
   | { error: string }
-  | { success: true; found: number; inserted: number; skipped: number; truncated: number; withContact: number }
+  | { success: true; found: number; inserted: number; skipped: number; truncated: number; hidden: number; withContact: number }
 > {
   if (!isKenyaCounty(county)) return { error: "Choose a county from the list." };
   if (kinds !== "all" && kinds !== "kindergartens" && kinds !== "schools") return { error: "Invalid school kind." };
+  if (!isOwnershipFilter(ownership)) return { error: "Invalid ownership filter." };
 
   let data: unknown;
   try {
@@ -132,8 +135,15 @@ export async function discoverSchoolsByCounty(
     return { error: "The map data service didn't respond. Wait a minute and try again, or try a smaller county first." };
   }
 
-  const { rows, truncated } = parseOverpassResponse(data, county);
-  if (rows.length === 0) return { error: `No named schools were found for ${county}. OpenStreetMap coverage varies by county.` };
+  const { rows, truncated, hidden } = parseOverpassResponse(data, county, ownership);
+  if (rows.length === 0) {
+    return {
+      error:
+        hidden > 0
+          ? `All ${hidden} schools found in ${county} look public, so the filter hid them. Choose "Everything" to see them.`
+          : `No named schools were found for ${county}. OpenStreetMap coverage varies by county.`,
+    };
+  }
 
   const supabase = await createClient();
   await tagSentryRequestContext(supabase);
@@ -146,7 +156,7 @@ export async function discoverSchoolsByCounty(
   const r = (result ?? {}) as { inserted?: number; skipped?: number };
   const inserted = r.inserted ?? 0;
   const skipped = r.skipped ?? 0;
-  void logAdminAction(supabase, "discover_outbound_prospects", { county, kinds, found: rows.length, inserted, skipped });
+  void logAdminAction(supabase, "discover_outbound_prospects", { county, kinds, ownership, found: rows.length, hidden, inserted, skipped });
   revalidatePath(PATH);
   return {
     success: true,
@@ -154,6 +164,7 @@ export async function discoverSchoolsByCounty(
     inserted,
     skipped,
     truncated,
+    hidden,
     withContact: rows.filter((x) => x.email || x.phone).length,
   };
 }

@@ -7,6 +7,7 @@
 // Discovery fills the top of the funnel; contact details usually still need a human or a follow-up
 // enrichment step.
 
+import { ownershipSignal, passesOwnershipFilter, type OwnershipFilter } from "./ownership";
 import {
   MAX_IMPORT_ROWS,
   normalizePhone,
@@ -84,11 +85,17 @@ export type DiscoveryParse = {
   rows: ProspectRow[];
   /** Rows beyond MAX_IMPORT_ROWS that were left out (lowest-priority first: those with no contact route). */
   truncated: number;
+  /** Schools left out by the ownership filter (e.g. likely-public schools). */
+  hidden: number;
 };
 
-export function parseOverpassResponse(data: unknown, county: string): DiscoveryParse {
+export function parseOverpassResponse(
+  data: unknown,
+  county: string,
+  ownership: OwnershipFilter = "all",
+): DiscoveryParse {
   const elements = (data as { elements?: OsmElement[] } | null)?.elements;
-  if (!Array.isArray(elements)) return { rows: [], truncated: 0 };
+  if (!Array.isArray(elements)) return { rows: [], truncated: 0, hidden: 0 };
 
   const seen = new Set<string>();
   const rows: ProspectRow[] = [];
@@ -119,11 +126,17 @@ export function parseOverpassResponse(data: unknown, county: string): DiscoveryP
     });
   }
 
+  // Ownership filter first, so the 500 cap is spent on schools worth pursuing.
+  const kept = rows.filter((r) => passesOwnershipFilter(ownershipSignal(r), ownership));
+  const hidden = rows.length - kept.length;
+  rows.length = 0;
+  rows.push(...kept);
+
   // Keep the most reachable schools if we have to cut: email > phone > website > nothing.
   const reach = (r: ProspectRow) => (r.email ? 3 : 0) + (r.phone ? 2 : 0) + (r.website ? 1 : 0);
   rows.sort((a, b) => reach(b) - reach(a));
   const truncated = Math.max(0, rows.length - MAX_IMPORT_ROWS);
-  return { rows: rows.slice(0, MAX_IMPORT_ROWS), truncated };
+  return { rows: rows.slice(0, MAX_IMPORT_ROWS), truncated, hidden };
 }
 
 export function discoverySourceNote(county: string, date: Date): string {

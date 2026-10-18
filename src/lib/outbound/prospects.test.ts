@@ -133,6 +133,18 @@ describe("scoring prompt", () => {
     expect(p).toMatch(/Never offer or imply a discount/);
     expect(p).not.toContain("simple learner progress reports");
   });
+  it("tells the scorer about ownership and to rank likely-public schools lower", () => {
+    const base = { town_county: null, school_type: null, school_level: "primary", website: null, contact_name: null, contact_role: null, student_count: null };
+    const priv = buildScoringPrompt({ ...base, school_name: "Murera View Academy" });
+    expect(priv).toContain("Ownership: Likely private (a guess from the name)");
+    const pub = buildScoringPrompt({ ...base, school_name: "Gititu Primary School" });
+    expect(pub).toContain("Ownership: Likely public (a guess from the name)");
+    expect(pub).toContain("no higher than 40");
+    const tagged = buildScoringPrompt({ ...base, school_name: "Anything", school_type: "private" });
+    expect(tagged).toContain("Ownership: Private (map tag)");
+    expect(tagged).not.toContain("(a guess from the name)");
+    expect(buildScoringPrompt({ ...base, school_name: "Gatimu Ngandu" })).not.toContain("Ownership:");
+  });
   it("keeps the fixed offer line in step with the marketing trial wording", () => {
     expect(TRIAL_TERMS).toBe("30-day free trial. No card required.");
     expect(OUTREACH_OFFER.pricePerStudentPerTermKes).toBe(PUBLISHED_PRICE_KES_PER_STUDENT_TERM);
