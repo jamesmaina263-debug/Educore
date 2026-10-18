@@ -47,17 +47,39 @@ export async function loadExamsContext(): Promise<ExamsContext> {
     { data: canWrite },
     { data: schemes },
     { data: components },
+    { data: classSubjectRows },
   ] = await Promise.all([
     supabase.from("exams").select("id, name, exam_type, status, term_id, terms(name)").order("created_at", { ascending: false }),
     supabase.from("terms").select("id, name").eq("status", "active"),
-    supabase.from("classes").select("id, name, grading_scale_id").order("level_order"),
-    supabase.from("subjects").select("id, name").eq("is_active", true).order("name"),
+    supabase.from("classes").select("id, name, grading_scale_id, kicd_grade").order("level_order"),
+    supabase.from("subjects").select("id, name, subject_catalogue(grade_band)").eq("is_active", true).order("name"),
     supabase.from("grading_scales").select("id, name, model_type, is_default"),
     supabase.from("grading_scale_bands").select("id, grading_scale_id, label, min_score, max_score, level_order"),
     supabase.rpc("auth_has_permission", { p_permission_key: "exams.write" }),
     supabase.from("assessment_schemes").select("id, name, is_default").order("created_at"),
     supabase.from("assessment_components").select("id, scheme_id, name, weight_percent, display_order").order("display_order"),
+    // Which classes each subject is already assigned in (via the class's streams), so the
+    // New-exam dialog can offer the right subjects per class.
+    supabase.from("class_subjects").select("subject_id, streams(class_id)"),
   ]);
+
+  const classIdsBySubject = new Map<string, Set<string>>();
+  for (const row of classSubjectRows ?? []) {
+    const stream = row.streams as unknown as { class_id: string } | { class_id: string }[] | null;
+    const classId = Array.isArray(stream) ? stream[0]?.class_id : stream?.class_id;
+    if (!classId) continue;
+    if (!classIdsBySubject.has(row.subject_id)) classIdsBySubject.set(row.subject_id, new Set());
+    classIdsBySubject.get(row.subject_id)!.add(classId);
+  }
+  const subjectOptions: SubjectOption[] = (subjects ?? []).map((s) => {
+    const cat = s.subject_catalogue as unknown as { grade_band: string | null } | { grade_band: string | null }[] | null;
+    return {
+      id: s.id,
+      name: s.name,
+      grade_band: (Array.isArray(cat) ? cat[0]?.grade_band : cat?.grade_band) ?? null,
+      class_ids: Array.from(classIdsBySubject.get(s.id) ?? []),
+    };
+  });
 
   const roleName = (schoolUser?.roles as unknown as { display_name: string } | null)?.display_name;
   const schoolName = (schoolUser?.schools as unknown as { name: string } | null)?.name;
@@ -94,7 +116,7 @@ export async function loadExamsContext(): Promise<ExamsContext> {
     examRows,
     terms: (terms ?? []) as TermOption[],
     classes: (classes ?? []) as ClassOption[],
-    subjects: (subjects ?? []) as SubjectOption[],
+    subjects: subjectOptions,
     scaleRows,
     gradingClasses: (classes ?? []) as ClassRow[],
     hasGradingScale: (scales ?? []).length > 0,
