@@ -10,6 +10,7 @@ import { BreadcrumbJsonLd, HOME_CRUMB } from "@/components/marketing/breadcrumb-
 import { ArticleJsonLd } from "@/components/marketing/article-json-ld";
 import { BlogByline } from "@/components/marketing/blog-byline";
 import { RelatedGuides } from "@/components/marketing/related-guides";
+import { BlogInlineCta } from "@/components/marketing/blog-inline-cta";
 
 const SLUG = "senior-school-pathways-kenya-stem-social-sciences-arts-sports";
 const PATH = `/blog/${SLUG}`;
@@ -249,6 +250,12 @@ export default function SeniorSchoolPathwaysPost() {
           </ul>
         </Reveal>
       </Section>
+
+      <BlogInlineCta
+        headline="Guiding Grade 9 learners towards a pathway?"
+        body="EduCore’s Pathway Guidance page compares the marks you already hold, as advisory input for the conversation with learners and parents. We can show it on your own class."
+        topic="Senior School pathways"
+      />
 
       {/* 7 — Where EduCore fits */}
       <Section tone="navy">

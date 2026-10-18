@@ -10,6 +10,7 @@ import { BreadcrumbJsonLd, HOME_CRUMB } from "@/components/marketing/breadcrumb-
 import { ArticleJsonLd } from "@/components/marketing/article-json-ld";
 import { BlogByline } from "@/components/marketing/blog-byline";
 import { RelatedGuides } from "@/components/marketing/related-guides";
+import { BlogInlineCta } from "@/components/marketing/blog-inline-cta";
 
 const SLUG = "data-protection-act-kenya-schools-guide";
 const PATH = `/blog/${SLUG}`;
@@ -328,6 +329,12 @@ export default function DataProtectionActKenyaSchoolsGuidePost() {
           </div>
         </Reveal>
       </Section>
+
+      <BlogInlineCta
+        headline="Choosing software that holds learner data?"
+        body="Next is how EduCore answers these obligations, including the part we haven’t solved yet. If you’d rather talk it through before deciding, we’re happy to."
+        topic="the Data Protection Act for schools"
+      />
 
       {/* 6 — EduCore's position */}
       <Section tone="canvas">

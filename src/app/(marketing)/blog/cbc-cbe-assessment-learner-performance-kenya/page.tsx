@@ -19,6 +19,7 @@ import { BreadcrumbJsonLd, HOME_CRUMB } from "@/components/marketing/breadcrumb-
 import { ArticleJsonLd } from "@/components/marketing/article-json-ld";
 import { BlogByline } from "@/components/marketing/blog-byline";
 import { RelatedGuides } from "@/components/marketing/related-guides";
+import { BlogInlineCta } from "@/components/marketing/blog-inline-cta";
 
 const TITLE = "CBC/CBE Assessment & Learner Performance in Kenya — EduCore";
 const DESCRIPTION = "How CBC/CBE competency-based assessment works in Kenya, the roles KICD and KNEC play, and how EduCore turns strand-level records into insight.";
@@ -331,6 +332,12 @@ export default function CbcCbeAssessmentLearnerPerformancePost() {
           </Reveal>
         </div>
       </Section>
+
+      <BlogInlineCta
+        headline="Assessing sub-strands across every class?"
+        body="See how EduCore records strand and sub-strand competency assessment alongside the rest of your school’s data, using your own classes rather than a generic tour."
+        topic="CBC and CBE assessment"
+      />
 
       {/* 5 — Core: EduCore's CBC/CBE capabilities */}
       <Section tone="navy">
