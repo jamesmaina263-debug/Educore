@@ -29,6 +29,7 @@ import {
   verifyFoundContacts,
 } from "@/lib/outbound/enrichment";
 import { isOwnershipFilter } from "@/lib/outbound/ownership";
+import { fetchOverpassJson } from "@/lib/outbound/overpass-client";
 import { safeFetchPage } from "@/lib/outbound/safe-fetch";
 import {
   isContactChannel,
@@ -84,33 +85,6 @@ export async function importOutboundProspects(
   return { success: true, inserted, skipped, warnings: parsed.value.warnings };
 }
 
-// Public Overpass instances, tried in order. Be a polite client: identify ourselves, one county per
-// request, and never retry in a tight loop.
-const OVERPASS_ENDPOINTS = ["https://overpass-api.de/api/interpreter", "https://overpass.kumi.systems/api/interpreter"];
-
-async function fetchOverpass(query: string): Promise<unknown> {
-  let lastError = "no endpoint answered";
-  for (const endpoint of OVERPASS_ENDPOINTS) {
-    try {
-      const res = await fetch(endpoint, {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded", "User-Agent": "EduCore-Outreach/1.0 (school discovery)" },
-        body: new URLSearchParams({ data: query }).toString(),
-        signal: AbortSignal.timeout(55_000),
-        cache: "no-store",
-      });
-      if (!res.ok) {
-        lastError = `${new URL(endpoint).host} responded ${res.status}`;
-        continue;
-      }
-      return await res.json();
-    } catch (e) {
-      lastError = `${new URL(endpoint).host}: ${e instanceof Error ? e.message : "request failed"}`;
-    }
-  }
-  throw new Error(lastError);
-}
-
 /**
  * Finds schools (and, optionally, kindergartens) in one county from OpenStreetMap and stages them
  * for review. Staging only: nothing is scored, approved or sent by this call.
@@ -127,13 +101,16 @@ export async function discoverSchoolsByCounty(
   if (kinds !== "all" && kinds !== "kindergartens" && kinds !== "schools") return { error: "Invalid school kind." };
   if (!isOwnershipFilter(ownership)) return { error: "Invalid ownership filter." };
 
-  let data: unknown;
-  try {
-    data = await fetchOverpass(buildOverpassQuery(county, kinds as DiscoveryKinds));
-  } catch (e) {
-    console.error("discoverSchoolsByCounty: overpass failed", e instanceof Error ? e.message : e);
-    return { error: "The map data service didn't respond. Wait a minute and try again, or try a smaller county first." };
+  // Public map servers fail often (overloaded / rate-limited). The client tries several mirrors, retries once,
+  // and stays inside this page's 60s limit; the per-server outcome (host + status only) is shown and logged.
+  const fetched = await fetchOverpassJson(buildOverpassQuery(county, kinds as DiscoveryKinds), { budgetMs: 45_000 });
+  if (!fetched.ok) {
+    console.error("discoverSchoolsByCounty: overpass failed:", fetched.summary);
+    return {
+      error: `The map data service is busy or unreachable right now (${fetched.summary}). Wait a few minutes and try again, or try a different county.`,
+    };
   }
+  const data = fetched.data;
 
   const { rows, truncated, hidden } = parseOverpassResponse(data, county, ownership);
   if (rows.length === 0) {
