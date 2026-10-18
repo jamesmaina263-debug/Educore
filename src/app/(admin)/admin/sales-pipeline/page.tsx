@@ -1,6 +1,8 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { AdminSalesPipeline } from "@/components/admin/admin-sales-pipeline";
+import { UpcomingDemos } from "@/components/admin/upcoming-demos";
+import type { DemoRow } from "@/lib/sales/demos";
 import { todayInNairobi, weekStartInstant, type SalesActivityRow, type SalesLeadRow } from "@/lib/sales/pipeline";
 
 // Same auth gate as the other platform-admin pages: the (admin) layout already enforces
@@ -17,7 +19,7 @@ export default async function AdminSalesPipelinePage() {
   const { data: isSuperAdmin } = await supabase.rpc("auth_is_super_admin");
   if (isSuperAdmin !== true) redirect("/dashboard");
 
-  const [leadsRes, activitiesRes, teamRes] = await Promise.all([
+  const [leadsRes, activitiesRes, teamRes, demosRes] = await Promise.all([
     supabase
       .from("sales_leads")
       .select(
@@ -31,6 +33,13 @@ export default async function AdminSalesPipelinePage() {
       .order("created_at", { ascending: false })
       .limit(2000),
     supabase.from("platform_team_members").select("id, name").eq("active", true).order("name"),
+    // Demo bookings live in their own table; if it is not there yet (code live a moment before its migration)
+    // the pipeline still loads and says so, rather than breaking.
+    supabase
+      .from("sales_lead_demos")
+      .select("id, lead_id, scheduled_for, mode, location_note, host_id, status, outcome_note, status_changed_at")
+      .order("scheduled_for", { ascending: false })
+      .limit(2000),
   ]);
 
   // If the tables aren't there (code deployed a moment before its migration), show a plain
@@ -53,6 +62,10 @@ export default async function AdminSalesPipelinePage() {
   }
 
   const today = todayInNairobi();
+  const demosAvailable = !demosRes.error;
+  const demos = demosAvailable ? ((demosRes.data ?? []) as DemoRow[]) : [];
+  const reps = (teamRes.data ?? []) as { id: string; name: string }[];
+  const leads = (leadsRes.data ?? []) as SalesLeadRow[];
 
   return (
     <div className="flex flex-col gap-4">
@@ -63,10 +76,24 @@ export default async function AdminSalesPipelinePage() {
           staff only.
         </p>
       </div>
+      {demosAvailable ? (
+        <UpcomingDemos
+          demos={demos}
+          leadNames={new Map(leads.map((l) => [l.id, l.school_name]))}
+          repNameById={new Map(reps.map((r) => [r.id, r.name]))}
+          now={new Date()}
+        />
+      ) : (
+        <p className="text-xs text-muted-foreground">
+          Demo booking is not available yet on this environment (its database table has not been created). The rest of the
+          pipeline is unaffected.
+        </p>
+      )}
       <AdminSalesPipeline
-        leads={(leadsRes.data ?? []) as SalesLeadRow[]}
+        leads={leads}
         activities={(activitiesRes.data ?? []) as SalesActivityRow[]}
-        reps={(teamRes.data ?? []) as { id: string; name: string }[]}
+        demos={demos}
+        reps={reps}
         today={today}
         weekStartIso={weekStartInstant(today)}
       />
