@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -13,6 +13,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogT
 import { useSchoolHref } from "@/components/app-shell/school-slug-context";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { createExam, closeExam, reopenExam } from "@/app/(app)/exams/actions";
+import { subjectAppliesToClass, subjectsForSelectedClasses, type ExamPickerSubject } from "@/lib/exam-subject-options";
 
 export interface ExamRow {
   id: string;
@@ -31,11 +32,15 @@ export interface TermOption {
 export interface ClassOption {
   id: string;
   name: string;
+  kicd_grade?: string | null;
 }
 
 export interface SubjectOption {
   id: string;
   name: string;
+  grade_band?: string | null;
+  /** Classes where this subject is already assigned to a stream. */
+  class_ids?: string[];
 }
 
 export function ExamsSection({
@@ -67,13 +72,25 @@ export function ExamsSection({
   );
   const [selectedSubjects, setSelectedSubjects] = useState<Set<string>>(new Set());
 
+  const pickerSubjects: ExamPickerSubject[] = useMemo(
+    () => subjects.map((s) => ({ id: s.id, name: s.name, grade_band: s.grade_band ?? null, class_ids: s.class_ids ?? [] })),
+    [subjects],
+  );
+  const pickerClasses = useMemo(() => classes.map((c) => ({ id: c.id, kicd_grade: c.kicd_grade ?? null })), [classes]);
+  // Subjects offered for the ticked classes, same-name duplicates collapsed.
+  const subjectChoices = useMemo(
+    () => subjectsForSelectedClasses(pickerSubjects, pickerClasses, selectedClasses),
+    [pickerSubjects, pickerClasses, selectedClasses],
+  );
+
   function toggleClass(id: string) {
-    setSelectedClasses((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
+    const next = new Set(selectedClasses);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    setSelectedClasses(next);
+    // Drop any ticked subject that is no longer offered for the new class selection.
+    const offered = new Set(subjectsForSelectedClasses(pickerSubjects, pickerClasses, next).map((o) => o.id));
+    setSelectedSubjects((prev) => new Set(Array.from(prev).filter((sid) => offered.has(sid))));
   }
 
   function toggleSubject(id: string) {
@@ -89,13 +106,20 @@ export function ExamsSection({
     setPending(true);
     setError(null);
     const classIds = Array.from(selectedClasses);
-    const subjectRows = classIds.flatMap((class_id) =>
-      Array.from(selectedSubjects).map((subject_id) => ({
-        class_id,
-        subject_id,
-        max_score: Number(subjectMax[subject_id] || "100"),
-      })),
-    );
+    // Only pair a subject with the classes it actually applies to.
+    const subjectRows = classIds.flatMap((class_id) => {
+      const cls = pickerClasses.find((c) => c.id === class_id);
+      return Array.from(selectedSubjects)
+        .filter((subject_id) => {
+          const sub = pickerSubjects.find((s) => s.id === subject_id);
+          return !!sub && !!cls && subjectAppliesToClass(sub, cls);
+        })
+        .map((subject_id) => ({
+          class_id,
+          subject_id,
+          max_score: Number(subjectMax[subject_id] || "100"),
+        }));
+    });
     const result = await createExam({ term_id: termId, name, exam_type: examType, class_ids: classIds, subjects: subjectRows });
     setPending(false);
     if ("error" in result) return setError(result.error);
@@ -206,7 +230,7 @@ export function ExamsSection({
                       type="button"
                       size="sm"
                       variant="ghost"
-                      onClick={() => setSelectedSubjects(new Set(subjects.map((s) => s.id)))}
+                      onClick={() => setSelectedSubjects(new Set(subjectChoices.map((s) => s.id)))}
                     >
                       Select all
                     </Button>
@@ -214,11 +238,19 @@ export function ExamsSection({
                       Clear
                     </Button>
                     <span className="text-xs text-muted-foreground">
-                      {selectedSubjects.size} of {subjects.length} selected
+                      {selectedSubjects.size} of {subjectChoices.length} selected
                     </span>
                   </div>
                   <div className="flex max-h-64 flex-col gap-2 overflow-y-auto rounded-md border border-border p-3">
-                    {subjects.map((s) => (
+                    {selectedClasses.size === 0 && (
+                      <p className="text-xs text-muted-foreground">Tick a class above to see only its subjects.</p>
+                    )}
+                    {selectedClasses.size > 0 && subjectChoices.length === 0 && (
+                      <p className="text-xs text-muted-foreground">
+                        No active subjects for the selected class. Activate subjects under Academics → Subjects.
+                      </p>
+                    )}
+                    {subjectChoices.map((s) => (
                       <div key={s.id} className="flex items-center gap-2">
                         <Checkbox
                           id={`subject-${s.id}`}
@@ -226,7 +258,7 @@ export function ExamsSection({
                           onCheckedChange={() => toggleSubject(s.id)}
                         />
                         <Label htmlFor={`subject-${s.id}`} className="flex-1">
-                          {s.name}
+                          {s.label}
                         </Label>
                         <Input
                           className="w-20"
