@@ -1,5 +1,5 @@
 // Shapes and display helpers for the admin "our own visit counter" panel. The data comes from the
-// admin_page_view_summary() database function (see 20261017200000_first_party_page_views.sql).
+// admin_page_view_summary() database function (see 20261017210000_first_party_page_views.sql).
 // Safe to import from client components: no server-only code here.
 
 export type PageViewRow = { label: string; value: number };

@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { clickPlatformFromSearch } from "@/lib/marketing/page-view";
 
 // Our own anonymous page-view counter (see /api/page-view and the migration
-// 20261017200000_first_party_page_views.sql). Sends one small beacon per page view of the public
+// 20261017210000_first_party_page_views.sql). Sends one small beacon per page view of the public
 // marketing site and the free-trial sign-up page. It is separate from Google Analytics on purpose:
 // the admin console reads it for same-day numbers, since Google's daily reports trail by hours.
 //
