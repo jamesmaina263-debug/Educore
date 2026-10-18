@@ -1,5 +1,5 @@
 // Pure helpers for the first-party page-view counter (see the migration
-// 20261017200000_first_party_page_views.sql for the table and what it does and does not store).
+// 20261017210000_first_party_page_views.sql for the table and what it does and does not store).
 //
 // Everything here is deliberately defensive: the counter's endpoint is public and unauthenticated,
 // so the body is treated as hostile input. Only a short, clean path and a handful of campaign tags
