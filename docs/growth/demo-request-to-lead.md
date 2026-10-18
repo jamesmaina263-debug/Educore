@@ -51,4 +51,4 @@ created stay in `sales_leads` (they are ordinary CRM rows).
 ## Not covered
 
 Automatic conversion on form submit (deliberately left manual so the public insert path is untouched), converting the
-incomplete step-1 leads, a booked-demo status (needs a real booking), and the lead/conversion report (PR 5).
+incomplete step-1 leads, a booked-demo status (now covered by manual demo booking: see `demo-booking.md`), and the lead/conversion report (PR 5).
