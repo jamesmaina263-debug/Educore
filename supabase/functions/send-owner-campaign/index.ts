@@ -16,6 +16,11 @@ import { renderCampaignEmail } from "../_shared/campaignEmail.ts";
 // under the OTP/billing identity, or a spam complaint would hurt their deliverability.
 const BATCH_SIZE = 20;
 
+type Audience = "owners" | "prospects" | "outreach";
+function audienceOf(a: unknown): Audience {
+  return a === "outreach" ? "outreach" : a === "prospects" ? "prospects" : "owners";
+}
+
 Deno.serve(async (req) => {
   const corsHeaders = buildCorsHeaders(req);
   const json = (body: unknown, status = 200) =>
@@ -63,9 +68,11 @@ Deno.serve(async (req) => {
         recipientName: "Test Owner",
         schoolName: "Your School (test)",
         unsubscribeUrl,
-        audience: payload.audience === "prospects" ? "prospects" : "owners",
+        audience: audienceOf(payload.audience),
       });
-      await provider.send(to, `[TEST] ${subject}`, text, undefined, fromAddress, { html, replyTo });
+      const testFrom = payload.audience === "outreach" ? (Deno.env.get("OUTREACH_FROM_ADDRESS") ?? fromAddress) : fromAddress;
+      const testReplyTo = payload.audience === "outreach" ? (Deno.env.get("OUTREACH_REPLY_TO") ?? replyTo) : replyTo;
+      await provider.send(to, `[TEST] ${subject}`, text, undefined, testFrom, { html, replyTo: testReplyTo });
       return json({ sent_to: to });
     }
 
@@ -88,21 +95,48 @@ Deno.serve(async (req) => {
     });
     if (claimErr) return json({ error: claimErr.message }, 500);
 
+    const audience = audienceOf(campaign.audience);
+    // Outreach may use its own sender so cold-email complaints can't hurt the owner/billing sender.
+    const sendFrom = audience === "outreach" ? (Deno.env.get("OUTREACH_FROM_ADDRESS") ?? fromAddress) : fromAddress;
+    const sendReplyTo = audience === "outreach" ? (Deno.env.get("OUTREACH_REPLY_TO") ?? replyTo) : replyTo;
+
+    // Per-recipient content (outreach): the exact subject/body that was reviewed when the campaign was created.
+    const custom = new Map<string, { custom_subject: string | null; custom_body: string | null; prospect_id: string | null }>();
+    if ((claimed ?? []).length > 0) {
+      const { data: extra } = await admin
+        .from("email_campaign_recipients")
+        .select("id, custom_subject, custom_body, prospect_id")
+        .in("id", (claimed ?? []).map((r: { id: string }) => r.id));
+      for (const e of extra ?? []) custom.set(e.id, e);
+    }
+
     let sent = 0;
     let failed = 0;
     for (const r of claimed ?? []) {
+      const c = custom.get(r.id);
+      const subject = (c?.custom_subject ?? "").trim() || campaign.subject;
+      const bodyText = (c?.custom_body ?? "").trim() || campaign.body;
+      if (audience === "outreach" && (!c?.custom_subject || !c?.custom_body)) {
+        // Never send the generic placeholder body to a school.
+        await admin
+          .from("email_campaign_recipients")
+          .update({ status: "failed", error: "Missing reviewed draft; not sent." })
+          .eq("id", r.id);
+        failed++;
+        continue;
+      }
       const unsubscribeUrl = `${siteUrl}/unsubscribe/${r.unsubscribe_token}`;
       const { text, html } = renderCampaignEmail({
-        body: campaign.body,
+        body: bodyText,
         recipientName: r.recipient_name,
         schoolName: r.school_name,
         unsubscribeUrl,
-        audience: campaign.audience === "prospects" ? "prospects" : "owners",
+        audience,
       });
       try {
-        await provider.send(r.email, campaign.subject, text, undefined, fromAddress, {
+        await provider.send(r.email, subject, text, undefined, sendFrom, {
           html,
-          replyTo,
+          replyTo: sendReplyTo,
           headers: {
             "List-Unsubscribe": `<${siteUrl}/api/unsubscribe/${r.unsubscribe_token}>`,
             "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
@@ -112,6 +146,15 @@ Deno.serve(async (req) => {
           .from("email_campaign_recipients")
           .update({ status: "sent", sent_at: new Date().toISOString() })
           .eq("id", r.id);
+        if (c?.prospect_id) {
+          // Best effort: shows "emailed" on the Outreach page so nobody is contacted twice.
+          await admin.from("outbound_contact_log").insert({
+            prospect_id: c.prospect_id,
+            channel: "email",
+            event: "sent",
+            note: "Sent via outreach email campaign",
+          });
+        }
         sent++;
       } catch (e) {
         await admin
