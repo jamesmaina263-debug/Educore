@@ -8,7 +8,7 @@ import path from "node:path";
 // later edit silently removing those properties.
 
 const root = path.resolve(__dirname, "../..");
-const sql = readFileSync(path.join(root, "supabase/migrations/20261018120000_class_rankings_percentage_average.sql"), "utf8");
+const sql = readFileSync(path.join(root, "supabase/migrations/20261018211500_class_rankings_percentage_average.sql"), "utf8");
 const code = sql.replace(/^--.*$/gm, "");
 
 describe("class_rankings percentage average migration", () => {

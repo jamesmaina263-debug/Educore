@@ -11,7 +11,7 @@
 //  * Average and positions come straight from class_rankings (the same source the report cards
 //    and portal read), so the sheet reconciles with them. They only exist for numeric exams.
 //    The average is the mean of each entered subject as a PERCENTAGE of that subject's maximum
-//    (20261018120000_class_rankings_percentage_average.sql), so subjects out of different
+//    (20261018211500_class_rankings_percentage_average.sql), so subjects out of different
 //    maximums count equally. Total stays the sum of raw marks.
 //  * Subject mean = mean of ENTERED scores only (missing excluded), 1 decimal place.
 //  * Competency-based exams get a band distribution per subject instead of a mean, and no
