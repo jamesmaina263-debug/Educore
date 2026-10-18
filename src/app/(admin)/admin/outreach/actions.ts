@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { tagSentryRequestContext } from "@/lib/observability/sentry-context";
 import { logAdminAction } from "@/lib/log-admin-action";
+import { extractEdgeFunctionError } from "@/lib/edge-function-error";
 import {
   addUsage,
   aiDisabledReason,
@@ -285,6 +286,86 @@ export async function discoverSchoolsFromDataset(
     hidden,
     withContact: rows.filter((x) => x.email || x.phone).length,
   };
+}
+
+// ---------------------------------------------------------------------------------------------------
+// Emailing APPROVED prospects through the existing campaign pipeline (send-owner-campaign). Creating a
+// campaign only snapshots the reviewed drafts; sending is done batch by batch with sendCampaignBatch
+// (email-campaigns/actions.ts). Eligibility, the daily cap and every safety rule live in the database.
+// ---------------------------------------------------------------------------------------------------
+
+export type OutreachEmailCandidate = {
+  prospect_id: string;
+  school_name: string;
+  town_county: string | null;
+  email: string;
+  contact_name: string | null;
+  subject: string;
+  body: string;
+  fit_score: number | null;
+};
+
+export type OutreachEmailQuota = { cap: number; used: number; remaining: number };
+
+export async function getOutreachEmailAudience(): Promise<
+  { error: string } | { success: true; candidates: OutreachEmailCandidate[]; quota: OutreachEmailQuota }
+> {
+  const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
+  const [aud, quota] = await Promise.all([
+    supabase.rpc("preview_outreach_email_audience"),
+    supabase.rpc("admin_outreach_email_quota"),
+  ]);
+  if (aud.error) return { error: aud.error.message };
+  if (quota.error) return { error: quota.error.message };
+  const q = (Array.isArray(quota.data) ? quota.data[0] : quota.data) as OutreachEmailQuota | undefined;
+  return {
+    success: true,
+    candidates: (aud.data ?? []) as OutreachEmailCandidate[],
+    quota: q ?? { cap: 0, used: 0, remaining: 0 },
+  };
+}
+
+export async function createOutreachEmailCampaign(
+  prospectIds: string[],
+): Promise<{ error: string } | { success: true; campaignId: string }> {
+  if (!Array.isArray(prospectIds) || prospectIds.length === 0) return { error: "Choose at least one school to email." };
+  if (prospectIds.length > 50) return { error: "Choose at most 50 schools at a time." };
+  if (!prospectIds.every(isUuid)) return { error: "Invalid prospect id." };
+
+  const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
+  const { data, error } = await supabase.rpc("create_outreach_email_campaign", { p_prospect_ids: prospectIds });
+  if (error) return { error: error.message };
+
+  void logAdminAction(supabase, "outreach_email_campaign_created", { campaign_id: data, schools: prospectIds.length });
+  revalidatePath(PATH);
+  revalidatePath("/admin/email-campaigns");
+  return { success: true, campaignId: data as string };
+}
+
+/** Sends ONE copy of a school's reviewed draft to the signed-in admin's own address, nobody else. */
+export async function sendOutreachTestEmail(
+  prospectId: string,
+): Promise<{ error: string } | { success: true; sentTo: string }> {
+  if (!isUuid(prospectId)) return { error: "Invalid prospect id." };
+  const supabase = await createClient();
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  if (!session) return { error: "Not signed in." };
+
+  const aud = await supabase.rpc("preview_outreach_email_audience");
+  if (aud.error) return { error: aud.error.message };
+  const row = ((aud.data ?? []) as OutreachEmailCandidate[]).find((c) => c.prospect_id === prospectId);
+  if (!row) return { error: "That school is not eligible to email (reload the list)." };
+
+  const { data, error } = await supabase.functions.invoke("send-owner-campaign", {
+    headers: { Authorization: `Bearer ${session.access_token}` },
+    body: { test: true, subject: row.subject, body: row.body, audience: "outreach" },
+  });
+  if (error) return { error: await extractEdgeFunctionError(error, "Failed to send the test email.") };
+  return { success: true, sentTo: String(data?.sent_to ?? "your login email") };
 }
 
 export async function scoreOutboundProspects(
