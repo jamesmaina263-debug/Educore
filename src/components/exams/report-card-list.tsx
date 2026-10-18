@@ -59,10 +59,16 @@ export function ReportCardList({
   async function handleGenerate() {
     setPending(true);
     setError(null);
-    const result = await generateReportCards(examId, classId);
-    setPending(false);
-    if ("error" in result) return setError(result.error);
-    router.refresh();
+    try {
+      const result = await generateReportCards(examId, classId);
+      if ("error" in result) return setError(result.error);
+      router.refresh();
+    } catch {
+      // A thrown server action (timeout, network, server error) must not leave the button stuck on "Generating...".
+      setError("Couldn't generate report cards. Please try again.");
+    } finally {
+      setPending(false);
+    }
   }
 
   async function handleApprove(studentId: string) {
