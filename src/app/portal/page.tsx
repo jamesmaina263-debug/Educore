@@ -292,6 +292,16 @@ export default async function PortalPage({ searchParams }: { searchParams: Promi
     }));
   }
 
+  // Earlier released report cards (the latest is shown in full below). RLS already limits this to
+  // released cards of the caller's own child; the .in() just mirrors the "latest" query above.
+  const { data: releasedCards } = await supabase
+    .from("report_cards")
+    .select("exam_id, generated_at, exams(name)")
+    .eq("student_id", selected.id)
+    .in("comment_source", ["teacher_approved", "teacher_written"])
+    .order("generated_at", { ascending: false })
+    .limit(12);
+
   const rc = latestReportCard as unknown as {
     comment: string | null;
     generated_at: string;
@@ -483,9 +493,28 @@ export default async function PortalPage({ searchParams }: { searchParams: Promi
               {ranking && ` — Average ${ranking.average_score}, Rank ${ranking.rank_in_stream} in stream`}
             </p>
             {rc.comment && <p className="mt-1 text-sm text-muted-foreground">{rc.comment}</p>}
+            <Link href={`/portal/report-cards/${rc.exam_id}?child=${selected.id}`} className="mt-2 inline-block text-sm font-medium underline underline-offset-2">
+              View &amp; print full report card
+            </Link>
             {reportCardInsights && (
               <div className="mt-2 border-t border-border pt-2">
                 <ReportCardInsightsPanel insights={reportCardInsights} />
+              </div>
+            )}
+            {(releasedCards ?? []).filter((c) => c.exam_id !== rc.exam_id).length > 0 && (
+              <div className="mt-2 border-t border-border pt-2">
+                <p className="mb-1 text-xs font-medium text-muted-foreground">Earlier report cards</p>
+                <ul className="flex flex-col gap-0.5 text-sm">
+                  {(releasedCards ?? [])
+                    .filter((c) => c.exam_id !== rc.exam_id)
+                    .map((c) => (
+                      <li key={c.exam_id}>
+                        <Link href={`/portal/report-cards/${c.exam_id}?child=${selected.id}`} className="underline underline-offset-2">
+                          {(c.exams as unknown as { name: string } | null)?.name ?? "Report card"}
+                        </Link>
+                      </li>
+                    ))}
+                </ul>
               </div>
             )}
             {competencyLines.length > 0 && (
