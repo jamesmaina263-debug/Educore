@@ -33,6 +33,11 @@ export interface TableExportMenuProps {
    * `printedName` pre-fills the name line; leave it out to leave the line blank for handwriting.
    */
   signOff?: { heading: string; printedName?: string | null };
+  /**
+   * Replaces the generic "Export as PDF" with a caller-built document (e.g. the Class Mark Sheet).
+   * Optional: every other page keeps the standard table PDF.
+   */
+  onExportPdf?: () => void | Promise<void>;
 }
 
 function sanitize(stub: string) {
@@ -69,7 +74,7 @@ async function exportExcel(rows: Record<string, string | number>[], filenameStub
   await downloadXlsxFromObjectRows(rows, sheetName, `${sanitize(filenameStub)}.xlsx`);
 }
 
-interface LoadedLogo {
+export interface LoadedLogo {
   dataUrl: string;
   width: number;
   height: number;
@@ -78,7 +83,7 @@ interface LoadedLogo {
 // Loads the logo through an <img> + canvas so any browser-supported format (PNG, JPEG, WebP)
 // ends up as a PNG data URL jsPDF can embed. Resolves to null on ANY failure (network error,
 // missing CORS headers tainting the canvas, timeout) so a logo problem can never block a download.
-function loadLogo(url: string): Promise<LoadedLogo | null> {
+export function loadLogo(url: string): Promise<LoadedLogo | null> {
   return new Promise((resolve) => {
     let settled = false;
     const finish = (value: LoadedLogo | null) => {
@@ -204,7 +209,7 @@ async function exportPDF(
   doc.save(`${sanitize(filenameStub)}.pdf`);
 }
 
-export function TableExportMenu({ filenameStub, title, rows, subtitle, size = "sm", logoUrl, signOff }: TableExportMenuProps) {
+export function TableExportMenu({ filenameStub, title, rows, subtitle, size = "sm", logoUrl, signOff, onExportPdf }: TableExportMenuProps) {
   const disabled = rows.length === 0;
 
   return (
@@ -217,7 +222,7 @@ export function TableExportMenu({ filenameStub, title, rows, subtitle, size = "s
       <DropdownMenuContent align="end">
         <DropdownMenuItem onClick={() => exportCSV(rows, filenameStub)}>Export as CSV</DropdownMenuItem>
         <DropdownMenuItem onClick={() => exportExcel(rows, filenameStub, title)}>Export as Excel</DropdownMenuItem>
-        <DropdownMenuItem onClick={() => exportPDF(rows, filenameStub, title, subtitle, logoUrl, signOff)}>Export as PDF</DropdownMenuItem>
+        <DropdownMenuItem onClick={() => (onExportPdf ? onExportPdf() : exportPDF(rows, filenameStub, title, subtitle, logoUrl, signOff))}>Export as PDF</DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   );
