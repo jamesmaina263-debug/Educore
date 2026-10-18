@@ -32,5 +32,5 @@ export function selectDatasetElements(
 
 /** The bundled snapshot for one county, or null when it has none (then the caller falls back to live data). */
 export function bundledCountySchools(county: string, kinds: DiscoveryKinds) {
-  return selectDatasetElements(snapshot as OsmDataset, county, kinds);
+  return selectDatasetElements(snapshot as unknown as OsmDataset, county, kinds);
 }

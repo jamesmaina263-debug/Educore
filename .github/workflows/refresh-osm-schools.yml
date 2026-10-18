@@ -8,9 +8,6 @@ name: Refresh OSM schools dataset
 
 on:
   workflow_dispatch:
-  push: # TEMP-TEST: remove before PR
-    branches: [feat/outreach-local-osm-dataset]
-    paths: [scripts/build_osm_schools.py, .github/workflows/refresh-osm-schools.yml]
 
 permissions:
   contents: write
