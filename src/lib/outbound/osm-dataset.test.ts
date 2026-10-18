@@ -45,3 +45,21 @@ describe("datasetSourceNote", () => {
     expect(datasetSourceNote("Nyeri", new Date("2026-10-18T10:00:00Z"), "junk")).not.toContain("snapshot");
   });
 });
+
+describe("parseOverpassResponse with already-staged schools", () => {
+  const mk = (n: number) =>
+    Array.from({ length: n }, (_, i) => ({ tags: { name: `School ${i}`, amenity: "school", "operator:type": "private", phone: `07000000${String(i).padStart(2, "0")}` } }));
+
+  it("drops already-staged schools before the cap so the next run reaches the next batch", () => {
+    const elements = mk(600);
+    const first = parseOverpassResponse({ elements }, "Nairobi", "all");
+    expect(first.rows).toHaveLength(500);
+    expect(first.truncated).toBe(100);
+    const staged = new Set(first.rows.map((r) => `${r.school_name.toLowerCase()}|${(r.town_county ?? "").toLowerCase()}`));
+    const second = parseOverpassResponse({ elements }, "Nairobi", "all", staged);
+    expect(second.rows).toHaveLength(100);
+    expect(second.known).toBe(500);
+    expect(second.truncated).toBe(0);
+    expect(second.rows.some((r) => staged.has(`${r.school_name.toLowerCase()}|${(r.town_county ?? "").toLowerCase()}`))).toBe(false);
+  });
+});
