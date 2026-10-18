@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getCachedUser } from "@/lib/supabase/get-user";
@@ -7,6 +8,7 @@ import { ReportCardPicker } from "@/components/exams/report-card-picker";
 import { ReportCardList, type ReportCardRow } from "@/components/exams/report-card-list";
 import { TableExportMenu } from "@/components/shared/table-export-menu";
 import { buildReportCardInsights } from "@/lib/academics/report-card-insights";
+import { buildMarkSheetRows } from "@/lib/academics/mark-sheet";
 
 export default async function ReportCardsPage({
   searchParams,
@@ -22,7 +24,7 @@ export default async function ReportCardsPage({
   const [{ data: schoolUser }, { data: canGenerate }, { data: canApproveOwn }, { data: canApproveAny }] = await Promise.all([
     supabase
       .from("school_users")
-      .select("full_name, roles(display_name), schools(name)")
+      .select("full_name, roles(display_name), schools(name, logo_url)")
       .eq("auth_user_id", user.id)
       .maybeSingle(),
     supabase.rpc("auth_has_permission", { p_permission_key: "exams.write" }),
@@ -32,6 +34,7 @@ export default async function ReportCardsPage({
 
   const roleName = (schoolUser?.roles as unknown as { display_name: string } | null)?.display_name;
   const schoolName = (schoolUser?.schools as unknown as { name: string } | null)?.name;
+  const schoolLogoUrl = (schoolUser?.schools as unknown as { logo_url: string | null } | null)?.logo_url ?? null;
 
   const { data: closedExams } = await supabase.from("exams").select("id, name").eq("status", "closed").order("created_at", { ascending: false });
   const examOptions = closedExams ?? [];
@@ -211,19 +214,7 @@ export default async function ReportCardsPage({
     });
   }
 
-  // Union of subjects across the class, alphabetical, so every student's row has the same
-  // columns in the same order regardless of which subjects they individually have marks for.
-  const subjectNames = Array.from(new Set(rows.flatMap((r) => r.marks.map((m) => m.subject_name)))).sort();
-  const markSheetRows = rows.map((r) => {
-    const scoreBySubject = new Map(r.marks.map((m) => [m.subject_name, m.raw_score]));
-    const row: Record<string, string | number> = { Student: r.full_name };
-    for (const subject of subjectNames) {
-      row[subject] = scoreBySubject.get(subject) ?? "";
-    }
-    row["Average"] = r.average_score ?? "";
-    row["Rank"] = r.rank_in_stream ?? "";
-    return row;
-  });
+  const markSheetRows = buildMarkSheetRows(rows);
   const selectedClassName = classOptions.find((c) => c.id === selectedClassId)?.name ?? "";
   const selectedExamName = examOptions.find((e) => e.id === selectedExamId)?.name ?? "";
 
@@ -247,7 +238,17 @@ export default async function ReportCardsPage({
                 title="Class Mark Sheet"
                 subtitle={[schoolName, selectedExamName, selectedClassName].filter(Boolean).join(" · ")}
                 rows={markSheetRows}
+                logoUrl={schoolLogoUrl}
               />
+            )}
+            {rows.length > 0 && selectedExamId && selectedClassId && (
+              <Link
+                href={`/exams/report-cards/print?exam=${selectedExamId}&class=${selectedClassId}`}
+                target="_blank"
+                className="inline-flex h-8 items-center rounded-md border border-border px-3 text-sm hover:bg-muted"
+              >
+                Print all
+              </Link>
             )}
             {examOptions.length > 0 && (
               <ReportCardPicker

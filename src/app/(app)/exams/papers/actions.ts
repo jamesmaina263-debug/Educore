@@ -63,12 +63,21 @@ async function getCaller() {
   return { supabase, user, schoolUser: schoolUser as { id: string; school_id: string } | null } as const;
 }
 
+// A school can switch AI exam papers off (school_modules key "exam_papers"; absent = enabled).
+// Enforced here, not just in the UI, because generation makes a cost-incurring AI call.
+async function examPapersModuleOff(supabase: Awaited<ReturnType<typeof createClient>>): Promise<boolean> {
+  const { data } = await supabase.rpc("auth_school_module_enabled", { p_key: "exam_papers" });
+  return data === false;
+}
+const MODULE_OFF_ERROR = "AI exam papers are turned off for your school.";
+
 export async function getExamPaperSourceOptions(classId: string, subjectId: string): Promise<SourceOptionsResult> {
   if (!isId(classId) || !isId(subjectId)) return { error: "Select a class and subject first." };
   const { supabase, user, schoolUser } = await getCaller();
   if (!user || !schoolUser) return { error: "You must be signed in." };
   const { data: canGenerate } = await supabase.rpc("auth_has_permission", { p_permission_key: "exams.generate_paper_ai" });
   if (!canGenerate) return { error: "You don't have permission to generate exam papers." };
+  if (await examPapersModuleOff(supabase)) return { error: MODULE_OFF_ERROR };
 
   const loaded = await loadExamSourceOptions(supabase, { classId, subjectId, schoolId: schoolUser.school_id });
   if (!loaded) return { error: "Class or subject not found." };
@@ -136,6 +145,7 @@ export async function generateExamPaper(input: GenerateExamPaperInput): Promise<
   // ---- 2. Permission. ----
   const { data: canGenerate } = await supabase.rpc("auth_has_permission", { p_permission_key: "exams.generate_paper_ai" });
   if (!canGenerate) return { error: "You don't have permission to generate exam papers." };
+  if (await examPapersModuleOff(supabase)) return { error: MODULE_OFF_ERROR };
 
   // ---- 3. Entities (RLS-scoped) and the optional exam link. ----
   const [{ data: classRow }, { data: subjectRow }, examResult] = await Promise.all([

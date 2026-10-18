@@ -4,7 +4,8 @@ import { useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
-import { searchRemarkBank, addRemarkBankEntry, REMARK_BANK_CATEGORIES, type RemarkBankEntry } from "@/app/(app)/exams/remark-bank-actions";
+import { searchRemarkBank, addRemarkBankEntry, type RemarkBankEntry } from "@/app/(app)/exams/remark-bank-actions";
+import { REMARK_BANK_CATEGORIES } from "@/lib/remark-bank-categories";
 
 /**
  * Remark bank picker (Performance Appraisal Engine directive, Phase 10 /

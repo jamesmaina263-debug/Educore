@@ -3,6 +3,7 @@
 // when a row is missing. School-level facts only.
 
 import type { TrialSchoolInput } from "./trial-followup";
+import type { SchoolCheckinSummary } from "./trial-checkins";
 
 export type SubscriptionRow = { school_id: string; status: string; trial_ends_at: string | null; created_at: string | null };
 export type SchoolRow = { id: string; name: string; slug: string; status: string; created_at: string | null };
@@ -24,6 +25,8 @@ export function assembleTrialInputs(args: {
   schools: readonly SchoolRow[];
   lastActive: readonly LastActiveRow[];
   users: readonly SchoolUserRow[];
+  /** Per-school check-in summaries (see summariseCheckins). Optional: no log means no check-ins. */
+  checkins?: ReadonlyMap<string, SchoolCheckinSummary>;
 }): TrialSchoolInput[] {
   const lastActive = new Map(args.lastActive.map((r) => [r.school_id, r.last_active_at]));
   const subBySchool = new Map(args.subscriptions.map((s) => [s.school_id, s]));
@@ -54,6 +57,7 @@ export function assembleTrialInputs(args: {
       lastActiveAt: lastActive.get(sc.id) ?? null,
       staffCount: staff.get(sc.id) ?? 0,
       owner: owners.get(sc.id) ?? null,
+      checkin: args.checkins?.get(sc.id) ?? null,
     });
   }
   return out;

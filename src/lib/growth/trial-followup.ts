@@ -7,6 +7,8 @@
 //
 // Checkpoint days and thresholds are suggested defaults, not rules: change the constants below.
 
+import { isRecentlyCheckedIn, type SchoolCheckinSummary } from "./trial-checkins";
+
 export const CHECKPOINT_DAYS: readonly number[] = [1, 3, 7, 14, 21, 27, 30];
 /** From this trial day on, "no activity" and "no staff yet" are meaningful (day 1-2 is just starting). */
 export const SETUP_CHECKS_FROM_DAY = 3;
@@ -27,6 +29,8 @@ export type TrialSchoolInput = {
   lastActiveAt: string | null;
   staffCount: number;
   owner: { name: string | null; email: string | null } | null;
+  /** From the check-in log; absent/null = nobody has logged a check-in with this school. */
+  checkin?: SchoolCheckinSummary | null;
 };
 
 export type AttentionReason = "expiring_soon" | "inactive" | "no_staff" | "checkpoint";
@@ -42,6 +46,7 @@ export type TrialRow = {
   inactiveDays: number | null;
   staffCount: number;
   owner: { name: string | null; email: string | null } | null;
+  checkin: SchoolCheckinSummary | null;
   /** Latest suggested checkpoint already reached, and the next one coming. */
   checkpoint: number | null;
   nextCheckpoint: number | null;
@@ -52,9 +57,11 @@ export type TrialRow = {
 
 export type TrialFollowup = {
   needsAttention: TrialRow[];
+  /** Flagged trials that were checked in with in the last RECENT_CHECKIN_DAYS days, or whose owner asked to stop. */
+  followedUp: TrialRow[];
   onTrack: TrialRow[];
   recentlyExpired: TrialRow[];
-  summary: { running: number; needsAttention: number; endingWithin7Days: number; recentlyExpired: number };
+  summary: { running: number; needsAttention: number; followedUp: number; endingWithin7Days: number; recentlyExpired: number };
 };
 
 function ms(iso: string | null): number | null {
@@ -131,6 +138,7 @@ function buildRow(s: TrialSchoolInput, now: number): TrialRow | null {
     inactiveDays,
     staffCount: s.staffCount,
     owner: s.owner,
+    checkin: s.checkin ?? null,
     checkpoint,
     nextCheckpoint,
     reasons: ordered,
@@ -164,8 +172,15 @@ export function buildTrialFollowup(inputs: readonly TrialSchoolInput[], nowDate:
     }
   }
 
+  // A flagged school we already checked in with recently (or that asked not to be contacted) is not
+  // suggested again: it is listed separately so a person can still see it.
+  const held = (r: TrialRow) =>
+    r.reasons.length > 0 && !!r.checkin && (r.checkin.askedToStop || isRecentlyCheckedIn(r.checkin.last.at, nowDate));
+  const followedUp = running
+    .filter(held)
+    .sort((a, b) => a.daysLeft - b.daysLeft || a.name.localeCompare(b.name));
   const needsAttention = running
-    .filter((r) => r.reasons.length > 0)
+    .filter((r) => r.reasons.length > 0 && !held(r))
     .sort((a, b) => priority(b) - priority(a) || a.daysLeft - b.daysLeft || a.name.localeCompare(b.name));
   const onTrack = running
     .filter((r) => r.reasons.length === 0)
@@ -174,11 +189,13 @@ export function buildTrialFollowup(inputs: readonly TrialSchoolInput[], nowDate:
 
   return {
     needsAttention,
+    followedUp,
     onTrack,
     recentlyExpired,
     summary: {
       running: running.length,
       needsAttention: needsAttention.length,
+      followedUp: followedUp.length,
       endingWithin7Days: running.filter((r) => r.daysLeft >= 0 && r.daysLeft <= 7).length,
       recentlyExpired: recentlyExpired.length,
     },

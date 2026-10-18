@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getCachedUser } from "@/lib/supabase/get-user";
 import type { ExamSourceKind } from "@/lib/ai/exam-paper";
+import { parsePaperPrefill } from "@/lib/exam-paper-links";
 
 export interface PaperQuestionRow {
   id: string;
@@ -36,9 +37,11 @@ export interface PapersContext {
   subjects: { id: string; name: string }[];
   openExams: { id: string; name: string }[];
   papers: PaperRow[];
+  /** Set when the generator was opened from an exam's mark sheet (?exam=&class=&subject=). */
+  prefill: { examId: string; examName: string; classId: string; subjectId: string; totalMarks: number } | null;
 }
 
-export async function loadPapersContext(): Promise<PapersContext> {
+export async function loadPapersContext(params: { exam?: string; class?: string; subject?: string } = {}): Promise<PapersContext> {
   const supabase = await createClient();
   const user = await getCachedUser();
   if (!user) redirect("/login");
@@ -60,6 +63,25 @@ export async function loadPapersContext(): Promise<PapersContext> {
 
   const roleName = (schoolUser?.roles as unknown as { display_name: string } | null)?.display_name;
   const schoolName = (schoolUser?.schools as unknown as { name: string } | null)?.name;
+
+  // Opened from an exam's mark sheet: only honour it for an open exam that really examines this
+  // class + subject (RLS-scoped lookups), and default the paper's total marks to the exam's max score
+  // so the paper and the marks sheet can't disagree.
+  let prefill: PapersContext["prefill"] = null;
+  const wanted = parsePaperPrefill(params);
+  const wantedExam = wanted ? (exams ?? []).find((e) => e.id === wanted.examId) : null;
+  if (wanted && wantedExam) {
+    const { data: es } = await supabase
+      .from("exam_subjects")
+      .select("max_score")
+      .eq("exam_id", wanted.examId)
+      .eq("class_id", wanted.classId)
+      .eq("subject_id", wanted.subjectId)
+      .maybeSingle();
+    if (es) {
+      prefill = { ...wanted, examName: wantedExam.name, totalMarks: Number(es.max_score) };
+    }
+  }
 
   type Raw = {
     id: string;
@@ -84,6 +106,7 @@ export async function loadPapersContext(): Promise<PapersContext> {
     classes: (classes ?? []) as { id: string; name: string }[],
     subjects: (subjects ?? []) as { id: string; name: string }[],
     openExams: (exams ?? []) as { id: string; name: string }[],
+    prefill,
     papers: ((papers ?? []) as unknown as Raw[]).map((p) => ({
       id: p.id,
       title: p.title,

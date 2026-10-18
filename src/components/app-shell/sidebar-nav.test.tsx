@@ -65,3 +65,27 @@ describe("SidebarNav slug-aware links", () => {
     expect(activeHrefs(render(undefined))).toEqual(["/students"]);
   });
 });
+
+describe("SidebarNav disabledHrefs", () => {
+  function renderWith(disabledHrefs: string[]) {
+    mockPathname = "/exams/overview"; // expands the Exams group so its child links render
+    return hrefs(
+      renderToStaticMarkup(
+        <SchoolSlugProvider slug={undefined}>
+          <SidebarNav disabledHrefs={disabledHrefs} />
+        </SchoolSlugProvider>,
+      ),
+    );
+  }
+
+  it("shows Exam Papers by default", () => {
+    expect(renderWith([])).toContain("/exams/papers");
+  });
+
+  it("hides a disabled child link (a school that opted out of AI exam papers) but keeps its siblings", () => {
+    const list = renderWith(["/exams/papers"]);
+    expect(list).not.toContain("/exams/papers");
+    expect(list).toContain("/exams/marks");
+    expect(list).toContain("/exams/report-cards");
+  });
+});
