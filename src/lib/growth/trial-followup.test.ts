@@ -204,3 +204,43 @@ describe("exclusions and bad data", () => {
     expect(r.owner).toBeNull();
   });
 });
+
+describe("check-ins keep the same school from being chased twice", () => {
+  const checkin = (daysAgo: number, outcome = "no_answer", askedToStop = false) => ({
+    last: { at: iso(-daysAgo), channel: "call", outcome, byName: "Ben" },
+    count: 1,
+    askedToStop,
+  });
+  // Day 10, owner inactive for a week: flagged "inactive".
+  const flagged = (c?: ReturnType<typeof checkin> | null) =>
+    trial(10, { schoolId: "x", name: "X School", lastActiveAt: iso(-7), checkin: c });
+
+  it("still needs a check-in when nobody has logged one", () => {
+    const f = run(flagged(null));
+    expect(f.needsAttention.map((r) => r.schoolId)).toEqual(["x"]);
+    expect(f.followedUp).toEqual([]);
+  });
+  it("moves a flagged school out of the list when it was checked in with recently, but still shows it", () => {
+    const f = run(flagged(checkin(1)));
+    expect(f.needsAttention).toEqual([]);
+    expect(f.followedUp.map((r) => r.schoolId)).toEqual(["x"]);
+    expect(f.followedUp[0].reasons).toContain("inactive");
+    expect(f.summary).toMatchObject({ running: 1, needsAttention: 0, followedUp: 1 });
+  });
+  it("suggests the school again once the wait is over", () => {
+    expect(run(flagged(checkin(2.9))).followedUp).toHaveLength(1);
+    const f = run(flagged(checkin(3.1)));
+    expect(f.needsAttention.map((r) => r.schoolId)).toEqual(["x"]);
+    expect(f.followedUp).toEqual([]);
+  });
+  it("never suggests a school that asked not to be contacted, however old the check-in", () => {
+    const f = run(flagged(checkin(20, "asked_to_stop", true)));
+    expect(f.needsAttention).toEqual([]);
+    expect(f.followedUp.map((r) => r.schoolId)).toEqual(["x"]);
+  });
+  it("leaves unflagged schools where they were and carries the last check-in through", () => {
+    const f = run(trial(10, { schoolId: "ok", checkin: checkin(1) }));
+    expect(f.onTrack[0].checkin?.last.outcome).toBe("no_answer");
+    expect(f.followedUp).toEqual([]);
+  });
+});

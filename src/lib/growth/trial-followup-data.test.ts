@@ -114,3 +114,18 @@ describe("assembleTrialInputs", () => {
     expect(rows.map((r) => r.schoolId)).toEqual(["a"]);
   });
 });
+
+describe("assembleTrialInputs check-ins", () => {
+  const base = { subscriptions: [sub("a"), sub("b")], schools: [school("a"), school("b")], lastActive: [], users: [] };
+  const summary = { last: { at: "2026-10-17T08:00:00Z", channel: "call", outcome: "no_answer", byName: null }, count: 1, askedToStop: false };
+
+  it("attaches each school's own check-in summary and null when there is none", () => {
+    const out = assembleTrialInputs({ ...base, checkins: new Map([["a", summary]]) });
+    expect(out.find((r) => r.schoolId === "a")?.checkin).toEqual(summary);
+    expect(out.find((r) => r.schoolId === "b")?.checkin).toBeNull();
+  });
+  it("works when no check-ins are supplied at all", () => {
+    expect(assembleTrialInputs(base).every((r) => r.checkin === null)).toBe(true);
+  });
+});
+

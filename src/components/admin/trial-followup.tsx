@@ -1,5 +1,7 @@
 import type { ReactNode } from "react";
 import { CHECKPOINT_DAYS, type TrialFollowup, type TrialRow } from "@/lib/growth/trial-followup";
+import { CHANNEL_LABELS, OUTCOME_LABELS, RECENT_CHECKIN_DAYS, isCheckinChannel, isCheckinOutcome } from "@/lib/growth/trial-checkins";
+import { TrialCheckinForm } from "@/components/admin/trial-checkin-form";
 
 // Presentational only: takes the output of buildTrialFollowup and renders it. No data access, no actions.
 // Everything shown is a suggestion for a person; nothing on this page sends a message or changes a trial.
@@ -16,6 +18,26 @@ function lastActive(r: TrialRow): string {
   if (!r.lastActiveAt) return "None recorded";
   if (r.inactiveDays === null) return fmtDate(r.lastActiveAt);
   return r.inactiveDays === 0 ? "Today" : `${r.inactiveDays} day${r.inactiveDays === 1 ? "" : "s"} ago`;
+}
+
+function LastCheckin({ checkin }: { checkin: TrialRow["checkin"] }) {
+  if (!checkin) return <span className="text-xs text-muted-foreground">No check-in logged</span>;
+  const { last } = checkin;
+  const ch = isCheckinChannel(last.channel) ? CHANNEL_LABELS[last.channel] : last.channel;
+  const out = isCheckinOutcome(last.outcome) ? OUTCOME_LABELS[last.outcome] : last.outcome;
+  return (
+    <div className="flex flex-col text-xs">
+      <span>
+        {ch}: {out}
+      </span>
+      <span className="text-muted-foreground">
+        {fmtDate(last.at)}
+        {last.byName ? ` · ${last.byName}` : ""}
+        {checkin.count > 1 ? ` · ${checkin.count} check-ins` : ""}
+      </span>
+      {checkin.askedToStop && <span className="font-medium text-destructive">Asked not to be contacted</span>}
+    </div>
+  );
 }
 
 function Owner({ owner }: { owner: TrialRow["owner"] }) {
@@ -49,13 +71,23 @@ function Panel({ title, note, children }: { title: string; note?: string; childr
   );
 }
 
-export function TrialFollowupView({ data }: { data: TrialFollowup }) {
+export function TrialFollowupView({
+  data,
+  teamMembers = [],
+  checkinsAvailable = true,
+}: {
+  data: TrialFollowup;
+  teamMembers?: { id: string; name: string }[];
+  /** False when the check-in log could not be read: the page then says so instead of implying nobody was contacted. */
+  checkinsAvailable?: boolean;
+}) {
   const { summary } = data;
   return (
     <div className="flex flex-col gap-4">
       <div className="panel flex flex-wrap gap-8 p-4">
         <Stat label="Trials running" value={summary.running} />
         <Stat label="Need a check-in" value={summary.needsAttention} />
+        <Stat label="Followed up recently" value={summary.followedUp} />
         <Stat label="Ending within 7 days" value={summary.endingWithin7Days} />
         <Stat label="Ended in the last 14 days, not converted" value={summary.recentlyExpired} />
       </div>
@@ -81,6 +113,8 @@ export function TrialFollowupView({ data }: { data: TrialFollowup }) {
                   <th className="text-right">Staff</th>
                   <th className="text-left">Owner</th>
                   <th className="text-left">Why, and a suggested step</th>
+                  <th className="text-left">Last check-in</th>
+                  <th className="text-left"></th>
                 </tr>
               </thead>
               <tbody>
@@ -107,6 +141,61 @@ export function TrialFollowupView({ data }: { data: TrialFollowup }) {
                       </ul>
                       {r.suggestion && <p className="mt-1 text-xs text-muted-foreground">{r.suggestion}</p>}
                     </td>
+                    <td>
+                      <LastCheckin checkin={r.checkin} />
+                    </td>
+                    <td>
+                      <TrialCheckinForm schoolId={r.schoolId} teamMembers={teamMembers} />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Panel>
+
+      <Panel
+        title="Followed up"
+        note={`Flagged trials we checked in with in the last ${RECENT_CHECKIN_DAYS} days, or whose owner asked not to be contacted. Not suggested again until the wait is over.`}
+      >
+        {data.followedUp.length === 0 ? (
+          <p className="text-xs text-muted-foreground">None.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="table-dense w-full">
+              <thead>
+                <tr>
+                  <th className="text-left">School</th>
+                  <th className="text-left">Trial</th>
+                  <th className="text-left">Still flagged for</th>
+                  <th className="text-left">Last check-in</th>
+                  <th className="text-left"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.followedUp.map((r) => (
+                  <tr key={r.schoolId} className="align-top">
+                    <td className="font-medium">{r.name}</td>
+                    <td>
+                      Day {r.trialDay} of {r.totalDays}
+                      <div className="text-xs text-muted-foreground">
+                        {r.daysLeft <= 0 ? "Ends today / ended" : `${r.daysLeft} day${r.daysLeft === 1 ? "" : "s"} left`}
+                      </div>
+                    </td>
+                    <td>
+                      <ul className="flex flex-col gap-0.5">
+                        {r.reasonTexts.map((t) => (
+                          <li key={t}>{t}</li>
+                        ))}
+                      </ul>
+                    </td>
+                    <td>
+                      <LastCheckin checkin={r.checkin} />
+                    </td>
+                    <td>
+                      <TrialCheckinForm schoolId={r.schoolId} teamMembers={teamMembers} />
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -128,6 +217,7 @@ export function TrialFollowupView({ data }: { data: TrialFollowup }) {
                   <th className="text-left">Last active</th>
                   <th className="text-right">Staff</th>
                   <th className="text-left">Next suggested check-in</th>
+                  <th className="text-left">Last check-in</th>
                 </tr>
               </thead>
               <tbody>
@@ -140,6 +230,9 @@ export function TrialFollowupView({ data }: { data: TrialFollowup }) {
                     <td>{lastActive(r)}</td>
                     <td className="text-right tabular-nums">{r.staffCount}</td>
                     <td>{r.nextCheckpoint ? `Day ${r.nextCheckpoint}` : "—"}</td>
+                    <td>
+                      <LastCheckin checkin={r.checkin} />
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -163,6 +256,8 @@ export function TrialFollowupView({ data }: { data: TrialFollowup }) {
                   <th className="text-left">Trial ended</th>
                   <th className="text-left">Last active</th>
                   <th className="text-left">Owner</th>
+                  <th className="text-left">Last check-in</th>
+                  <th className="text-left"></th>
                 </tr>
               </thead>
               <tbody>
@@ -179,6 +274,12 @@ export function TrialFollowupView({ data }: { data: TrialFollowup }) {
                     <td>
                       <Owner owner={r.owner} />
                     </td>
+                    <td>
+                      <LastCheckin checkin={r.checkin} />
+                    </td>
+                    <td>
+                      <TrialCheckinForm schoolId={r.schoolId} teamMembers={teamMembers} />
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -187,10 +288,16 @@ export function TrialFollowupView({ data }: { data: TrialFollowup }) {
         )}
       </Panel>
 
+      {!checkinsAvailable && (
+        <p className="text-xs text-destructive">
+          The check-in log could not be read, so past check-ins are not shown. Do not assume nobody has been contacted.
+        </p>
+      )}
+
       <p className="text-xs text-muted-foreground">
         School-level signals only: trial dates, last sign-in or activity, and the number of staff accounts. No learner data is
         read. Suggested check-in days ({CHECKPOINT_DAYS.join(", ")}) and the &ldquo;3 days&rdquo; thresholds are defaults, not rules.
-        Demo and QA schools are left out. Nothing is sent from this page and no subscription is changed.
+        Demo and QA schools are left out. Check-ins are logged by hand and are not proof of delivery. Nothing is sent from this page and no subscription is changed.
       </p>
     </div>
   );
