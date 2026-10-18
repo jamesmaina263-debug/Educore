@@ -133,7 +133,7 @@ export async function buildMarkSheetPdf(model: MarkSheetModel, logo: LoadedLogo 
   for (const s of model.subjects) head.push(numeric ? `${s.name}\n/${s.maxScore}` : s.name);
   if (numeric) head.push("Total");
   if (model.showRanking) {
-    head.push("Avg");
+    head.push("Avg %");
     head.push(model.multiStream ? "Pos\n(stream)" : "Pos");
     if (model.multiStream) head.push("Pos\n(class)");
   }
@@ -224,7 +224,7 @@ export async function buildMarkSheetPdf(model: MarkSheetModel, logo: LoadedLogo 
   if (model.legend.length) notes.push(`Key: ${model.legend.map((l) => `${l.code} = ${l.meaning}`).join(";  ")}`);
   notes.push(`${MISSING} = mark not yet entered. Missing marks are excluded from all statistics and are never counted as zero.`);
   if (model.incompleteCount > 0) notes.push(`* = results incomplete (fewer subjects entered than examined; ${model.incompleteCount} learner${model.incompleteCount === 1 ? "" : "s"}). Averages use entered subjects only.`);
-  if (model.showRanking) notes.push(`Average = mean of entered scores. Position is by average; learners with equal averages share a position${model.multiStream ? ". Stream position is within the stream, class position across all streams" : ""}.`);
+  if (model.showRanking) notes.push(`Avg % = mean of each entered subject's score as a percentage of its maximum, so subjects with different maximums count equally. Position is by Avg %; learners with equal averages share a position${model.multiStream ? ". Stream position is within the stream, class position across all streams" : ""}.`);
   if (model.kind === "cbc") notes.push("Competency-based assessment: performance levels are descriptors, so no totals, averages or positions are calculated.");
   if (model.kind === "mixed") notes.push("This sheet mixes marks and competency levels, so no average or position is calculated.");
   doc.setFontSize(7.5);

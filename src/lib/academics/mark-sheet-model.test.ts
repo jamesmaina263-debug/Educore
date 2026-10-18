@@ -59,7 +59,7 @@ describe("numeric exam", () => {
   });
   it("keeps Excel/CSV rows in step with the model, a real zero staying numeric", () => {
     const rows = markSheetExportRows(model);
-    expect(rows[1]).toMatchObject({ "Adm No": "ADM2", Mathematics: 0, Total: 50, Average: 25, Position: 2 });
+    expect(rows[1]).toMatchObject({ "Adm No": "ADM2", Mathematics: 0, Total: 50, "Average %": 25, Position: 2 });
     expect(rows[2].Mathematics).toBe("—");
   });
 });
