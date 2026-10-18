@@ -473,3 +473,37 @@ export function normalizeManualContacts(input: ManualContactsInput): ManualConta
     },
   };
 }
+
+// ---------------------------------------------------------------------------------------------
+// Rows parsed in the browser (map discovery) are re-validated on the server: never trust the client.
+// ---------------------------------------------------------------------------------------------
+
+const isStr = (v: unknown): v is string => typeof v === "string";
+const clean = (v: unknown, max: number): string | null => (isStr(v) && v.trim() && v.trim().length <= max ? v.trim() : null);
+
+/** Returns only well-formed rows (invalid ones are dropped, not repaired); at most MAX_IMPORT_ROWS. */
+export function sanitizeProspectRows(raw: unknown): ProspectRow[] {
+  if (!Array.isArray(raw)) return [];
+  const out: ProspectRow[] = [];
+  for (const r of raw.slice(0, MAX_IMPORT_ROWS)) {
+    if (!r || typeof r !== "object") continue;
+    const o = r as Record<string, unknown>;
+    const name = clean(o.school_name, 200);
+    if (!name) continue;
+    const email = isStr(o.email) ? o.email.trim().toLowerCase() : "";
+    const students = typeof o.student_count === "number" && Number.isInteger(o.student_count) && o.student_count >= 0 && o.student_count <= 100000 ? o.student_count : null;
+    out.push({
+      school_name: name,
+      town_county: clean(o.town_county, 200),
+      school_type: isStr(o.school_type) && (SCHOOL_TYPES as readonly string[]).includes(o.school_type) ? (o.school_type as OutboundSchoolType) : null,
+      school_level: isStr(o.school_level) && (SCHOOL_LEVELS as readonly string[]).includes(o.school_level) ? (o.school_level as OutboundSchoolLevel) : null,
+      website: isStr(o.website) ? normalizeWebsite(o.website) : null,
+      phone: isStr(o.phone) ? normalizePhone(o.phone) : null,
+      email: email && email.length <= 254 && EMAIL_RE.test(email) ? email : null,
+      contact_name: clean(o.contact_name, 200),
+      contact_role: clean(o.contact_role, 100),
+      student_count: students,
+    });
+  }
+  return out;
+}

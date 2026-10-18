@@ -2,7 +2,7 @@ import { readdirSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
-import { buildCsp, marketingHeaderSources } from "./csp";
+import { OUTREACH_HEADER_SOURCE, buildCsp, marketingHeaderSources } from "./csp";
 
 const SUPABASE = "https://abcd1234.supabase.co";
 
@@ -99,5 +99,28 @@ describe("marketingHeaderSources", () => {
 
   it("returns no sources (so the base policy stays) if the folder cannot be read", () => {
     expect(marketingHeaderSources(join(process.cwd(), "does-not-exist"))).toEqual([]);
+  });
+});
+
+describe("outreach CSP (/admin/outreach only)", () => {
+  const connect = (csp: string) => csp.split("; ").find((d) => d.startsWith("connect-src")) ?? "";
+  const outreach = buildCsp({ supabaseOrigin: SUPABASE, outreach: true });
+
+  it("lets the browser call the public map servers on the outreach page", () => {
+    const c = connect(outreach);
+    expect(c).toContain("https://overpass-api.de");
+    expect(c).toContain("https://overpass.private.coffee");
+    expect(c).toContain("https://overpass.kumi.systems");
+  });
+  it("does NOT widen the base policy used by the rest of the admin console and the school app", () => {
+    expect(buildCsp({ supabaseOrigin: SUPABASE })).not.toContain("overpass");
+  });
+  it("does not leak into the marketing policy, and changes nothing but connect-src", () => {
+    expect(buildCsp({ supabaseOrigin: SUPABASE, marketing: true })).not.toContain("overpass");
+    const strip = (csp: string) => csp.split("; ").filter((d) => !d.startsWith("connect-src")).join("; ");
+    expect(strip(outreach)).toBe(strip(buildCsp({ supabaseOrigin: SUPABASE })));
+  });
+  it("is applied to exactly one path", () => {
+    expect(OUTREACH_HEADER_SOURCE).toBe("/admin/outreach");
   });
 });

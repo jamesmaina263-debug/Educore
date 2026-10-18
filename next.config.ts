@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
 import { withSentryConfig } from "@sentry/nextjs";
 import path from "node:path";
-import { buildCsp, marketingHeaderSources } from "./src/lib/csp";
+import { OUTREACH_HEADER_SOURCE, buildCsp, marketingHeaderSources } from "./src/lib/csp";
 
 const nextConfig: NextConfig = {
   experimental: {
@@ -65,6 +65,7 @@ const nextConfig: NextConfig = {
     // public marketing pages and /signup, the only places GTM loads.
     const csp = buildCsp({ supabaseOrigin });
     const marketingCsp = buildCsp({ supabaseOrigin, marketing: true });
+    const outreachCsp = buildCsp({ supabaseOrigin, outreach: true });
 
     const reportTo = JSON.stringify({
       group: "csp-endpoint",
@@ -106,6 +107,8 @@ const nextConfig: NextConfig = {
         source,
         headers: [{ key: "Content-Security-Policy", value: marketingCsp }],
       })),
+      // /admin/outreach alone may call the public OpenStreetMap (Overpass) servers from the browser.
+      { source: OUTREACH_HEADER_SOURCE, headers: [{ key: "Content-Security-Policy", value: outreachCsp }] },
     ];
   },
 };

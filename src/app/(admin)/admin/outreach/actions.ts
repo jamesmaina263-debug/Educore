@@ -13,7 +13,7 @@ import {
 } from "@/lib/ai/platform-ai";
 import { isUuid } from "@/lib/sales/pipeline";
 import {
-  buildOverpassQuery,
+  overpassQueryFor,
   discoverySourceNote,
   isKenyaCounty,
   parseOverpassResponse,
@@ -28,7 +28,7 @@ import {
   pickBestEmail,
   verifyFoundContacts,
 } from "@/lib/outbound/enrichment";
-import { isOwnershipFilter } from "@/lib/outbound/ownership";
+import { isOwnershipFilter, ownershipSignal, passesOwnershipFilter } from "@/lib/outbound/ownership";
 import { fetchOverpassJson } from "@/lib/outbound/overpass-client";
 import { safeFetchPage } from "@/lib/outbound/safe-fetch";
 import {
@@ -40,6 +40,7 @@ import {
 import {
   MAX_SCORE_BATCH,
   normalizeManualContacts,
+  sanitizeProspectRows,
   type ManualContactsInput,
   buildScoringPrompt,
   parseProspectCsv,
@@ -103,7 +104,7 @@ export async function discoverSchoolsByCounty(
 
   // Public map servers fail often (overloaded / rate-limited). The client tries several mirrors, retries once,
   // and stays inside this page's 60s limit; the per-server outcome (host + status only) is shown and logged.
-  const fetched = await fetchOverpassJson(buildOverpassQuery(county, kinds as DiscoveryKinds), { budgetMs: 45_000 });
+  const fetched = await fetchOverpassJson(overpassQueryFor(county, kinds as DiscoveryKinds), { budgetMs: 45_000 });
   if (!fetched.ok) {
     console.error("discoverSchoolsByCounty: overpass failed:", fetched.summary);
     return {
@@ -151,6 +152,63 @@ export async function discoverSchoolsByCounty(
 // time limit (the free hosting plan's limit is unverified); raise OUTREACH_SCORE_BUDGET_MS once the
 // real limit is known.
 const DEFAULT_SCORE_BUDGET_MS = 8_000;
+
+/**
+ * Stages schools that the admin's BROWSER fetched from the public map servers (the server-side route is
+ * often refused by those servers). The rows are re-validated here, the ownership filter is re-applied,
+ * and the OpenStreetMap attribution is added server-side, so the client can't set the source note.
+ */
+export async function importDiscoveredSchools(
+  county: string,
+  ownership: string,
+  rows: unknown,
+  truncated: number,
+  hiddenByClient: number,
+): Promise<
+  | { error: string }
+  | { success: true; found: number; inserted: number; skipped: number; truncated: number; hidden: number; withContact: number }
+> {
+  if (!isKenyaCounty(county)) return { error: "Choose a county from the list." };
+  if (!isOwnershipFilter(ownership)) return { error: "Invalid ownership filter." };
+
+  const clean = sanitizeProspectRows(rows);
+  const kept = clean.filter((r) => passesOwnershipFilter(ownershipSignal(r), ownership));
+  // Schools the browser already left out (display only) plus any this server filtered itself.
+  const clientHidden = Number.isInteger(hiddenByClient) && hiddenByClient > 0 ? Math.min(hiddenByClient, 100_000) : 0;
+  const hidden = clientHidden + (clean.length - kept.length);
+  if (kept.length === 0) {
+    return {
+      error:
+        hidden > 0
+          ? `All ${hidden} schools found in ${county} look public, so the filter hid them. Choose "Everything" to see them.`
+          : `No named schools were found for ${county}. OpenStreetMap coverage varies by county.`,
+    };
+  }
+
+  const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
+  const { data: result, error } = await supabase.rpc("admin_import_outbound_prospects", {
+    p_rows: kept,
+    p_source_note: discoverySourceNote(county, new Date()),
+  });
+  if (error) return { error: error.message };
+
+  const r = (result ?? {}) as { inserted?: number; skipped?: number };
+  const inserted = r.inserted ?? 0;
+  const skipped = r.skipped ?? 0;
+  const safeTruncated = Number.isInteger(truncated) && truncated > 0 ? Math.min(truncated, 100_000) : 0;
+  void logAdminAction(supabase, "discover_outbound_prospects", { county, via: "browser", ownership, found: kept.length, hidden, inserted, skipped });
+  revalidatePath(PATH);
+  return {
+    success: true,
+    found: kept.length,
+    inserted,
+    skipped,
+    truncated: safeTruncated,
+    hidden,
+    withContact: kept.filter((x) => x.email || x.phone).length,
+  };
+}
 
 export async function scoreOutboundProspects(
   ids: string[],

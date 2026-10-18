@@ -14,6 +14,7 @@ import {
   deleteOutboundProspect,
   enrichOutboundProspects,
   discoverSchoolsByCounty,
+  importDiscoveredSchools,
   importOutboundProspects,
   loadProspectContact,
   logOutboundContact,
@@ -23,7 +24,15 @@ import {
   scoreOutboundProspects,
   updateOutboundContacts,
 } from "@/app/(admin)/admin/outreach/actions";
-import { KENYA_COUNTIES } from "@/lib/outbound/discovery";
+import {
+  KENYA_COUNTIES,
+  isKenyaCounty,
+  overpassQueryFor,
+  parseOverpassResponse,
+  type DiscoveryKinds,
+} from "@/lib/outbound/discovery";
+import { fetchOverpassJson } from "@/lib/outbound/overpass-client";
+import { isOwnershipFilter } from "@/lib/outbound/ownership";
 import { OWNERSHIP_FILTERS, OWNERSHIP_LABELS, ownershipSignal, passesOwnershipFilter, type OwnershipFilter } from "@/lib/outbound/ownership";
 import { MAX_ENRICH_BATCH } from "@/lib/outbound/enrichment";
 import {
@@ -145,6 +154,35 @@ export function AdminOutreach({
         router.refresh();
       }
     });
+  }
+
+  /**
+   * Discovery tries YOUR browser first: the public map servers often refuse a cloud server's shared IP
+   * but answer a normal connection. If the browser can't reach them (offline, blocked, a server without
+   * browser access), it falls back to asking our server, and reports both failures if both fail.
+   */
+  async function discoverCounty(): Promise<
+    | { error: string }
+    | { success: true; found: number; inserted: number; skipped: number; truncated: number; hidden: number; withContact: number }
+  > {
+    if (!isKenyaCounty(county) || !isOwnershipFilter(discoverOwnership)) return { error: "Choose a county first." };
+    const kindsTyped = kinds as DiscoveryKinds;
+
+    const fetched = await fetchOverpassJson(overpassQueryFor(county, kindsTyped), { budgetMs: 50_000 });
+    if (fetched.ok) {
+      // Filtered and capped here (so the 500-school cap isn't spent on schools we'd hide); the server
+      // re-validates the rows, re-applies the same filter and adds the OpenStreetMap attribution.
+      const { rows, truncated, hidden } = parseOverpassResponse(fetched.data, county, discoverOwnership);
+      return importDiscoveredSchools(county, discoverOwnership, rows, truncated, hidden);
+    }
+
+    const viaServer = await discoverSchoolsByCounty(county, kinds, discoverOwnership);
+    if ("error" in viaServer) {
+      return {
+        error: `${viaServer.error} (Your browser couldn't reach the map servers either: ${fetched.summary}.)`,
+      };
+    }
+    return viaServer;
   }
 
   const toggle = (id: string) =>
@@ -318,7 +356,7 @@ export function AdminOutreach({
               disabled={pending || !county}
               onClick={() =>
                 run(
-                  () => discoverSchoolsByCounty(county, kinds, discoverOwnership),
+                  () => discoverCounty(),
                   (r) =>
                     `Found ${r.found} in ${county}: ${r.inserted} new, ${r.skipped} already known` +
                     `${Number(r.hidden) > 0 ? `, ${r.hidden} hidden as likely public` : ""}` +

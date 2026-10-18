@@ -40,16 +40,44 @@ function countyNameRegex(county: KenyaCounty): string {
   return `^${loose}( City)?( County)?$`;
 }
 
-export function buildOverpassQuery(county: KenyaCounty, kinds: DiscoveryKinds): string {
+/**
+ * Two ways to say "inside this county", because not every public Overpass server maintains the
+ * precomputed area index the first form needs (the backups answered HTTP 500 to it in production):
+ *  - "area":    uses precomputed areas (fast; works on overpass-api.de, the primary).
+ *  - "derived": finds the county boundary relation inside a Kenya bounding box and converts it to an
+ *               area on the fly (`map_to_area`), which works without the index.
+ */
+export type OverpassQueryVariant = "area" | "derived";
+
+const KENYA_BBOX = "-5.0,33.8,5.3,42.1"; // south,west,north,east: generous box around Kenya
+
+export function buildOverpassQuery(
+  county: KenyaCounty,
+  kinds: DiscoveryKinds,
+  variant: OverpassQueryVariant = "area",
+): string {
   const amenity = kinds === "kindergartens" ? "kindergarten" : kinds === "schools" ? "school" : "school|kindergarten";
   // Safe to interpolate: county is validated against the fixed KENYA_COUNTIES list (isKenyaCounty).
+  const nameRe = countyNameRegex(county);
+  const select =
+    variant === "derived"
+      ? `rel["boundary"="administrative"]["admin_level"="4"]["name"~"${nameRe}",i](${KENYA_BBOX});
+map_to_area->.county;`
+      : `area["ISO3166-1"="KE"]["admin_level"="2"]->.ke;
+area["boundary"="administrative"]["admin_level"="4"]["name"~"${nameRe}",i](area.ke)->.county;`;
   return `[out:json][timeout:25];
-area["ISO3166-1"="KE"]["admin_level"="2"]->.ke;
-area["boundary"="administrative"]["admin_level"="4"]["name"~"${countyNameRegex(county)}",i](area.ke)->.county;
+${select}
 (
   nwr["amenity"~"^(${amenity})$"]["name"](area.county);
 );
 out center tags 1500;`;
+}
+
+/** Which query variant each server gets: the primary keeps the proven form, mirrors get the index-free one. */
+export function overpassQueryFor(county: KenyaCounty, kinds: DiscoveryKinds): (endpoint: string) => string {
+  const area = buildOverpassQuery(county, kinds, "area");
+  const derived = buildOverpassQuery(county, kinds, "derived");
+  return (endpoint) => (endpoint.includes("overpass-api.de") ? area : derived);
 }
 
 type OsmElement = { type?: string; id?: number; tags?: Record<string, string> };

@@ -6,6 +6,21 @@ const ok = (body: unknown) => new Response(JSON.stringify(body), { status: 200 }
 const base = { endpoints: EP, sleep: async () => {}, retryDelayMs: 0 };
 
 describe("fetchOverpassJson", () => {
+  it("lets each server receive its own query variant", async () => {
+    const bodies: string[] = [];
+    const fetchImpl = vi.fn(async (url: string, init?: RequestInit) => {
+      bodies.push(`${String(url)} <- ${decodeURIComponent(String(init?.body).slice(5))}`);
+      return String(url).includes("a.example") ? new Response("x", { status: 500 }) : ok({ elements: [] });
+    });
+    const r = await fetchOverpassJson((ep) => (ep.includes("a.example") ? "QUERY-A" : "QUERY-B"), {
+      ...base,
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    });
+    expect(r).toMatchObject({ ok: true, host: "b.example" });
+    expect(bodies[0]).toBe("https://a.example/api <- QUERY-A");
+    expect(bodies[bodies.length - 1]).toBe("https://b.example/api <- QUERY-B");
+  });
+
   it("returns data from the first server when it answers", async () => {
     const fetchImpl = vi.fn(async () => ok({ elements: [1] }));
     const r = await fetchOverpassJson("q", { ...base, fetchImpl: fetchImpl as unknown as typeof fetch });

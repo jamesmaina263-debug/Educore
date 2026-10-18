@@ -43,7 +43,11 @@ function runtimeRemark(data: unknown): string | null {
   return /runtime error|timed out|out of memory|too many requests|rate_limited/i.test(remark) ? "runtime error" : null;
 }
 
-export async function fetchOverpassJson(query: string, opts: OverpassOptions = {}): Promise<OverpassResult> {
+/** `query` may be a function so different servers can get a variant they support (see buildOverpassQuery). */
+export async function fetchOverpassJson(
+  query: string | ((endpoint: string) => string),
+  opts: OverpassOptions = {},
+): Promise<OverpassResult> {
   const endpoints = opts.endpoints ?? OVERPASS_ENDPOINTS;
   const budgetMs = opts.budgetMs ?? 45_000;
   const perRequestMs = opts.perRequestMs ?? 20_000;
@@ -67,8 +71,13 @@ export async function fetchOverpassJson(query: string, opts: OverpassOptions = {
       try {
         const res = await doFetch(endpoint, {
           method: "POST",
-          headers: { "Content-Type": "application/x-www-form-urlencoded", "User-Agent": USER_AGENT },
-          body: new URLSearchParams({ data: query }).toString(),
+          // Browsers may not set User-Agent (and a custom header would force a CORS preflight the servers
+          // don't answer), so it is only sent from the server.
+          headers: {
+            "Content-Type": "application/x-www-form-urlencoded",
+            ...(typeof window === "undefined" ? { "User-Agent": USER_AGENT } : {}),
+          },
+          body: new URLSearchParams({ data: typeof query === "function" ? query(endpoint) : query }).toString(),
           signal: AbortSignal.timeout(Math.min(perRequestMs, left)),
           cache: "no-store",
         });
