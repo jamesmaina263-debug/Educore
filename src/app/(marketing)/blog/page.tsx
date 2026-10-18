@@ -30,7 +30,7 @@ export default function BlogIndexPage() {
       <BreadcrumbJsonLd items={[HOME_CRUMB, { name: "Blog", path: "/blog" }]} />
       {/* 1 — Hero */}
       <Section tone="navy" className="pb-14 pt-20 sm:pb-16 sm:pt-28">
-        <Eyebrow tone="dark">Blog</Eyebrow>
+        <Eyebrow tone="light">Blog</Eyebrow>
         <h1 className="mt-4 max-w-3xl text-4xl font-semibold tracking-tight text-white sm:text-5xl">
           Guides for running a school in Kenya
         </h1>

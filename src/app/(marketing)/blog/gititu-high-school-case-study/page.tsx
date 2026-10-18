@@ -103,7 +103,7 @@ export default function KenyanSchoolCaseStudyPost() {
 
       {/* 1 — Hero */}
       <Section tone="navy" className="pb-14 pt-20 sm:pb-16 sm:pt-28">
-        <Eyebrow tone="dark">Case Study</Eyebrow>
+        <Eyebrow tone="light">Case Study</Eyebrow>
         <h1 className="mt-4 max-w-3xl text-4xl font-semibold tracking-tight text-white sm:text-5xl">
           {SCHOOL_NAME} on running end of term from one system
         </h1>
