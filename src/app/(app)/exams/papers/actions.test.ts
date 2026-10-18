@@ -16,11 +16,11 @@ type Call = { table: string; method: string; args: unknown[] };
 
 // Recording fake: resolves each table to a configured result and records every
 // method call (with args), so tests can assert exactly what was written where.
-function fakeClient(opts: { results: Record<string, unknown>; permission?: boolean; user?: { id: string } | null }) {
+function fakeClient(opts: { results: Record<string, unknown>; permission?: boolean; moduleEnabled?: boolean; user?: { id: string } | null }) {
   const calls: Call[] = [];
   const client = {
     auth: { getUser: vi.fn().mockResolvedValue({ data: { user: opts.user === undefined ? { id: "auth-1" } : opts.user } }) },
-    rpc: vi.fn(() => Promise.resolve({ data: opts.permission ?? true })),
+    rpc: vi.fn((name: string) => Promise.resolve({ data: name === "auth_school_module_enabled" ? (opts.moduleEnabled ?? true) : (opts.permission ?? true) })),
     from(table: string) {
       const proxy: unknown = new Proxy(
         {},
@@ -121,6 +121,14 @@ describe("generateExamPaper validation and permission (no DB, no AI)", () => {
     const { client } = fakeClient({ results: baseResults, user: null });
     mockCreateClient.mockResolvedValue(client);
     expect(await generateExamPaper(input)).toEqual({ error: "You must be signed in." });
+  });
+  it("refuses, before any AI call or write, when the school has switched AI exam papers off", async () => {
+    const { client, calls } = fakeClient({ results: baseResults, moduleEnabled: false });
+    mockCreateClient.mockResolvedValue(client);
+    globalThis.fetch = geminiOk([]);
+    expect(await generateExamPaper(input)).toEqual({ error: "AI exam papers are turned off for your school." });
+    expect(globalThis.fetch).not.toHaveBeenCalled();
+    expect(calls.filter((c) => c.method === "insert")).toEqual([]);
   });
 });
 
@@ -240,6 +248,11 @@ describe("generateExamPaper happy path and isolation", () => {
 });
 
 describe("getExamPaperSourceOptions and edits", () => {
+  it("returns an error when the school has switched AI exam papers off", async () => {
+    const { client } = fakeClient({ results: baseResults, moduleEnabled: false });
+    mockCreateClient.mockResolvedValue(client);
+    expect(await getExamPaperSourceOptions("c1", "s1")).toEqual({ error: "AI exam papers are turned off for your school." });
+  });
   it("returns separate, labelled sources with usability flags", async () => {
     const { client } = fakeClient({ results: baseResults });
     mockCreateClient.mockResolvedValue(client);

@@ -71,7 +71,13 @@ export function SidebarNav({ onNavigate, disabledHrefs = [] }: { onNavigate?: ()
   const groups =
     disabledHrefs.length === 0
       ? navGroups
-      : navGroups.map((group) => ({ ...group, items: group.items.filter((item) => !disabledHrefs.includes(item.href)) }));
+      : navGroups.map((group) => ({
+          ...group,
+          items: group.items
+            .filter((item) => !disabledHrefs.includes(item.href))
+            // Child links (e.g. Exams > Exam Papers) are hidden by the same list.
+            .map((item) => (item.children ? { ...item, children: item.children.filter((c) => !disabledHrefs.includes(c.href)) } : item)),
+        }));
 
   return (
     <nav className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-2">

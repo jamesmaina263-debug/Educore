@@ -32,7 +32,7 @@ export default async function AppRouteGroupLayout({ children }: { children: Reac
   // #425's own note) -- everything else reads the new module system.
   const disabledHrefs: string[] = [];
   if (user) {
-    const [{ data: schoolUser }, { data: healthEnabled }, { data: disciplineEnabled }, { data: libraryEnabled }, { data: payrollEnabled }, { data: transportEnabled }, { data: homeworkEnabled }, { data: ptMeetingsEnabled }, { data: inventoryEnabled }, { data: schemeOfWorkEnabled }] = await Promise.all([
+    const [{ data: schoolUser }, { data: healthEnabled }, { data: disciplineEnabled }, { data: libraryEnabled }, { data: payrollEnabled }, { data: transportEnabled }, { data: homeworkEnabled }, { data: ptMeetingsEnabled }, { data: inventoryEnabled }, { data: schemeOfWorkEnabled }, { data: examPapersEnabled }] = await Promise.all([
       supabase.from("school_users").select("schools(name, boarding_enabled)").eq("auth_user_id", user.id).maybeSingle(),
       supabase.rpc("auth_school_module_enabled", { p_key: "health" }),
       supabase.rpc("auth_school_module_enabled", { p_key: "discipline" }),
@@ -43,6 +43,7 @@ export default async function AppRouteGroupLayout({ children }: { children: Reac
       supabase.rpc("auth_school_module_enabled", { p_key: "pt_meetings" }),
       supabase.rpc("auth_school_module_enabled", { p_key: "inventory" }),
       supabase.rpc("auth_school_module_enabled", { p_key: "scheme_of_work" }),
+      supabase.rpc("auth_school_module_enabled", { p_key: "exam_papers" }),
     ]);
     const school = schoolUser?.schools as unknown as { name: string; boarding_enabled: boolean } | null;
     schoolName = school?.name;
@@ -59,6 +60,8 @@ export default async function AppRouteGroupLayout({ children }: { children: Reac
     // Curriculum Content upload/review exists only to ground Scheme of Work
     // AI generation -- hide it under the same toggle.
     if (schemeOfWorkEnabled === false) disabledHrefs.push("/academics/curriculum");
+    // Schools that don't want AI-drafted exam papers switch this module off.
+    if (examPapersEnabled === false) disabledHrefs.push("/exams/papers");
   }
 
   return (
