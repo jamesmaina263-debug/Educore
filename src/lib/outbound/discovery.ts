@@ -115,15 +115,18 @@ export type DiscoveryParse = {
   truncated: number;
   /** Schools left out by the ownership filter (e.g. likely-public schools). */
   hidden: number;
+  /** Schools already staged (matched by the same name|town key the database dedupes on), dropped BEFORE the cap. */
+  known: number;
 };
 
 export function parseOverpassResponse(
   data: unknown,
   county: string,
   ownership: OwnershipFilter = "all",
+  knownKeys?: ReadonlySet<string>,
 ): DiscoveryParse {
   const elements = (data as { elements?: OsmElement[] } | null)?.elements;
-  if (!Array.isArray(elements)) return { rows: [], truncated: 0, hidden: 0 };
+  if (!Array.isArray(elements)) return { rows: [], truncated: 0, hidden: 0, known: 0 };
 
   const seen = new Set<string>();
   const rows: ProspectRow[] = [];
@@ -154,9 +157,14 @@ export function parseOverpassResponse(
     });
   }
 
-  // Ownership filter first, so the 500 cap is spent on schools worth pursuing.
-  const kept = rows.filter((r) => passesOwnershipFilter(ownershipSignal(r), ownership));
-  const hidden = rows.length - kept.length;
+  // Drop schools that are already staged BEFORE the cap, so each run takes the NEXT batch instead of
+  // re-selecting the same top 500. Key = the database's dedupe_key: lower(name)|lower(town_county).
+  const fresh = knownKeys ? rows.filter((r) => !knownKeys.has(`${r.school_name.toLowerCase()}|${(r.town_county ?? "").toLowerCase()}`)) : rows;
+  const known = rows.length - fresh.length;
+
+  // Ownership filter next, so the 500 cap is spent on schools worth pursuing.
+  const kept = fresh.filter((r) => passesOwnershipFilter(ownershipSignal(r), ownership));
+  const hidden = fresh.length - kept.length;
   rows.length = 0;
   rows.push(...kept);
 
@@ -164,7 +172,7 @@ export function parseOverpassResponse(
   const reach = (r: ProspectRow) => (r.email ? 3 : 0) + (r.phone ? 2 : 0) + (r.website ? 1 : 0);
   rows.sort((a, b) => reach(b) - reach(a));
   const truncated = Math.max(0, rows.length - MAX_IMPORT_ROWS);
-  return { rows: rows.slice(0, MAX_IMPORT_ROWS), truncated, hidden };
+  return { rows: rows.slice(0, MAX_IMPORT_ROWS), truncated, hidden, known };
 }
 
 export function discoverySourceNote(county: string, date: Date): string {

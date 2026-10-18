@@ -212,6 +212,24 @@ export async function importDiscoveredSchools(
   };
 }
 
+/** dedupe keys (lower(name)|lower(town_county)) of prospects already staged in this county, paged past the 1000-row API cap. */
+async function stagedKeysForCounty(supabase: Awaited<ReturnType<typeof createClient>>, county: string): Promise<Set<string>> {
+  const keys = new Set<string>();
+  const pattern = `%${county.toLowerCase().replace(/[%_\\]/g, "")}`;
+  for (let from = 0; from < 50_000; from += 1000) {
+    const { data, error } = await supabase
+      .from("outbound_prospects")
+      .select("dedupe_key")
+      .like("dedupe_key", pattern)
+      .order("dedupe_key")
+      .range(from, from + 999);
+    if (error || !data) break; // best effort: the database still dedupes, we just can't pre-skip
+    for (const r of data as { dedupe_key: string }[]) keys.add(r.dedupe_key);
+    if (data.length < 1000) break;
+  }
+  return keys;
+}
+
 /**
  * Discover from OUR saved OpenStreetMap snapshot (no network call, so it can't be "busy"). Returns
  * `{ unavailable: true }` when the snapshot has no data for the county so the caller can fall back to
@@ -232,18 +250,21 @@ export async function discoverSchoolsFromDataset(
   const local = bundledCountySchools(county, kinds as DiscoveryKinds);
   if (!local) return { error: "No saved map data for this county.", unavailable: true };
 
-  const { rows, truncated, hidden } = parseOverpassResponse({ elements: local.elements }, county, ownership);
+  const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
+  const staged = await stagedKeysForCounty(supabase, county);
+  const { rows, truncated, hidden, known } = parseOverpassResponse({ elements: local.elements }, county, ownership, staged);
   if (rows.length === 0) {
     return {
       error:
-        hidden > 0
-          ? `All ${hidden} schools found in ${county} look public, so the filter hid them. Choose "Everything" to see them.`
-          : `No named schools were found for ${county}. OpenStreetMap coverage varies by county.`,
+        known > 0
+          ? `Every school found in ${county} is already in your list (${known} staged${hidden > 0 ? `, ${hidden} more hidden as likely public; choose "Everything" to see them` : ""}).`
+          : hidden > 0
+            ? `All ${hidden} schools found in ${county} look public, so the filter hid them. Choose "Everything" to see them.`
+            : `No named schools were found for ${county}. OpenStreetMap coverage varies by county.`,
     };
   }
 
-  const supabase = await createClient();
-  await tagSentryRequestContext(supabase);
   const { data: result, error } = await supabase.rpc("admin_import_outbound_prospects", {
     p_rows: rows,
     p_source_note: datasetSourceNote(county, new Date(), local.generated),
@@ -252,12 +273,12 @@ export async function discoverSchoolsFromDataset(
 
   const r = (result ?? {}) as { inserted?: number; skipped?: number };
   const inserted = r.inserted ?? 0;
-  const skipped = r.skipped ?? 0;
-  void logAdminAction(supabase, "discover_outbound_prospects", { county, kinds, via: "dataset", ownership, found: rows.length, hidden, inserted, skipped });
+  const skipped = (r.skipped ?? 0) + known;
+  void logAdminAction(supabase, "discover_outbound_prospects", { county, kinds, via: "dataset", ownership, found: rows.length + known, hidden, inserted, skipped });
   revalidatePath(PATH);
   return {
     success: true,
-    found: rows.length,
+    found: rows.length + known,
     inserted,
     skipped,
     truncated,
