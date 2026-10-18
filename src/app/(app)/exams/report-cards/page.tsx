@@ -6,9 +6,9 @@ import { logout } from "@/app/login/actions";
 import { AppShell } from "@/components/app-shell/app-shell";
 import { ReportCardPicker } from "@/components/exams/report-card-picker";
 import { ReportCardList, type ReportCardRow } from "@/components/exams/report-card-list";
-import { TableExportMenu } from "@/components/shared/table-export-menu";
+import { MarkSheetExportMenu } from "@/components/exams/mark-sheet-export-menu";
 import { buildReportCardInsights } from "@/lib/academics/report-card-insights";
-import { buildMarkSheetRows } from "@/lib/academics/mark-sheet";
+import { loadMarkSheetModel } from "@/lib/academics/load-mark-sheet";
 
 export default async function ReportCardsPage({
   searchParams,
@@ -24,7 +24,7 @@ export default async function ReportCardsPage({
   const [{ data: schoolUser }, { data: canGenerate }, { data: canApproveOwn }, { data: canApproveAny }] = await Promise.all([
     supabase
       .from("school_users")
-      .select("full_name, roles(display_name), schools(name, logo_url)")
+      .select("full_name, roles(display_name), schools(name)")
       .eq("auth_user_id", user.id)
       .maybeSingle(),
     supabase.rpc("auth_has_permission", { p_permission_key: "exams.write" }),
@@ -34,7 +34,6 @@ export default async function ReportCardsPage({
 
   const roleName = (schoolUser?.roles as unknown as { display_name: string } | null)?.display_name;
   const schoolName = (schoolUser?.schools as unknown as { name: string } | null)?.name;
-  const schoolLogoUrl = (schoolUser?.schools as unknown as { logo_url: string | null } | null)?.logo_url ?? null;
 
   const { data: closedExams } = await supabase.from("exams").select("id, name").eq("status", "closed").order("created_at", { ascending: false });
   const examOptions = closedExams ?? [];
@@ -214,7 +213,10 @@ export default async function ReportCardsPage({
     });
   }
 
-  const markSheetRows = buildMarkSheetRows(rows);
+  const markSheetModel =
+    rows.length > 0 && selectedExamId && selectedClassId
+      ? await loadMarkSheetModel(supabase, { examId: selectedExamId, classId: selectedClassId, preparedBy: schoolUser?.full_name ?? null })
+      : null;
   const selectedClassName = classOptions.find((c) => c.id === selectedClassId)?.name ?? "";
   const selectedExamName = examOptions.find((e) => e.id === selectedExamId)?.name ?? "";
 
@@ -232,15 +234,7 @@ export default async function ReportCardsPage({
             <p className="text-sm text-muted-foreground">Generated from closed exams only</p>
           </div>
           <div className="flex items-center gap-2">
-            {rows.length > 0 && (
-              <TableExportMenu
-                filenameStub={`${schoolName ?? "educore"}-${selectedClassName}-mark-sheet`}
-                title="Class Mark Sheet"
-                subtitle={[schoolName, selectedExamName, selectedClassName].filter(Boolean).join(" · ")}
-                rows={markSheetRows}
-                logoUrl={schoolLogoUrl}
-              />
-            )}
+            {markSheetModel && <MarkSheetExportMenu model={markSheetModel} filenameStub={`${schoolName ?? "educore"}-${selectedClassName}-${selectedExamName}-mark-sheet`} />}
             {rows.length > 0 && selectedExamId && selectedClassId && (
               <Link
                 href={`/exams/report-cards/print?exam=${selectedExamId}&class=${selectedClassId}`}
