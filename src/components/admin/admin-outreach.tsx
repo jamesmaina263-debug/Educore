@@ -24,6 +24,7 @@ import {
   updateOutboundContacts,
 } from "@/app/(admin)/admin/outreach/actions";
 import { KENYA_COUNTIES } from "@/lib/outbound/discovery";
+import { OWNERSHIP_FILTERS, OWNERSHIP_LABELS, ownershipSignal, passesOwnershipFilter, type OwnershipFilter } from "@/lib/outbound/ownership";
 import { MAX_ENRICH_BATCH } from "@/lib/outbound/enrichment";
 import {
   CHANNEL_LABELS,
@@ -103,6 +104,8 @@ export function AdminOutreach({
 
   const [county, setCounty] = useState<string>("");
   const [kinds, setKinds] = useState<string>("all");
+  const [discoverOwnership, setDiscoverOwnership] = useState<string>("hide_public");
+  const [listOwnership, setListOwnership] = useState<OwnershipFilter>("all");
   const [csvText, setCsvText] = useState("");
   const [csvSource, setCsvSource] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
@@ -122,8 +125,13 @@ export function AdminOutreach({
     return c;
   }, [prospects]);
   const visible = useMemo(
-    () => (filter === "all" ? prospects : prospects.filter((p) => p.status === filter)),
-    [prospects, filter],
+    () =>
+      prospects.filter(
+        (p) =>
+          (filter === "all" || p.status === filter) &&
+          passesOwnershipFilter(ownershipSignal(p), listOwnership),
+      ),
+    [prospects, filter, listOwnership],
   );
 
   function run(fn: () => Promise<{ error: string } | ({ success: true } & Record<string, unknown>)>, ok: (r: Record<string, unknown>) => string) {
@@ -290,14 +298,30 @@ export function AdminOutreach({
                 </SelectContent>
               </Select>
             </div>
+            <div className="flex flex-col gap-1">
+              <Label htmlFor="ownership">Ownership</Label>
+              <Select value={discoverOwnership} onValueChange={setDiscoverOwnership}>
+                <SelectTrigger id="ownership" className="h-8 w-[15rem] text-[0.8125rem]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {OWNERSHIP_FILTERS.map((o) => (
+                    <SelectItem key={o.value} value={o.value}>
+                      {o.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
             <Button
               size="sm"
               disabled={pending || !county}
               onClick={() =>
                 run(
-                  () => discoverSchoolsByCounty(county, kinds),
+                  () => discoverSchoolsByCounty(county, kinds, discoverOwnership),
                   (r) =>
                     `Found ${r.found} in ${county}: ${r.inserted} new, ${r.skipped} already known` +
+                    `${Number(r.hidden) > 0 ? `, ${r.hidden} hidden as likely public` : ""}` +
                     `${Number(r.truncated) > 0 ? `, ${r.truncated} more left out (run again after reviewing)` : ""}. ` +
                     `${r.withContact} have a phone or email.`,
                 )
@@ -393,6 +417,22 @@ export function AdminOutreach({
           </div>
         </div>
 
+        <div className="mt-3 flex items-center gap-2">
+          <Label htmlFor="list-ownership" className="text-xs">
+            Show
+          </Label>
+          <Select value={listOwnership} onValueChange={(v) => setListOwnership(v as OwnershipFilter)}>
+            <SelectTrigger id="list-ownership" className="h-8 w-[15rem] text-[0.8125rem]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All schools</SelectItem>
+              <SelectItem value="hide_public">Hide likely public</SelectItem>
+              <SelectItem value="private_only">Private-leaning only</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
         <div className="mt-3 flex flex-wrap gap-1" role="tablist" aria-label="Filter by status">
           {FILTERS.map((f) => (
             <Button
@@ -451,6 +491,9 @@ export function AdminOutreach({
                         <div className="text-xs text-muted-foreground">
                           {[p.town_county, p.school_type].filter(Boolean).join(" · ")}
                         </div>
+                        {ownershipSignal(p) !== "unknown" && (
+                          <div className="text-[0.6875rem] text-muted-foreground">{OWNERSHIP_LABELS[ownershipSignal(p)]}</div>
+                        )}
                       </td>
                       <td className="p-2">
                         {p.school_level ? SCHOOL_LEVEL_LABELS[p.school_level as OutboundSchoolLevel] ?? p.school_level : "—"}

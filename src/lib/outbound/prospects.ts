@@ -5,6 +5,7 @@
 
 import { PUBLISHED_PRICE_KES_PER_STUDENT_TERM, renderProductFactsForPrompt } from "@/lib/growth/product-facts";
 import { SITE_URL } from "@/lib/site";
+import { OWNERSHIP_LABELS, ownershipSignal } from "./ownership";
 
 export const MAX_IMPORT_ROWS = 500;
 export const MAX_SCORE_BATCH = 10;
@@ -334,11 +335,13 @@ export function assembleWhatsApp(ctx: DraftContext = {}): string {
  */
 export function buildScoringPrompt(p: ProspectForScoring): string {
   const level = normalizeSchoolLevel(p.school_level ?? null);
+  const ownership = ownershipSignal({ school_name: p.school_name, school_type: p.school_type, school_level: p.school_level });
   const facts = [
     `School name: ${p.school_name}`,
     p.town_county ? `Location: ${p.town_county}` : null,
     p.school_type ? `Type: ${p.school_type}` : null,
     p.school_level ? `Level: ${p.school_level}` : null,
+    ownership !== "unknown" ? `Ownership: ${OWNERSHIP_LABELS[ownership]}${ownership.endsWith("_tagged") ? "" : " (a guess from the name)"}` : null,
     p.student_count !== null ? `Approximate students: ${p.student_count}` : null,
     p.website ? `Website: ${p.website}` : null,
     p.contact_name ? `Contact: ${p.contact_name}${p.contact_role ? ` (${p.contact_role})` : ""}` : null,
@@ -354,7 +357,7 @@ What we know about the school (this is ALL we know):
 ${facts}
 
 Return ONLY a JSON object with these keys:
-- "fit_score": integer 0-100. How likely this school is to benefit from and buy a school management system. Larger fee-paying schools with parent-communication and fee-collection needs score higher. If you know very little, score between 30 and 50, not high.
+- "fit_score": integer 0-100. How likely this school is to benefit from and buy a school management system. Larger fee-paying schools with parent-communication and fee-collection needs score higher. If you know very little, score between 30 and 50, not high. A school that looks government-run (public) is usually a weaker fit because it rarely buys software on its own budget: score it no higher than 40 unless other facts clearly show it can pay.
 - "fit_reason": one or two plain sentences explaining the score, using only the facts above.
 - "email_subject": under 70 characters, plain and professional, no clickbait, no ALL CAPS, no exclamation marks.
 - "opening": ONE paragraph of 1-2 sentences (under 45 words) that opens a first email by naming an administrative burden a school like this typically faces (for example admissions, fee follow-up, assessments, or updating parents). Plain text. Do not greet, do not mention EduCore, and do not include any numbers, prices, percentages, offers, links or promises. ${

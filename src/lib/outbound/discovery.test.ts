@@ -67,6 +67,23 @@ describe("parseOverpassResponse", () => {
     expect(r.rows[2]).toMatchObject({ school_type: "public", school_level: "primary" });
     expect(r.truncated).toBe(0);
   });
+  it("can hide likely-public schools before the cap and report how many", () => {
+    const mixed = {
+      elements: [
+        { type: "node", id: 1, tags: { amenity: "school", name: "Murera View Academy" } },
+        { type: "node", id: 2, tags: { amenity: "school", name: "Giakanja Boys High School" } },
+        { type: "node", id: 3, tags: { amenity: "school", name: "Gatimu Ngandu" } },
+        { type: "node", id: 4, tags: { amenity: "kindergarten", name: "Tiny Tots" } },
+      ],
+    };
+    const hide = parseOverpassResponse(mixed, "Nyeri", "hide_public");
+    expect(hide.rows.map((r) => r.school_name).sort()).toEqual(["Gatimu Ngandu", "Murera View Academy", "Tiny Tots"]);
+    expect(hide.hidden).toBe(1);
+    const priv = parseOverpassResponse(mixed, "Nyeri", "private_only");
+    expect(priv.rows.map((r) => r.school_name).sort()).toEqual(["Murera View Academy", "Tiny Tots"]);
+    expect(priv.hidden).toBe(2);
+    expect(parseOverpassResponse(mixed, "Nyeri").hidden).toBe(0);
+  });
   it("is safe on garbage", () => {
     expect(parseOverpassResponse(null, "Nakuru").rows).toEqual([]);
     expect(parseOverpassResponse({ elements: "x" }, "Nakuru").rows).toEqual([]);
