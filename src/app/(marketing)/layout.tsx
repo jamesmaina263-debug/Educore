@@ -8,6 +8,7 @@ import { MarketingAnalytics } from "@/components/marketing/analytics";
 import { ExitIntentLeadMagnet } from "@/components/marketing/exit-intent-lead-magnet";
 import { ConsentDefaults } from "@/components/marketing/consent-defaults";
 import { CookieNotice } from "@/components/marketing/cookie-notice";
+import { FirstPartyBeacon } from "@/components/marketing/first-party-beacon";
 
 // Shared by every public marketing page (see src/lib/school-slug-routing.ts
 // NEVER_PREFIX for the full route list this covers). Deliberately does not
@@ -40,6 +41,7 @@ export default function MarketingLayout({ children }: { children: ReactNode }) {
       <GoogleTagManager gtmId="GTM-MGV2XHBB" />
       <MarketingJsonLd />
       <MarketingAnalytics />
+      <FirstPartyBeacon />
       <MarketingNav />
       <main className="flex-1">{children}</main>
       <MarketingFooter />

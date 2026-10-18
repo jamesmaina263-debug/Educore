@@ -8,6 +8,8 @@ import { BreakdownList } from "@/components/admin/analytics/breakdown-list";
 import { EngagedOnlyToggle } from "@/components/admin/analytics/engaged-only-toggle";
 import { TrafficTrendChart } from "@/components/admin/analytics/traffic-trend-chart";
 import { LiveVisitorsPanel } from "@/components/admin/analytics/live-visitors-panel";
+import { FirstPartyTrafficPanel } from "@/components/admin/analytics/first-party-traffic-panel";
+import { parsePageViewSummary } from "@/lib/analytics-page-views";
 import { KeyEventsChart } from "@/components/admin/analytics/key-events-chart";
 import { ChannelPerformanceList } from "@/components/admin/analytics/channel-performance-list";
 import { ConversionFunnel, type FunnelStage } from "@/components/admin/analytics/conversion-funnel";
@@ -191,6 +193,11 @@ export default async function AdminAnalyticsPage({
       ])
     : [null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null];
 
+  // Our own first-party visit counter (no processing delay, counts visitors who declined Google's
+  // cookies). Fail-open: if the database function is not there yet, the panel shows a notice.
+  const pageViewResult = await supabase.rpc("admin_page_view_summary", { p_from: startIso, p_to: endIso });
+  const pageViewSummary = pageViewResult.error ? null : parsePageViewSummary(pageViewResult.data);
+
   // Search Console -- a separate config check and a separate, smaller
   // Promise.all than GA4's, since it's a distinct data source (see
   // src/lib/search-console.ts's module note on why the two are never
@@ -353,6 +360,14 @@ export default async function AdminAnalyticsPage({
           on the site. The live panel below reads GA4&apos;s Realtime feed and is current.
         </p>
       )}
+
+      <FirstPartyTrafficPanel
+        key={`${startIso}_${endIso}`}
+        from={startIso}
+        to={endIso}
+        includesToday={endsToday}
+        initial={pageViewSummary}
+      />
 
       {gaConfigured && <LiveVisitorsPanel initialActiveUsers={realtimeVisitors} />}
 
