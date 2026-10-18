@@ -38,16 +38,18 @@ export function ExamPapersSection({
   subjects,
   openExams,
   papers,
+  prefill = null,
 }: {
   canGenerate: boolean;
   classes: { id: string; name: string }[];
   subjects: { id: string; name: string }[];
   openExams: { id: string; name: string }[];
   papers: PaperRow[];
+  prefill?: { examId: string; examName: string; classId: string; subjectId: string; totalMarks: number } | null;
 }) {
   const router = useRouter();
-  const [classId, setClassId] = useState("");
-  const [subjectId, setSubjectId] = useState("");
+  const [classId, setClassId] = useState(prefill?.classId ?? "");
+  const [subjectId, setSubjectId] = useState(prefill?.subjectId ?? "");
   const [options, setOptions] = useState<SourceOptionSummary[] | null>(null);
   const [notes, setNotes] = useState<string[]>([]);
   const [optionsError, setOptionsError] = useState<string | null>(null);
@@ -55,11 +57,11 @@ export function ExamPapersSection({
   const [chosenKey, setChosenKey] = useState("");
   const [selectedRefs, setSelectedRefs] = useState<Set<string>>(new Set());
   const [title, setTitle] = useState("");
-  const [totalMarks, setTotalMarks] = useState("50");
+  const [totalMarks, setTotalMarks] = useState(String(prefill?.totalMarks ?? 50));
   const [questionCount, setQuestionCount] = useState("10");
   const [types, setTypes] = useState<Set<ExamQuestionType>>(new Set(["short_answer", "structured"]));
   const [teacherNotes, setTeacherNotes] = useState("");
-  const [examId, setExamId] = useState("none");
+  const [examId, setExamId] = useState(prefill?.examId ?? "none");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [warnings, setWarnings] = useState<string[]>([]);
@@ -145,6 +147,12 @@ export function ExamPapersSection({
       {canGenerate && (
         <div className="panel space-y-4 p-4">
           <h2 className="text-[0.8125rem] font-semibold">Generate a draft paper</h2>
+          {prefill && (
+            <p className="text-xs text-muted-foreground">
+              For the exam <span className="font-medium text-foreground">{prefill.examName}</span> — class, subject and total marks come from the
+              exam. A teacher reviews and approves every draft before it&apos;s used.
+            </p>
+          )}
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label>Class</Label>

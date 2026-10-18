@@ -2,8 +2,12 @@ import { loadPapersContext } from "./_data";
 import { ModulePageShell } from "@/components/app-shell/module-page-shell";
 import { ExamPapersSection } from "@/components/exams/exam-papers-section";
 
-export default async function ExamPapersPage() {
-  const ctx = await loadPapersContext();
+export default async function ExamPapersPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ exam?: string; class?: string; subject?: string }>;
+}) {
+  const ctx = await loadPapersContext(await searchParams);
   return (
     <ModulePageShell
       schoolName={ctx.schoolName}
@@ -21,6 +25,7 @@ export default async function ExamPapersPage() {
         subjects={ctx.subjects}
         openExams={ctx.openExams}
         papers={ctx.papers}
+        prefill={ctx.prefill}
       />
     </ModulePageShell>
   );

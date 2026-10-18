@@ -10,6 +10,7 @@ import { ExamScheduleSection, type ExamScheduleRow, type SubjectClassOption } fr
 import { ApproveMarksButton } from "@/components/exams/approve-marks-button";
 import { getSchoolSlug } from "@/lib/school-slug-server";
 import { withSchoolSlug } from "@/lib/school-slug-href";
+import { generatePaperHref, groupPapersBySheet } from "@/lib/exam-paper-links";
 import { ExamComponentPicker } from "@/components/exams/exam-component-picker";
 
 export default async function ExamProgressPage({ params }: { params: Promise<{ examId: string }> }) {
@@ -75,7 +76,15 @@ export default async function ExamProgressPage({ params }: { params: Promise<{ e
   ]);
 
   const teacherIds = Array.from(new Set((slotRows ?? []).map((s) => s.teacher_id).filter(Boolean)));
-  const [{ data: teacherRows }, { data: canWriteExams }, { data: canApproveAny }, { data: scheduleRows }, { data: approvalCounts }] =
+  const [
+    { data: teacherRows },
+    { data: canWriteExams },
+    { data: canApproveAny },
+    { data: scheduleRows },
+    { data: approvalCounts },
+    { data: examPapersEnabled },
+    { data: canGeneratePaper },
+  ] =
     await Promise.all([
       teacherIds.length ? supabase.from("school_users").select("id, full_name").in("id", teacherIds) : Promise.resolve({ data: [] }),
       supabase.rpc("auth_has_permission", { p_permission_key: "exams.write" }),
@@ -86,7 +95,27 @@ export default async function ExamProgressPage({ params }: { params: Promise<{ e
         .eq("exam_id", examId)
         .order("exam_date"),
       supabase.from("marks").select("class_id, subject_id, status").eq("exam_id", examId),
+      supabase.rpc("auth_school_module_enabled", { p_key: "exam_papers" }),
+      supabase.rpc("auth_has_permission", { p_permission_key: "exams.generate_paper_ai" }),
     ]);
+
+  // Question papers linked to this exam. Schools can opt out of AI exam papers; when the module is
+  // off (or the lookup fails closed to "off"), the exam page shows nothing about papers at all.
+  const papersEnabled = examPapersEnabled !== false;
+  const { data: paperRows } = papersEnabled
+    ? await supabase.from("exam_papers").select("id, title, status, total_marks, class_id, subject_id").eq("exam_id", examId)
+    : { data: [] };
+  const papersBySheet = groupPapersBySheet(
+    (paperRows ?? []).map((p) => ({
+      id: p.id,
+      title: p.title,
+      status: p.status as "draft" | "approved",
+      total_marks: Number(p.total_marks),
+      class_id: p.class_id,
+      subject_id: p.subject_id,
+    })),
+  );
+  const showPaperColumn = papersEnabled && (canGeneratePaper === true || (paperRows ?? []).length > 0);
   const teacherNameById = new Map((teacherRows ?? []).map((t) => [t.id, t.full_name]));
 
   // Roster size per class (sum of active students across its streams).
@@ -218,6 +247,7 @@ export default async function ExamProgressPage({ params }: { params: Promise<{ e
                     <th className="text-right">Entered</th>
                     <th>Status</th>
                     <th>Approval</th>
+                    {showPaperColumn && <th>Question paper</th>}
                   </tr>
                 </thead>
                 <tbody>
@@ -284,6 +314,38 @@ export default async function ExamProgressPage({ params }: { params: Promise<{ e
                             );
                           })()}
                         </td>
+                        {showPaperColumn && (
+                          <td>
+                            {(() => {
+                              const linked = papersBySheet.get(s.key) ?? [];
+                              if (linked.length > 0) {
+                                return (
+                                  <div className="flex flex-col gap-1">
+                                    {linked.map((p) => (
+                                      <Link key={p.id} href={withSchoolSlug(schoolSlug, "/exams/papers")} className="flex items-center gap-1.5 hover:underline">
+                                        <StatusBadge tone={p.status === "approved" ? "success" : "neutral"} label={p.status === "approved" ? "approved" : "draft"} />
+                                        <span className="text-[0.6875rem] text-muted-foreground">
+                                          {p.title} · {p.total_marks} marks
+                                        </span>
+                                      </Link>
+                                    ))}
+                                  </div>
+                                );
+                              }
+                              if (canGeneratePaper === true && exam.status === "open") {
+                                return (
+                                  <Link
+                                    href={withSchoolSlug(schoolSlug, generatePaperHref(exam.id, s.classId, s.subjectId))}
+                                    className="text-[0.6875rem] text-primary hover:underline"
+                                  >
+                                    Generate paper
+                                  </Link>
+                                );
+                              }
+                              return <span className="text-muted-foreground">—</span>;
+                            })()}
+                          </td>
+                        )}
                       </tr>
                     );
                   })}
