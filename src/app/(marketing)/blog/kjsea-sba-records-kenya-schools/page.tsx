@@ -10,6 +10,7 @@ import { BreadcrumbJsonLd, HOME_CRUMB } from "@/components/marketing/breadcrumb-
 import { ArticleJsonLd } from "@/components/marketing/article-json-ld";
 import { BlogByline } from "@/components/marketing/blog-byline";
 import { RelatedGuides } from "@/components/marketing/related-guides";
+import { BlogInlineCta } from "@/components/marketing/blog-inline-cta";
 
 const SLUG = "kjsea-sba-records-kenya-schools";
 const PATH = `/blog/${SLUG}`;
@@ -276,6 +277,12 @@ export default function KjseaSbaRecordsKenyaSchoolsPost() {
           </div>
         </Reveal>
       </Section>
+
+      <BlogInlineCta
+        headline="Keeping SBA records for every learner?"
+        body="EduCore holds each learner’s marks, competency ratings and evidence on one record that stays with them year to year, and exports it for whoever uploads on the KNEC portal. We can show it with your own classes."
+        topic="KJSEA and SBA records"
+      />
 
       {/* 6 — What EduCore does and does not do */}
       <Section tone="canvas">
