@@ -76,9 +76,9 @@ export function AuthLayout({
               Smarter Schools. Brighter Futures.
             </p>
 
-            <dl className="grid grid-cols-2 gap-x-6 gap-y-5">
+            <ul className="grid grid-cols-2 gap-x-6 gap-y-5">
               {BRAND_HIGHLIGHTS.map(({ icon: Icon, label }) => (
-                <div key={label} className="flex items-center gap-2.5">
+                <li key={label} className="flex items-center gap-2.5">
                   <span
                     className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border"
                     style={{
@@ -89,10 +89,10 @@ export function AuthLayout({
                   >
                     <Icon className="h-4 w-4" strokeWidth={1.75} />
                   </span>
-                  <dt className="text-sm font-medium text-white/80">{label}</dt>
-                </div>
+                  <span className="text-sm font-medium text-white/80">{label}</span>
+                </li>
               ))}
-            </dl>
+            </ul>
           </div>
         </div>
 

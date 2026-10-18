@@ -151,8 +151,8 @@ export function SignupForm() {
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div className="space-y-1.5">
-          <Label htmlFor="email">Email</Label>
-          <Input id="email" name="email" type="email" inputMode="email" {...bind("email")} required maxLength={254} autoComplete="email" placeholder="you@school.ac.ke" />
+          <Label htmlFor="email">Email address</Label>
+          <Input id="email" name="email" type="email" inputMode="email" {...bind("email")} required maxLength={254} autoComplete="email" placeholder="you@example.com" />
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="phone">Phone</Label>
@@ -161,9 +161,9 @@ export function SignupForm() {
       </div>
 
       <div className="space-y-1.5">
-        <Label>Country</Label>
+        <Label htmlFor="country_code_trigger">Country</Label>
         <Select value={country} onValueChange={setCountry}>
-          <SelectTrigger className="h-11 text-base sm:text-sm">
+          <SelectTrigger id="country_code_trigger" className="h-11 text-base sm:text-sm">
             <SelectValue placeholder="Select" />
           </SelectTrigger>
           <SelectContent>

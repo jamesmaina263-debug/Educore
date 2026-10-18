@@ -26,7 +26,7 @@ export default function ContactPage() {
     <>
       <BreadcrumbJsonLd items={[HOME_CRUMB, { name: "Contact", path: "/contact" }]} />
       <Section tone="navy" className="pb-14 pt-20 sm:pb-16 sm:pt-28">
-        <Eyebrow tone="dark">Contact</Eyebrow>
+        <Eyebrow tone="light">Contact</Eyebrow>
         <h1 className="mt-4 max-w-2xl text-4xl font-semibold tracking-tight text-white sm:text-5xl">
           Tell us about your school. We&apos;ll take it from there.
         </h1>

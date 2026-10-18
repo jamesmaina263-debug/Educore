@@ -217,8 +217,9 @@ describe("parseScoringResponse + fixed draft template", () => {
     expect(r.value.email_body).toContain("competency-based learner progress reports");
     expect(r.value.email_body).not.toContain("marks-based grading");
     expect(r.value.email_body).not.toContain("simple learner progress reports");
-    expect(r.value.whatsapp).toContain("kindergartens run admissions");
-    expect(r.value.whatsapp).not.toContain("report cards");
+    expect(r.value.whatsapp).toContain("Kenyan kindergartens and nursery schools");
+    expect(r.value.whatsapp).toContain("competency-based learner progress reports");
+    expect(r.value.whatsapp).not.toMatch(/report cards|marks-based|exam/i);
   });
 
   it("stays level-neutral (no exam or report-card wording) when the level is unknown", () => {
@@ -227,17 +228,27 @@ describe("parseScoringResponse + fixed draft template", () => {
     if (!r.ok) return;
     expect(r.value.email_body).not.toContain("marks-based grading");
     expect(r.value.email_body).not.toContain("exam");
-    expect(r.value.whatsapp).not.toContain("report cards");
+    expect(r.value.whatsapp).not.toMatch(/report cards|marks-based|exam/i);
     const primary = parseScoringResponse(JSON.stringify(good), { school_level: "primary" });
     expect(primary.ok && primary.value.email_body).toContain("marks-based grading");
   });
 
-  it("builds a WhatsApp message with the offer and a STOP line, from fixed text only", () => {
-    const w = assembleWhatsApp({ school_name: "Sunrise Academy", contact_name: "Jane Wanjiru" });
-    expect(w.startsWith("Hello Jane Wanjiru, this is EduCore Africa.")).toBe(true);
-    expect(w).toContain("from KES 100 per student per term with a 30-day free trial");
-    expect(w).toContain("Reply STOP");
+  it("builds the WhatsApp message from fixed text in the approved layout", () => {
+    const w = assembleWhatsApp({ school_name: "Sunrise Academy", contact_name: "Jane Wanjiru", school_level: "primary" });
+    expect(w.split("\n")).toEqual([
+      "Hello Jane Wanjiru! 👋 We’re EduCore Africa, helping Kenyan schools simplify their daily administration.",
+      "Our school management system brings together admissions, student attendance, M-Pesa fee collection, parent communication via SMS and WhatsApp, and exam management with CBC-supported and marks-based report cards.",
+      "Pricing starts at KES 100 per student per term, and you can explore the system with a 30-day free trial, with no payment card required.",
+      "Would you be open to a short demo to see how EduCore could support your school?",
+      "🌐 https://www.educoreafrica.com",
+      "If you’d prefer not to receive further messages, just reply STOP.",
+    ]);
     expect(w.length).toBeLessThan(1000);
+  });
+
+  it("uses a plain 'Hello!' greeting when there is no usable contact name", () => {
+    const w = assembleWhatsApp({ school_name: "Nyeri Junior School", contact_name: "Nyeri Junior", school_level: "primary" });
+    expect(w.startsWith("Hello! 👋 We’re EduCore Africa")).toBe(true);
   });
 
   it("rejects malformed or incomplete output", () => {

@@ -303,21 +303,29 @@ export function assembleEmailBody(openingRaw: unknown, ctx: DraftContext = {}): 
   ].join("\n\n");
 }
 
+// WhatsApp wording per level. Same rules as the email: only verified claims (src/lib/growth/product-facts.ts),
+// no exam/grade wording for kindergartens or for an unknown level.
+const WHATSAPP_PRODUCT = {
+  kindergarten:
+    "Our system brings together admissions, attendance, M-Pesa fee collection and parent communication via SMS and WhatsApp, with competency-based learner progress reports and support for Pre-Primary (PP1 and PP2) classes.",
+  neutral:
+    "Our school management system brings together admissions, student attendance, M-Pesa fee collection and parent communication via SMS and WhatsApp.",
+  full: "Our school management system brings together admissions, student attendance, M-Pesa fee collection, parent communication via SMS and WhatsApp, and exam management with CBC-supported and marks-based report cards.",
+} as const;
+
 export function assembleWhatsApp(ctx: DraftContext = {}): string {
   const level = normalizeSchoolLevel(ctx.school_level ?? null);
   const name = greetingName(ctx.contact_name, ctx.school_name);
-  const what =
-    level === "kindergarten"
-      ? "kindergartens run admissions, fee collection through M-Pesa, attendance and parent updates"
-      : level === null
-        ? "schools run admissions, fee collection through M-Pesa, attendance and parent updates"
-        : "schools run admissions, fee collection through M-Pesa, attendance, parent updates and report cards";
-  return (
-    `Hello${name ? ` ${name}` : ""}, this is EduCore Africa. We help Kenyan ${what} in one cloud system, ` +
-    `from KES ${OUTREACH_OFFER.pricePerStudentPerTermKes} per student per term with a ${OUTREACH_OFFER.trialDays}-day free trial and no card needed. ` +
-    `Could we show you a short online demo? ${SITE_URL}\n` +
-    "Reply STOP and we will not message you again."
-  );
+  const who = level === "kindergarten" ? "Kenyan kindergartens and nursery schools" : "Kenyan schools";
+  const product = level === "kindergarten" ? WHATSAPP_PRODUCT.kindergarten : level === null ? WHATSAPP_PRODUCT.neutral : WHATSAPP_PRODUCT.full;
+  return [
+    `Hello${name ? ` ${name}` : ""}! 👋 We’re EduCore Africa, helping ${who} simplify their daily administration.`,
+    product,
+    `Pricing starts at KES ${OUTREACH_OFFER.pricePerStudentPerTermKes} per student per term, and you can explore the system with a ${OUTREACH_OFFER.trialDays}-day free trial, with no payment card required.`,
+    "Would you be open to a short demo to see how EduCore could support your school?",
+    `🌐 ${SITE_URL}`,
+    "If you’d prefer not to receive further messages, just reply STOP.",
+  ].join("\n");
 }
 
 /**
