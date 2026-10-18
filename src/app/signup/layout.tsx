@@ -3,6 +3,7 @@ import { GoogleTagManager } from "@next/third-parties/google";
 import { ConsentDefaults } from "@/components/marketing/consent-defaults";
 import { PageViewTracker } from "@/components/marketing/analytics";
 import { CookieNotice } from "@/components/marketing/cookie-notice";
+import { FirstPartyBeacon } from "@/components/marketing/first-party-beacon";
 
 // /signup currently has no GTM coverage at all -- it isn't wrapped by
 // (marketing)/layout.tsx (which loads GTM-MGV2XHBB), and the root layout
@@ -21,6 +22,7 @@ export default function SignupLayout({ children }: { children: ReactNode }) {
       <ConsentDefaults />
       <GoogleTagManager gtmId="GTM-MGV2XHBB" />
       <PageViewTracker />
+      <FirstPartyBeacon />
       {children}
       <CookieNotice />
     </>

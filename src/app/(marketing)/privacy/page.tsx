@@ -107,7 +107,8 @@ export default function PrivacyPage() {
               the time you continue or submit the form, so we understand which channels
               are helpful. We do not collect this information anywhere else
               on the marketing site — pages you simply browse do not submit
-              any personal information to us.
+              any personal information to us. (Browsing is counted
+              anonymously, as described below.)
             </p>
           </div>
 
@@ -166,6 +167,24 @@ export default function PrivacyPage() {
               message you entered, or the role you selected in the form.
               We do not share the data it collects with any third party
               beyond Google.
+            </p>
+            <p className="mt-3 text-marketing-navy-900/75">
+              Separately from Google, we run our own simple visit counter on
+              this marketing website and the free-trial sign-up page, so we
+              can see how many people visit each day, including people who
+              decline analytics cookies. Each page view records the page
+              address (without any query string), the time, your country and
+              broad device type (phone, tablet or computer), the website
+              that referred you, any campaign tags on the link you used, and
+              whether you arrived from a Google or Meta advertisement. It
+              sets no cookie and stores nothing on your device. To count
+              distinct visitors, your IP address and browser details are
+              combined with a random value that changes every day and then
+              irreversibly scrambled; the IP address and browser details
+              themselves are never stored, and the scrambled value cannot be
+              linked across days. These records are kept for 90 days, are
+              not shared with anyone, and are not collected if your browser
+              sends a Do Not Track or Global Privacy Control signal.
             </p>
             <p className="mt-3 text-marketing-navy-900/75">
               We advertise on Google Search (Google Ads). When you click
@@ -582,7 +601,7 @@ export default function PrivacyPage() {
           </div>
 
           <p className="text-xs text-marketing-navy-900/60">
-            Last updated: September 21, 2026.
+            Last updated: October 17, 2026.
           </p>
         </div>
       </Section>

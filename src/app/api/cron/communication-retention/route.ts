@@ -3,6 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { isValidCronRequest } from "@/lib/cron-auth";
 import { sendSecurityAlert } from "@/lib/security-alert";
 import { DEMO_PARTIAL_RETENTION_DAYS } from "@/lib/marketing/demo-partial";
+import { PAGE_VIEW_RETENTION_DAYS } from "@/lib/marketing/page-view";
 
 export const dynamic = "force-dynamic";
 
@@ -65,7 +66,17 @@ export async function GET(request: Request) {
     });
   }
 
+  // Same non-fatal pattern for our own first-party page-view counter: raw rows are kept
+  // PAGE_VIEW_RETENTION_DAYS (90) and only the daily visitor-hash salts are dropped sooner.
+  const pageViewsPurged = await adminClient.rpc("purge_old_page_views", { p_days: PAGE_VIEW_RETENTION_DAYS });
+  if (pageViewsPurged.error) {
+    void sendSecurityAlert("Communication-retention cron (page views purge) failed", {
+      error: pageViewsPurged.error.message,
+    });
+  }
+
   return NextResponse.json({
+    page_views_purged: pageViewsPurged.error ? null : pageViewsPurged.data,
     archived: archived.data,
     purged: purged.data,
     demo_partial_leads_purged: partialLeadsPurged.error ? null : partialLeadsPurged.data,
