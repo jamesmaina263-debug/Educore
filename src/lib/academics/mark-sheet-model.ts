@@ -10,6 +10,9 @@
 //  * Total  = sum of the learner's entered numeric scores.
 //  * Average and positions come straight from class_rankings (the same source the report cards
 //    and portal read), so the sheet reconciles with them. They only exist for numeric exams.
+//    The average is the mean of each entered subject as a PERCENTAGE of that subject's maximum
+//    (20261018120000_class_rankings_percentage_average.sql), so subjects out of different
+//    maximums count equally. Total stays the sum of raw marks.
 //  * Subject mean = mean of ENTERED scores only (missing excluded), 1 decimal place.
 //  * Competency-based exams get a band distribution per subject instead of a mean, and no
 //    average/position: a band has no meaningful number to average (by design, see
@@ -221,7 +224,7 @@ export function markSheetExportRows(model: MarkSheetModel): Record<string, strin
     }
     if (numeric) row["Total"] = l.total ?? MISSING;
     if (model.showRanking) {
-      row["Average"] = l.average ?? MISSING;
+      row["Average %"] = l.average ?? MISSING;
       row["Position"] = l.rankInStream ?? MISSING;
     }
     return row;
