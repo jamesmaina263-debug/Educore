@@ -23,6 +23,7 @@ import {
   Menu,
   FileUp,
   ShieldCheck,
+  Hourglass,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -77,6 +78,7 @@ const NAV_GROUPS: AdminNavGroup[] = [
       { href: "/admin/demo-requests", label: "Requests", icon: Inbox },
       { href: "/admin/leads", label: "Leads", icon: UserPlus },
       { href: "/admin/sales-pipeline", label: "Sales Pipeline", icon: Briefcase },
+      { href: "/admin/trials", label: "Trial Follow-up", icon: Hourglass },
       { href: "/admin/outreach", label: "Outreach", icon: Compass },
     ],
   },
