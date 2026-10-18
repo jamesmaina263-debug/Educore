@@ -14,6 +14,7 @@ import {
   deleteOutboundProspect,
   enrichOutboundProspects,
   discoverSchoolsByCounty,
+  discoverSchoolsFromDataset,
   importDiscoveredSchools,
   importOutboundProspects,
   loadProspectContact,
@@ -167,6 +168,11 @@ export function AdminOutreach({
   > {
     if (!isKenyaCounty(county) || !isOwnershipFilter(discoverOwnership)) return { error: "Choose a county first." };
     const kindsTyped = kinds as DiscoveryKinds;
+
+    // 1) Our own saved map data: instant and never "busy". Only when it has nothing for this county do we
+    // go to the live map servers below.
+    const saved = await discoverSchoolsFromDataset(county, kinds, discoverOwnership);
+    if (!("error" in saved && saved.unavailable)) return saved;
 
     const fetched = await fetchOverpassJson(overpassQueryFor(county, kindsTyped), { budgetMs: 50_000 });
     if (fetched.ok) {

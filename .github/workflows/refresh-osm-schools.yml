@@ -1,8 +1,9 @@
 name: Refresh OSM schools dataset
 
 # Builds src/data/osm-schools-ke.json (named schools + kindergartens per Kenyan county, from the Geofabrik
-# Kenya OpenStreetMap extract) and uploads it as a build artifact. Manual only: download the artifact,
-# commit it on a branch and open a normal PR so CI and review apply. Nothing here touches production.
+# Kenya OpenStreetMap extract), uploads it as an artifact and pushes ONLY that file to the branch
+# data/osm-schools-ke. Manual only: open a normal PR from that branch so CI and review apply. Nothing here
+# touches main or production.
 # Suggested cadence: every few months, or before a big outreach push.
 
 on:
@@ -12,7 +13,7 @@ on:
     paths: [scripts/build_osm_schools.py, .github/workflows/refresh-osm-schools.yml]
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
@@ -42,3 +43,13 @@ jobs:
           name: osm-schools-ke
           path: src/data/osm-schools-ke.json
           retention-days: 30
+
+      - name: Push dataset to data/osm-schools-ke
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout --orphan data-tmp
+          git rm -rf --cached . >/dev/null
+          git add -f src/data/osm-schools-ke.json
+          git commit -q -m "data: refresh OSM schools dataset"
+          git push -f origin data-tmp:data/osm-schools-ke
