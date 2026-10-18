@@ -7,7 +7,7 @@ import type { ReportCardDocumentData } from "@/lib/academics/report-card-documen
 export function ReportCardDocumentSet({ docs, backHref }: { docs: ReportCardDocumentData[]; backHref: string }) {
   return (
     <div className="report-card-sheet" style={{ background: "#f4f4f5", minHeight: "100vh", padding: "1.5rem", fontFamily: "system-ui, sans-serif" }}>
-      <div className="print:hidden" style={{ maxWidth: 794, margin: "0 auto 12px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+      <div className="rc-toolbar print:hidden" style={{ maxWidth: 794, margin: "0 auto 12px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <Link href={backHref} style={{ fontSize: 13, color: "#52525b" }}>
           ← Back
         </Link>
@@ -20,6 +20,8 @@ export function ReportCardDocumentSet({ docs, backHref }: { docs: ReportCardDocu
         @page { size: A4; margin: 10mm; }
         @media print {
           body { background: #fff !important; }
+          /* The toolbar sets display:flex inline, which beats the print:hidden utility class, so hide it explicitly. */
+          .rc-toolbar { display: none !important; }
           .report-card-sheet { background: #fff !important; padding: 0 !important; min-height: 0 !important; }
           .report-card-page { box-shadow: none !important; border: none !important; margin: 0 !important; max-width: none !important; page-break-after: always; break-after: page; }
           .report-card-page:last-of-type { page-break-after: auto; break-after: auto; }

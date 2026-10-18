@@ -33,6 +33,11 @@ describe("ReportCardDocumentSet", () => {
     expect(out).toContain("DRAFT");
     expect(out).toContain("Pending approval.");
   });
+  it("hides the Back link / print toolbar when printing (inline display must not defeat it)", () => {
+    const out = html([doc()]);
+    expect(out).toContain("rc-toolbar");
+    expect(out).toMatch(/@media print[\s\S]*\.rc-toolbar\s*\{\s*display:\s*none\s*!important/);
+  });
   it("renders one page per student and omits the logo when the school has none", () => {
     const out = html([doc(), doc({ student: { id: "s2", fullName: "Ben Bett", admissionNumber: "2", classLabel: "Grade 6 A" }, school: { name: "Gititu High", logoUrl: null, primaryColor: null, address: null, phone: null } })]);
     expect((out.match(/report-card-page/g) ?? []).length).toBeGreaterThanOrEqual(2);
