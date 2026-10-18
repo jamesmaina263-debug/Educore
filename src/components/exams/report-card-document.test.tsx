@@ -6,6 +6,7 @@ import type { ReportCardDocumentData } from "@/lib/academics/report-card-documen
 const doc = (over: Partial<ReportCardDocumentData> = {}): ReportCardDocumentData => ({
   school: { name: "Gititu High", logoUrl: "https://x/logo.png", primaryColor: "#123456", address: "Box 1", phone: "0700" },
   exam: { id: "e1", name: "Mid-term", termName: "Term 2" },
+  details: { assessment: "Mid-term (Exam)", termYear: "Term 2, 2027", grading: "Competency-based (CBC)", generatedAt: "2026-10-18T12:00:00.000Z", classSize: 2 },
   student: { id: "s1", fullName: "Amy Abel", admissionNumber: "1", classLabel: "Grade 6 A" },
   subjects: [{ subject: "Mathematics", score: null, grade: "A — Exceeding Expectation" }],
   competencies: [],
@@ -32,6 +33,17 @@ describe("ReportCardDocumentSet", () => {
     const out = html([doc({ released: false, comment: null })]);
     expect(out).toContain("DRAFT");
     expect(out).toContain("Pending approval.");
+  });
+  it("shows the same assessment details as the class mark sheet header", () => {
+    const out = html([doc()]);
+    for (const text of ["Assessment:", "Mid-term (Exam)", "Term / Year:", "Term 2, 2027", "Grading:", "Competency-based (CBC)", "Class:", "Grade 6 A", "Learners:", "Generated:", "18 Oct 2026"]) {
+      expect(out).toContain(text);
+    }
+  });
+  it("leaves out Learners when the class size isn't loaded (parent portal)", () => {
+    const out = html([doc({ details: { ...doc().details, classSize: null } })]);
+    expect(out).not.toContain("Learners:");
+    expect(out).toContain("Assessment:");
   });
   it("hides the Back link / print toolbar when printing (inline display must not defeat it)", () => {
     const out = html([doc()]);
