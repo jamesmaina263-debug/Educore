@@ -11,21 +11,8 @@ import { tagSentryRequestContext } from "@/lib/observability/sentry-context";
 // absence of a 'kicd_licensed' content_source option.
 // ---------------------------------------------------------------------------
 
-export const REMARK_BANK_CATEGORIES = [
-  { value: "strength", label: "Strength" },
-  { value: "progress", label: "Progress" },
-  { value: "needs_support", label: "Needs Support" },
-  { value: "communication_and_collaboration", label: "Communication & Collaboration" },
-  { value: "critical_thinking_and_problem_solving", label: "Critical Thinking & Problem Solving" },
-  { value: "creativity_and_imagination", label: "Creativity & Imagination" },
-  { value: "citizenship", label: "Citizenship" },
-  { value: "digital_literacy", label: "Digital Literacy" },
-  { value: "learning_to_learn", label: "Learning to Learn" },
-  { value: "self_efficacy", label: "Self-Efficacy" },
-  { value: "general", label: "General" },
-] as const;
-
-export type RemarkBankCategory = (typeof REMARK_BANK_CATEGORIES)[number]["value"];
+// NOTE: REMARK_BANK_CATEGORIES lives in @/lib/remark-bank-categories. A "use server" file may only
+// export async functions (Next.js throws at runtime otherwise, which broke report-card generation).
 
 export interface RemarkBankEntry {
   id: string;
