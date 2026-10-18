@@ -26,6 +26,7 @@
 // country here is Kenya, so .co.ke is included. Anything else a visitor's
 // browser needs will show up as a violation report at /api/csp-report.
 import { readdirSync } from "node:fs";
+import { OVERPASS_ENDPOINTS } from "./outbound/overpass-client";
 
 const GOOGLE_ADS = {
   scriptSrc: ["https://www.googleadservices.com", "https://www.google.com"],
@@ -40,12 +41,20 @@ const GOOGLE_ADS = {
   frameSrc: ["https://www.googletagmanager.com"],
 } as const;
 
+// /admin/outreach only: the browser fetches OpenStreetMap school data straight from the public Overpass
+// servers (a cloud server's shared IP is often refused by them; the admin's own connection is not).
+// Kept off the base policy for the same reason as the Google hosts above: the rest of the admin console
+// shows real student/financial data and shouldn't be able to talk to third-party hosts.
+const OUTREACH_CONNECT_SRC = OVERPASS_ENDPOINTS.map((e) => new URL(e).origin);
+
 export function buildCsp({
   supabaseOrigin,
   marketing = false,
+  outreach = false,
 }: {
   supabaseOrigin: string;
   marketing?: boolean;
+  outreach?: boolean;
 }): string {
   const ads = marketing ? GOOGLE_ADS : { scriptSrc: [], connectSrc: [], frameSrc: [] };
   const join = (...parts: readonly string[]) => parts.join(" ");
@@ -87,6 +96,7 @@ export function buildCsp({
     join(
       `connect-src 'self' ${supabaseOrigin} https://*.ingest.de.sentry.io https://*.ingest.sentry.io https://*.googletagmanager.com https://*.google-analytics.com https://*.analytics.google.com`,
       ...ads.connectSrc,
+      ...(outreach ? OUTREACH_CONNECT_SRC : []),
     ),
     "frame-ancestors 'none'",
     "base-uri 'self'",
@@ -122,3 +132,6 @@ export function marketingHeaderSources(marketingDir: string): string[] {
   }
   return ["/", ...[...names, "signup"].sort().map((name) => `/${name}/:path*`)];
 }
+
+/** The one admin page that may call the public map servers from the browser. */
+export const OUTREACH_HEADER_SOURCE = "/admin/outreach";

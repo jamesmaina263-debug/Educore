@@ -9,6 +9,7 @@ import {
   greetingName,
   normalizePhone,
   normalizeManualContacts,
+  sanitizeProspectRows,
   normalizeSchoolLevel,
   normalizeSchoolType,
   normalizeWebsite,
@@ -300,5 +301,46 @@ describe("normalizeManualContacts", () => {
     expect(normalizeManualContacts({ phone: "12" })).toMatchObject({ ok: false, error: expect.stringContaining("phone") });
     expect(normalizeManualContacts({ website: "not a url" })).toMatchObject({ ok: false, error: expect.stringContaining("website") });
     expect(normalizeManualContacts({ contact_name: "x".repeat(201) }).ok).toBe(false);
+  });
+});
+
+describe("sanitizeProspectRows (rows sent from the browser are never trusted)", () => {
+  const good = {
+    school_name: "Murera View Academy",
+    town_county: "Nyeri",
+    school_type: "private",
+    school_level: "primary",
+    website: "murera.ac.ke",
+    phone: "0712 345 678",
+    email: "Office@Murera.ac.ke",
+    contact_name: null,
+    contact_role: null,
+    student_count: 300,
+  };
+  it("keeps good rows and normalises them", () => {
+    expect(sanitizeProspectRows([good])[0]).toMatchObject({
+      school_name: "Murera View Academy",
+      school_type: "private",
+      school_level: "primary",
+      website: "https://murera.ac.ke",
+      phone: "0712345678",
+      email: "office@murera.ac.ke",
+      student_count: 300,
+    });
+  });
+  it("drops rows without a usable name, and non-array input", () => {
+    expect(sanitizeProspectRows([{ ...good, school_name: "  " }, null, 5, "x", { ...good, school_name: "x".repeat(201) }])).toEqual([]);
+    expect(sanitizeProspectRows("nope")).toEqual([]);
+    expect(sanitizeProspectRows(undefined)).toEqual([]);
+  });
+  it("nulls out invalid enum values, bad emails/phones/URLs and bad numbers instead of trusting them", () => {
+    const r = sanitizeProspectRows([
+      { ...good, school_type: "government", school_level: "tertiary", email: "nope", phone: "12", website: "not a url", student_count: -4 },
+    ])[0];
+    expect(r).toMatchObject({ school_type: null, school_level: null, email: null, phone: null, website: null, student_count: null });
+  });
+  it("never returns more than the import cap", () => {
+    const many = Array.from({ length: MAX_IMPORT_ROWS + 50 }, (_, i) => ({ ...good, school_name: `School ${i}` }));
+    expect(sanitizeProspectRows(many)).toHaveLength(MAX_IMPORT_ROWS);
   });
 });

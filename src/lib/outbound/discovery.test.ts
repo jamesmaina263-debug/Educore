@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   KENYA_COUNTIES,
   buildOverpassQuery,
+  overpassQueryFor,
   classifyLevel,
   discoverySourceNote,
   isKenyaCounty,
@@ -21,6 +22,29 @@ describe("buildOverpassQuery", () => {
   it("makes hyphens, spaces and apostrophes wildcard-tolerant", () => {
     expect(buildOverpassQuery("Elgeyo-Marakwet", "all")).toContain("^Elgeyo.Marakwet(");
     expect(buildOverpassQuery("Murang'a", "all")).toContain("^Murang.a(");
+  });
+});
+
+describe("query variants", () => {
+  it("area variant keeps the proven precomputed-area form", () => {
+    const q = buildOverpassQuery("Laikipia", "all", "area");
+    expect(q).toContain('area["ISO3166-1"="KE"]');
+    expect(q).toContain("(area.ke)->.county");
+    expect(q).not.toContain("map_to_area");
+  });
+  it("derived variant avoids the area index: boundary relation in a Kenya box, converted on the fly", () => {
+    const q = buildOverpassQuery("Laikipia", "kindergartens", "derived");
+    expect(q).toContain('rel["boundary"="administrative"]["admin_level"="4"]["name"~"^Laikipia( City)?( County)?$",i](-5.0,33.8,5.3,42.1);');
+    expect(q).toContain("map_to_area->.county;");
+    expect(q).not.toContain('area["ISO3166-1"');
+    expect(q).toContain("^(kindergarten)$");
+    expect(q).toContain("(area.county)");
+  });
+  it("sends the primary server the proven form and every mirror the index-free form", () => {
+    const f = overpassQueryFor("Nyeri", "all");
+    expect(f("https://overpass-api.de/api/interpreter")).toContain("(area.ke)->.county");
+    expect(f("https://overpass.kumi.systems/api/interpreter")).toContain("map_to_area");
+    expect(f("https://overpass.private.coffee/api/interpreter")).toContain("map_to_area");
   });
 });
 
