@@ -1,6 +1,6 @@
 import type { CellDef, RowInput } from "jspdf-autotable";
 import type { MarkSheetModel } from "@/lib/academics/mark-sheet-model";
-import { MISSING } from "@/lib/academics/mark-sheet-model";
+import { MISSING, assessmentTitle as sharedAssessmentTitle, gradingLabel } from "@/lib/academics/mark-sheet-model";
 
 // Lays out a MarkSheetModel as a real, text-selectable PDF with jsPDF + jspdf-autotable (the same
 // libraries the generic export already used; no new dependency). It does no calculation of its
@@ -23,12 +23,8 @@ function hexToRgb(hex: string | null): [number, number, number] {
   return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
 }
 
-const EXAM_TYPE_LABELS: Record<string, string> = { cat: "CAT", exam: "Exam", mock: "Mock", other: "Assessment" };
-
-// "CAT 1" already says it is a CAT; only append the type when the name doesn't.
 function assessmentTitle(model: MarkSheetModel): string {
-  const typeLabel = EXAM_TYPE_LABELS[model.exam.examType] ?? model.exam.examType;
-  return model.exam.name.toLowerCase().includes(typeLabel.toLowerCase()) ? model.exam.name : `${model.exam.name} (${typeLabel})`;
+  return sharedAssessmentTitle(model.exam.name, model.exam.examType);
 }
 
 function formatDate(iso: string): string {
@@ -103,7 +99,7 @@ export async function buildMarkSheetPdf(model: MarkSheetModel, logo: LoadedLogo 
   }
   y += 5.5;
   const termYear = [model.exam.termName, model.exam.academicYearName].filter(Boolean).join(", ") || MISSING;
-  const grading = model.kind === "numeric" ? "Marks-based" : model.kind === "cbc" ? "Competency-based (CBC)" : model.kind === "mixed" ? "Mixed marks and competency" : "No marks entered yet";
+  const grading = gradingLabel(model.kind);
   const streams = [...new Set(model.learners.map((l) => l.streamName))];
   const left = [
     ["Assessment", assessmentTitle(model)],

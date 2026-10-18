@@ -94,6 +94,30 @@ describe("loadReportCardDocuments", () => {
     expect(doc.comment).toBeNull();
   });
 
+  it("builds the assessment details block (worded like the mark sheet header)", async () => {
+    const { client } = fakeSupabase({
+      ...base,
+      exams: { id: "e1", name: "End-Term", exam_type: "exam", terms: { name: "Term 3", academic_years: { name: "2027" } } },
+      report_cards: [{ student_id: "s1", class_id: "c1", comment: "ok", comment_source: "teacher_approved" }],
+    });
+    const [doc] = await loadReportCardDocuments(client, "e1", { studentId: "s1" });
+    expect(doc.details).toMatchObject({ assessment: "End-Term (Exam)", termYear: "Term 3, 2027", grading: "Mixed marks and competency", classSize: null });
+    expect(Number.isNaN(Date.parse(doc.details.generatedAt))).toBe(false);
+  });
+
+  it("reads the class size only when asked (staff print), counting active learners across the class's streams", async () => {
+    const results = {
+      ...base,
+      students: base.students.map((st) => ({ ...st, current_class_id: "st1" })),
+      streams: [{ id: "st1", class_id: "c1" }],
+      report_cards: [{ student_id: "s1", class_id: "c1", comment: "ok", comment_source: "teacher_approved" }],
+    };
+    const [without] = await loadReportCardDocuments(fakeSupabase(results).client, "e1", { studentId: "s1" });
+    expect(without.details.classSize).toBeNull();
+    const [withSize] = await loadReportCardDocuments(fakeSupabase(results).client, "e1", { studentId: "s1" }, { includeClassSize: true });
+    expect(withSize.details.classSize).toBe(2);
+  });
+
   it("performs reads only", async () => {
     const { client, calls } = fakeSupabase({ ...base, report_cards: [{ student_id: "s1", comment: "c", comment_source: "teacher_approved" }] });
     await loadReportCardDocuments(client, "e1", { all: true });
