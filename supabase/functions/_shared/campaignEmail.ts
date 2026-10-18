@@ -8,7 +8,7 @@ export interface CampaignEmailInput {
   schoolName?: string | null;
   unsubscribeUrl: string;
   // Controls the footer wording only. Defaults to school owners (the original behaviour).
-  audience?: "owners" | "prospects";
+  audience?: "owners" | "prospects" | "outreach";
 }
 
 export function escapeHtml(s: string): string {
@@ -36,9 +36,11 @@ export function personalize(template: string, input: Pick<CampaignEmailInput, "r
 export function renderCampaignEmail(input: CampaignEmailInput): { text: string; html: string } {
   const body = personalize(input.body, input).trim();
   const footerLine =
-    input.audience === "prospects"
-      ? "You're receiving this because you asked about EduCore on our website."
-      : `You're receiving this because you're the owner of ${(input.schoolName ?? "").trim() || "your school"} on EduCore.`;
+    input.audience === "outreach"
+      ? `We're writing to ${(input.schoolName ?? "").trim() || "your school"} because its contact details are publicly listed and EduCore may be useful to you. If this isn't relevant, unsubscribe below and we won't email again.`
+      : input.audience === "prospects"
+        ? "You're receiving this because you asked about EduCore on our website."
+        : `You're receiving this because you're the owner of ${(input.schoolName ?? "").trim() || "your school"} on EduCore.`;
 
   const text = `${body}\n\n--\n${footerLine}\nUnsubscribe: ${input.unsubscribeUrl}\nEduCore - https://educoreafrica.com`;
 

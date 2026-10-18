@@ -50,3 +50,20 @@ describe("campaign email rendering", () => {
     expect(text).toContain("you're the owner of Tetu Bygrace Academy");
   });
 });
+
+describe("outreach audience footer", () => {
+  it("explains why a school is being emailed (not 'you asked on our website') and keeps the unsubscribe link", () => {
+    const { text, html } = renderCampaignEmail({
+      body: "Hello {{name}}, about {{school}}.",
+      recipientName: "Jane Doe",
+      schoolName: "Sunrise Academy",
+      unsubscribeUrl: "https://example.com/unsubscribe/abc",
+      audience: "outreach",
+    });
+    expect(text).toContain("Hello Jane, about Sunrise Academy.");
+    expect(text).toContain("publicly listed");
+    expect(text).not.toContain("asked about EduCore on our website");
+    expect(text).toContain("Unsubscribe: https://example.com/unsubscribe/abc");
+    expect(html).toContain("Unsubscribe");
+  });
+});

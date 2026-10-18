@@ -94,6 +94,25 @@ export interface MarkSheetModel {
 
 export const MISSING = "—";
 
+const EXAM_TYPE_LABELS: Record<string, string> = { cat: "CAT", exam: "Exam", mock: "Mock", other: "Assessment" };
+
+/** "CAT 1" already says it is a CAT; only append the type when the name doesn't. Shared by the mark sheet and the report card. */
+export function assessmentTitle(name: string, examType: string): string {
+  const typeLabel = EXAM_TYPE_LABELS[examType] ?? examType;
+  return name.toLowerCase().includes(typeLabel.toLowerCase()) ? name : `${name} (${typeLabel})`;
+}
+
+/** Numeric marks, CBC bands, both, or nothing -- decided from whichever marks are passed in. */
+export function assessmentKindOf(marks: { rawScore: number | null; bandLabel: string | null }[]): AssessmentKind {
+  const hasNumeric = marks.some((m) => m.rawScore !== null);
+  const hasBandOnly = marks.some((m) => m.rawScore === null && m.bandLabel !== null);
+  return hasNumeric && hasBandOnly ? "mixed" : hasNumeric ? "numeric" : hasBandOnly ? "cbc" : "empty";
+}
+
+export function gradingLabel(kind: AssessmentKind): string {
+  return kind === "numeric" ? "Marks-based" : kind === "cbc" ? "Competency-based (CBC)" : kind === "mixed" ? "Mixed marks and competency" : "No marks entered yet";
+}
+
 export function round(n: number, dp: number): number {
   const f = 10 ** dp;
   return Math.round((n + Number.EPSILON) * f) / f;
@@ -109,9 +128,7 @@ export function buildMarkSheetModel(input: RawMarkSheetInput): MarkSheetModel {
   const marksByKey = new Map(input.marks.map((m) => [`${m.studentId}:${m.subjectId}`, m]));
   const rankByStudent = new Map(input.rankings.map((r) => [r.studentId, r]));
 
-  const hasNumeric = input.marks.some((m) => m.rawScore !== null);
-  const hasBandOnly = input.marks.some((m) => m.rawScore === null && m.bandLabel !== null);
-  const kind: AssessmentKind = hasNumeric && hasBandOnly ? "mixed" : hasNumeric ? "numeric" : hasBandOnly ? "cbc" : "empty";
+  const kind: AssessmentKind = assessmentKindOf(input.marks);
 
   const legendMap = new Map<string, string>();
   const noteBand = (label: string | null) => {

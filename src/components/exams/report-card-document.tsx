@@ -7,7 +7,7 @@ import type { ReportCardDocumentData } from "@/lib/academics/report-card-documen
 export function ReportCardDocumentSet({ docs, backHref }: { docs: ReportCardDocumentData[]; backHref: string }) {
   return (
     <div className="report-card-sheet" style={{ background: "#f4f4f5", minHeight: "100vh", padding: "1.5rem", fontFamily: "system-ui, sans-serif" }}>
-      <div className="print:hidden" style={{ maxWidth: 794, margin: "0 auto 12px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+      <div className="rc-toolbar print:hidden" style={{ maxWidth: 794, margin: "0 auto 12px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <Link href={backHref} style={{ fontSize: 13, color: "#52525b" }}>
           ← Back
         </Link>
@@ -20,14 +20,20 @@ export function ReportCardDocumentSet({ docs, backHref }: { docs: ReportCardDocu
         @page { size: A4; margin: 10mm; }
         @media print {
           body { background: #fff !important; }
+          /* The toolbar sets display:flex inline, which beats the print:hidden utility class, so hide it explicitly. */
+          .rc-toolbar { display: none !important; }
           .report-card-sheet { background: #fff !important; padding: 0 !important; min-height: 0 !important; }
           .report-card-page { box-shadow: none !important; border: none !important; margin: 0 !important; max-width: none !important; page-break-after: always; break-after: page; }
           .report-card-page:last-of-type { page-break-after: auto; break-after: auto; }
-          .rc-accent { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; color-adjust: exact !important; }
+          .rc-accent, .rc-details { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; color-adjust: exact !important; }
         }
       `}</style>
     </div>
   );
+}
+
+function formatDate(iso: string): string {
+  return new Date(iso).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
 }
 
 function ReportCardPage({ data }: { data: ReportCardDocumentData }) {
@@ -60,11 +66,30 @@ function ReportCardPage({ data }: { data: ReportCardDocumentData }) {
       )}
 
       <div style={{ padding: 24 }}>
+        {/* Same details block as the class mark sheet header: assessment / term / grading on the left,
+            class / learners / generated on the right. Learners is omitted where it isn't loaded. */}
+        <div
+          className="rc-details"
+          style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gridTemplateRows: "repeat(3, auto)", gridAutoFlow: "column", columnGap: 24, rowGap: 4, padding: "10px 12px", marginBottom: 16, border: "1px solid #e4e4e7", borderRadius: 6, background: "#fafafa", fontSize: 12 }}
+        >
+          {[
+            ["Assessment", data.details.assessment],
+            ["Term / Year", data.details.termYear],
+            ["Grading", data.details.grading],
+            ["Class", data.student.classLabel],
+            ...(data.details.classSize !== null ? [["Learners", String(data.details.classSize)]] : []),
+            ["Generated", formatDate(data.details.generatedAt)],
+          ].map(([label, value]) => (
+            <p key={label} style={{ margin: 0 }}>
+              <strong>{label}:</strong> {value}
+            </p>
+          ))}
+        </div>
+
         <div style={{ display: "flex", justifyContent: "space-between", gap: 12, marginBottom: 16 }}>
           <div>
             <p style={{ margin: 0, fontSize: 15, fontWeight: 600 }}>{data.student.fullName}</p>
             <p style={{ margin: 0, fontSize: 12, color: "#71717a" }}>Adm. No. {data.student.admissionNumber ?? "—"}</p>
-            <p style={{ margin: 0, fontSize: 12, color: "#71717a" }}>Class: {data.student.classLabel}</p>
           </div>
           {(data.average !== null || data.rank !== null) && (
             <div style={{ textAlign: "right", fontSize: 12 }}>

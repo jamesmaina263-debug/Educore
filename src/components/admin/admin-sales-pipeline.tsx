@@ -17,6 +17,8 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { LeadFormDialog, LostReasonDialog, type RepOption } from "@/components/admin/sales-lead-dialogs";
+import { LeadDemos } from "@/components/admin/lead-demos";
+import type { DemoRow } from "@/lib/sales/demos";
 import {
   addSalesLeadActivity,
   deleteSalesLead,
@@ -85,12 +87,14 @@ const NEED_WORKING_AS = "Choose who you are working as (top right of this page) 
 export function AdminSalesPipeline({
   leads,
   activities,
+  demos = [],
   reps,
   today,
   weekStartIso,
 }: {
   leads: SalesLeadRow[];
   activities: SalesActivityRow[];
+  demos?: DemoRow[];
   reps: RepOption[];
   today: string;
   weekStartIso: string;
@@ -124,6 +128,16 @@ export function AdminSalesPipeline({
     }
     return map; // activities arrive newest-first, so each list is newest-first too
   }, [activities]);
+
+  const demosByLead = useMemo(() => {
+    const map = new Map<string, DemoRow[]>();
+    for (const d of demos) {
+      const list = map.get(d.lead_id);
+      if (list) list.push(d);
+      else map.set(d.lead_id, [d]);
+    }
+    return map;
+  }, [demos]);
 
   const counts = useMemo(() => funnelCounts(leads), [leads]);
   const overdueCount = useMemo(
@@ -454,6 +468,7 @@ export function AdminSalesPipeline({
                           <LeadDetail
                             lead={lead}
                             activities={leadActivities}
+                            demos={demosByLead.get(lead.id) ?? []}
                             repNameById={repNameById}
                             workingAs={validWorkingAs}
                             onDelete={() => setDeleteTarget(lead)}
@@ -521,6 +536,7 @@ export function AdminSalesPipeline({
 function LeadDetail({
   lead,
   activities,
+  demos,
   repNameById,
   workingAs,
   onDelete,
@@ -528,6 +544,7 @@ function LeadDetail({
 }: {
   lead: SalesLeadRow;
   activities: SalesActivityRow[];
+  demos: DemoRow[];
   repNameById: Map<string, string>;
   workingAs: string;
   onDelete: () => void;
@@ -594,6 +611,14 @@ function LeadDetail({
       </div>
 
       <div className="flex flex-col gap-3">
+        <LeadDemos
+          leadId={lead.id}
+          leadClosed={lead.stage === "paid" || lead.stage === "lost"}
+          demos={demos}
+          repNameById={repNameById}
+          workingAs={workingAs}
+          onChanged={onLogged}
+        />
         <div className="rounded-md border border-border bg-background p-3">
           <p className="mb-2 text-[0.8125rem] font-semibold">Log an activity</p>
           <div className="grid gap-2">

@@ -1,6 +1,8 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { AdminOutreach, type OutboundProspectRow } from "@/components/admin/admin-outreach";
+import { AdminOutreachEmailPanel } from "@/components/admin/admin-outreach-email-panel";
+import { getOutreachEmailAudience } from "./actions";
 import { summariseContactLog, type ContactLogRow } from "@/lib/outbound/contact";
 
 // "Find contacts" fetches several web pages per school and calls Gemini; allow the full minute.
@@ -38,6 +40,8 @@ export default async function AdminOutreachPage() {
       .order("created_at", { ascending: false })
       .limit(5000),
   ]);
+  // Tolerates the outreach-email migration not being applied yet: the panel then shows the error only.
+  const emailAudience = await getOutreachEmailAudience();
   const contactEnabled = !logRes.error;
   const contactSummary = Object.fromEntries(summariseContactLog((logRes.data ?? []) as ContactLogRow[]));
 
@@ -63,9 +67,14 @@ export default async function AdminOutreachPage() {
         <h1 className="text-lg font-semibold">Outreach</h1>
         <p className="text-sm text-muted-foreground">
           Find schools and kindergartens, let AI score them and draft a first message, then approve the ones worth
-          pursuing. Nothing is ever sent from this page; copying a draft or marking it sent is logged by hand so nobody is contacted twice. Visible to platform staff only.
+          pursuing. Nothing is sent automatically: emails go only to schools you approved, after you review them and click send; copying a draft or marking it sent is logged so nobody is contacted twice. Visible to platform staff only.
         </p>
       </div>
+      <AdminOutreachEmailPanel
+        initialCandidates={"success" in emailAudience ? emailAudience.candidates : []}
+        initialQuota={"success" in emailAudience ? emailAudience.quota : { cap: 0, used: 0, remaining: 0 }}
+        initialError={"error" in emailAudience ? emailAudience.error : null}
+      />
       <AdminOutreach
         prospects={(prospectsRes.data ?? []) as OutboundProspectRow[]}
         reps={(teamRes.data ?? []) as { id: string; name: string }[]}
