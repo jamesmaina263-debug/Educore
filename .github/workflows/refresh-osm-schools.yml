@@ -1,0 +1,52 @@
+name: Refresh OSM schools dataset
+
+# Builds src/data/osm-schools-ke.json (named schools + kindergartens per Kenyan county, from the Geofabrik
+# Kenya OpenStreetMap extract), uploads it as an artifact and pushes ONLY that file to the branch
+# data/osm-schools-ke. Manual only: open a normal PR from that branch so CI and review apply. Nothing here
+# touches main or production.
+# Suggested cadence: every few months, or before a big outreach push.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq osmium-tool
+          pip install shapely
+
+      - name: Download Kenya extract
+        run: curl -fsSL --retry 5 --retry-delay 10 -o kenya-latest.osm.pbf https://download.geofabrik.de/africa/kenya-latest.osm.pbf
+
+      - name: Build dataset
+        run: python3 scripts/build_osm_schools.py kenya-latest.osm.pbf src/data/osm-schools-ke.json
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: osm-schools-ke
+          path: src/data/osm-schools-ke.json
+          retention-days: 30
+
+      - name: Push dataset to data/osm-schools-ke
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout --orphan data-tmp
+          git rm -rf --cached . >/dev/null
+          git add -f src/data/osm-schools-ke.json
+          git commit -q -m "data: refresh OSM schools dataset"
+          git push -f origin data-tmp:data/osm-schools-ke

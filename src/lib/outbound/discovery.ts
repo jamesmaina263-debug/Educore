@@ -170,3 +170,9 @@ export function parseOverpassResponse(
 export function discoverySourceNote(county: string, date: Date): string {
   return `OpenStreetMap contributors (ODbL), ${county} County, discovered ${date.toISOString().slice(0, 10)}`;
 }
+
+/** Source note for rows staged from our saved OpenStreetMap snapshot (same ODbL attribution, plus its date). */
+export function datasetSourceNote(county: string, date: Date, snapshotDate: string | null): string {
+  const snap = snapshotDate && /^\d{4}-\d{2}-\d{2}$/.test(snapshotDate) ? `, map data snapshot ${snapshotDate}` : "";
+  return `OpenStreetMap contributors (ODbL), ${county} County, discovered ${date.toISOString().slice(0, 10)}${snap}`;
+}

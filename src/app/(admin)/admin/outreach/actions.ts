@@ -14,6 +14,7 @@ import {
 import { isUuid } from "@/lib/sales/pipeline";
 import {
   overpassQueryFor,
+  datasetSourceNote,
   discoverySourceNote,
   isKenyaCounty,
   parseOverpassResponse,
@@ -30,6 +31,7 @@ import {
 } from "@/lib/outbound/enrichment";
 import { isOwnershipFilter, ownershipSignal, passesOwnershipFilter } from "@/lib/outbound/ownership";
 import { fetchOverpassJson } from "@/lib/outbound/overpass-client";
+import { bundledCountySchools } from "@/lib/outbound/osm-dataset";
 import { safeFetchPage } from "@/lib/outbound/safe-fetch";
 import {
   isContactChannel,
@@ -207,6 +209,60 @@ export async function importDiscoveredSchools(
     truncated: safeTruncated,
     hidden,
     withContact: kept.filter((x) => x.email || x.phone).length,
+  };
+}
+
+/**
+ * Discover from OUR saved OpenStreetMap snapshot (no network call, so it can't be "busy"). Returns
+ * `{ unavailable: true }` when the snapshot has no data for the county so the caller can fall back to
+ * the live map servers; any other error is final (the live lookup would say the same thing).
+ */
+export async function discoverSchoolsFromDataset(
+  county: string,
+  kinds: string,
+  ownership: string = "hide_public",
+): Promise<
+  | { error: string; unavailable?: true }
+  | { success: true; found: number; inserted: number; skipped: number; truncated: number; hidden: number; withContact: number }
+> {
+  if (!isKenyaCounty(county)) return { error: "Choose a county from the list." };
+  if (kinds !== "all" && kinds !== "kindergartens" && kinds !== "schools") return { error: "Invalid school kind." };
+  if (!isOwnershipFilter(ownership)) return { error: "Invalid ownership filter." };
+
+  const local = bundledCountySchools(county, kinds as DiscoveryKinds);
+  if (!local) return { error: "No saved map data for this county.", unavailable: true };
+
+  const { rows, truncated, hidden } = parseOverpassResponse({ elements: local.elements }, county, ownership);
+  if (rows.length === 0) {
+    return {
+      error:
+        hidden > 0
+          ? `All ${hidden} schools found in ${county} look public, so the filter hid them. Choose "Everything" to see them.`
+          : `No named schools were found for ${county}. OpenStreetMap coverage varies by county.`,
+    };
+  }
+
+  const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
+  const { data: result, error } = await supabase.rpc("admin_import_outbound_prospects", {
+    p_rows: rows,
+    p_source_note: datasetSourceNote(county, new Date(), local.generated),
+  });
+  if (error) return { error: error.message };
+
+  const r = (result ?? {}) as { inserted?: number; skipped?: number };
+  const inserted = r.inserted ?? 0;
+  const skipped = r.skipped ?? 0;
+  void logAdminAction(supabase, "discover_outbound_prospects", { county, kinds, via: "dataset", ownership, found: rows.length, hidden, inserted, skipped });
+  revalidatePath(PATH);
+  return {
+    success: true,
+    found: rows.length,
+    inserted,
+    skipped,
+    truncated,
+    hidden,
+    withContact: rows.filter((x) => x.email || x.phone).length,
   };
 }
 
