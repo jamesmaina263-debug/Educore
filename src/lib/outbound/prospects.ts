@@ -246,8 +246,19 @@ export const OUTREACH_OFFER = {
 const OFFER_LINE = `Our pricing starts at KES ${OUTREACH_OFFER.pricePerStudentPerTermKes} per student per term, with a ${OUTREACH_OFFER.trialDays}-day free trial and no payment card required.`;
 
 // Links added to every draft. Fixed text (never written by the model) so they can't be altered or invented.
-const SIGNUP_URL = `${SITE_URL}/signup`;
-const CONTACT_URL = `${SITE_URL}/contact`;
+// Each carries UTM tags so a signup or contact-form lead can be traced back to outreach (the site stores
+// them first-touch: see src/lib/attribution.ts). utm_medium says which channel, utm_content which link.
+export type OutreachChannel = "email" | "whatsapp";
+export function outreachLink(path: "" | "/signup" | "/contact", channel: OutreachChannel): string {
+  const content = path === "" ? "home" : path.slice(1);
+  const q = new URLSearchParams({
+    utm_source: "outreach",
+    utm_medium: channel,
+    utm_campaign: "school_outreach",
+    utm_content: content,
+  });
+  return `${SITE_URL}${path}${path === "" ? "/" : ""}?${q.toString()}`;
+}
 
 const DEFAULT_OPENING_SCHOOL =
   "Managing admissions, student records, fee collection through M-Pesa, and end-of-term assessments can take considerable time for a school.";
@@ -303,8 +314,8 @@ export function assembleEmailBody(openingRaw: unknown, ctx: DraftContext = {}): 
     product,
     OFFER_LINE,
     "Would you be open to a brief online demonstration to see how EduCore could support your school?",
-    `Start your free trial: ${SIGNUP_URL}\nContact us: ${CONTACT_URL}`,
-    `Kind regards,\nEduCore Africa\n${SITE_URL}`,
+    `Start your free trial: ${outreachLink("/signup", "email")}\nContact us: ${outreachLink("/contact", "email")}`,
+    `Kind regards,\nEduCore Africa\n${outreachLink("", "email")}`,
     "If you would rather not hear from us, just reply and we will not contact you again.",
   ].join("\n\n");
 }
@@ -319,7 +330,16 @@ const WHATSAPP_PRODUCT = {
   full: "Our school management system brings together admissions, student attendance, M-Pesa fee collection, parent communication via SMS and WhatsApp, and exam management with CBC-supported and marks-based report cards.",
 } as const;
 
+// The stored draft is clipped at 1000 characters (parseScoringResponse). If an unusually long contact name would
+// push the message past that, drop the name rather than let the clip cut off the "reply STOP" opt-out line.
+const WHATSAPP_MAX = 1000;
+
 export function assembleWhatsApp(ctx: DraftContext = {}): string {
+  const full = buildWhatsApp(ctx);
+  return full.length <= WHATSAPP_MAX ? full : buildWhatsApp({ ...ctx, contact_name: null });
+}
+
+function buildWhatsApp(ctx: DraftContext): string {
   const level = normalizeSchoolLevel(ctx.school_level ?? null);
   const name = greetingName(ctx.contact_name, ctx.school_name);
   const who = level === "kindergarten" ? "Kenyan kindergartens and nursery schools" : "Kenyan schools";
@@ -329,9 +349,8 @@ export function assembleWhatsApp(ctx: DraftContext = {}): string {
     product,
     `Pricing starts at KES ${OUTREACH_OFFER.pricePerStudentPerTermKes} per student per term, and you can explore the system with a ${OUTREACH_OFFER.trialDays}-day free trial, with no payment card required.`,
     "Would you be open to a short demo to see how EduCore could support your school?",
-    `📝 Start your free trial: ${SIGNUP_URL}`,
-    `💬 Contact us: ${CONTACT_URL}`,
-    `🌐 ${SITE_URL}`,
+    `📝 Start your free trial: ${outreachLink("/signup", "whatsapp")}`,
+    `💬 Contact us: ${outreachLink("/contact", "whatsapp")}`,
     "If you’d prefer not to receive further messages, just reply STOP.",
   ].join("\n");
 }

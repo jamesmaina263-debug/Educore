@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { PUBLISHED_PRICE_KES_PER_STUDENT_TERM } from "@/lib/growth/product-facts";
 import { TRIAL_TERMS } from "@/lib/marketing/trial";
 import {
+  outreachLink,
   MAX_IMPORT_ROWS,
   OUTREACH_OFFER,
   assembleWhatsApp,
@@ -193,8 +194,8 @@ describe("parseScoringResponse + fixed draft template", () => {
     expect(body).toContain("supported CBC competency-based reporting and marks-based grading");
     expect(body).toContain("Would you be open to a brief online demonstration");
     expect(body).toContain("Kind regards,\nEduCore Africa\nhttps://");
-    expect(body).toContain("Start your free trial: https://www.educoreafrica.com/signup");
-    expect(body).toContain("Contact us: https://www.educoreafrica.com/contact");
+    expect(body).toContain("Start your free trial: https://www.educoreafrica.com/signup?utm_source=outreach&utm_medium=email&utm_campaign=school_outreach&utm_content=signup");
+    expect(body).toContain("Contact us: https://www.educoreafrica.com/contact?utm_source=outreach&utm_medium=email&utm_campaign=school_outreach&utm_content=contact");
     expect(body).toContain("just reply and we will not contact you again");
   });
 
@@ -254,12 +255,20 @@ describe("parseScoringResponse + fixed draft template", () => {
       "Our school management system brings together admissions, student attendance, M-Pesa fee collection, parent communication via SMS and WhatsApp, and exam management with CBC-supported and marks-based report cards.",
       "Pricing starts at KES 100 per student per term, and you can explore the system with a 30-day free trial, with no payment card required.",
       "Would you be open to a short demo to see how EduCore could support your school?",
-      "📝 Start your free trial: https://www.educoreafrica.com/signup",
-      "💬 Contact us: https://www.educoreafrica.com/contact",
-      "🌐 https://www.educoreafrica.com",
+      "📝 Start your free trial: https://www.educoreafrica.com/signup?utm_source=outreach&utm_medium=whatsapp&utm_campaign=school_outreach&utm_content=signup",
+      "💬 Contact us: https://www.educoreafrica.com/contact?utm_source=outreach&utm_medium=whatsapp&utm_campaign=school_outreach&utm_content=contact",
       "If you’d prefer not to receive further messages, just reply STOP.",
     ]);
     expect(w.length).toBeLessThan(1000);
+    // The stored draft is clipped at 1000 characters; the opt-out line must never be what gets cut.
+    expect(w.endsWith("just reply STOP.")).toBe(true);
+  });
+
+  it("never lets a very long contact name push the opt-out line past the 1000-character clip", () => {
+    const w = assembleWhatsApp({ school_name: "Tiny Tots", contact_name: "A".repeat(200), school_level: "kindergarten" });
+    expect(w.length).toBeLessThanOrEqual(1000);
+    expect(w.endsWith("just reply STOP.")).toBe(true);
+    expect(w.startsWith("Hello! ")).toBe(true);
   });
 
   it("uses a plain 'Hello!' greeting when there is no usable contact name", () => {
@@ -271,6 +280,15 @@ describe("parseScoringResponse + fixed draft template", () => {
     expect(parseScoringResponse("sure! here you go").ok).toBe(false);
     expect(parseScoringResponse(JSON.stringify({ ...good, email_subject: "" })).ok).toBe(false);
     expect(parseScoringResponse(JSON.stringify({ ...good, fit_score: "high" })).ok).toBe(false);
+  });
+});
+
+describe("outreachLink", () => {
+  it("tags each link with source, channel, campaign and which link it is", () => {
+    expect(outreachLink("/signup", "email")).toBe(
+      "https://www.educoreafrica.com/signup?utm_source=outreach&utm_medium=email&utm_campaign=school_outreach&utm_content=signup",
+    );
+    expect(outreachLink("", "whatsapp")).toContain("/?utm_source=outreach&utm_medium=whatsapp");
   });
 });
 
