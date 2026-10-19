@@ -14,6 +14,7 @@ const doc = (over: Partial<ReportCardDocumentData> = {}): ReportCardDocumentData
   rank: 2,
   released: true,
   comment: "Excellent progress",
+  options: { showRank: true, showCompetencies: true, showSignatures: true },
   ...over,
 });
 

@@ -1,4 +1,5 @@
 import type { createClient } from "@/lib/supabase/server";
+import { loadReportSettings } from "@/lib/academics/report-settings";
 import { assessmentKindOf, assessmentTitle, gradingLabel, MISSING } from "@/lib/academics/mark-sheet-model";
 
 // Loader + pure rules for the printable report card (staff print route and the parent portal
@@ -52,6 +53,8 @@ export interface ReportCardDocumentData {
   released: boolean;
   /** Only ever the released comment (see releasedComment). */
   comment: string | null;
+  /** The school's report options (report-settings.ts); all default to on. */
+  options: { showRank: boolean; showCompetencies: boolean; showSignatures: boolean };
 }
 
 type Client = Awaited<ReturnType<typeof createClient>>;
@@ -88,7 +91,10 @@ export async function loadReportCardDocuments(
   if (!exam || !students || students.length === 0) return [];
 
   const schoolId = (students[0] as { school_id: string }).school_id;
-  const { data: school } = await supabase.from("schools").select("name, logo_url, primary_color, address, phone").eq("id", schoolId).maybeSingle();
+  const [{ data: school }, settings] = await Promise.all([
+    supabase.from("schools").select("name, logo_url, primary_color, address, phone").eq("id", schoolId).maybeSingle(),
+    loadReportSettings(supabase, schoolId),
+  ]);
 
   // Class size is a class-wide statistic, so it is only read where the caller can see the whole
   // roster (staff print route). Same rule as the mark sheet: active learners across all streams.
@@ -175,6 +181,7 @@ export async function loadReportCardDocuments(
       rank: rank?.rank_in_stream ?? null,
       released: isReleased(card?.comment_source),
       comment: releasedComment(card?.comment_source, card?.comment),
+      options: { showRank: settings.rankingEnabled, showCompetencies: settings.showCompetencyRatings, showSignatures: settings.showSignatures },
     };
   });
 

@@ -29,6 +29,15 @@ export interface MarkSheetSchool {
   primaryColor: string | null;
 }
 
+/** Per-school report options (see report-settings.ts); all default to on. */
+export interface MarkSheetOptions {
+  rankingEnabled: boolean;
+  showSignatures: boolean;
+  showClassStatistics: boolean;
+}
+
+export const DEFAULT_MARK_SHEET_OPTIONS: MarkSheetOptions = { rankingEnabled: true, showSignatures: true, showClassStatistics: true };
+
 export interface RawMarkSheetInput {
   school: MarkSheetSchool;
   exam: { name: string; examType: string; status: "open" | "closed"; termName: string | null; academicYearName: string | null };
@@ -83,7 +92,11 @@ export interface MarkSheetModel {
   kind: AssessmentKind;
   subjects: { id: string; name: string; maxScore: number }[];
   learners: MarkSheetLearner[];
-  showRanking: boolean;
+  /** Average % (and class mean) are shown: numeric exam with stored averages. */
+  showAverage: boolean;
+  /** Positions are shown: showAverage AND the school has ranking enabled. */
+  showPositions: boolean;
+  options: MarkSheetOptions;
   multiStream: boolean;
   subjectStats: Record<string, SubjectStats>;
   classMean: number | null;
@@ -124,7 +137,7 @@ export function splitBandLabel(label: string): { code: string; meaning: string |
   return m ? { code: m[1].trim(), meaning: m[2].trim() } : { code: label.trim(), meaning: null };
 }
 
-export function buildMarkSheetModel(input: RawMarkSheetInput): MarkSheetModel {
+export function buildMarkSheetModel(input: RawMarkSheetInput, options: MarkSheetOptions = DEFAULT_MARK_SHEET_OPTIONS): MarkSheetModel {
   const marksByKey = new Map(input.marks.map((m) => [`${m.studentId}:${m.subjectId}`, m]));
   const rankByStudent = new Map(input.rankings.map((r) => [r.studentId, r]));
 
@@ -208,7 +221,8 @@ export function buildMarkSheetModel(input: RawMarkSheetInput): MarkSheetModel {
   }
 
   const averages = learners.map((l) => l.average).filter((a): a is number => a !== null);
-  const showRanking = kind === "numeric" && averages.length > 0;
+  const showAverage = kind === "numeric" && averages.length > 0;
+  const showPositions = showAverage && options.rankingEnabled;
 
   return {
     school: input.school,
@@ -219,10 +233,12 @@ export function buildMarkSheetModel(input: RawMarkSheetInput): MarkSheetModel {
     kind,
     subjects: input.subjects,
     learners,
-    showRanking,
+    showAverage,
+    showPositions,
+    options,
     multiStream: streams.size > 1,
     subjectStats,
-    classMean: showRanking ? round(averages.reduce((a, b) => a + b, 0) / averages.length, 2) : null,
+    classMean: showAverage ? round(averages.reduce((a, b) => a + b, 0) / averages.length, 2) : null,
     legend: [...legendMap.entries()].map(([code, meaning]) => ({ code, meaning })),
     provisional: input.exam.status !== "closed",
     incompleteCount: learners.filter((l) => l.incomplete).length,
@@ -240,10 +256,8 @@ export function markSheetExportRows(model: MarkSheetModel): Record<string, strin
       row[subject.name] = cell.score !== null ? cell.score : cell.text;
     }
     if (numeric) row["Total"] = l.total ?? MISSING;
-    if (model.showRanking) {
-      row["Average %"] = l.average ?? MISSING;
-      row["Position"] = l.rankInStream ?? MISSING;
-    }
+    if (model.showAverage) row["Average %"] = l.average ?? MISSING;
+    if (model.showPositions) row["Position"] = l.rankInStream ?? MISSING;
     return row;
   });
 }

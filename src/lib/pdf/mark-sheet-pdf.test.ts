@@ -44,6 +44,24 @@ describe("buildMarkSheetPdf", () => {
     }
   });
 
+  it("school options: ranking off hides positions but keeps Avg %; stats and signatures can be switched off", async () => {
+    const model = buildMarkSheetModel(numericInput(8, 2), { rankingEnabled: false, showSignatures: false, showClassStatistics: false });
+    const doc = await buildMarkSheetPdf(model, null);
+    save("options-off", doc);
+    const { text } = await textOf(doc);
+    expect(text).toMatch(/Avg %/);
+    expect(text).not.toMatch(/\bPos\b/);
+    expect(text).not.toContain("Position is by");
+    expect(text).not.toContain("Prepared by");
+    expect(text).not.toContain("Class mean");
+    expect(text).toContain("Marks entered"); // data-completeness row is always kept
+  });
+
+  it("defaults still print positions, statistics and signatures", async () => {
+    const { text } = await textOf(await buildMarkSheetPdf(buildMarkSheetModel(numericInput(8, 2)), null));
+    for (const expected of ["Pos", "Class mean", "Prepared by", "Position is by"]) expect(text).toContain(expected);
+  });
+
   it("does not repeat the exam type when the name already says it", async () => {
     const { text } = await textOf(await buildMarkSheetPdf(buildMarkSheetModel(numericInput(3, 3)), null));
     expect(text).toContain("CAT 1");

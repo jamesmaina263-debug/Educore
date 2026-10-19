@@ -1,5 +1,6 @@
 import type { createClient } from "@/lib/supabase/server";
 import { buildMarkSheetModel, type MarkSheetModel } from "@/lib/academics/mark-sheet-model";
+import { loadReportSettings } from "@/lib/academics/report-settings";
 
 // Server-side loader for the Class Mark Sheet. Reads only, through the caller's own Supabase
 // session, so existing RLS (exams.read, school scoping) decides what is visible; this adds no
@@ -31,7 +32,7 @@ export async function loadMarkSheetModel(
 
   const streamRows = (streams ?? []) as { id: string; name: string }[];
   const streamName = new Map(streamRows.map((s) => [s.id, s.name]));
-  const [{ data: students }, { data: school }] = await Promise.all([
+  const [{ data: students }, { data: school }, settings] = await Promise.all([
     streamRows.length
       ? supabase
           .from("students")
@@ -41,6 +42,7 @@ export async function loadMarkSheetModel(
           .order("last_name")
       : Promise.resolve({ data: [] as never[] }),
     supabase.from("schools").select("name, motto, logo_url, address, phone, email, primary_color").eq("id", cls.school_id).maybeSingle(),
+    loadReportSettings(supabase, cls.school_id as string),
   ]);
 
   const term = one(exam.terms as unknown as { name: string; academic_years: { name: string } | { name: string }[] | null } | null);
@@ -91,5 +93,6 @@ export async function loadMarkSheetModel(
     })),
     generatedAt: new Date().toISOString(),
     preparedBy: args.preparedBy,
-  });
+  },
+  { rankingEnabled: settings.rankingEnabled, showSignatures: settings.showSignatures, showClassStatistics: settings.showClassStatistics });
 }

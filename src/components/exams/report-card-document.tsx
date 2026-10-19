@@ -91,10 +91,10 @@ function ReportCardPage({ data }: { data: ReportCardDocumentData }) {
             <p style={{ margin: 0, fontSize: 15, fontWeight: 600 }}>{data.student.fullName}</p>
             <p style={{ margin: 0, fontSize: 12, color: "#71717a" }}>Adm. No. {data.student.admissionNumber ?? "—"}</p>
           </div>
-          {(data.average !== null || data.rank !== null) && (
+          {(data.average !== null || (data.rank !== null && data.options.showRank)) && (
             <div style={{ textAlign: "right", fontSize: 12 }}>
               {data.average !== null && <p style={{ margin: 0 }}>Average: <strong>{data.average}</strong></p>}
-              {data.rank !== null && <p style={{ margin: 0 }}>Position in stream: <strong>{data.rank}</strong></p>}
+              {data.rank !== null && data.options.showRank && <p style={{ margin: 0 }}>Position in stream: <strong>{data.rank}</strong></p>}
             </div>
           )}
         </div>
@@ -122,7 +122,7 @@ function ReportCardPage({ data }: { data: ReportCardDocumentData }) {
           <p style={{ fontSize: 12, color: "#71717a" }}>No marks recorded for this exam.</p>
         )}
 
-        {data.competencies.length > 0 && (
+        {data.competencies.length > 0 && data.options.showCompetencies && (
           <>
             <p style={{ margin: "0 0 6px", fontSize: 12, fontWeight: 600 }}>CBC competency ratings</p>
             <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 16 }}>
@@ -145,14 +145,16 @@ function ReportCardPage({ data }: { data: ReportCardDocumentData }) {
           <p style={{ margin: 0, fontSize: 12, whiteSpace: "pre-wrap" }}>{data.comment ?? (data.released ? "—" : "Pending approval.")}</p>
         </div>
 
-        <div style={{ display: "flex", gap: 24, fontSize: 11, color: "#52525b", marginTop: 28 }}>
-          {["Class teacher", "Principal", "Parent / Guardian"].map((who) => (
-            <div key={who} style={{ flex: 1 }}>
-              <div style={{ borderBottom: "1px solid #71717a", height: 20 }} />
-              <p style={{ margin: "4px 0 0" }}>{who} (signature &amp; date)</p>
-            </div>
-          ))}
-        </div>
+        {data.options.showSignatures && (
+          <div style={{ display: "flex", gap: 24, fontSize: 11, color: "#52525b", marginTop: 28 }}>
+            {["Class teacher", "Principal", "Parent / Guardian"].map((who) => (
+              <div key={who} style={{ flex: 1 }}>
+                <div style={{ borderBottom: "1px solid #71717a", height: 20 }} />
+                <p style={{ margin: "4px 0 0" }}>{who} (signature &amp; date)</p>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {(data.school.address || data.school.phone) && (

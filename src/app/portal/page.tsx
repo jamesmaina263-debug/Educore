@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
+import { DEFAULT_REPORT_SETTINGS, loadReportSettings } from "@/lib/academics/report-settings";
 import { createClient } from "@/lib/supabase/server";
 import { portalLogout } from "@/app/portal/actions";
 import { ChildSwitcher } from "@/components/portal/child-switcher";
@@ -292,6 +293,10 @@ export default async function PortalPage({ searchParams }: { searchParams: Promi
     }));
   }
 
+  // The school's report options (e.g. ranking on/off). Resolved through the caller's own school.
+  const { data: portalSchoolId } = await supabase.rpc("auth_school_id");
+  const reportSettings = portalSchoolId ? await loadReportSettings(supabase, portalSchoolId as string) : DEFAULT_REPORT_SETTINGS;
+
   // Earlier released report cards (the latest is shown in full below). RLS already limits this to
   // released cards of the caller's own child; the .in() just mirrors the "latest" query above.
   const { data: releasedCards } = await supabase
@@ -490,7 +495,7 @@ export default async function PortalPage({ searchParams }: { searchParams: Promi
           <div>
             <p className="text-sm font-medium">
               {rc.exams?.name}
-              {ranking && ` — Average ${ranking.average_score}, Rank ${ranking.rank_in_stream} in stream`}
+              {ranking && ` — Average ${ranking.average_score}${reportSettings.rankingEnabled ? `, Rank ${ranking.rank_in_stream} in stream` : ""}`}
             </p>
             {rc.comment && <p className="mt-1 text-sm text-muted-foreground">{rc.comment}</p>}
             <Link href={`/portal/report-cards/${rc.exam_id}?child=${selected.id}`} className="mt-2 inline-block text-sm font-medium underline underline-offset-2">

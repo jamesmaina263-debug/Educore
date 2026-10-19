@@ -50,7 +50,8 @@ describe("numeric exam", () => {
     expect(model.incompleteCount).toBe(1);
   });
   it("uses the stored average and positions and reports the class mean", () => {
-    expect(model.showRanking).toBe(true);
+    expect(model.showAverage).toBe(true);
+    expect(model.showPositions).toBe(true);
     expect(model.learners[0]).toMatchObject({ average: 70, rankInStream: 1 });
     expect(model.classMean).toBe(47.5);
   });
@@ -61,6 +62,27 @@ describe("numeric exam", () => {
     const rows = markSheetExportRows(model);
     expect(rows[1]).toMatchObject({ "Adm No": "ADM2", Mathematics: 0, Total: 50, "Average %": 25, Position: 2 });
     expect(rows[2].Mathematics).toBe("—");
+  });
+});
+
+describe("school report options", () => {
+  const input = base({
+    marks: [num("1", "m", 80), num("1", "e", 60), num("2", "m", 50), num("2", "e", 50)],
+    rankings: [
+      { studentId: "1", totalScore: 140, averageScore: 70, rankInStream: 1, rankInClass: 1 },
+      { studentId: "2", totalScore: 100, averageScore: 50, rankInStream: 2, rankInClass: 2 },
+    ],
+  });
+  it("defaults keep today's behaviour: average and positions both shown", () => {
+    const model = buildMarkSheetModel(input);
+    expect(model).toMatchObject({ showAverage: true, showPositions: true, options: { rankingEnabled: true, showSignatures: true, showClassStatistics: true } });
+  });
+  it("ranking disabled hides positions but keeps the average and class mean", () => {
+    const model = buildMarkSheetModel(input, { rankingEnabled: false, showSignatures: true, showClassStatistics: true });
+    expect(model).toMatchObject({ showAverage: true, showPositions: false, classMean: 60 });
+    const row = markSheetExportRows(model)[0];
+    expect(row).toMatchObject({ "Average %": 70 });
+    expect(row).not.toHaveProperty("Position");
   });
 });
 
@@ -76,7 +98,8 @@ describe("competency-based (CBC) exam", () => {
   );
   it("shows descriptors, never averages or positions, and does not invent a total", () => {
     expect(model.kind).toBe("cbc");
-    expect(model.showRanking).toBe(false);
+    expect(model.showAverage).toBe(false);
+    expect(model.showPositions).toBe(false);
     expect(model.classMean).toBeNull();
     expect(model.learners[0]).toMatchObject({ total: null, average: null, rankInStream: null });
     expect(model.learners[0].cells.m.text).toBe("EE");
@@ -101,7 +124,8 @@ describe("other cases", () => {
   it("an exam still open is provisional and has no positions", () => {
     const model = buildMarkSheetModel(base({ exam: { ...base().exam, status: "open" }, marks: [num("1", "m", 50)] }));
     expect(model.provisional).toBe(true);
-    expect(model.showRanking).toBe(false);
+    expect(model.showAverage).toBe(false);
+    expect(model.showPositions).toBe(false);
   });
   it("an exam with no marks at all is empty, not a table of zeros", () => {
     const model = buildMarkSheetModel(base());
@@ -120,7 +144,8 @@ describe("other cases", () => {
       }),
     );
     expect(model.kind).toBe("mixed");
-    expect(model.showRanking).toBe(false);
+    expect(model.showAverage).toBe(false);
+    expect(model.showPositions).toBe(false);
   });
   it("splitBandLabel handles labels with and without a descriptor", () => {
     expect(splitBandLabel("A — Exceeding Expectation")).toEqual({ code: "A", meaning: "Exceeding Expectation" });
