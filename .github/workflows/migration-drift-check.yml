@@ -155,7 +155,8 @@ jobs:
   # secret) to write the missing files and open the PR -- see reconcile_migration_drift.py
   # for how content is sourced (verbatim from schema_migrations, never introspected/guessed).
   #
-  # KNOWN LIMITATION, not fixed here: GitHub doesn't trigger further workflow runs (including
+  # (Fixed 2026-10-19 when RECONCILE_PAT is configured -- see the checkout step below.)
+  # KNOWN LIMITATION without RECONCILE_PAT: GitHub doesn't trigger further workflow runs (including
   # ci.yml's required check) from a push/PR made with GITHUB_TOKEN -- this prevents recursive
   # workflow runs, but also means this job's own PR can't satisfy branch protection on its
   # own. `gh pr merge --auto` is still called so it's pre-armed: the moment a human or an
@@ -172,9 +173,17 @@ jobs:
       contents: write
       pull-requests: write
     steps:
+      # RECONCILE_PAT (optional repo secret): a fine-grained PAT scoped to THIS repo only
+      # with Contents + Pull requests read/write (no `workflow` scope, nothing else).
+      # Pushes and PRs made with GITHUB_TOKEN never trigger other workflows, so the
+      # required `ci` check never ran on the reconcile PR and a human had to push to it.
+      # Pushes/PRs made with a PAT do trigger ci, so the pre-armed auto-merge fires by
+      # itself. If the secret is unset this falls back to GITHUB_TOKEN (old behaviour).
+      # Rotate before the PAT's expiry; a lapsed PAT makes checkout fail loudly.
       - uses: actions/checkout@v7
         with:
           ref: main
+          token: ${{ secrets.RECONCILE_PAT || github.token }}
 
       - name: Check SUPABASE_DB_URL is set
         run: |
@@ -258,7 +267,8 @@ jobs:
       - name: Open or update the reconciliation PR
         if: steps.changes.outputs.has_changes == 'true'
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.RECONCILE_PAT || github.token }}
+          HAS_PAT: ${{ secrets.RECONCILE_PAT != '' }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -277,11 +287,16 @@ jobs:
           git commit -F /tmp/commit_msg.txt
           git push origin "$BRANCH" --force
           EXISTING_PR=$(gh pr list --repo "${{ github.repository }}" --head "$BRANCH" --state open --json number --jq '.[0].number // empty')
+          if [ "$HAS_PAT" = "true" ]; then
+            CI_NOTE='Opened with RECONCILE_PAT, so the required ci check runs on its own and the pre-armed auto-merge fires when it passes. Check the CI run if this sits open.'
+          else
+            CI_NOTE='RECONCILE_PAT is not set, so this PR needs a human to push a commit (even an empty one) before it can merge: GitHub does not run the required ci check on a PR opened with the workflow token. Add a fine-grained PAT as the RECONCILE_PAT repo secret to remove this step.'
+          fi
           if [ -z "$EXISTING_PR" ]; then
             printf '%s\n' \
               "Opened automatically after a scheduled migration-drift-check run found production migration(s) with no matching git file. Content pulled verbatim from supabase_migrations.schema_migrations -- nothing guessed or introspected." \
               "" \
-              "**This PR needs a human or an agent with a real PAT to push a commit (even an empty one) or otherwise nudge it before it can merge** -- GitHub doesn't run the required \`ci\` check on a PR opened with the workflow's own token, so auto-merge is armed but won't fire on its own. See migration-drift-check.yml's auto-reconcile-drift job for why." \
+              "$CI_NOTE" \
               "" \
               "If the job log shows any version it couldn't reconcile automatically (no name/statements recorded in schema_migrations), that one still needs manual investigation -- see supabase/.migration_drift_allowlist's header for the pattern." \
               > /tmp/pr_body.md
