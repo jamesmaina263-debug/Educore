@@ -17,6 +17,13 @@ export type BlogPostSummary = {
 
 export const BLOG_POSTS: BlogPostSummary[] = [
   {
+    slug: "school-management-system-cost-kenya",
+    title: "How Much Does a School Management System Cost in Kenya? (2026) — EduCore",
+    description:
+      "How Kenyan school management systems are priced, what a 150, 300 and 600-student school would pay at KES 100 per student per term, and the extra costs to ask about before you sign.",
+    publishedOn: "2026-10-19",
+  },
+  {
     slug: "what-is-a-school-management-system-kenya",
     title: "What Is a School Management System? A Kenya Guide — EduCore",
     description:

@@ -23,7 +23,7 @@ export const PAGE_LAST_MODIFIED: Record<string, string> = {
   "/ai-automation": "2026-10-05",
   "/finance-fees": "2026-10-05",
   "/security": "2026-10-05",
-  "/pricing": "2026-10-05",
+  "/pricing": "2026-10-19",
   "/about": "2026-10-05",
   "/contact": "2026-10-05",
   "/faq": "2026-10-05",

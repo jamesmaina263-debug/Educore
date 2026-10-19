@@ -9,6 +9,11 @@
 // referenced by at least one other post (no orphans). When you publish a new
 // post, add it here AND list it under at least one other post's related set.
 export const RELATED_GUIDES: Record<string, string[]> = {
+  "school-management-system-cost-kenya": [
+    "best-school-management-system-kenya",
+    "free-school-management-system-kenya",
+    "mpesa-fee-collection-automation-kenya-schools",
+  ],
   "what-is-a-school-management-system-kenya": [
     "best-school-management-system-kenya",
     "free-school-management-system-kenya",
@@ -17,11 +22,11 @@ export const RELATED_GUIDES: Record<string, string[]> = {
   "best-school-management-system-kenya": [
     "what-is-a-school-management-system-kenya",
     "free-school-management-system-kenya",
-    "mpesa-fee-collection-automation-kenya-schools",
+    "school-management-system-cost-kenya",
   ],
   "free-school-management-system-kenya": [
     "best-school-management-system-kenya",
-    "what-is-a-school-management-system-kenya",
+    "school-management-system-cost-kenya",
     "data-protection-act-kenya-schools-guide",
   ],
   "gititu-high-school-case-study": [
@@ -123,8 +128,8 @@ export const GUIDES_FOR_PAGE: Record<string, string[]> = {
     "school-payroll-statutory-deductions-kenya",
   ],
   "/pricing": [
+    "school-management-system-cost-kenya",
     "free-school-management-system-kenya",
-    "what-is-a-school-management-system-kenya",
     "gititu-high-school-case-study",
   ],
   "/security": ["data-protection-act-kenya-schools-guide"],
