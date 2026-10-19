@@ -245,6 +245,10 @@ export const OUTREACH_OFFER = {
 
 const OFFER_LINE = `Our pricing starts at KES ${OUTREACH_OFFER.pricePerStudentPerTermKes} per student per term, with a ${OUTREACH_OFFER.trialDays}-day free trial and no payment card required.`;
 
+// Links added to every draft. Fixed text (never written by the model) so they can't be altered or invented.
+const SIGNUP_URL = `${SITE_URL}/signup`;
+const CONTACT_URL = `${SITE_URL}/contact`;
+
 const DEFAULT_OPENING_SCHOOL =
   "Managing admissions, student records, fee collection through M-Pesa, and end-of-term assessments can take considerable time for a school.";
 const DEFAULT_OPENING_KINDERGARTEN =
@@ -299,7 +303,8 @@ export function assembleEmailBody(openingRaw: unknown, ctx: DraftContext = {}): 
     product,
     OFFER_LINE,
     "Would you be open to a brief online demonstration to see how EduCore could support your school?",
-    `Kind regards,\nEduCore Africa\n${SITE_URL}\n${SITE_URL}/signup`,
+    `Start your free trial: ${SIGNUP_URL}\nContact us: ${CONTACT_URL}`,
+    `Kind regards,\nEduCore Africa\n${SITE_URL}`,
     "If you would rather not hear from us, just reply and we will not contact you again.",
   ].join("\n\n");
 }
@@ -324,6 +329,8 @@ export function assembleWhatsApp(ctx: DraftContext = {}): string {
     product,
     `Pricing starts at KES ${OUTREACH_OFFER.pricePerStudentPerTermKes} per student per term, and you can explore the system with a ${OUTREACH_OFFER.trialDays}-day free trial, with no payment card required.`,
     "Would you be open to a short demo to see how EduCore could support your school?",
+    `📝 Start your free trial: ${SIGNUP_URL}`,
+    `💬 Contact us: ${CONTACT_URL}`,
     `🌐 ${SITE_URL}`,
     "If you’d prefer not to receive further messages, just reply STOP.",
   ].join("\n");

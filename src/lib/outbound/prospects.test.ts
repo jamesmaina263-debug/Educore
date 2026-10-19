@@ -193,7 +193,8 @@ describe("parseScoringResponse + fixed draft template", () => {
     expect(body).toContain("supported CBC competency-based reporting and marks-based grading");
     expect(body).toContain("Would you be open to a brief online demonstration");
     expect(body).toContain("Kind regards,\nEduCore Africa\nhttps://");
-    expect(body).toContain("/signup");
+    expect(body).toContain("Start your free trial: https://www.educoreafrica.com/signup");
+    expect(body).toContain("Contact us: https://www.educoreafrica.com/contact");
     expect(body).toContain("just reply and we will not contact you again");
   });
 
@@ -253,6 +254,8 @@ describe("parseScoringResponse + fixed draft template", () => {
       "Our school management system brings together admissions, student attendance, M-Pesa fee collection, parent communication via SMS and WhatsApp, and exam management with CBC-supported and marks-based report cards.",
       "Pricing starts at KES 100 per student per term, and you can explore the system with a 30-day free trial, with no payment card required.",
       "Would you be open to a short demo to see how EduCore could support your school?",
+      "📝 Start your free trial: https://www.educoreafrica.com/signup",
+      "💬 Contact us: https://www.educoreafrica.com/contact",
       "🌐 https://www.educoreafrica.com",
       "If you’d prefer not to receive further messages, just reply STOP.",
     ]);
