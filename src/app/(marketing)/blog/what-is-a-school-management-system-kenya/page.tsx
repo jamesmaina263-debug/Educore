@@ -139,7 +139,7 @@ const FAQS = [
   },
   {
     q: "How much does a school management system cost in Kenya?",
-    a: "Prices vary by vendor and by model, so compare per-student against flat fees and check what each tier includes. EduCore charges a flat KES 100 per student, per term across all plans, with plans differing by modules and support, not price.",
+    a: "Prices vary by vendor and by model, so compare per-student against flat fees and check what each tier includes. EduCore charges a flat KES 100 per student, per term across all plans, with plans differing by modules and support, not price. For worked examples at 150, 300 and 600 students, read our full cost guide: How Much Does a School Management System Cost in Kenya? (2026).",
   },
   {
     q: "Can we try EduCore before paying?",
