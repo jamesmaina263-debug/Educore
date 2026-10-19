@@ -127,3 +127,68 @@ describe("other cases", () => {
     expect(splitBandLabel("Distinction")).toEqual({ code: "Distinction", meaning: null });
   });
 });
+
+describe("selective subjects (per-student enrolment)", () => {
+  const row = (studentId: string, subjectId: string, isActive = true) => ({ studentId, subjectId, isActive });
+  const realistic = () =>
+    base({
+      marks: [num("1", "m", 80, "A — Excellent"), num("1", "e", 60, "B — Good"), num("2", "m", 50, "C — Fair"), num("3", "m", 40)],
+      rankings: [{ studentId: "1", totalScore: 140, averageScore: 70, rankInStream: 1, rankInClass: 1 }],
+    });
+
+  it("with no enrolment rows the sheet is identical to one built without the option (nothing changes for existing schools)", () => {
+    expect(buildMarkSheetModel({ ...realistic(), enrolmentRows: [] })).toEqual(buildMarkSheetModel(realistic()));
+    const model = buildMarkSheetModel(realistic());
+    expect(model.learners.flatMap((l) => Object.values(l.cells)).some((c) => "notApplicable" in c)).toBe(false);
+  });
+
+  it("a learner who does not take a selective subject gets n/a: not missing, not expected, not incomplete", () => {
+    // English is selective: only Ann takes it. Ben and Cy do not, and have no English marks.
+    const model = buildMarkSheetModel({ ...realistic(), enrolmentRows: [row("1", "e", true), row("2", "e", false)] });
+    const [ann, ben, cy] = model.learners;
+    expect(ben.cells.e).toEqual({ text: "n/a", score: null, missing: false, notApplicable: true });
+    expect(cy.cells.e).toEqual({ text: "n/a", score: null, missing: false, notApplicable: true });
+    expect(ann.cells.e).toMatchObject({ score: 60, missing: false });
+    expect(ann).toMatchObject({ expected: 2, entered: 2, incomplete: false });
+    expect(ben).toMatchObject({ expected: 1, entered: 1, incomplete: false });
+    expect(cy).toMatchObject({ expected: 1, entered: 1, incomplete: false });
+    expect(model.incompleteCount).toBe(0);
+    // The universal subject is untouched, and English's stats only count the learner who takes it.
+    expect(model.subjectStats.m).toMatchObject({ entered: 3, missing: 0 });
+    expect(model.subjectStats.e).toMatchObject({ entered: 1, missing: 0, mean: 60 });
+  });
+
+  it("a learner who takes a selective subject but has no mark is still flagged as missing it", () => {
+    const model = buildMarkSheetModel({
+      ...base({ marks: [num("1", "m", 80), num("2", "m", 50), num("3", "m", 40), num("1", "e", 60)] }),
+      enrolmentRows: [row("1", "e", true), row("2", "e", true)], // Ben takes English but has no mark
+    });
+    const [, ben, cy] = model.learners;
+    expect(ben.cells.e).toEqual({ text: "—", score: null, missing: true });
+    expect(ben).toMatchObject({ expected: 2, entered: 1, incomplete: true });
+    expect(cy.cells.e.notApplicable).toBe(true);
+    expect(model.subjectStats.e).toMatchObject({ entered: 1, missing: 1 });
+    expect(model.incompleteCount).toBe(1);
+  });
+
+  it("an existing mark keeps a learner in the subject even if staff later un-enrolled them (history is protected)", () => {
+    const model = buildMarkSheetModel({
+      ...base({ marks: [num("1", "m", 80), num("2", "m", 50), num("3", "m", 40), num("2", "e", 55)] }),
+      enrolmentRows: [row("1", "e", true), row("2", "e", false)],
+    });
+    expect(model.learners[1].cells.e).toMatchObject({ score: 55, missing: false });
+    expect(model.learners[1].cells.e.notApplicable).toBeUndefined();
+  });
+
+  it("n/a is never counted as zero in totals or statistics", () => {
+    const model = buildMarkSheetModel({ ...realistic(), enrolmentRows: [row("1", "e", true)] });
+    expect(model.learners[1].total).toBe(50);
+    expect(model.subjectStats.e.lowest).toBe(60);
+  });
+
+  it("Excel/CSV rows show n/a for a subject the learner does not take", () => {
+    const rows = markSheetExportRows(buildMarkSheetModel({ ...realistic(), enrolmentRows: [row("1", "e", true)] }));
+    expect(rows[1].English).toBe("n/a");
+    expect(rows[0].English).toBe(60);
+  });
+});

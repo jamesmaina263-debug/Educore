@@ -11,6 +11,8 @@ import {
   type CompetencyRatingRow,
 } from "@/components/exams/competency-marks-section";
 import { listRubricsForSubStrands, type RubricDetail } from "@/app/(app)/exams/rubric-actions";
+import { buildSubjectEnrolment } from "@/lib/academics/subject-enrolment";
+import { loadEnrolmentRows } from "@/lib/academics/load-subject-enrolment";
 
 export default async function MarksPage({
   searchParams,
@@ -47,9 +49,11 @@ export default async function MarksPage({
   const examId = examParam || examOptions[0]?.id || null;
 
   const { data: exam } = examId
-    ? await supabase.from("exams").select("id, name, status").eq("id", examId).maybeSingle()
+    ? await supabase.from("exams").select("id, name, status, terms(academic_year_id)").eq("id", examId).maybeSingle()
     : { data: null };
   if (examParam && !exam) redirect("/exams/marks");
+  const examTerm = exam?.terms as unknown as { academic_year_id: string | null } | { academic_year_id: string | null }[] | null | undefined;
+  const examAcademicYearId = (Array.isArray(examTerm) ? examTerm[0] : examTerm)?.academic_year_id ?? null;
 
   const { data: examClassRows } = exam
     ? await supabase
@@ -122,11 +126,25 @@ export default async function MarksPage({
 
     const existingByStudent = new Map((existingMarks ?? []).map((m) => [m.student_id, { raw_score: m.raw_score, band_id: m.band_id }]));
 
-    roster = (students ?? []).map((s) => ({
-      student_id: s.id,
-      full_name: `${s.first_name} ${s.last_name}`,
-      existing: existingByStudent.get(s.id) ?? null,
-    }));
+    // Only students who take this subject. With no enrolment rows (every school until electives are set up)
+    // or on any read problem this is everyone, as before. Anyone already marked stays listed so their
+    // mark can still be corrected, whatever the enrolment says.
+    const enrolment = buildSubjectEnrolment(
+      await loadEnrolmentRows(supabase, {
+        academicYearId: examAcademicYearId,
+        studentIds: (students ?? []).map((s) => s.id),
+        subjectIds: [selectedSubjectId],
+      }),
+      (existingMarks ?? []).map((m) => ({ studentId: m.student_id, subjectId: selectedSubjectId })),
+    );
+
+    roster = (students ?? [])
+      .filter((s) => enrolment.takes(s.id, selectedSubjectId))
+      .map((s) => ({
+        student_id: s.id,
+        full_name: `${s.first_name} ${s.last_name}`,
+        existing: existingByStudent.get(s.id) ?? null,
+      }));
 
     if (gradingModel === "cbc") {
       const { data: strandRows } = await supabase
