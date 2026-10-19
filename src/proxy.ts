@@ -46,7 +46,16 @@ export const config = {
   // extension list here (rather than adding "downloads" to NEVER_PREFIX)
   // covers this file and any future doc dropped under /public the same way,
   // without special-casing one folder name.
+  //
+  // Public marketing routes (the second alternative group below, listed explicitly because Next
+  // requires `matcher` to be a static literal) are also excluded. They never read the session
+  // (see (marketing)/layout.tsx), their server actions use the admin client, none of them is a
+  // school-app path (so no maintenance gate / protected redirect / slug rewrite ever applied),
+  // and every one is already in NEVER_PREFIX. Running the proxy there only cost a function
+  // invocation + a Supabase client per hit (including every crawler hit). "/" itself stays
+  // matched on purpose (rootAuthFallback). src/proxy.test.ts keeps this list in sync with the
+  // real (marketing) folders and proves every app/auth/api path is still matched.
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|sw\\.js|offline\\.html|manifest\\.webmanifest|robots\\.txt|sitemap\\.xml|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|txt|xml|json|webmanifest|pdf|doc|docx|zip)$).*)",
+    "/((?!_next/static|_next/image|favicon.ico|sw\\.js|offline\\.html|manifest\\.webmanifest|robots\\.txt|sitemap\\.xml|(?:about|ai-automation|blog|cbc-school-management|contact|faq|finance-fees|parent-communication|platform|pricing|privacy|school-attendance-management|security|solutions|student-management-system|student-performance-appraisal|teacher-performance-management|terms)(?:/|$)|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|txt|xml|json|webmanifest|pdf|doc|docx|zip)$).*)",
   ],
 };
