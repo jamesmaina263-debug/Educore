@@ -58,6 +58,8 @@ export const DISPOSABLE_EMAIL_DOMAINS: ReadonlySet<string> = new Set([
   "mailcatch.com",
   "jetable.org",
   "spambox.us",
+  // Test/QA signups seen in production (e.g. "Alicesec" / "Bobsec", 2026-10-19). Not a real school domain.
+  "punkproof.com",
 ]);
 
 /** Lower-cased domain part of an email address, or null if it has no usable domain. */
