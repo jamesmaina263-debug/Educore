@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "deny": [
+      "mcp__supabase__apply_migration",
+      "mcp__Supabase__apply_migration",
+      "mcp__claude_ai_Supabase__apply_migration"
+    ]
+  }
+}
