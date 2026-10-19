@@ -27,7 +27,7 @@ import { MarketingButton } from "@/components/marketing/button";
 import { Eyebrow } from "@/components/marketing/eyebrow";
 import { Section } from "@/components/marketing/section";
 import { Reveal } from "@/components/marketing/reveal";
-import { DashboardFrame } from "@/components/marketing/dashboard-frame";
+import { DashboardCarousel } from "@/components/marketing/dashboard-carousel";
 import { FeatureCard } from "@/components/marketing/feature-card";
 import { PricingCard } from "@/components/marketing/pricing-card";
 import { PLANS } from "./pricing/page";
@@ -180,7 +180,7 @@ export default function MarketingHomePage() {
               as large as the page allows (up to 1440px) -- the sidebar's module
               names only read clearly when the preview is big. */}
           <div className="relative left-1/2 w-[min(calc(100vw-3rem),1440px)] -translate-x-1/2">
-            <DashboardFrame />
+            <DashboardCarousel />
             <p className="mt-3 text-center text-xs text-white/50">
               Illustrative preview — not actual account data.
             </p>
