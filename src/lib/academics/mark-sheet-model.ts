@@ -10,6 +10,9 @@
 //  * Total  = sum of the learner's entered numeric scores.
 //  * Average and positions come straight from class_rankings (the same source the report cards
 //    and portal read), so the sheet reconciles with them. They only exist for numeric exams.
+//    The average is the mean of each entered subject as a PERCENTAGE of that subject's maximum
+//    (20261018211500_class_rankings_percentage_average.sql), so subjects out of different
+//    maximums count equally. Total stays the sum of raw marks.
 //  * Subject mean = mean of ENTERED scores only (missing excluded), 1 decimal place.
 //  * Competency-based exams get a band distribution per subject instead of a mean, and no
 //    average/position: a band has no meaningful number to average (by design, see
@@ -91,6 +94,25 @@ export interface MarkSheetModel {
 
 export const MISSING = "—";
 
+const EXAM_TYPE_LABELS: Record<string, string> = { cat: "CAT", exam: "Exam", mock: "Mock", other: "Assessment" };
+
+/** "CAT 1" already says it is a CAT; only append the type when the name doesn't. Shared by the mark sheet and the report card. */
+export function assessmentTitle(name: string, examType: string): string {
+  const typeLabel = EXAM_TYPE_LABELS[examType] ?? examType;
+  return name.toLowerCase().includes(typeLabel.toLowerCase()) ? name : `${name} (${typeLabel})`;
+}
+
+/** Numeric marks, CBC bands, both, or nothing -- decided from whichever marks are passed in. */
+export function assessmentKindOf(marks: { rawScore: number | null; bandLabel: string | null }[]): AssessmentKind {
+  const hasNumeric = marks.some((m) => m.rawScore !== null);
+  const hasBandOnly = marks.some((m) => m.rawScore === null && m.bandLabel !== null);
+  return hasNumeric && hasBandOnly ? "mixed" : hasNumeric ? "numeric" : hasBandOnly ? "cbc" : "empty";
+}
+
+export function gradingLabel(kind: AssessmentKind): string {
+  return kind === "numeric" ? "Marks-based" : kind === "cbc" ? "Competency-based (CBC)" : kind === "mixed" ? "Mixed marks and competency" : "No marks entered yet";
+}
+
 export function round(n: number, dp: number): number {
   const f = 10 ** dp;
   return Math.round((n + Number.EPSILON) * f) / f;
@@ -106,9 +128,7 @@ export function buildMarkSheetModel(input: RawMarkSheetInput): MarkSheetModel {
   const marksByKey = new Map(input.marks.map((m) => [`${m.studentId}:${m.subjectId}`, m]));
   const rankByStudent = new Map(input.rankings.map((r) => [r.studentId, r]));
 
-  const hasNumeric = input.marks.some((m) => m.rawScore !== null);
-  const hasBandOnly = input.marks.some((m) => m.rawScore === null && m.bandLabel !== null);
-  const kind: AssessmentKind = hasNumeric && hasBandOnly ? "mixed" : hasNumeric ? "numeric" : hasBandOnly ? "cbc" : "empty";
+  const kind: AssessmentKind = assessmentKindOf(input.marks);
 
   const legendMap = new Map<string, string>();
   const noteBand = (label: string | null) => {
@@ -221,7 +241,7 @@ export function markSheetExportRows(model: MarkSheetModel): Record<string, strin
     }
     if (numeric) row["Total"] = l.total ?? MISSING;
     if (model.showRanking) {
-      row["Average"] = l.average ?? MISSING;
+      row["Average %"] = l.average ?? MISSING;
       row["Position"] = l.rankInStream ?? MISSING;
     }
     return row;

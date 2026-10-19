@@ -1,6 +1,6 @@
 import type { CellDef, RowInput } from "jspdf-autotable";
 import type { MarkSheetModel } from "@/lib/academics/mark-sheet-model";
-import { MISSING } from "@/lib/academics/mark-sheet-model";
+import { MISSING, assessmentTitle as sharedAssessmentTitle, gradingLabel } from "@/lib/academics/mark-sheet-model";
 
 // Lays out a MarkSheetModel as a real, text-selectable PDF with jsPDF + jspdf-autotable (the same
 // libraries the generic export already used; no new dependency). It does no calculation of its
@@ -23,12 +23,8 @@ function hexToRgb(hex: string | null): [number, number, number] {
   return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
 }
 
-const EXAM_TYPE_LABELS: Record<string, string> = { cat: "CAT", exam: "Exam", mock: "Mock", other: "Assessment" };
-
-// "CAT 1" already says it is a CAT; only append the type when the name doesn't.
 function assessmentTitle(model: MarkSheetModel): string {
-  const typeLabel = EXAM_TYPE_LABELS[model.exam.examType] ?? model.exam.examType;
-  return model.exam.name.toLowerCase().includes(typeLabel.toLowerCase()) ? model.exam.name : `${model.exam.name} (${typeLabel})`;
+  return sharedAssessmentTitle(model.exam.name, model.exam.examType);
 }
 
 function formatDate(iso: string): string {
@@ -103,7 +99,7 @@ export async function buildMarkSheetPdf(model: MarkSheetModel, logo: LoadedLogo 
   }
   y += 5.5;
   const termYear = [model.exam.termName, model.exam.academicYearName].filter(Boolean).join(", ") || MISSING;
-  const grading = model.kind === "numeric" ? "Marks-based" : model.kind === "cbc" ? "Competency-based (CBC)" : model.kind === "mixed" ? "Mixed marks and competency" : "No marks entered yet";
+  const grading = gradingLabel(model.kind);
   const streams = [...new Set(model.learners.map((l) => l.streamName))];
   const left = [
     ["Assessment", assessmentTitle(model)],
@@ -137,7 +133,7 @@ export async function buildMarkSheetPdf(model: MarkSheetModel, logo: LoadedLogo 
   for (const s of model.subjects) head.push(numeric ? `${s.name}\n/${s.maxScore}` : s.name);
   if (numeric) head.push("Total");
   if (model.showRanking) {
-    head.push("Avg");
+    head.push("Avg %");
     head.push(model.multiStream ? "Pos\n(stream)" : "Pos");
     if (model.multiStream) head.push("Pos\n(class)");
   }
@@ -228,7 +224,7 @@ export async function buildMarkSheetPdf(model: MarkSheetModel, logo: LoadedLogo 
   if (model.legend.length) notes.push(`Key: ${model.legend.map((l) => `${l.code} = ${l.meaning}`).join(";  ")}`);
   notes.push(`${MISSING} = mark not yet entered. Missing marks are excluded from all statistics and are never counted as zero.`);
   if (model.incompleteCount > 0) notes.push(`* = results incomplete (fewer subjects entered than examined; ${model.incompleteCount} learner${model.incompleteCount === 1 ? "" : "s"}). Averages use entered subjects only.`);
-  if (model.showRanking) notes.push(`Average = mean of entered scores. Position is by average; learners with equal averages share a position${model.multiStream ? ". Stream position is within the stream, class position across all streams" : ""}.`);
+  if (model.showRanking) notes.push(`Avg % = mean of each entered subject's score as a percentage of its maximum, so subjects with different maximums count equally. Position is by Avg %; learners with equal averages share a position${model.multiStream ? ". Stream position is within the stream, class position across all streams" : ""}.`);
   if (model.kind === "cbc") notes.push("Competency-based assessment: performance levels are descriptors, so no totals, averages or positions are calculated.");
   if (model.kind === "mixed") notes.push("This sheet mixes marks and competency levels, so no average or position is calculated.");
   doc.setFontSize(7.5);

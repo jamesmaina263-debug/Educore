@@ -21,7 +21,7 @@ export default async function PrintReportCardsPage({
   if (!user) redirect("/login");
 
   const scope: ReportCardScope = student ? { studentId: student } : { classId: classId as string };
-  const docs = await loadReportCardDocuments(supabase, exam, scope);
+  const docs = await loadReportCardDocuments(supabase, exam, scope, { includeClassSize: true });
   if (docs.length === 0) notFound();
 
   const back = `/exams/report-cards?exam=${encodeURIComponent(exam)}${classId ? `&class=${encodeURIComponent(classId)}` : ""}`;
