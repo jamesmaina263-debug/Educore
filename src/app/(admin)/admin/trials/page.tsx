@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { TrialFollowupView } from "@/components/admin/trial-followup";
+import Link from "next/link";
 import { RECENTLY_EXPIRED_DAYS, buildTrialFollowup } from "@/lib/growth/trial-followup";
 import { summariseCheckins, type CheckinRow } from "@/lib/growth/trial-checkins";
 import {
@@ -44,6 +45,12 @@ export default async function AdminTrialFollowupPage() {
       <p className="text-sm text-muted-foreground">
         Which trial schools need a human check-in, and why. Suggestions only: nothing is sent from this page. Visible to
         platform staff only.
+      </p>
+      <p className="text-sm">
+        <Link href="/admin/trials/nudges" className="underline">
+          Trial messages
+        </Link>{" "}
+        (propose, approve and send an email to a trial school&apos;s owner)
       </p>
     </div>
   );
