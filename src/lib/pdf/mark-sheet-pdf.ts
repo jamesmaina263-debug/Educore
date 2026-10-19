@@ -1,6 +1,6 @@
 import type { CellDef, RowInput } from "jspdf-autotable";
 import type { MarkSheetModel } from "@/lib/academics/mark-sheet-model";
-import { MISSING, assessmentTitle as sharedAssessmentTitle, gradingLabel } from "@/lib/academics/mark-sheet-model";
+import { MISSING, NOT_TAKEN, assessmentTitle as sharedAssessmentTitle, gradingLabel } from "@/lib/academics/mark-sheet-model";
 
 // Lays out a MarkSheetModel as a real, text-selectable PDF with jsPDF + jspdf-autotable (the same
 // libraries the generic export already used; no new dependency). It does no calculation of its
@@ -174,7 +174,8 @@ export async function buildMarkSheetPdf(model: MarkSheetModel, logo: LoadedLogo 
     if ((model.kind === "cbc" || model.kind === "mixed") && model.options.showClassStatistics) {
       foot.push(mk("Performance levels", model.subjects.map((sub) => model.subjectStats[sub.id].distribution.map((d) => `${d.code} ${d.count}`).join("  ") || MISSING)));
     }
-    foot.push(mk("Marks entered", model.subjects.map((sub) => `${model.subjectStats[sub.id].entered}/${model.learners.length}`)));
+    // entered + missing = the learners who take the subject (all of them unless it is a selective subject).
+    foot.push(mk("Marks entered", model.subjects.map((sub) => `${model.subjectStats[sub.id].entered}/${model.subjectStats[sub.id].entered + model.subjectStats[sub.id].missing}`)));
   }
 
   const fontSize = columnCount > 12 ? 7 : 8;
@@ -201,7 +202,7 @@ export async function buildMarkSheetPdf(model: MarkSheetModel, logo: LoadedLogo 
       if (data.section === "head" && (col === 1 || col === 2)) data.cell.styles.halign = "left";
       if (data.section === "body") {
         if (col >= labelSpan) data.cell.styles.halign = "center";
-        if (data.cell.text.join("") === MISSING) data.cell.styles.textColor = 130;
+        if (data.cell.text.join("") === MISSING || data.cell.text.join("") === NOT_TAKEN) data.cell.styles.textColor = 130;
       }
       if (data.section === "foot" && col === 0) data.cell.styles.halign = "right";
     },
@@ -223,6 +224,7 @@ export async function buildMarkSheetPdf(model: MarkSheetModel, logo: LoadedLogo 
   const notes: string[] = [];
   if (model.legend.length) notes.push(`Key: ${model.legend.map((l) => `${l.code} = ${l.meaning}`).join(";  ")}`);
   notes.push(`${MISSING} = mark not yet entered. Missing marks are excluded from all statistics and are never counted as zero.`);
+  if (model.learners.some((l) => Object.values(l.cells).some((c) => c.notApplicable))) notes.push(`${NOT_TAKEN} = the learner does not take this subject. It is not counted as missing or as zero.`);
   if (model.incompleteCount > 0) notes.push(`* = results incomplete (fewer subjects entered than examined; ${model.incompleteCount} learner${model.incompleteCount === 1 ? "" : "s"}). Averages use entered subjects only.`);
   if (model.showAverage) notes.push(`Avg % = mean of each entered subject's score as a percentage of its maximum, so subjects with different maximums count equally. ${model.showPositions ? ` Position is by Avg %; learners with equal averages share a position${model.multiStream ? ". Stream position is within the stream, class position across all streams" : ""}.` : ""}`);
   if (model.kind === "cbc") notes.push("Competency-based assessment: performance levels are descriptors, so no totals, averages or positions are calculated.");
