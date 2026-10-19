@@ -42,10 +42,14 @@ that's what is happening, and delete the account when done.
 
 ## Database migrations
 
-**Never apply a migration to production by hand** (Supabase MCP `apply_migration`, the dashboard,
-`psql`, `execute_sql` with DDL). Put the file in `supabase/migrations/` in a PR and let the
-**Deploy migrations** workflow apply it on merge. `.claude/settings.json` denies
-`apply_migration` for Claude Code sessions; don't work around it.
+**Default: do not apply migrations to production by hand.** Put the file in `supabase/migrations/`
+in a PR and let the **Deploy migrations** workflow apply it on merge.
+
+**A direct apply (Supabase MCP `apply_migration`, `execute_sql` with DDL, dashboard, `psql`) is
+allowed only with the owner's explicit approval for that specific migration, in that conversation.**
+`.claude/settings.json` makes `apply_migration` prompt for approval; that prompt is the permission
+step, so show the owner the SQL and wait. Never approve on the owner's behalf, and never apply
+"to get ahead of" a PR.
 
 The workflow runs `supabase db push --include-all` on every push to `main`. A hand-applied
 migration breaks it for the whole repo: production records a version with no matching file, `db push`
@@ -55,14 +59,17 @@ it deploys** (2026-10-19: two hand-applied migrations blocked every deploy for h
 **If code depends on a new function/column/constraint:** merge the migration in its own PR first,
 wait for Deploy migrations to go green, *then* merge the code PR. (Vercel deploys on merge and the
 migration workflow runs in parallel, so putting both in one PR lets the code go live first.) Do not
-apply the migration by hand to "get ahead" of the code.
+apply the migration by hand to "get ahead" of the code unless the owner approves it.
 
-**Break-glass only (live outage, no other way):** tell the owner first, apply it, then in the same
-session commit the file under the *exact* version production recorded
-(`select version, name from supabase_migrations.schema_migrations order by version desc limit 5`)
-and open the PR immediately. Never commit it under a different timestamp, and never leave it
-uncommitted: the drift check will open an auto-reconcile PR if you do, but that is the backstop,
-not the plan.
+**After an approved direct apply, in the SAME session, before doing anything else:**
+1. Read back what production recorded
+   (`select version, name, statements from supabase_migrations.schema_migrations order by version desc limit 5`).
+2. Commit the file as `supabase/migrations/<that exact version>_<name>.sql`, with the recorded SQL.
+3. Open the PR immediately.
+
+Never commit it under a different timestamp, and never leave it uncommitted: an applied migration
+with no matching file blocks Deploy migrations for the whole repo. The drift check will open an
+auto-reconcile PR if you forget, but that is the backstop, not the plan.
 
 Other rules:
 - **Migrations must be safe to run twice for anything already live.** `db push` runs any file
