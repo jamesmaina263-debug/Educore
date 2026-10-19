@@ -123,4 +123,13 @@ describe("loadReportCardDocuments", () => {
     await loadReportCardDocuments(client, "e1", { all: true });
     expect(calls.filter((c) => /\.(insert|update|upsert|delete|rpc)$/.test(c))).toEqual([]);
   });
+
+  it("takes the display options from the school's report settings (defaults when none are stored)", async () => {
+    const cards = [{ student_id: "s1", comment: "ok", comment_source: "teacher_approved" }];
+    const plain = fakeSupabase({ ...base, report_cards: cards });
+    expect((await loadReportCardDocuments(plain.client, "e1", { studentId: "s1" }))[0].options).toEqual({ showRank: true, showCompetencies: true, showSignatures: true });
+    const custom = fakeSupabase({ ...base, schools: { ...base.schools, report_settings: { ranking_enabled: false, show_signatures: false } }, report_cards: cards });
+    expect((await loadReportCardDocuments(custom.client, "e1", { studentId: "s1" }))[0].options).toEqual({ showRank: false, showCompetencies: true, showSignatures: false });
+  });
 });
+

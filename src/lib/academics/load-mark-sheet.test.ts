@@ -60,6 +60,19 @@ describe("loadMarkSheetModel", () => {
     expect(model!.learners[0]).toMatchObject({ admissionNumber: "A1", name: "Ann Abel", streamName: "A", total: 40.5, average: 20.25, rankInStream: 1 });
   });
 
+  it("passes the school's report settings into the model options (all on by default)", async () => {
+    const on = await loadMarkSheetModel(fakeSupabase(data).client, { examId: "e1", classId: "c1", preparedBy: null });
+    expect(on!.options).toEqual({ rankingEnabled: true, showSignatures: true, showClassStatistics: true });
+    expect(on!.showPositions).toBe(true);
+    const off = await loadMarkSheetModel(
+      fakeSupabase({ ...data, schools: { ...data.schools, report_settings: { ranking_enabled: false, show_class_statistics: false } } }).client,
+      { examId: "e1", classId: "c1", preparedBy: null },
+    );
+    expect(off!.options).toEqual({ rankingEnabled: false, showSignatures: true, showClassStatistics: false });
+    expect(off!.showAverage).toBe(true);
+    expect(off!.showPositions).toBe(false);
+  });
+
   it("keeps a genuine zero (numeric column returned as 0) distinct from a missing mark", async () => {
     const { client } = fakeSupabase(data);
     const model = await loadMarkSheetModel(client, { examId: "e1", classId: "c1", preparedBy: null });

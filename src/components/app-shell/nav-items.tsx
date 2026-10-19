@@ -188,6 +188,7 @@ const settingsChildren: NavChild[] = [
   { label: "Account", href: "/settings/account", icon: Lock },
   { label: "General", href: "/settings/general", icon: Settings },
   { label: "Branding", href: "/settings/branding", icon: Palette },
+  { label: "Report Settings", href: "/settings/reports", icon: FileText },
   { label: "Admission Form", href: "/settings/admission-form", icon: FileText },
   { label: "Admission Documents", href: "/settings/admission-documents", icon: FileText },
   { label: "Users & Roles", href: "/settings/staff", icon: Users },
