@@ -29,6 +29,8 @@ asked_to_stop), optional team member (`platform_team_members`), optional note (5
 ## Limits (deliberate)
 
 - Self-reported: it records what a person says they did, not that a message was delivered.
+- The one exception: a trial message that really went out through the email provider (see `trial-nudges.md`) writes an
+  email check-in automatically, so the school is treated as contacted.
 - There is no edit or delete in the UI; a wrong entry is corrected by logging another one.
 - The 3-day wait applies equally to every flag, including "ending soon". A school checked in with 2 days ago and ending
   tomorrow sits in "Followed up" (with its days left shown) rather than "Needs a check-in".
