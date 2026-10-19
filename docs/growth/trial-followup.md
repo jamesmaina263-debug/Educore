@@ -47,4 +47,4 @@ If a query fails, the page says so and shows nothing rather than guessing.
 
 ## Not covered (later Phase 2 work)
 
-Sending welcome or reminder messages (needs the WhatsApp/email provider decisions and consent rules), and automated nudges. Each needs explicit approval first.
+Manually approved emails to trial-school owners now exist as a separate page (see `trial-nudges.md`); this page itself still sends nothing. Still not covered: WhatsApp or SMS messages, and any automated or scheduled nudges. Each needs explicit approval first.
