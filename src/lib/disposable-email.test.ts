@@ -18,6 +18,10 @@ describe("isDisposableEmail", () => {
     expect(isDisposableEmail("a@guerrillamail.com")).toBe(true);
     expect(isDisposableEmail("a@yopmail.com")).toBe(true);
   });
+  it("flags test/QA signup domains seen in production", () => {
+    expect(isDisposableEmail("alice012@punkproof.com")).toBe(true);
+    expect(isDisposableEmail("x@mail.punkproof.com")).toBe(true);
+  });
   it("flags subdomains of disposable providers", () => {
     expect(isDisposableEmail("a@x.mailinator.com")).toBe(true);
   });
