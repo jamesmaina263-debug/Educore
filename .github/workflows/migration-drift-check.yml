@@ -17,8 +17,12 @@ on:
     # Was daily -- written when direct-to-prod drift was assumed rare. 2026-09-02
     # saw 3 instances in about an hour (concurrent sessions applying migrations
     # straight to Supabase), each silently blocking deploy-functions.yml's
-    # schema-sync guard until someone noticed. 15 minutes bounds the exposure
-    # window to roughly that instead of up to 24 hours.
+    # schema-sync guard until someone noticed.
+    # NOTE: GitHub treats scheduled workflows as best-effort and throttles them. In
+    # practice this has run every 2-5 hours, not every 15 minutes (2026-10-19: no run
+    # between 06:46 and 10:38 UTC, so drift applied at 07:28 went unreconciled).
+    # Do not rely on this schedule alone -- the push-to-main trigger below also
+    # runs auto-reconcile-drift now, which does not depend on cron firing.
     - cron: "*/15 * * * *"
   workflow_dispatch: {}
 
@@ -124,6 +128,9 @@ jobs:
         if: failure()
         env:
           GH_TOKEN: ${{ github.token }}
+          # github.ref_name is "<n>/merge" on pull_request events, which matches no PR;
+          # github.head_ref is the real branch there (empty on other events).
+          HEAD_REF: ${{ github.head_ref || github.ref_name }}
         run: |
           {
             echo "### Migration drift check failed"
@@ -133,16 +140,18 @@ jobs:
             echo ""
             cat /tmp/missing_statements.md 2>/dev/null || true
           } > /tmp/drift_comment.md
-          PR_NUMBER=$(gh pr list --repo "${{ github.repository }}" --head "${{ github.ref_name }}" --state open --json number --jq '.[0].number // empty')
+          PR_NUMBER=$(gh pr list --repo "${{ github.repository }}" --head "$HEAD_REF" --state open --json number --jq '.[0].number // empty')
           if [ -n "$PR_NUMBER" ]; then
             gh pr comment "$PR_NUMBER" --body-file /tmp/drift_comment.md --repo "${{ github.repository }}"
           else
-            echo "No open PR found for ref ${{ github.ref_name }} -- skipping comment post (output is above in the job log)."
+            echo "No open PR found for ref $HEAD_REF -- skipping comment post (output is above in the job log)."
           fi
 
-  # Only on schedule/workflow_dispatch -- a push/PR run is validating a specific proposed
-  # change, not reporting independently-discovered prod drift, so auto-opening a
-  # reconciliation PR there would be surprising. Uses the default GITHUB_TOKEN (no new
+  # Only on schedule/workflow_dispatch, or a push to main that failed the check -- a PR run
+  # is validating a specific proposed change, not reporting independently-discovered prod
+  # drift, so auto-opening a reconciliation PR there would be surprising. A failed push to
+  # main is different: main is already merged, so the drift is real and blocks Deploy
+  # migrations (added 2026-10-19 after cron failed to fire for hours). Uses the default GITHUB_TOKEN (no new
   # secret) to write the missing files and open the PR -- see reconcile_migration_drift.py
   # for how content is sourced (verbatim from schema_migrations, never introspected/guessed).
   #
@@ -157,7 +166,7 @@ jobs:
   # long-lived credential as a CI secret is a security decision, not a code change.
   auto-reconcile-drift:
     needs: check-drift
-    if: failure() && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
+    if: failure() && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main'))
     runs-on: ubuntu-latest
     permissions:
       contents: write
