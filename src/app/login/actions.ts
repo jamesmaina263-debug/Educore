@@ -10,6 +10,7 @@ import { sendSecurityAlert } from "@/lib/security-alert";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { setSchoolSlugCookie, clearSchoolSlugCookie } from "@/lib/school-slug-cookie";
 import { clearAdminOperatorCookie } from "@/lib/admin-operator-server";
+import { NOT_APPROVED_MESSAGE, signupReviewGate } from "@/lib/signup-review";
 
 export type LoginState = { error: string | null };
 
@@ -99,7 +100,7 @@ export async function login(
     await tagSentryRequestContext(supabase);
     const { data: schoolUser } = await supabase
       .from("school_users")
-      .select("status, must_change_password, temp_password_expires_at, schools(status)")
+      .select("status, must_change_password, temp_password_expires_at, schools(status, signup_review_status)")
       .eq("auth_user_id", signInData.user.id)
       .maybeSingle();
 
@@ -125,12 +126,20 @@ export async function login(
     // staff could keep logging in as normal. 'trial' and 'active' both pass;
     // only 'suspended' and 'cancelled' (the other two schools_status_check
     // values) block here.
-    const schoolStatus = (schoolUser?.schools as unknown as { status: string } | null)?.status;
+    const schoolRow = schoolUser?.schools as unknown as { status: string; signup_review_status?: string } | null;
+    const schoolStatus = schoolRow?.status;
     if (schoolUser && (schoolStatus === "suspended" || schoolStatus === "cancelled")) {
       await supabase.auth.signOut();
       return {
         error: "Your school's account is currently suspended. Contact your school admin.",
       };
+    }
+
+    // A rejected signup is turned away here, with the school kept. A pending one is let in: the
+    // middleware then holds every school-app page on /pending-approval until it is approved.
+    if (schoolUser && signupReviewGate(schoolRow?.signup_review_status) === "rejected") {
+      await supabase.auth.signOut();
+      return { error: NOT_APPROVED_MESSAGE };
     }
 
     if (schoolUser?.must_change_password) {

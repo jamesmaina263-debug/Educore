@@ -24,6 +24,16 @@ const PLATFORM_ADMIN_EMAIL = Deno.env.get("PLATFORM_ADMIN_EMAIL") ?? "admin@educ
 // opt-in `from` override comment in _shared/email/index.ts.
 const ASSIGNMENT_FROM_ADDRESS = "james.maina@educoreafrica.com";
 
+// Signup fields come from anyone on the internet, so anything that goes into the email HTML is escaped.
+function esc(value: unknown): string {
+  return String(value ?? "—")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
 }
@@ -51,6 +61,7 @@ Deno.serve(async (req) => {
     resource?: string;
     source_page?: string;
     lead_id?: string;
+    school_type?: string;
   };
   try {
     payload = await req.json();
@@ -100,6 +111,31 @@ Deno.serve(async (req) => {
       `<li><strong>Source page:</strong> ${payload.source_page ?? "—"}</li>`,
       `</ul>`,
       `<p><a href="https://www.educoreafrica.com/admin/leads">View in the Platform Admin Console</a></p>`,
+    ].join("\n");
+
+    try {
+      const emailProvider = getEmailProvider();
+      await emailProvider.send(PLATFORM_ADMIN_EMAIL, subject, lines);
+      return json({ success: true });
+    } catch (err) {
+      console.error(err);
+      const message = err instanceof Error ? err.message : String(err);
+      return json({ error: message }, 500);
+    }
+  }
+
+  if (payload.kind === "school_signup") {
+    const subject = `New school signup awaiting approval: ${String(payload.school_name ?? "unknown school").replace(/[\r\n]+/g, " ").slice(0, 120)}`;
+    const lines = [
+      `<p>A new school signed up and is waiting for your approval. It cannot use the system until you approve it, and its 30-day trial starts when you do.</p>`,
+      `<ul>`,
+      `<li><strong>School:</strong> ${esc(payload.school_name)}</li>`,
+      `<li><strong>Type:</strong> ${esc(payload.school_type)}</li>`,
+      `<li><strong>Owner:</strong> ${esc(payload.name)}</li>`,
+      `<li><strong>Email:</strong> ${esc(payload.email)}</li>`,
+      `<li><strong>Phone:</strong> ${esc(payload.phone)}</li>`,
+      `</ul>`,
+      `<p><a href="https://www.educoreafrica.com/admin/signups">Review in the Platform Admin Console</a></p>`,
     ].join("\n");
 
     try {

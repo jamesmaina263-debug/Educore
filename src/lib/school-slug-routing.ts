@@ -23,7 +23,7 @@ export { APP_ROUTE_SEGMENTS };
 // unchanged. Keep in sync with src/app/(marketing)'s top-level folder list.
 export const NEVER_PREFIX = new Set([
   "api", "apply", "login", "signup", "notifications", "parent-login", "portal", "admin", "change-password",
-  "maintenance", "auth", "reset-password", "forgot-password",
+  "maintenance", "auth", "reset-password", "forgot-password", "pending-approval",
   "platform", "solutions", "ai-automation", "pricing", "about", "contact", "faq",
   "privacy", "terms", "finance-fees", "security", "blog",
   "student-management-system", "cbc-school-management",

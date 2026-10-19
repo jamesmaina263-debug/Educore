@@ -94,7 +94,11 @@ export function SignupForm() {
             <p className="text-sm text-muted-foreground">
               We&apos;ve created <span className="font-medium text-foreground">{state.schoolName}</span> and sent a
               link to <span className="font-medium text-foreground">{state.email}</span>. Open it to choose your
-              password and go straight to your dashboard.
+              password and sign in.
+            </p>
+            <p className="text-sm text-muted-foreground">
+              Our team reviews every new school before it opens. You&apos;ll see a short waiting page until
+              you&apos;re approved, and your 30-day free trial starts the moment you are.
             </p>
             <p className="text-xs text-muted-foreground">
               Open the link in this same browser. Nothing in your inbox after a few minutes? Check spam, or use
