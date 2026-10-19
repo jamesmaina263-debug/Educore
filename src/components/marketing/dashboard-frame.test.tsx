@@ -53,13 +53,14 @@ describe("DashboardFrame", () => {
     expect(html).toMatch(/class="[^"]*\bbg-background\b[^"]*\btext-foreground\b[^"]*"/);
   });
 
-  it("has a phone layout that drops the sidebar and the secondary panels", () => {
+  it("shows the full desktop dashboard on phones (sidebar with every module), cropped on the right", () => {
     const html = renderToStaticMarkup(<DashboardFrame />);
-    // Sidebar, operations strip and attendance chart are hidden in compact mode...
-    expect(html).toMatch(/<aside[^>]*group-data-\[compact=true\]:hidden/);
-    expect(html).toContain("group-data-[compact=true]:grid-cols-2");
-    // ...but the headline KPI cards and the fee chart are not.
-    expect(html).not.toMatch(/Enrolled students[^]{0,40}group-data-\[compact=true\]:hidden/);
+    // No phone-only restyling: the sidebar and every panel are kept on phones...
+    expect(html).not.toContain("group-data-[compact=true]");
+    expect(html).toMatch(/<aside[^>]*group-data-\[tablet=true\]:hidden/);
+    expect(html).not.toMatch(/<aside[^>]*group-data-\[compact=true\]:hidden/);
+    // ...laid out at the full desktop width, with the stage cropped at 980px.
+    expect(html).toContain("--stage-ratio-compact:980 / 840");
   });
 
   it("has a tablet layout that drops the sidebar and the narrow attendance panel", () => {

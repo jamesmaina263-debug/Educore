@@ -36,11 +36,11 @@ import { cn } from "@/lib/utils";
 const DESIGN_WIDTH = 1280;
 const DESIGN_HEIGHT = 840; // 3:2 -- a laptop-screen screenshot
 
-// Phones: scaling the whole 1280px window down to ~330px makes every label
-// ~4px and unreadable. Below COMPACT.below px the stage instead shows a
-// narrower, taller crop (no sidebar, 2x2 KPI cards, fee chart only) that is
-// scaled far less, so the headline figures stay legible.
-const COMPACT = { below: 640, width: 520, height: 760 };
+// Phones: the same full desktop dashboard -- sidebar with every module, KPI
+// cards, operations strip, charts -- laid out at the full 1280px and shown at a
+// readable scale, with the right-hand edge cropped (like a desktop screenshot).
+// Only the left COMPACT.viewWidth px are visible; see ScaledStage.
+const COMPACT = { below: 640, width: DESIGN_WIDTH, height: DESIGN_HEIGHT, viewWidth: 980 };
 // Tablets (640-1023px): keep the full dashboard (KPIs, operations, charts)
 // but drop the 256px sidebar and lay out at 900px instead of 1280px, so the
 // scale is ~0.65-1.0 instead of ~0.45-0.75.
@@ -258,7 +258,7 @@ function BarChart({
             <div key={group.label} className="relative z-10 flex items-end gap-0.5">
               {group.values.map((bar, i) => (
                 <div key={i} className="flex flex-col items-center justify-end" style={{ height }}>
-                  <span className="mb-0.5 text-xs text-foreground group-data-[compact=true]:hidden">{format(bar.v)}</span>
+                  <span className="mb-0.5 text-xs text-foreground">{format(bar.v)}</span>
                   <div
                     className="w-3.5 rounded-t-sm"
                     style={{
@@ -369,7 +369,7 @@ export function DashboardFrame({ className }: { className?: string }) {
         >
           <div className="flex h-full bg-background text-foreground" aria-hidden="true">
             {/* Sidebar -- every module, rendered from the real navGroups. */}
-            <aside className="flex w-64 shrink-0 flex-col overflow-hidden border-r border-sidebar-border bg-sidebar group-data-[compact=true]:hidden group-data-[tablet=true]:hidden">
+            <aside className="flex w-64 shrink-0 flex-col overflow-hidden border-r border-sidebar-border bg-sidebar group-data-[tablet=true]:hidden">
               <div className="flex h-14 items-center border-b border-sidebar-border px-4 text-sm font-semibold text-sidebar-foreground">
                 {SCHOOL}
               </div>
@@ -432,7 +432,7 @@ export function DashboardFrame({ className }: { className?: string }) {
                     </span>
                   </div>
 
-                  <div className="grid grid-cols-4 gap-3 group-data-[compact=true]:grid-cols-2">
+                  <div className="grid grid-cols-4 gap-3">
                     {METRICS.map((m) => (
                       <div key={m.label} className="panel px-4 py-3">
                         <div className="flex items-start justify-between gap-2">
@@ -447,7 +447,7 @@ export function DashboardFrame({ className }: { className?: string }) {
                           </span>
                         </div>
                         <p
-                          className="mt-1.5 whitespace-nowrap text-2xl font-semibold tracking-tight group-data-[compact=true]:text-xl group-data-[tablet=true]:text-xl"
+                          className="mt-1.5 whitespace-nowrap text-2xl font-semibold tracking-tight group-data-[tablet=true]:text-xl"
                           data-numeric
                         >
                           {m.value}
@@ -473,7 +473,7 @@ export function DashboardFrame({ className }: { className?: string }) {
                     ))}
                   </div>
 
-                  <div className="panel px-4 py-3 group-data-[compact=true]:hidden">
+                  <div className="panel px-4 py-3">
                     <p className="label-eyebrow mb-2">Operations</p>
                     <div className="grid grid-cols-6 gap-x-4 gap-y-3">
                       {OPERATIONS.map((op) => (
@@ -488,8 +488,8 @@ export function DashboardFrame({ className }: { className?: string }) {
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-3 gap-3 group-data-[compact=true]:grid-cols-1 group-data-[tablet=true]:grid-cols-1">
-                    <div className="col-span-2 group-data-[compact=true]:col-span-1 group-data-[tablet=true]:col-span-1">
+                  <div className="grid grid-cols-3 gap-3 group-data-[tablet=true]:grid-cols-1">
+                    <div className="col-span-2 group-data-[tablet=true]:col-span-1">
                       <Panel title="Fee collection vs. invoiced" meta="KES thousands · this term">
                         <div className="mb-3 flex items-center gap-3 text-xs text-muted-foreground">
                           <span className="flex items-center gap-1.5">
@@ -514,7 +514,7 @@ export function DashboardFrame({ className }: { className?: string }) {
                         />
                       </Panel>
                     </div>
-                    <Panel title="Attendance rate by class" meta="Today" className="group-data-[compact=true]:hidden group-data-[tablet=true]:hidden">
+                    <Panel title="Attendance rate by class" meta="Today" className="group-data-[tablet=true]:hidden">
                       <BarChart
                         max={100}
                         ticks={[0, 25, 50, 75, 100]}
@@ -527,7 +527,7 @@ export function DashboardFrame({ className }: { className?: string }) {
                     </Panel>
                   </div>
 
-                  <div className="grid grid-cols-3 gap-3 group-data-[compact=true]:hidden">
+                  <div className="grid grid-cols-3 gap-3">
                     <Panel title="Enrollment trend" meta="Last 5 terms">
                       <EnrollmentChart />
                     </Panel>
@@ -574,7 +574,7 @@ export function DashboardFrame({ className }: { className?: string }) {
                     </Panel>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-3 group-data-[compact=true]:hidden">
+                  <div className="grid grid-cols-2 gap-3">
                     <div className="panel-interactive flex items-center gap-3 px-4 py-3">
                       <span className="grid size-8 place-items-center rounded-md bg-primary-subtle text-primary">
                         <CalendarCheck className="size-4" />

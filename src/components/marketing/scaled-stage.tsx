@@ -15,7 +15,11 @@ import { useLayoutEffect, useRef, useState } from "react";
 // `group-data-[compact=true]:` / `group-data-[tablet=true]:` variants -- e.g.
 // hide a sidebar. The CSS aspect ratios below use Tailwind's `max-sm` (640px)
 // and `max-lg` (1024px); keep `compact.below` / `tablet.below` in sync.
-export type CompactStage = { below: number; width: number; height: number };
+// `viewWidth` (optional): the window is laid out at `width` but only its left
+// `viewWidth` design px are shown -- the rest is cropped at the container edge,
+// like a desktop screenshot cropped on the right. Scale and aspect ratio use
+// `viewWidth`.
+export type CompactStage = { below: number; width: number; height: number; viewWidth?: number };
 
 export function ScaledStage({
   designWidth,
@@ -36,6 +40,7 @@ export function ScaledStage({
 
   const compactBelow = compact?.below;
   const compactWidth = compact?.width;
+  const compactView = compact?.viewWidth;
   const tabletBelow = tablet?.below;
   const tabletWidth = tablet?.width;
   useLayoutEffect(() => {
@@ -55,8 +60,9 @@ export function ScaledStage({
           : next === "tablet" && tabletWidth
             ? tabletWidth
             : designWidth;
+      const visible = next === "compact" && compactView ? compactView : width;
       setMode(next);
-      setScale(Math.min(next === "desktop" ? 1.2 : 1.4, outer.clientWidth / width));
+      setScale(Math.min(next === "desktop" ? 1.2 : 1.4, outer.clientWidth / visible));
     };
     measure();
     const observer = new ResizeObserver(measure);
@@ -66,7 +72,7 @@ export function ScaledStage({
       observer.disconnect();
       window.removeEventListener("resize", measure);
     };
-  }, [designWidth, compactBelow, compactWidth, tabletBelow, tabletWidth]);
+  }, [designWidth, compactBelow, compactWidth, compactView, tabletBelow, tabletWidth]);
 
   const active = mode === "compact" ? compact : mode === "tablet" ? tablet : undefined;
   const width = active ? active.width : designWidth;
@@ -91,7 +97,7 @@ export function ScaledStage({
                 ? `${tablet.width} / ${tablet.height}`
                 : `${designWidth} / ${designHeight}`,
               "--stage-ratio-compact": compact
-                ? `${compact.width} / ${compact.height}`
+                ? `${compact.viewWidth ?? compact.width} / ${compact.height}`
                 : tablet
                   ? `${tablet.width} / ${tablet.height}`
                   : `${designWidth} / ${designHeight}`,
