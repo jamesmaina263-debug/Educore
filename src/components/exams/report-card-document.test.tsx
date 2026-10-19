@@ -14,6 +14,7 @@ const doc = (over: Partial<ReportCardDocumentData> = {}): ReportCardDocumentData
   rank: 2,
   released: true,
   comment: "Excellent progress",
+  options: { showRank: true, showCompetencies: true, showSignatures: true },
   ...over,
 });
 
@@ -55,4 +56,18 @@ describe("ReportCardDocumentSet", () => {
     expect((out.match(/report-card-page/g) ?? []).length).toBeGreaterThanOrEqual(2);
     expect(out).toContain("Ben Bett");
   });
+
+  it("school options hide the position, the competency table and the signature lines (average stays)", () => {
+    const withComp = doc({ competencies: [{ subject: "Maths", strand: "Numbers", subStrand: "Place value", rating: "EE" }] });
+    const on = html([withComp]);
+    expect(on).toContain("Position in stream");
+    expect(on).toContain("CBC competency ratings");
+    expect(on).toContain("Parent / Guardian");
+    const off = html([{ ...withComp, options: { showRank: false, showCompetencies: false, showSignatures: false } }]);
+    expect(off).not.toContain("Position in stream");
+    expect(off).not.toContain("CBC competency ratings");
+    expect(off).not.toContain("Parent / Guardian");
+    expect(off).toContain("Average:");
+  });
 });
+

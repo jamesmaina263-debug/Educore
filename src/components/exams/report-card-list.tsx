@@ -44,12 +44,15 @@ export function ReportCardList({
   rows,
   canGenerate,
   canApprove,
+  rankingEnabled = true,
 }: {
   examId: string;
   classId: string;
   rows: ReportCardRow[];
   canGenerate: boolean;
   canApprove: boolean;
+  /** School setting: when false the Rank text is hidden (the average still shows). */
+  rankingEnabled?: boolean;
 }) {
   const router = useRouter();
   const [pending, setPending] = useState(false);
@@ -135,7 +138,7 @@ export function ReportCardList({
                 </div>
                 {r.average_score !== null && (
                   <p className="text-sm text-muted-foreground">
-                    Average {r.average_score} {r.rank_in_stream ? `— Rank ${r.rank_in_stream} in stream` : ""}
+                    Average {r.average_score} {rankingEnabled && r.rank_in_stream ? `— Rank ${r.rank_in_stream} in stream` : ""}
                   </p>
                 )}
               </div>

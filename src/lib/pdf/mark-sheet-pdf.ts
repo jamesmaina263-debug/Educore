@@ -37,7 +37,7 @@ export async function buildMarkSheetPdf(model: MarkSheetModel, logo: LoadedLogo 
   const autoTable = (await import("jspdf-autotable")).default;
 
   const numeric = model.kind === "numeric" || model.kind === "mixed";
-  const posCols = model.showRanking ? (model.multiStream ? 3 : 2) : 0; // Average + position(s)
+  const posCols = (model.showAverage ? 1 : 0) + (model.showPositions ? (model.multiStream ? 2 : 1) : 0); // Average + position(s)
   const columnCount = 3 + (model.multiStream ? 1 : 0) + model.subjects.length + (numeric ? 1 : 0) + posCols;
   // A4 portrait fits about 8 columns legibly; wider sheets go landscape.
   const doc = new jsPDF({ orientation: columnCount > 8 ? "landscape" : "portrait", unit: "mm", format: "a4" });
@@ -132,8 +132,8 @@ export async function buildMarkSheetPdf(model: MarkSheetModel, logo: LoadedLogo 
   if (model.multiStream) head.push("Stream");
   for (const s of model.subjects) head.push(numeric ? `${s.name}\n/${s.maxScore}` : s.name);
   if (numeric) head.push("Total");
-  if (model.showRanking) {
-    head.push("Avg %");
+  if (model.showAverage) head.push("Avg %");
+  if (model.showPositions) {
     head.push(model.multiStream ? "Pos\n(stream)" : "Pos");
     if (model.multiStream) head.push("Pos\n(class)");
   }
@@ -142,8 +142,8 @@ export async function buildMarkSheetPdf(model: MarkSheetModel, logo: LoadedLogo 
     if (model.multiStream) row.push(l.streamName);
     for (const s of model.subjects) row.push(l.cells[s.id].text);
     if (numeric) row.push(l.total === null ? MISSING : String(l.total));
-    if (model.showRanking) {
-      row.push(l.average === null ? MISSING : l.average.toFixed(2));
+    if (model.showAverage) row.push(l.average === null ? MISSING : l.average.toFixed(2));
+    if (model.showPositions) {
       row.push(l.rankInStream === null ? MISSING : String(l.rankInStream));
       if (model.multiStream) row.push(l.rankInClass === null ? MISSING : String(l.rankInClass));
     }
@@ -155,7 +155,7 @@ export async function buildMarkSheetPdf(model: MarkSheetModel, logo: LoadedLogo 
   const foot: RowInput[] = [];
   if (model.kind !== "empty") {
     // Cells after the subject columns: Total, then Avg and position(s) when ranking is shown.
-    const trail = (avg?: string): string[] => [...(numeric ? [""] : []), ...(model.showRanking ? [avg ?? "", ...(model.multiStream ? ["", ""] : [""])] : [])];
+    const trail = (avg?: string): string[] => [...(numeric ? [""] : []), ...(model.showAverage ? [avg ?? ""] : []), ...(model.showPositions ? (model.multiStream ? ["", ""] : [""]) : [])];
     const mk = (label: string, perSubject: string[], avg?: string): CellDef[] => [
       { content: label, colSpan: labelSpan, styles: { halign: "right", fontStyle: "bold" } },
       ...perSubject.map((content): CellDef => ({ content })),
@@ -166,12 +166,12 @@ export async function buildMarkSheetPdf(model: MarkSheetModel, logo: LoadedLogo 
         const v = pick(model.subjectStats[sub.id]);
         return v === null ? MISSING : String(v);
       });
-    if (numeric) {
+    if (numeric && model.options.showClassStatistics) {
       foot.push(mk("Class mean", stat((st) => st.mean), model.classMean === null ? undefined : String(model.classMean)));
       foot.push(mk("Highest", stat((st) => st.highest)));
       foot.push(mk("Lowest", stat((st) => st.lowest)));
     }
-    if (model.kind === "cbc" || model.kind === "mixed") {
+    if ((model.kind === "cbc" || model.kind === "mixed") && model.options.showClassStatistics) {
       foot.push(mk("Performance levels", model.subjects.map((sub) => model.subjectStats[sub.id].distribution.map((d) => `${d.code} ${d.count}`).join("  ") || MISSING)));
     }
     // entered + missing = the learners who take the subject (all of them unless it is a selective subject).
@@ -226,14 +226,14 @@ export async function buildMarkSheetPdf(model: MarkSheetModel, logo: LoadedLogo 
   notes.push(`${MISSING} = mark not yet entered. Missing marks are excluded from all statistics and are never counted as zero.`);
   if (model.learners.some((l) => Object.values(l.cells).some((c) => c.notApplicable))) notes.push(`${NOT_TAKEN} = the learner does not take this subject. It is not counted as missing or as zero.`);
   if (model.incompleteCount > 0) notes.push(`* = results incomplete (fewer subjects entered than examined; ${model.incompleteCount} learner${model.incompleteCount === 1 ? "" : "s"}). Averages use entered subjects only.`);
-  if (model.showRanking) notes.push(`Avg % = mean of each entered subject's score as a percentage of its maximum, so subjects with different maximums count equally. Position is by Avg %; learners with equal averages share a position${model.multiStream ? ". Stream position is within the stream, class position across all streams" : ""}.`);
+  if (model.showAverage) notes.push(`Avg % = mean of each entered subject's score as a percentage of its maximum, so subjects with different maximums count equally. ${model.showPositions ? ` Position is by Avg %; learners with equal averages share a position${model.multiStream ? ". Stream position is within the stream, class position across all streams" : ""}.` : ""}`);
   if (model.kind === "cbc") notes.push("Competency-based assessment: performance levels are descriptors, so no totals, averages or positions are calculated.");
   if (model.kind === "mixed") notes.push("This sheet mixes marks and competency levels, so no average or position is calculated.");
   doc.setFontSize(7.5);
   doc.setFont("helvetica", "normal");
   doc.setTextColor(70);
   const wrapped = notes.flatMap((n) => doc.splitTextToSize(n, pageW - 2 * MARGIN) as string[]);
-  const blockH = wrapped.length * 3.5 + 8 + 16;
+  const blockH = wrapped.length * 3.5 + 8 + (model.options.showSignatures ? 16 : 0);
   if (ny + blockH > pageH - 18) {
     doc.addPage();
     ny = 18;
@@ -241,7 +241,7 @@ export async function buildMarkSheetPdf(model: MarkSheetModel, logo: LoadedLogo 
   doc.text(wrapped, MARGIN, ny);
   ny += wrapped.length * 3.5 + 8;
 
-  // ---- Verification block (compact: one row per signatory) ----
+  // ---- Verification block (compact: one row per signatory); a school can switch it off ----
   doc.setTextColor(0);
   doc.setFontSize(8.5);
   const fields = [
@@ -249,7 +249,7 @@ export async function buildMarkSheetPdf(model: MarkSheetModel, logo: LoadedLogo 
     { label: "Verified by (HOD / Deputy)", value: null },
   ];
   const colW = (pageW - 2 * MARGIN) / 2;
-  fields.forEach((f, i) => {
+  (model.options.showSignatures ? fields : []).forEach((f, i) => {
     const x = MARGIN + i * colW;
     doc.setFont("helvetica", "bold");
     doc.text(f.label, x, ny);

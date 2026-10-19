@@ -9,6 +9,7 @@ import { ReportCardList, type ReportCardRow } from "@/components/exams/report-ca
 import { MarkSheetExportMenu } from "@/components/exams/mark-sheet-export-menu";
 import { buildReportCardInsights } from "@/lib/academics/report-card-insights";
 import { loadMarkSheetModel } from "@/lib/academics/load-mark-sheet";
+import { DEFAULT_REPORT_SETTINGS, loadReportSettings } from "@/lib/academics/report-settings";
 
 export default async function ReportCardsPage({
   searchParams,
@@ -24,7 +25,7 @@ export default async function ReportCardsPage({
   const [{ data: schoolUser }, { data: canGenerate }, { data: canApproveOwn }, { data: canApproveAny }] = await Promise.all([
     supabase
       .from("school_users")
-      .select("full_name, roles(display_name), schools(name)")
+      .select("school_id, full_name, roles(display_name), schools(name)")
       .eq("auth_user_id", user.id)
       .maybeSingle(),
     supabase.rpc("auth_has_permission", { p_permission_key: "exams.write" }),
@@ -213,6 +214,7 @@ export default async function ReportCardsPage({
     });
   }
 
+  const reportSettings = schoolUser?.school_id ? await loadReportSettings(supabase, schoolUser.school_id as string) : DEFAULT_REPORT_SETTINGS;
   const markSheetModel =
     rows.length > 0 && selectedExamId && selectedClassId
       ? await loadMarkSheetModel(supabase, { examId: selectedExamId, classId: selectedClassId, preparedBy: schoolUser?.full_name ?? null })
@@ -270,6 +272,7 @@ export default async function ReportCardsPage({
             rows={rows}
             canGenerate={canGenerate === true}
             canApprove={canApproveOwn === true || canApproveAny === true}
+            rankingEnabled={reportSettings.rankingEnabled}
           />
         )}
       </div>
