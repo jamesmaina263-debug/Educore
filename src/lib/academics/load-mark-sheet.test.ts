@@ -66,6 +66,34 @@ describe("loadMarkSheetModel", () => {
     expect(model!.learners[0].cells.m).toMatchObject({ score: 0, missing: false });
   });
 
+  it("applies enrolment: a learner not enrolled in a selective subject shows n/a, not missing", async () => {
+    const withElective = {
+      ...data,
+      exams: { ...data.exams, terms: { name: "Term 2", academic_year_id: "y1", academic_years: { name: "2026" } } },
+      students: [
+        { id: "1", first_name: "Ann", last_name: "Abel", other_names: null, admission_number: "A1", current_class_id: "st-a" },
+        { id: "2", first_name: "Ben", last_name: "Bett", other_names: null, admission_number: "A2", current_class_id: "st-a" },
+      ],
+      // English is selective and only Ann takes it.
+      student_subjects: [
+        { student_id: "1", subject_id: "e", is_active: true },
+        { student_id: "2", subject_id: "e", is_active: false },
+      ],
+    };
+    const model = await loadMarkSheetModel(fakeSupabase(withElective).client, { examId: "e1", classId: "c1", preparedBy: null });
+    const [ann, ben] = model!.learners;
+    expect(ann.cells.e).toMatchObject({ score: 40.5, missing: false });
+    expect(ben.cells.e).toMatchObject({ text: "n/a", notApplicable: true });
+    expect(ben).toMatchObject({ expected: 1, incomplete: true }); // still missing Mathematics, which he does take
+  });
+
+  it("without an academic year, or without student_subjects rows, nothing about the sheet changes", async () => {
+    const { client, calls } = fakeSupabase(data); // no academic_year_id, no student_subjects
+    const model = await loadMarkSheetModel(client, { examId: "e1", classId: "c1", preparedBy: null });
+    expect(model!.learners[0].cells.m.notApplicable).toBeUndefined();
+    expect(calls.some((c) => c.startsWith("student_subjects"))).toBe(false); // no year => no extra query at all
+  });
+
   it("returns null when the exam or class isn't visible to the caller (RLS)", async () => {
     expect(await loadMarkSheetModel(fakeSupabase({ ...data, exams: null }).client, { examId: "e", classId: "c", preparedBy: null })).toBeNull();
     expect(await loadMarkSheetModel(fakeSupabase({ ...data, classes: null }).client, { examId: "e", classId: "c", preparedBy: null })).toBeNull();

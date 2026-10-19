@@ -1,5 +1,6 @@
 import type { createClient } from "@/lib/supabase/server";
 import { buildMarkSheetModel, type MarkSheetModel } from "@/lib/academics/mark-sheet-model";
+import { loadEnrolmentRows } from "@/lib/academics/load-subject-enrolment";
 
 // Server-side loader for the Class Mark Sheet. Reads only, through the caller's own Supabase
 // session, so existing RLS (exams.read, school scoping) decides what is visible; this adds no
@@ -16,7 +17,7 @@ export async function loadMarkSheetModel(
 ): Promise<MarkSheetModel | null> {
   const { examId, classId } = args;
   const [{ data: exam }, { data: cls }, { data: examSubjects }, { data: streams }, { data: marks }, { data: rankings }] = await Promise.all([
-    supabase.from("exams").select("name, exam_type, status, terms(name, academic_years(name))").eq("id", examId).maybeSingle(),
+    supabase.from("exams").select("name, exam_type, status, terms(name, academic_year_id, academic_years(name))").eq("id", examId).maybeSingle(),
     supabase.from("classes").select("name, school_id").eq("id", classId).maybeSingle(),
     supabase.from("exam_subjects").select("max_score, subjects(id, name)").eq("exam_id", examId).eq("class_id", classId),
     supabase.from("streams").select("id, name").eq("class_id", classId),
@@ -43,13 +44,21 @@ export async function loadMarkSheetModel(
     supabase.from("schools").select("name, motto, logo_url, address, phone, email, primary_color").eq("id", cls.school_id).maybeSingle(),
   ]);
 
-  const term = one(exam.terms as unknown as { name: string; academic_years: { name: string } | { name: string }[] | null } | null);
+  const term = one(exam.terms as unknown as { name: string; academic_year_id?: string | null; academic_years: { name: string } | { name: string }[] | null } | null);
   const subjects = ((examSubjects ?? []) as unknown as { max_score: number; subjects: { id: string; name: string } | { id: string; name: string }[] | null }[])
     .flatMap((es) => {
       const s = one(es.subjects);
       return s ? [{ id: s.id, name: s.name, maxScore: Number(es.max_score) }] : [];
     })
     .sort((a, b) => a.name.localeCompare(b.name));
+
+  // Which learners take which (selective) subjects. Empty for any school that has not set up electives, and
+  // on any read problem, which means every learner takes every subject -- the behaviour before this existed.
+  const enrolmentRows = await loadEnrolmentRows(supabase, {
+    academicYearId: term?.academic_year_id,
+    studentIds: ((students ?? []) as { id: string }[]).map((s) => s.id),
+    subjectIds: subjects.map((s) => s.id),
+  });
 
   return buildMarkSheetModel({
     school: {
@@ -89,6 +98,7 @@ export async function loadMarkSheetModel(
       rankInStream: r.rank_in_stream,
       rankInClass: r.rank_in_class,
     })),
+    enrolmentRows,
     generatedAt: new Date().toISOString(),
     preparedBy: args.preparedBy,
   });

@@ -12,6 +12,8 @@ import { getSchoolSlug } from "@/lib/school-slug-server";
 import { withSchoolSlug } from "@/lib/school-slug-href";
 import { generatePaperHref, groupPapersBySheet } from "@/lib/exam-paper-links";
 import { ExamComponentPicker } from "@/components/exams/exam-component-picker";
+import { buildSubjectEnrolment } from "@/lib/academics/subject-enrolment";
+import { loadEnrolmentRows } from "@/lib/academics/load-subject-enrolment";
 
 export default async function ExamProgressPage({ params }: { params: Promise<{ examId: string }> }) {
   const { examId } = await params;
@@ -30,11 +32,13 @@ export default async function ExamProgressPage({ params }: { params: Promise<{ e
 
   const { data: exam } = await supabase
     .from("exams")
-    .select("id, name, exam_type, status, term_id, component_id, terms(name)")
+    .select("id, name, exam_type, status, term_id, component_id, terms(name, academic_year_id)")
     .eq("id", examId)
     .maybeSingle();
   if (!exam) notFound();
-  const termName = (exam.terms as unknown as { name: string } | null)?.name ?? "";
+  const examTerm = exam.terms as unknown as { name: string; academic_year_id: string | null } | { name: string; academic_year_id: string | null }[] | null;
+  const termName = (Array.isArray(examTerm) ? examTerm[0] : examTerm)?.name ?? "";
+  const examAcademicYearId = (Array.isArray(examTerm) ? examTerm[0] : examTerm)?.academic_year_id ?? null;
 
   const { data: componentOptionRows } = await supabase
     .from("assessment_components")
@@ -137,6 +141,33 @@ export default async function ExamProgressPage({ params }: { params: Promise<{ e
     enteredByKey.set(key, (enteredByKey.get(key) ?? 0) + 1);
   }
 
+  // Selective subjects: a learner who does not take a subject must not count towards its "entered / total".
+  // With no enrolment rows (every school until electives are set up, or on any read problem) this is skipped
+  // and the totals below are exactly what they were before.
+  const enrolmentRows = await loadEnrolmentRows(supabase, {
+    academicYearId: examAcademicYearId,
+    studentIds: (rosterRows ?? []).map((r) => r.id),
+    subjectIds: Array.from(new Set((examSubjects ?? []).map((es) => es.subject_id))),
+  });
+  const studentsByClass = new Map<string, string[]>();
+  for (const r of rosterRows ?? []) {
+    const classId = r.current_class_id ? classByStream.get(r.current_class_id) : null;
+    if (classId) studentsByClass.set(classId, [...(studentsByClass.get(classId) ?? []), r.id]);
+  }
+  const enrolmentByClass = new Map<string, ReturnType<typeof buildSubjectEnrolment>>();
+  if (enrolmentRows.length > 0) {
+    for (const [classId, classStudentIds] of studentsByClass) {
+      const inClass = new Set(classStudentIds);
+      enrolmentByClass.set(
+        classId,
+        buildSubjectEnrolment(
+          enrolmentRows.filter((r) => inClass.has(r.studentId)),
+          (markRows ?? []).filter((m) => inClass.has(m.student_id)).map((m) => ({ studentId: m.student_id, subjectId: m.subject_id })),
+        ),
+      );
+    }
+  }
+
   // First timetabled teacher per class+subject (a class's streams may have more than one teacher for split subjects — pick the first).
   const teacherByKey = new Map<string, string>();
   for (const slot of slotRows ?? []) {
@@ -153,7 +184,10 @@ export default async function ExamProgressPage({ params }: { params: Promise<{ e
     const subjectName = (es.subjects as unknown as { name: string } | null)?.name ?? "";
     const className = classNameById.get(es.class_id) ?? "";
     const key = `${es.class_id}__${es.subject_id}`;
-    const total = rosterCountByClass.get(es.class_id) ?? 0;
+    const classEnrolment = enrolmentByClass.get(es.class_id);
+    const total = classEnrolment
+      ? (studentsByClass.get(es.class_id) ?? []).filter((studentId) => classEnrolment.takes(studentId, es.subject_id)).length
+      : (rosterCountByClass.get(es.class_id) ?? 0);
     const entered = Math.min(enteredByKey.get(key) ?? 0, total);
     return {
       key,

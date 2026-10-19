@@ -32,11 +32,23 @@ school (cascade). There is deliberately no trigger on `students`, `class_subject
 
 ## Rollout
 
-1. **Schema (this PR):** the table, indexes, policies. Inserts no rows; nothing reads it, so behaviour is unchanged.
-2. **Read path:** mark entry roster, mark sheet `expected` per student, rankings (flag incomplete), report cards, exam
-   paper rosters, student profile. A subject with no rows behaves as today.
-3. **Assignment screen:** staff set a subject to selective and tick who takes it, singly or in bulk by class.
-4. **Follow-ups:** guardian/student portal read policy if needed, copy-from-last-year, exam timetable clash checks.
+1. **Schema (shipped, #636):** the table, indexes, policies. Inserts no rows; nothing read it, so behaviour was unchanged.
+2. **Read path (this PR):** the rule lives in `src/lib/academics/subject-enrolment.ts`, rows are read by
+   `load-subject-enrolment.ts`. Used by:
+   - the mark-entry roster (only learners who take the subject; anyone already marked stays listed);
+   - the class mark sheet (PDF, Excel, CSV): `n/a` for a subject the learner does not take, `expected` and
+     "incomplete" per learner, "missing" and "marks entered x/y" counted over the learners who take the subject;
+   - the exam overview progress (`entered / total`).
+
+   Not changed, on purpose: rankings (marks that do not exist already drop out of them, and the formula is owned by
+   `class_rankings`), and individual report cards (they list the marks a learner has, so a subject they do not take
+   never appears). With no rows, or on any read problem, every learner takes every subject, i.e. today's behaviour.
+   The common case costs one small extra query per page.
+3. **Assignment screen:** staff set a subject to selective and tick who takes it, singly or in bulk by class. Until this
+   ships nothing writes rows, so nothing above changes for any school.
+4. **Follow-ups:** a learner admitted into a class after a subject became selective has no row and is treated as not
+   taking it until staff assign them (the assignment screen should surface this); guardian/student portal read policy
+   if needed, copy-from-last-year, exam timetable clash checks.
 
 Open decisions (defaults in brackets): ranking across different subject mixes [plain average of entered marks, rank
 marked provisional when marks are missing]; elective changes during a term [allowed, history protected as above];

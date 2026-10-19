@@ -17,7 +17,12 @@
 //  * Competency-based exams get a band distribution per subject instead of a mean, and no
 //    average/position: a band has no meaningful number to average (by design, see
 //    20260730151614_exams_rankings_and_close.sql).
-//  * A learner with fewer entered subjects than examined subjects is flagged incomplete.
+//  * A learner with fewer entered subjects than the subjects THEY TAKE is flagged incomplete.
+//  * Subjects a learner does not take (selective subjects, see subject-enrolment.ts) print "n/a", are not
+//    expected, and are left out of that subject's "missing" count. With no enrolment rows every learner
+//    takes every subject, so this changes nothing for a school that has not set up electives.
+
+import { buildSubjectEnrolment, type EnrolmentRow } from "@/lib/academics/subject-enrolment";
 
 export interface MarkSheetSchool {
   name: string;
@@ -37,6 +42,8 @@ export interface RawMarkSheetInput {
   students: { id: string; admissionNumber: string; firstName: string; lastName: string; otherNames: string | null; streamName: string }[];
   marks: { studentId: string; subjectId: string; rawScore: number | null; bandLabel: string | null; bandLevel: number | null }[];
   rankings: { studentId: string; totalScore: number; averageScore: number; rankInStream: number; rankInClass: number }[];
+  /** student_subjects rows for THIS class's students in the exam's academic year. Omitted/empty = everyone takes everything. */
+  enrolmentRows?: EnrolmentRow[];
   generatedAt: string;
   preparedBy: string | null;
 }
@@ -48,6 +55,8 @@ export interface MarkSheetCell {
   text: string;
   score: number | null;
   missing: boolean;
+  /** Only present (true) when the learner does not take this subject. */
+  notApplicable?: boolean;
 }
 
 export interface MarkSheetLearner {
@@ -93,6 +102,8 @@ export interface MarkSheetModel {
 }
 
 export const MISSING = "—";
+/** Printed in place of a mark for a subject the learner does not take. */
+export const NOT_TAKEN = "n/a";
 
 const EXAM_TYPE_LABELS: Record<string, string> = { cat: "CAT", exam: "Exam", mock: "Mock", other: "Assessment" };
 
@@ -138,7 +149,11 @@ export function buildMarkSheetModel(input: RawMarkSheetInput): MarkSheetModel {
     return code;
   };
 
-  const expected = input.subjects.length;
+  // A learner with a mark in a subject always counts as taking it, so enrolment changes never alter old results.
+  const enrolment = buildSubjectEnrolment(
+    input.enrolmentRows ?? [],
+    input.marks.map((m) => ({ studentId: m.studentId, subjectId: m.subjectId })),
+  );
   const streams = new Set(input.students.map((s) => s.streamName));
 
   const learners: MarkSheetLearner[] = input.students.map((s, i) => {
@@ -146,7 +161,13 @@ export function buildMarkSheetModel(input: RawMarkSheetInput): MarkSheetModel {
     let total = 0;
     let entered = 0;
     let numericEntered = 0;
+    let expected = 0;
     for (const subject of input.subjects) {
+      if (!enrolment.takes(s.id, subject.id)) {
+        cells[subject.id] = { text: NOT_TAKEN, score: null, missing: false, notApplicable: true };
+        continue;
+      }
+      expected += 1;
       const m = marksByKey.get(`${s.id}:${subject.id}`);
       if (!m || (m.rawScore === null && m.bandLabel === null)) {
         cells[subject.id] = { text: MISSING, score: null, missing: true };
@@ -184,7 +205,10 @@ export function buildMarkSheetModel(input: RawMarkSheetInput): MarkSheetModel {
     const scores: number[] = [];
     const counts = new Map<string, { count: number; level: number }>();
     let entered = 0;
+    let taking = 0;
     for (const s of input.students) {
+      if (!enrolment.takes(s.id, subject.id)) continue;
+      taking += 1;
       const m = marksByKey.get(`${s.id}:${subject.id}`);
       if (!m || (m.rawScore === null && m.bandLabel === null)) continue;
       entered += 1;
@@ -198,7 +222,7 @@ export function buildMarkSheetModel(input: RawMarkSheetInput): MarkSheetModel {
     }
     subjectStats[subject.id] = {
       entered,
-      missing: input.students.length - entered,
+      missing: taking - entered,
       mean: scores.length ? round(scores.reduce((a, b) => a + b, 0) / scores.length, 1) : null,
       highest: scores.length ? Math.max(...scores) : null,
       lowest: scores.length ? Math.min(...scores) : null,

@@ -102,6 +102,26 @@ describe("buildMarkSheetPdf", () => {
     expect(text).toContain("results incomplete");
   });
 
+  it("explains n/a for a selective subject and counts marks entered against the learners who take it", async () => {
+    const input = numericInput(4, 3);
+    // Kiswahili (s2) is selective and only First0 takes it; the others have no mark in it.
+    input.marks = input.marks.filter((m) => !(m.subjectId === "s2" && m.studentId !== "st0"));
+    input.enrolmentRows = [{ studentId: "st0", subjectId: "s2", isActive: true }];
+    const doc = await buildMarkSheetPdf(buildMarkSheetModel(input), null);
+    save("selective-subject", doc);
+    const { text } = await textOf(doc);
+    expect(text).toContain("n/a");
+    expect(text).toContain("does not take this subject");
+    expect(text).toContain("1/1"); // Kiswahili: 1 mark entered of the 1 learner who takes it
+    expect(text).toContain("4/4"); // Mathematics is universal
+    expect(text).not.toContain("Last001 *"); // not taking Kiswahili does not make a learner incomplete
+  });
+
+  it("a sheet with no selective subjects has no n/a note", async () => {
+    const { text } = await textOf(await buildMarkSheetPdf(buildMarkSheetModel(numericInput(4, 3)), null));
+    expect(text).not.toContain("does not take this subject");
+  });
+
   it("an open exam is labelled provisional", async () => {
     const input = numericInput(3, 3);
     input.exam = { ...input.exam, status: "open" };
