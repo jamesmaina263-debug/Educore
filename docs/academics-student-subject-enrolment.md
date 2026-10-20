@@ -44,11 +44,20 @@ school (cascade). There is deliberately no trigger on `students`, `class_subject
    `class_rankings`), and individual report cards (they list the marks a learner has, so a subject they do not take
    never appears). With no rows, or on any read problem, every learner takes every subject, i.e. today's behaviour.
    The common case costs one small extra query per page.
-3. **Assignment screen:** staff set a subject to selective and tick who takes it, singly or in bulk by class. Until this
-   ships nothing writes rows, so nothing above changes for any school.
-4. **Follow-ups:** a learner admitted into a class after a subject became selective has no row and is treated as not
-   taking it until staff assign them (the assignment screen should surface this); guardian/student portal read policy
-   if needed, copy-from-last-year, exam timetable clash checks.
+3. **Assignment screen (shipped, #656 and #666):** `/academics/subject-enrolment`. Staff pick a class, then per
+   subject choose who takes it, or make everyone take it again. Needs `academics.write`. Un-enrolling is an
+   `is_active = false` row; ticking everyone deletes the rows, so the subject is universal again and later admissions
+   are included. Rows carry `class_id` and are read per class.
+4. **Follow-ups:**
+   - Shipped (#668): mark entry shows a notice with the count of learners not yet assigned to a selective subject
+     (e.g. admitted after it was set up); they are not listed until staff assign them.
+   - **Planned, not built: copy-from-last-year.** Decision (2026-10-20): not in the rollover database function (it runs
+     for every school and changing it needs owner approval). Build it later as a "Copy from last year" button on the
+     Subject Enrolment screen with a preview and a confirm step, copying only subjects taught in the new class, once
+     schools are actually using electives. Until then, new-year classes start with every subject open to everyone;
+     rankings, averages, report cards and the portal are unaffected, only the mark sheet and exam overview counts look
+     incomplete until electives are re-set. The rollover page carries a reminder.
+   - Also open: guardian/student portal read policy if needed, exam timetable clash checks.
 
 Open decisions (defaults in brackets): ranking across different subject mixes [plain average of entered marks, rank
 marked provisional when marks are missing]; elective changes during a term [allowed, history protected as above];

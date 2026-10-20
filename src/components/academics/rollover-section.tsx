@@ -72,6 +72,10 @@ export function RolloverSection({
         streams. Mark individual students as repeating below — everyone else is promoted one level,
         and students at the school&apos;s highest class level are marked graduated.
       </p>
+      <p className="text-sm text-muted-foreground">
+        If some subjects are taken by only some students, set who takes them for the new year&apos;s classes under
+        Academics &rarr; Subject Enrolment. Until you do, every student is listed for every subject.
+      </p>
 
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-1.5">
