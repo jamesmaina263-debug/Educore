@@ -14,6 +14,7 @@ import { KeyEventsChart } from "@/components/admin/analytics/key-events-chart";
 import { ChannelPerformanceList } from "@/components/admin/analytics/channel-performance-list";
 import { ConversionFunnel, type FunnelStage } from "@/components/admin/analytics/conversion-funnel";
 import { GrowthReport } from "@/components/admin/analytics/growth-report";
+import { TrialFunnelPanel } from "@/components/admin/analytics/trial-funnel";
 import { DataHealthBanner } from "@/components/admin/analytics/data-health-banner";
 import {
   DEMO_PARTIAL_RETENTION_DAYS,
@@ -564,6 +565,8 @@ export default async function AdminAnalyticsPage({
           .
         </p>
       </div>
+
+      <TrialFunnelPanel startIso={startIso} endIso={endIso} />
 
       <GrowthReport startIso={startIso} endIso={endIso} />
     </div>
