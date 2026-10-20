@@ -7,15 +7,18 @@ import { useSchoolHref } from "@/components/app-shell/school-slug-context";
 export function PathwayGuidanceClassPicker({
   classOptions,
   selectedClassId,
+  basePath = "/academics/pathway-guidance",
 }: {
   classOptions: { id: string; name: string }[];
   selectedClassId: string | null;
+  /** The page the picker navigates within; reused by other class-based academics pages. */
+  basePath?: string;
 }) {
   const router = useRouter();
   const toHref = useSchoolHref();
 
   return (
-    <Select value={selectedClassId ?? undefined} onValueChange={(v) => router.push(toHref(`/academics/pathway-guidance?class=${v}`))}>
+    <Select value={selectedClassId ?? undefined} onValueChange={(v) => router.push(toHref(`${basePath}?class=${v}`))}>
       <SelectTrigger className="w-52">
         <SelectValue placeholder="Select class" />
       </SelectTrigger>

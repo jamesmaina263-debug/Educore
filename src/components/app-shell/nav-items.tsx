@@ -1,6 +1,7 @@
 import {
   LayoutDashboard,
   Users,
+  ListChecks,
   GraduationCap,
   ClipboardList,
   BookOpen,
@@ -105,6 +106,7 @@ const academicsChildren: NavChild[] = [
   { label: "Classes & Streams", href: "/academics/classes-streams", icon: School },
   { label: "Teacher Allocation", href: "/academics/teacher-allocation", icon: UserCog },
   { label: "Subjects", href: "/academics/subjects", icon: BookMarked },
+  { label: "Subject Enrolment", href: "/academics/subject-enrolment", icon: ListChecks },
   { label: "Pathway Guidance", href: "/academics/pathway-guidance", icon: Compass },
   { label: "Competency Appraisal", href: "/academics/competency-appraisal", icon: ClipboardCheck },
   { label: "Scheme of Work", href: "/academics/scheme-of-work", icon: NotebookPen },

@@ -15,6 +15,8 @@
 export interface EnrolmentRow {
   studentId: string;
   subjectId: string;
+  /** The class the row was set up for; the loader only returns rows for the classes asked for. */
+  classId?: string;
   isActive: boolean;
 }
 

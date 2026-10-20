@@ -132,6 +132,7 @@ export default async function MarksPage({
     const enrolment = buildSubjectEnrolment(
       await loadEnrolmentRows(supabase, {
         academicYearId: examAcademicYearId,
+        classIds: [selectedClass.id],
         studentIds: (students ?? []).map((s) => s.id),
         subjectIds: [selectedSubjectId],
       }),
