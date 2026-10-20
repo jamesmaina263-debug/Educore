@@ -52,6 +52,12 @@ export default async function AdminTrialFollowupPage() {
         </Link>{" "}
         (propose, approve and send an email to a trial school&apos;s owner)
       </p>
+      <p className="text-sm">
+        <Link href="/admin/sales-whatsapp" className="underline">
+          Sales WhatsApp
+        </Link>{" "}
+        (who agreed to WhatsApp contact, and messages you send them)
+      </p>
     </div>
   );
 

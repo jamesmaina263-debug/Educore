@@ -15,6 +15,7 @@ import {
   CONTACT_METHODS,
   ROLE_OPTIONS,
   TIME_WINDOWS,
+  WHATSAPP_CONSENT_LABEL,
   formatPreferredDate,
   todayInNairobi,
   type ContactMethod,
@@ -44,6 +45,7 @@ type Details = {
   timeWindow: TimeWindow | "";
   studentCount: string;
   message: string;
+  whatsappConsent: boolean;
 };
 const EMPTY_DETAILS: Details = {
   role: "",
@@ -53,6 +55,7 @@ const EMPTY_DETAILS: Details = {
   timeWindow: "",
   studentCount: "",
   message: "",
+  whatsappConsent: false,
 };
 
 export function DemoRequestForm() {
@@ -475,6 +478,18 @@ export function DemoRequestForm() {
                 </Choice>
               ))}
             </div>
+            {/* Never ticked by default: it is a separate, explicit agreement, stored with these exact words. */}
+            <label className="flex cursor-pointer items-start gap-2 text-sm text-marketing-navy-900/80">
+              <input
+                type="checkbox"
+                name="whatsapp_consent"
+                value="yes"
+                checked={details.whatsappConsent}
+                onChange={(e) => setDetail("whatsappConsent", e.target.checked)}
+                className="mt-1 h-4 w-4 shrink-0"
+              />
+              <span>{WHATSAPP_CONSENT_LABEL}</span>
+            </label>
           </fieldset>
 
           <fieldset className="flex flex-col gap-2">

@@ -11,7 +11,7 @@ import {
   legacyAttributionColumns,
   parseAttributionFormData,
 } from "@/lib/marketing/attribution-fields";
-import { buildStoredMessage, parseDemoRequest } from "@/lib/marketing/demo-request";
+import { WHATSAPP_CONSENT_LABEL, buildStoredMessage, parseDemoRequest } from "@/lib/marketing/demo-request";
 
 export type DemoRequestState = {
   status: "idle" | "success" | "error";
@@ -136,9 +136,11 @@ export async function submitDemoRequest(
     return { status: "success" };
   }
 
+  // The id is chosen here (the column accepts one) so the WhatsApp agreement below can point at this request.
+  const leadId = crypto.randomUUID();
   let { error } = await admin
     .from("marketing_demo_requests")
-    .insert({ ...lead, ...attribution });
+    .insert({ id: leadId, ...lead, ...attribution });
   if (isMissingColumnError(error)) {
     // The extra attribution columns come from a migration the deploy workflow
     // applies in parallel with the app deploy. If the code is briefly live
@@ -146,7 +148,7 @@ export async function submitDemoRequest(
     // failing the visitor's submission.
     ({ error } = await admin
       .from("marketing_demo_requests")
-      .insert({ ...lead, ...legacyAttributionColumns(attribution) }));
+      .insert({ id: leadId, ...lead, ...legacyAttributionColumns(attribution) }));
   }
 
   if (error) {
@@ -154,6 +156,23 @@ export async function submitDemoRequest(
       status: "error",
       message: "Something went wrong on our end. Please try again, or email us directly.",
     };
+  }
+
+  // The visitor ticked the WhatsApp tick-box: record the agreement with the exact words they saw. Best effort and
+  // after the lead is safely saved: if it fails (or the table is not there yet during a deploy) the lead is unaffected
+  // and a team member can record the agreement by hand. Never throws, never changes the visitor's result.
+  if (input.whatsappConsent) {
+    try {
+      await admin.rpc("record_demo_whatsapp_consent", {
+        p_demo_request_id: leadId,
+        p_name: input.name,
+        p_school_name: input.schoolName,
+        p_phone: input.phone,
+        p_consent_text: WHATSAPP_CONSENT_LABEL,
+      });
+    } catch {
+      // intentionally ignored: see above
+    }
   }
 
   // The visitor finished the form: close out any step-1 lead saved for this email (see
