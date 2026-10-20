@@ -146,6 +146,7 @@ export default async function ExamProgressPage({ params }: { params: Promise<{ e
   // and the totals below are exactly what they were before.
   const enrolmentRows = await loadEnrolmentRows(supabase, {
     academicYearId: examAcademicYearId,
+    classIds,
     studentIds: (rosterRows ?? []).map((r) => r.id),
     subjectIds: Array.from(new Set((examSubjects ?? []).map((es) => es.subject_id))),
   });
@@ -161,7 +162,7 @@ export default async function ExamProgressPage({ params }: { params: Promise<{ e
       enrolmentByClass.set(
         classId,
         buildSubjectEnrolment(
-          enrolmentRows.filter((r) => inClass.has(r.studentId)),
+          enrolmentRows.filter((r) => r.classId === classId && inClass.has(r.studentId)),
           (markRows ?? []).filter((m) => inClass.has(m.student_id)).map((m) => ({ studentId: m.student_id, subjectId: m.subject_id })),
         ),
       );

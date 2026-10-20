@@ -58,6 +58,7 @@ export async function loadMarkSheetModel(
   // on any read problem, which means every learner takes every subject -- the behaviour before this existed.
   const enrolmentRows = await loadEnrolmentRows(supabase, {
     academicYearId: term?.academic_year_id,
+    classIds: [classId],
     studentIds: ((students ?? []) as { id: string }[]).map((s) => s.id),
     subjectIds: subjects.map((s) => s.id),
   });

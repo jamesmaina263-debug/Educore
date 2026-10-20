@@ -16,19 +16,21 @@ const STUDENT_CHUNK = 100; // keeps the request URL short for large classes
 const PAGE_SIZE = 1000; // the API caps a response at 1000 rows and truncates silently, so page explicitly
 const MAX_PAGES_PER_CHUNK = 20;
 
-type RawRow = { student_id: string; subject_id: string; is_active: boolean };
+type RawRow = { student_id: string; subject_id: string; class_id: string; is_active: boolean };
 
 export async function loadEnrolmentRows(
   supabase: Client,
-  args: { academicYearId: string | null | undefined; studentIds: string[]; subjectIds: string[] },
+  // classIds: only rows set up for these classes count (a row with no class, or for another class, is ignored).
+  args: { academicYearId: string | null | undefined; classIds: string[]; studentIds: string[]; subjectIds: string[] },
 ): Promise<EnrolmentRow[]> {
   const { academicYearId } = args;
   const studentIds = [...new Set(args.studentIds)];
   const subjectIds = [...new Set(args.subjectIds)];
-  if (!academicYearId || studentIds.length === 0 || subjectIds.length === 0) return [];
+  const classIds = [...new Set(args.classIds)];
+  if (!academicYearId || classIds.length === 0 || studentIds.length === 0 || subjectIds.length === 0) return [];
 
   try {
-    const probe = await supabase.from("student_subjects").select("id").eq("academic_year_id", academicYearId).limit(1);
+    const probe = await supabase.from("student_subjects").select("id").eq("academic_year_id", academicYearId).in("class_id", classIds).limit(1);
     if (probe.error) {
       console.error("student_subjects probe failed; treating every student as taking every subject:", probe.error.message);
       return [];
@@ -45,8 +47,9 @@ export async function loadEnrolmentRows(
           const from = page * PAGE_SIZE;
           const res = await supabase
             .from("student_subjects")
-            .select("student_id, subject_id, is_active")
+            .select("student_id, subject_id, class_id, is_active")
             .eq("academic_year_id", academicYearId)
+            .in("class_id", classIds)
             .in("subject_id", subjectIds)
             .in("student_id", chunk)
             .order("id")
@@ -61,7 +64,7 @@ export async function loadEnrolmentRows(
       }),
     );
 
-    return perChunk.flat().map((r) => ({ studentId: r.student_id, subjectId: r.subject_id, isActive: r.is_active === true }));
+    return perChunk.flat().map((r) => ({ studentId: r.student_id, subjectId: r.subject_id, classId: r.class_id, isActive: r.is_active === true }));
   } catch (err) {
     // All-or-nothing: a partial list would make some students look un-enrolled.
     console.error("student_subjects read failed; treating every student as taking every subject:", err instanceof Error ? err.message : err);
