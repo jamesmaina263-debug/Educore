@@ -33,6 +33,14 @@ export const TIME_WINDOWS = [
 export type TimeWindow = (typeof TIME_WINDOWS)[number]["value"];
 
 export const REQUEST_TYPES = ["callback", "scheduled"] as const;
+
+/**
+ * The exact words shown next to the WhatsApp tick-box (unticked by default) and stored with the agreement.
+ * It covers messages about the visitor's own demo request and trial only, never promotions. If this wording changes,
+ * old agreements keep the words their owner actually saw (they are copied into the record, not referenced).
+ */
+export const WHATSAPP_CONSENT_LABEL =
+  "Yes, you may message me on WhatsApp, on the phone number above, about my demo request and free trial. I can reply STOP at any time.";
 export type RequestType = (typeof REQUEST_TYPES)[number];
 
 /** Kenya has no DST: East Africa Time is always UTC+3. */
@@ -120,6 +128,8 @@ export type DemoRequestInput = {
   timeWindow: TimeWindow | null;
   studentCount: number | null;
   message: string;
+  /** True only when the visitor ticked the WhatsApp tick-box. Never defaulted on. */
+  whatsappConsent: boolean;
 };
 
 export type DemoRequestParse =
@@ -192,6 +202,7 @@ export function parseDemoRequest(formData: FormData, now: Date = new Date()): De
       timeWindow,
       studentCount,
       message,
+      whatsappConsent: formData.get("whatsapp_consent") === "yes",
     },
   };
 }

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  WHATSAPP_CONSENT_LABEL,
   buildStoredMessage,
   cleanText,
   isAcceptablePreferredDate,
@@ -136,5 +137,37 @@ describe("buildStoredMessage", () => {
     expect(res.ok && buildStoredMessage(res.value)).toBe(
       "Contact via: Phone call\nPreferred time: callback requested as soon as possible",
     );
+  });
+});
+
+describe("WhatsApp agreement tick-box", () => {
+  it("is false unless the box was ticked, and only the value \"yes\" counts", () => {
+    for (const extra of [{}, { whatsapp_consent: "" }, { whatsapp_consent: "on" }, { whatsapp_consent: "true" }, { whatsapp_consent: "1" }, { whatsapp_consent: "YES" }] as Record<string, string>[]) {
+      const res = parseDemoRequest(form({ ...valid, ...extra }), NOW);
+      expect(res.ok && res.value.whatsappConsent, JSON.stringify(extra)).toBe(false);
+    }
+    const ticked = parseDemoRequest(form({ ...valid, whatsapp_consent: "yes" }), NOW);
+    expect(ticked.ok && ticked.value.whatsappConsent).toBe(true);
+  });
+
+  it("does not depend on the preferred contact method (choosing WhatsApp alone is not agreement)", () => {
+    const res = parseDemoRequest(form({ ...valid, contact_method: "whatsapp" }), NOW);
+    expect(res.ok && res.value.whatsappConsent).toBe(false);
+    const phone = parseDemoRequest(form({ ...valid, contact_method: "phone", whatsapp_consent: "yes" }), NOW);
+    expect(phone.ok && phone.value.whatsappConsent).toBe(true);
+  });
+
+  it("does not change what is stored in the lead's message", () => {
+    const a = parseDemoRequest(form({ ...valid }), NOW);
+    const b = parseDemoRequest(form({ ...valid, whatsapp_consent: "yes" }), NOW);
+    expect(a.ok && b.ok && buildStoredMessage(a.value)).toBe(a.ok && b.ok && buildStoredMessage(b.value));
+  });
+
+  it("has wording that names the channel, the purpose and the way out, and promises nothing promotional", () => {
+    expect(WHATSAPP_CONSENT_LABEL).toMatch(/WhatsApp/);
+    expect(WHATSAPP_CONSENT_LABEL).toMatch(/demo request and free trial/);
+    expect(WHATSAPP_CONSENT_LABEL).toMatch(/STOP/);
+    expect(WHATSAPP_CONSENT_LABEL).not.toMatch(/offer|promotion|discount|marketing/i);
+    expect(WHATSAPP_CONSENT_LABEL.length).toBeLessThan(600);
   });
 });

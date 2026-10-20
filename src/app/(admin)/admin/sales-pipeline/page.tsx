@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { AdminSalesPipeline } from "@/components/admin/admin-sales-pipeline";
@@ -74,6 +75,12 @@ export default async function AdminSalesPipelinePage() {
         <p className="text-sm text-muted-foreground">
           Every school the sales team is pursuing: stage, next follow-up and the full visit history. Visible to platform
           staff only.
+        </p>
+        <p className="text-sm">
+          <Link href="/admin/sales-whatsapp" className="underline">
+            Sales WhatsApp
+          </Link>{" "}
+          (who agreed to WhatsApp contact, and messages you send them)
         </p>
       </div>
       {demosAvailable ? (

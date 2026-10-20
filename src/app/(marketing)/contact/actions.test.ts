@@ -33,6 +33,7 @@ vi.mock("@/lib/marketing/demo-partial-store", () => ({
 }));
 
 const { submitDemoRequest } = await import("./actions");
+const { WHATSAPP_CONSENT_LABEL } = await import("@/lib/marketing/demo-request");
 
 function form(overrides: Record<string, string> = {}) {
   const fd = new FormData();
@@ -190,3 +191,75 @@ describe("submitDemoRequest", () => {
 function soon(): string {
   return new Date(Date.now() + 2 * 24 * 60 * 60 * 1000 + 3 * 60 * 60 * 1000).toISOString().slice(0, 10);
 }
+
+describe("submitDemoRequest: WhatsApp agreement", () => {
+  const consentCalls = () => h.rpc.mock.calls.filter((c) => c[0] === "record_demo_whatsapp_consent");
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    h.rpc.mockResolvedValue({ data: true, error: null });
+    h.insert.mockResolvedValue({ error: null });
+    h.recent.mockResolvedValue({ data: [], error: null });
+  });
+
+  it("records the agreement, with the exact words and this request's id, only when the box was ticked", async () => {
+    const res = await submitDemoRequest({ status: "idle" }, form({ whatsapp_consent: "yes" }));
+    expect(res).toEqual({ status: "success" });
+    const savedId = h.insert.mock.calls[0][0].id as string;
+    expect(savedId).toMatch(/^[0-9a-f-]{36}$/);
+    expect(consentCalls()).toHaveLength(1);
+    expect(consentCalls()[0][1]).toEqual({
+      p_demo_request_id: savedId,
+      p_name: "Jane Teacher",
+      p_school_name: "Sunrise Academy",
+      p_phone: "0700000000",
+      p_consent_text: WHATSAPP_CONSENT_LABEL,
+    });
+  });
+
+  it("never records an agreement when the box was not ticked, even if WhatsApp is the preferred method", async () => {
+    await submitDemoRequest({ status: "idle" }, form({ contact_method: "whatsapp" }));
+    expect(consentCalls()).toHaveLength(0);
+    for (const v of ["on", "true", "1", ""]) {
+      await submitDemoRequest({ status: "idle" }, form({ whatsapp_consent: v }));
+    }
+    expect(consentCalls()).toHaveLength(0);
+  });
+
+  it("still saves the lead and reports success when recording the agreement throws or errors", async () => {
+    h.rpc.mockImplementation(async (name: string) => {
+      if (name === "record_demo_whatsapp_consent") throw new Error("function does not exist");
+      return { data: true, error: null };
+    });
+    expect(await submitDemoRequest({ status: "idle" }, form({ whatsapp_consent: "yes" }))).toEqual({ status: "success" });
+    expect(h.insert).toHaveBeenCalledTimes(1);
+    expect(h.markIncompleteLeadCompleted).toHaveBeenCalledTimes(1);
+
+    h.rpc.mockImplementation(async (name: string) =>
+      name === "record_demo_whatsapp_consent" ? { data: null, error: { message: "boom" } } : { data: true, error: null },
+    );
+    expect(await submitDemoRequest({ status: "idle" }, form({ whatsapp_consent: "yes" }))).toEqual({ status: "success" });
+  });
+
+  it("uses the same request id on the legacy-column retry, and records the agreement once", async () => {
+    h.insert.mockResolvedValueOnce({ error: { code: "42703" } }).mockResolvedValueOnce({ error: null });
+    expect(await submitDemoRequest({ status: "idle" }, form({ whatsapp_consent: "yes" }))).toEqual({ status: "success" });
+    expect(h.insert).toHaveBeenCalledTimes(2);
+    const first = h.insert.mock.calls[0][0].id;
+    expect(h.insert.mock.calls[1][0].id).toBe(first);
+    expect(consentCalls()).toHaveLength(1);
+    expect(consentCalls()[0][1].p_demo_request_id).toBe(first);
+  });
+
+  it("records nothing when the lead was not saved, was a duplicate retry, or was a bot", async () => {
+    h.insert.mockResolvedValue({ error: { code: "XX000", message: "boom" } });
+    expect((await submitDemoRequest({ status: "idle" }, form({ whatsapp_consent: "yes" }))).status).toBe("error");
+    h.insert.mockResolvedValue({ error: null });
+    h.recent.mockResolvedValue({ data: [{ id: "x" }], error: null });
+    expect(await submitDemoRequest({ status: "idle" }, form({ whatsapp_consent: "yes" }))).toEqual({ status: "success" });
+    h.recent.mockResolvedValue({ data: [], error: null });
+    await submitDemoRequest({ status: "idle" }, form({ whatsapp_consent: "yes", company_website: "spam.com" }));
+    await submitDemoRequest({ status: "idle" }, form({ whatsapp_consent: "yes", rendered_at: String(Date.now()) }));
+    expect(consentCalls()).toHaveLength(0);
+  });
+});
