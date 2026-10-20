@@ -2,7 +2,13 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { saveSubjectEnrolment, makeSubjectUniversal } from "@/app/(app)/academics/subject-enrolment-actions";
+import {
+  saveSubjectEnrolment,
+  makeSubjectUniversal,
+  previewCopyFromLastYear,
+  applyCopyFromLastYear,
+  type CopyPreviewSubject,
+} from "@/app/(app)/academics/subject-enrolment-actions";
 import type { EnrolmentStudent, EnrolmentSubject } from "@/app/(app)/academics/subject-enrolment/_data";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -27,6 +33,10 @@ export function SubjectEnrolmentSection({
   const [search, setSearch] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [copyOpen, setCopyOpen] = useState(false);
+  const [copyBusy, setCopyBusy] = useState(false);
+  const [copyError, setCopyError] = useState<string | null>(null);
+  const [copyPreview, setCopyPreview] = useState<{ previousYearName: string; subjects: CopyPreviewSubject[] } | null>(null);
 
   const visible = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -62,6 +72,34 @@ export function SubjectEnrolmentSection({
     router.refresh();
   }
 
+  async function openCopy() {
+    setCopyOpen(true);
+    setCopyBusy(true);
+    setCopyError(null);
+    setCopyPreview(null);
+    const res = await previewCopyFromLastYear({ classId });
+    setCopyBusy(false);
+    if ("error" in res) setCopyError(res.error);
+    else setCopyPreview(res);
+  }
+
+  async function applyCopy() {
+    if (!copyPreview) return;
+    setCopyBusy(true);
+    setCopyError(null);
+    const res = await applyCopyFromLastYear({
+      classId,
+      subjectIds: copyPreview.subjects.filter((s) => s.status === "copy").map((s) => s.subjectId),
+    });
+    setCopyBusy(false);
+    if ("error" in res) {
+      setCopyError(res.error);
+      return;
+    }
+    setCopyOpen(false);
+    router.refresh();
+  }
+
   if (students.length === 0) {
     return <div className="panel border-dashed p-10 text-center text-sm text-muted-foreground">This class has no active students yet.</div>;
   }
@@ -75,6 +113,13 @@ export function SubjectEnrolmentSection({
 
   return (
     <>
+      {canEdit && (
+        <div className="flex justify-end">
+          <Button size="sm" variant="outline" onClick={openCopy}>
+            Copy from last year
+          </Button>
+        </div>
+      )}
       <div className="panel divide-y">
         {subjects.map((s) => (
           <div key={s.subjectId} className="flex flex-wrap items-center justify-between gap-3 p-3">
@@ -144,6 +189,49 @@ export function SubjectEnrolmentSection({
             )}
             <Button disabled={busy} onClick={() => editing && run(() => saveSubjectEnrolment({ classId, subjectId: editing.subjectId, takingStudentIds: [...picked] }))}>
               {busy ? "Saving…" : "Save"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={copyOpen} onOpenChange={(o) => !o && !copyBusy && setCopyOpen(false)}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Copy from last year</DialogTitle>
+            <DialogDescription>
+              Carries each student&apos;s subject choices over from the previous academic year. Subjects you have already set up for this class are never changed, and nothing is saved until you confirm.
+            </DialogDescription>
+          </DialogHeader>
+          {copyBusy && !copyPreview && !copyError && <p className="text-sm text-muted-foreground">Reading last year&apos;s choices…</p>}
+          {copyError && <p className="text-sm text-destructive">{copyError}</p>}
+          {copyPreview && copyPreview.subjects.length === 0 && (
+            <p className="text-sm text-muted-foreground">
+              Nothing to copy from {copyPreview.previousYearName}: either no choices were recorded for these subjects, everyone takes them, or you have already set them up.
+            </p>
+          )}
+          {copyPreview && copyPreview.subjects.length > 0 && (
+            <div className="max-h-72 divide-y overflow-y-auto rounded-md border text-sm">
+              {copyPreview.subjects.map((s) => (
+                <div key={s.subjectId} className="flex flex-col gap-0.5 p-2">
+                  <span className="font-medium">{s.subjectName}</span>
+                  {s.status === "copy" ? (
+                    <span className="text-xs text-muted-foreground">
+                      {s.taking} of {students.length} will take it: {s.continuing} continuing
+                      {s.unknown > 0 ? `, ${s.unknown} with no record last year (included)` : ""}; {s.dropped} did not take it last year.
+                    </span>
+                  ) : (
+                    <span className="text-xs text-amber-700">Nobody took this last year, so it is left as it is. Set it by hand if needed.</span>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="ghost" disabled={copyBusy} onClick={() => setCopyOpen(false)}>
+              Cancel
+            </Button>
+            <Button disabled={copyBusy || !copyPreview || !copyPreview.subjects.some((s) => s.status === "copy")} onClick={applyCopy}>
+              {copyBusy && copyPreview ? "Copying…" : "Copy these choices"}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -51,12 +51,12 @@ school (cascade). There is deliberately no trigger on `students`, `class_subject
 4. **Follow-ups:**
    - Shipped (#668): mark entry shows a notice with the count of learners not yet assigned to a selective subject
      (e.g. admitted after it was set up); they are not listed until staff assign them.
-   - **Planned, not built: copy-from-last-year.** Decision (2026-10-20): not in the rollover database function (it runs
-     for every school and changing it needs owner approval). Build it later as a "Copy from last year" button on the
-     Subject Enrolment screen with a preview and a confirm step, copying only subjects taught in the new class, once
-     schools are actually using electives. Until then, new-year classes start with every subject open to everyone;
-     rankings, averages, report cards and the portal are unaffected, only the mark sheet and exam overview counts look
-     incomplete until electives are re-set. The rollover page carries a reminder.
+   - **Copy from last year (shipped as a button, not in the rollover function):** "Copy from last year" on the Subject
+     Enrolment screen shows a preview, then writes only after confirmation. It carries each student's previous-year
+     choices into the class for subjects that are universal in the class right now; a subject staff already set up is
+     never changed, so running it twice does nothing. A student with no record last year is included, so a mistake can
+     only list too many students, never hide one. A subject nobody continued is flagged and left alone. No database
+     change; same write path and permission (`academics.write`) as the manual screen.
    - Also open: guardian/student portal read policy if needed, exam timetable clash checks.
 
 Open decisions (defaults in brackets): ranking across different subject mixes [plain average of entered marks, rank

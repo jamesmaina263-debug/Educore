@@ -18,19 +18,36 @@ const MAX_PAGES_PER_CHUNK = 20;
 
 type RawRow = { student_id: string; subject_id: string; class_id: string; is_active: boolean };
 
+type ReadArgs = { academicYearId: string | null | undefined; studentIds: string[]; subjectIds: string[] };
+
 export async function loadEnrolmentRows(
   supabase: Client,
   // classIds: only rows set up for these classes count (a row with no class, or for another class, is ignored).
-  args: { academicYearId: string | null | undefined; classIds: string[]; studentIds: string[]; subjectIds: string[] },
+  args: ReadArgs & { classIds: string[] },
 ): Promise<EnrolmentRow[]> {
+  const classIds = [...new Set(args.classIds)];
+  if (classIds.length === 0) return [];
+  return readRows(supabase, args, classIds);
+}
+
+/**
+ * A past year's enrolment for the given students, whatever class each row was set up for (students change class
+ * at rollover, so the old class is not known). Rows with no class are still ignored. Used only by "copy from
+ * last year"; the live screens always use loadEnrolmentRows for the class being viewed.
+ */
+export async function loadPreviousYearEnrolmentRows(supabase: Client, args: ReadArgs): Promise<EnrolmentRow[]> {
+  return readRows(supabase, args, null);
+}
+
+async function readRows(supabase: Client, args: ReadArgs, classIds: string[] | null): Promise<EnrolmentRow[]> {
   const { academicYearId } = args;
   const studentIds = [...new Set(args.studentIds)];
   const subjectIds = [...new Set(args.subjectIds)];
-  const classIds = [...new Set(args.classIds)];
-  if (!academicYearId || classIds.length === 0 || studentIds.length === 0 || subjectIds.length === 0) return [];
+  if (!academicYearId || studentIds.length === 0 || subjectIds.length === 0) return [];
 
   try {
-    const probe = await supabase.from("student_subjects").select("id").eq("academic_year_id", academicYearId).in("class_id", classIds).limit(1);
+    const probeQuery = supabase.from("student_subjects").select("id").eq("academic_year_id", academicYearId);
+    const probe = await (classIds ? probeQuery.in("class_id", classIds) : probeQuery.not("class_id", "is", null)).limit(1);
     if (probe.error) {
       console.error("student_subjects probe failed; treating every student as taking every subject:", probe.error.message);
       return [];
@@ -45,11 +62,11 @@ export async function loadEnrolmentRows(
         const out: RawRow[] = [];
         for (let page = 0; page < MAX_PAGES_PER_CHUNK; page += 1) {
           const from = page * PAGE_SIZE;
-          const res = await supabase
+          const base = supabase
             .from("student_subjects")
             .select("student_id, subject_id, class_id, is_active")
-            .eq("academic_year_id", academicYearId)
-            .in("class_id", classIds)
+            .eq("academic_year_id", academicYearId);
+          const res = await (classIds ? base.in("class_id", classIds) : base.not("class_id", "is", null))
             .in("subject_id", subjectIds)
             .in("student_id", chunk)
             .order("id")
