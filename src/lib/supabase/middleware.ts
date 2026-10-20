@@ -1,6 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, after, type NextRequest } from "next/server";
 import { APP_ROUTE_SEGMENTS } from "@/lib/school-slug-routing";
+import { PENDING_APPROVAL_PATH, signupReviewGate } from "@/lib/signup-review";
 
 const PROTECTED_PREFIXES = ["/dashboard"];
 
@@ -174,7 +175,7 @@ export async function updateSession(request: NextRequest): Promise<SessionUpdate
   if (isProtected && user && !isChangePasswordPath(request.nextUrl.pathname)) {
     const { data: schoolUser } = await supabase
       .from("school_users")
-      .select("status, must_change_password, schools(status)")
+      .select("status, must_change_password, schools(status, signup_review_status)")
       .eq("auth_user_id", user.id)
       .maybeSingle();
 
@@ -189,13 +190,33 @@ export async function updateSession(request: NextRequest): Promise<SessionUpdate
     // Same school-suspension gate as login/actions.ts, for anyone who was already
     // mid-session when their school got suspended (login's own check only runs at
     // sign-in time). 'trial'/'active' pass; 'suspended'/'cancelled' get signed out.
-    const schoolStatus = (schoolUser?.schools as unknown as { status: string } | null)?.status;
+    const schoolRow = schoolUser?.schools as unknown as { status: string; signup_review_status?: string } | null;
+    const schoolStatus = schoolRow?.status;
     if (schoolUser && (schoolStatus === "suspended" || schoolStatus === "cancelled")) {
       await supabase.auth.signOut();
       const loginUrl = request.nextUrl.clone();
       loginUrl.pathname = "/login";
       loginUrl.searchParams.set("suspended", "1");
       return { response: NextResponse.redirect(loginUrl), isAuthenticated: false };
+    }
+
+    // Manual signup approval (see lib/signup-review.ts). A rejected school is signed out with a "not
+    // approved" message (the school itself is kept); a pending one is held on a waiting page. Anything
+    // else -- approved, or a school that predates the column -- passes straight through.
+    const reviewGate = signupReviewGate(schoolRow?.signup_review_status);
+    if (schoolUser && reviewGate === "rejected") {
+      await supabase.auth.signOut();
+      const loginUrl = request.nextUrl.clone();
+      loginUrl.pathname = "/login";
+      loginUrl.search = "";
+      loginUrl.searchParams.set("not_approved", "1");
+      return { response: NextResponse.redirect(loginUrl), isAuthenticated: false };
+    }
+    if (schoolUser && reviewGate === "pending") {
+      const waitingUrl = request.nextUrl.clone();
+      waitingUrl.pathname = PENDING_APPROVAL_PATH;
+      waitingUrl.search = "";
+      return { response: NextResponse.redirect(waitingUrl), isAuthenticated: true };
     }
 
     if (schoolUser?.must_change_password) {

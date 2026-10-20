@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { login, type LoginState } from "./actions";
+import { NOT_APPROVED_MESSAGE } from "@/lib/signup-review";
 
 const initialState: LoginState = { error: null };
 
@@ -25,11 +26,14 @@ function LoginForm() {
   const searchParams = useSearchParams();
   const wasDeactivated = searchParams.get("deactivated") === "1";
   const wasSuspended = searchParams.get("suspended") === "1";
+  const wasNotApproved = searchParams.get("not_approved") === "1";
   const linkError = searchParams.get("error");
   const errorMessage = state.error ?? linkError ?? (wasDeactivated
       ? "Your account has been deactivated. Contact your school admin."
       : wasSuspended
       ? "Your school's account is currently suspended. Contact your school admin."
+      : wasNotApproved
+      ? NOT_APPROVED_MESSAGE
       : null);
 
   return (
