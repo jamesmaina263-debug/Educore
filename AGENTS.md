@@ -42,26 +42,41 @@ that's what is happening, and delete the account when done.
 
 ## Database migrations
 
-The **Deploy migrations** workflow runs `supabase db push --include-all` on every push to
-`main`. Two things break it, and both have happened repeatedly:
+**Default: do not apply migrations to production by hand.** Put the file in `supabase/migrations/`
+in a PR and let the **Deploy migrations** workflow apply it on merge.
 
-- **A migration applied straight to production (e.g. via the Supabase MCP) and committed under a
-  different timestamp.** Production records the version it was applied under. If the repo file has
-  another version, `db push` stops entirely with "Remote migration versions not found in local
-  migrations directory", and nothing after it deploys. If you must apply directly, commit the file
-  under the *exact* version production recorded
-  (`select version, name from supabase_migrations.schema_migrations order by version desc limit 5`),
-  or insert a `schema_migrations` row whose version matches your repo filename. Better: don't apply
-  directly — put the file in the PR and let the workflow apply it on merge.
-- **A migration file that is not safe to run twice, for something already live.** `db push` runs any
-  file whose version isn't recorded. Reconciliation files that `drop policy` / `create policy`
-  without `if exists` fail if the change was already applied by hand. Either record the version as
-  applied (after verifying the effect is really live) or make the statements idempotent.
+**A direct apply (Supabase MCP `apply_migration`, `execute_sql` with DDL, dashboard, `psql`) is
+allowed only with the owner's explicit approval for that specific migration, in that conversation.**
+`.claude/settings.json` makes `apply_migration` prompt for approval; that prompt is the permission
+step, so show the owner the SQL and wait. Never approve on the owner's behalf, and never apply
+"to get ahead of" a PR.
 
-Never commit a second file that duplicates an already-recorded migration under a new timestamp.
+The workflow runs `supabase db push --include-all` on every push to `main`. A hand-applied
+migration breaks it for the whole repo: production records a version with no matching file, `db push`
+stops with "Remote migration versions not found in local migrations directory", and **nothing after
+it deploys** (2026-10-19: two hand-applied migrations blocked every deploy for hours).
 
-If code depends on a new function/column/constraint, apply the migration *before* merging the code
-(Vercel deploys on merge and the migration workflow runs in parallel — the code can go live first).
+**If code depends on a new function/column/constraint:** merge the migration in its own PR first,
+wait for Deploy migrations to go green, *then* merge the code PR. (Vercel deploys on merge and the
+migration workflow runs in parallel, so putting both in one PR lets the code go live first.) Do not
+apply the migration by hand to "get ahead" of the code unless the owner approves it.
+
+**After an approved direct apply, in the SAME session, before doing anything else:**
+1. Read back what production recorded
+   (`select version, name, statements from supabase_migrations.schema_migrations order by version desc limit 5`).
+2. Commit the file as `supabase/migrations/<that exact version>_<name>.sql`, with the recorded SQL.
+3. Open the PR immediately.
+
+Never commit it under a different timestamp, and never leave it uncommitted: an applied migration
+with no matching file blocks Deploy migrations for the whole repo. The drift check will open an
+auto-reconcile PR if you forget, but that is the backstop, not the plan.
+
+Other rules:
+- **Migrations must be safe to run twice for anything already live.** `db push` runs any file
+  whose version isn't recorded. Reconciliation files that `drop policy` / `create policy` without
+  `if exists` fail if the change was already applied by hand. Make statements idempotent, or record
+  the version as applied after verifying the effect is really live.
+- Never commit a second file that duplicates an already-recorded migration under a new timestamp.
 
 Every `SECURITY DEFINER` function must `revoke execute ... from public, anon, authenticated`
 unless it is meant to be called by clients (and then it must check permissions itself). New

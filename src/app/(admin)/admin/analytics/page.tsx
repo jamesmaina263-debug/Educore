@@ -14,6 +14,7 @@ import { KeyEventsChart } from "@/components/admin/analytics/key-events-chart";
 import { ChannelPerformanceList } from "@/components/admin/analytics/channel-performance-list";
 import { ConversionFunnel, type FunnelStage } from "@/components/admin/analytics/conversion-funnel";
 import { GrowthReport } from "@/components/admin/analytics/growth-report";
+import { DataHealthBanner } from "@/components/admin/analytics/data-health-banner";
 import {
   DEMO_PARTIAL_RETENTION_DAYS,
   startsBeyondPartialRetention,
@@ -301,6 +302,13 @@ export default async function AdminAnalyticsPage({
       </div>
 
       {period === "custom" && <CustomRangePicker from={customRange?.from} to={customRange?.to} />}
+
+      <DataHealthBanner
+        gaConfigured={gaConfigured}
+        gaVisitors={overview ? overview.visitors : null}
+        firstPartyVisitors={pageViewSummary ? pageViewSummary.visitors : null}
+        endsToday={endsToday}
+      />
 
       {/* Top-line KPIs: mixes real GA4 numbers (when connected) with real
           Supabase numbers (always available) -- never fabricated either way.
