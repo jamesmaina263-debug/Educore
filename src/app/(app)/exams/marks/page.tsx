@@ -89,6 +89,8 @@ export default async function MarksPage({
   let gradingModel: "numeric" | "cbc" = "numeric";
   let bandOptions: BandOption[] = [];
   let roster: MarksRosterRow[] = [];
+  // Students of a selective subject who have never been assigned either way (e.g. admitted after it was set up).
+  let notSetCount = 0;
   let strandsWithSubStrands: StrandOption[] = [];
   let competencyRatings: CompetencyRatingRow[] = [];
   let rubricsBySubStrand: Record<string, RubricDetail> = {};
@@ -129,15 +131,20 @@ export default async function MarksPage({
     // Only students who take this subject. With no enrolment rows (every school until electives are set up)
     // or on any read problem this is everyone, as before. Anyone already marked stays listed so their
     // mark can still be corrected, whatever the enrolment says.
+    const enrolmentRows = await loadEnrolmentRows(supabase, {
+      academicYearId: examAcademicYearId,
+      classIds: [selectedClass.id],
+      studentIds: (students ?? []).map((s) => s.id),
+      subjectIds: [selectedSubjectId],
+    });
     const enrolment = buildSubjectEnrolment(
-      await loadEnrolmentRows(supabase, {
-        academicYearId: examAcademicYearId,
-        classIds: [selectedClass.id],
-        studentIds: (students ?? []).map((s) => s.id),
-        subjectIds: [selectedSubjectId],
-      }),
+      enrolmentRows,
       (existingMarks ?? []).map((m) => ({ studentId: m.student_id, subjectId: selectedSubjectId })),
     );
+    if (enrolmentRows.length > 0) {
+      const hasRow = new Set(enrolmentRows.map((r) => r.studentId));
+      notSetCount = (students ?? []).filter((s) => !hasRow.has(s.id) && !enrolment.takes(s.id, selectedSubjectId)).length;
+    }
 
     roster = (students ?? [])
       .filter((s) => enrolment.takes(s.id, selectedSubjectId))
@@ -233,6 +240,13 @@ export default async function MarksPage({
             This exam has no classes or subjects configured yet.
           </div>
         ) : (
+          <>
+          {notSetCount > 0 && (
+            <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+              {notSetCount} {notSetCount === 1 ? "student has" : "students have"} not been assigned for this subject yet, so {notSetCount === 1 ? "is" : "are"} not listed.
+              Set them under Academics &rarr; Subject Enrolment.
+            </div>
+          )}
           <MarksEntryForm
             examId={exam.id}
             classId={selectedClassId}
@@ -244,6 +258,7 @@ export default async function MarksPage({
             examStatus={exam.status as "open" | "closed"}
             canEnter={canWriteAny === true || canWrite === true}
           />
+          </>
         )}
 
         {exam && selectedClassId && selectedSubjectId && gradingModel === "cbc" && (
