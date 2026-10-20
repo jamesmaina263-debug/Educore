@@ -105,6 +105,9 @@ export default async function AdminAnalyticsPage({
   // "Today" view compared with a full prior day would always read as a large drop, so that % is hidden.
   const endsToday = endIso === todayIso(ANALYTICS_TIME_ZONE);
   const isPartialDay = startIso === endIso && endsToday;
+  // Google can take 24 to 48 hours to process standard reports, so a range ending today or yesterday may still read low.
+  const yesterdayIso = new Date(new Date(`${todayIso(ANALYTICS_TIME_ZONE)}T00:00:00Z`).getTime() - 86_400_000).toISOString().slice(0, 10);
+  const mayStillBeProcessing = endIso >= yesterdayIso;
   const processingMessage = isPartialDay
     ? "Google is still processing today\u2019s data \u2014 see the live panel above."
     : undefined;
@@ -308,7 +311,7 @@ export default async function AdminAnalyticsPage({
         gaConfigured={gaConfigured}
         gaVisitors={overview ? overview.visitors : null}
         firstPartyVisitors={pageViewSummary ? pageViewSummary.visitors : null}
-        endsToday={endsToday}
+        mayStillBeProcessing={mayStillBeProcessing}
       />
 
       {/* Top-line KPIs: mixes real GA4 numbers (when connected) with real

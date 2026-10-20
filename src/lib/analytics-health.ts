@@ -9,8 +9,11 @@ export type AnalyticsHealthInput = {
   gaVisitors: number | null;
   /** Our own counter's visitors for the range; null when its database function was unavailable. */
   firstPartyVisitors: number | null;
-  /** The selected range ends today (Kenya time), so GA4's batch processing may not have caught up. */
-  endsToday: boolean;
+  /**
+   * The range ends today or yesterday (Kenya time). Google says standard reports can take 24 to 48 hours to
+   * process, so a zero there is not yet a sign that data is missing.
+   */
+  mayStillBeProcessing: boolean;
 };
 
 export type AnalyticsHealth =
@@ -19,11 +22,13 @@ export type AnalyticsHealth =
 
 /**
  * ok              - nothing worth saying, the banner is hidden.
- * ga-lagging      - GA4 shows nothing yet but we saw visitors, and the range includes today: expected delay.
- * ga-missing      - same, but for a finished range: GA4 should have caught up, so hits are probably not arriving.
+ * ga-lagging      - GA4 shows nothing yet but we saw visitors, and the range ends today or yesterday: Google can take
+ *                   24 to 48 hours to process standard reports, so this is expected.
+ * ga-missing      - same, but the range ended more than a day ago: GA4 should have caught up, so hits are probably
+ *                   not arriving (or are being filtered).
  */
 export function assessAnalyticsHealth(input: AnalyticsHealthInput): AnalyticsHealth {
-  const { gaConfigured, gaVisitors, firstPartyVisitors, endsToday } = input;
+  const { gaConfigured, gaVisitors, firstPartyVisitors, mayStillBeProcessing } = input;
 
   if (!gaConfigured) {
     return {
@@ -44,14 +49,14 @@ export function assessAnalyticsHealth(input: AnalyticsHealthInput): AnalyticsHea
     };
   }
   if (gaVisitors === 0 && firstPartyVisitors > 0) {
-    return endsToday
+    return mayStillBeProcessing
       ? {
           status: "ga-lagging",
-          message: `Our own counter recorded ${firstPartyVisitors.toLocaleString()} visitor${firstPartyVisitors === 1 ? "" : "s"} but Google Analytics shows none yet. Google processes reports in batches and can trail by hours, so this usually clears on its own. Check Yesterday to confirm Google is receiving data.`,
+          message: `Our own counter recorded ${firstPartyVisitors.toLocaleString()} visitor${firstPartyVisitors === 1 ? "" : "s"} but Google Analytics shows none yet. Google can take 24 to 48 hours to process standard reports, so this usually clears on its own. The live panel below reads Google's Realtime feed, which is current.`,
         }
       : {
           status: "ga-missing",
-          message: `Our own counter recorded ${firstPartyVisitors.toLocaleString()} visitor${firstPartyVisitors === 1 ? "" : "s"} in this period but Google Analytics shows none. That range is finished, so the delay doesn't explain it: check that the Google Tag Manager container is published and that the GA4 tag fires.`,
+          message: `Our own counter recorded ${firstPartyVisitors.toLocaleString()} visitor${firstPartyVisitors === 1 ? "" : "s"} in this period but Google Analytics shows none. That range ended more than a day ago, so processing delay does not explain it: check that Google Analytics Realtime shows a test visit, then look at its Data filters and that the Google Tag Manager container is published.`,
         };
   }
   return { status: "ok" };
