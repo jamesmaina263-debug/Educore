@@ -346,6 +346,9 @@ export async function signUpSchool(
       name: schoolName,
       slug,
       status: "trial",
+      // Held on a waiting page until a platform admin approves it (lib/signup-review.ts). The 30-day
+      // trial is restarted at approval, so waiting costs the school nothing.
+      signup_review_status: "pending",
       description: description || null,
       school_type: schoolType || null,
       cycle_type: cycleType || null,

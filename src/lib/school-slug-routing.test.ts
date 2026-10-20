@@ -113,3 +113,15 @@ describe("resolveSlugRouting", () => {
     expect(routing).toEqual({ type: "rewrite", url: expect.objectContaining({ pathname: "/also-fake" }) });
   });
 });
+
+// The waiting page for a school awaiting signup approval. If it were not reserved it would be treated as a
+// school slug and rewritten to /dashboard, which the signup-approval gate redirects straight back here: a loop
+// for exactly the people it is meant to hold.
+describe("pending-approval route", () => {
+  it("is reserved and is not rewritten to a school slug", () => {
+    expect(NEVER_PREFIX.has("pending-approval")).toBe(true);
+    expect(resolveSlugRouting(makeRequest("/pending-approval", "some-school"), true).type).toBe("next");
+    expect(resolveSlugRouting(makeRequest("/pending-approval"), true).type).toBe("next");
+    expect(resolveSlugRouting(makeRequest("/pending-approval"), false).type).toBe("next");
+  });
+});
