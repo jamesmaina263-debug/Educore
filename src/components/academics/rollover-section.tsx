@@ -74,7 +74,7 @@ export function RolloverSection({
       </p>
       <p className="text-sm text-muted-foreground">
         If some subjects are taken by only some students, set who takes them for the new year&apos;s classes under
-        Academics &rarr; Subject Enrolment. Until you do, every student is listed for every subject.
+        Academics &rarr; Subject Enrolment, or use "Copy from last year" there. Until you do, every student is listed for every subject.
       </p>
 
       <div className="grid grid-cols-2 gap-4">

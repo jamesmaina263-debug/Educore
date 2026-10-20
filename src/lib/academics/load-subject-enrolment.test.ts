@@ -1,14 +1,14 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { loadEnrolmentRows } from "./load-subject-enrolment";
+import { loadEnrolmentRows, loadPreviousYearEnrolmentRows } from "./load-subject-enrolment";
 
-type Call = { table: string; select?: string; eq: Record<string, unknown>; in: Record<string, unknown[]>; order?: string; range?: [number, number]; limit?: number };
+type Call = { table: string; select?: string; eq: Record<string, unknown>; in: Record<string, unknown[]>; not: Record<string, unknown>; order?: string; range?: [number, number]; limit?: number };
 type Result = { data: unknown; error: { message: string } | null };
 
 function fakeSupabase(handler: (c: Call) => Result | Promise<Result>) {
   const calls: Call[] = [];
   const client = {
     from(table: string) {
-      const call: Call = { table, eq: {}, in: {} };
+      const call: Call = { table, eq: {}, in: {}, not: {} };
       const builder: Record<string, unknown> = {
         select(cols: string) {
           call.select = cols;
@@ -20,6 +20,10 @@ function fakeSupabase(handler: (c: Call) => Result | Promise<Result>) {
         },
         in(col: string, v: unknown[]) {
           call.in[col] = v;
+          return builder;
+        },
+        not(col: string, _op: string, v: unknown) {
+          call.not[col] = v;
           return builder;
         },
         order(col: string) {
@@ -130,5 +134,22 @@ describe("loadEnrolmentRows", () => {
     const { client, calls } = fakeSupabase((c) => (c.limit === 1 ? ok([{ id: "x" }]) : ok([])));
     await loadEnrolmentRows(client, { academicYearId: "y", classIds: ["c"], studentIds: ["a"], subjectIds: ["phy"] });
     expect(calls.every((c) => c.table === "student_subjects" && typeof c.select === "string")).toBe(true);
+  });
+
+  it("previous-year read: any class with a class set, never a null-class row, and the same safety fallbacks", async () => {
+    const { client, calls } = fakeSupabase((c) =>
+      c.limit === 1 ? ok([{ id: "x" }]) : ok([{ student_id: "a", subject_id: "phy", class_id: "old", is_active: false }]),
+    );
+    const rows = await loadPreviousYearEnrolmentRows(client, { academicYearId: "prev", studentIds: ["a"], subjectIds: ["phy"] });
+    expect(rows).toEqual([{ studentId: "a", subjectId: "phy", classId: "old", isActive: false }]);
+    for (const c of calls) {
+      expect(c.eq).toEqual({ academic_year_id: "prev" });
+      expect(c.in.class_id).toBeUndefined(); // not limited to one class
+      expect(c.not).toEqual({ class_id: null }); // rows with no class are ignored
+    }
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const failing = fakeSupabase(() => ({ data: null, error: { message: "boom" } }));
+    expect(await loadPreviousYearEnrolmentRows(failing.client, { academicYearId: "prev", studentIds: ["a"], subjectIds: ["phy"] })).toEqual([]);
+    expect(await loadPreviousYearEnrolmentRows(failing.client, { academicYearId: null, studentIds: ["a"], subjectIds: ["phy"] })).toEqual([]);
   });
 });
