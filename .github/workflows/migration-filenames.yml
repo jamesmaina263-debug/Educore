@@ -1,0 +1,40 @@
+name: Migration filenames
+
+# Database-free guard: fails when two files in supabase/migrations/ share a version (or a
+# filename is malformed). Required on main -- see scripts/check_migration_versions.py for why
+# (3 'Deploy migrations' failures on main, 2026-10-18..20, all from duplicate versions).
+#
+# Deliberately:
+#   * no `paths:` filter -- a required check must report on EVERY PR, or PRs that don't touch
+#     migrations would wait forever for a status that never arrives;
+#   * no secrets -- so it also runs on Dependabot/fork PRs and can't flake on production state
+#     (the DB-connected 'Migration drift check' stays advisory for that reason);
+#   * on pull_request the checkout is the PR merged into main, so two open PRs that each add a
+#     file with the same version are caught as soon as the second is brought up to date.
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: migration-filenames-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  migration-filenames:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Unit-test the migration scripts
+        run: python3 -m unittest scripts/test_migration_versions.py -v
+
+      - name: Check migration versions are unique
+        run: python3 scripts/check_migration_versions.py
