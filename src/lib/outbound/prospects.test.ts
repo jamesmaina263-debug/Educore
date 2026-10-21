@@ -18,6 +18,7 @@ import {
   parseProspectCsv,
   parseScoringResponse,
   sanitizeOpening,
+  CHILDRENS_HOME_FREE_LINE,
 } from "./prospects";
 
 describe("parseCsv", () => {
@@ -363,5 +364,82 @@ describe("sanitizeProspectRows (rows sent from the browser are never trusted)", 
   it("never returns more than the import cap", () => {
     const many = Array.from({ length: MAX_IMPORT_ROWS + 50 }, (_, i) => ({ ...good, school_name: `School ${i}` }));
     expect(sanitizeProspectRows(many)).toHaveLength(MAX_IMPORT_ROWS);
+  });
+});
+
+describe("email greeting name and children's home wording", () => {
+  const opening = "Following up on fees and preparing report cards each term can take a lot of a school's time.";
+  const draft = (ctx: Parameters<typeof parseScoringResponse>[1]) => {
+    const r = parseScoringResponse(
+      JSON.stringify({ fit_score: 60, fit_reason: "ok", email_subject: "A school system", opening }),
+      ctx,
+    );
+    if (!r.ok) throw new Error(r.error);
+    return r.value;
+  };
+
+  it("greets by the name in a personal-looking email address", () => {
+    expect(draft({ school_name: "Sunrise Academy", email: "peter.kimani@gmail.com" }).email_body.startsWith("Hello Peter,\n\n")).toBe(true);
+  });
+
+  it("uses no name when the address is not clearly a person", () => {
+    for (const email of ["info@sunrise.ac.ke", "jmaina263@gmail.com", "j.kimani@gmail.com", null]) {
+      expect(draft({ school_name: "Sunrise Academy", email }).email_body.startsWith("Hello,\n\n"), String(email)).toBe(true);
+    }
+  });
+
+  it("keeps the contact name when the address says nothing about a person, or agrees with it", () => {
+    expect(draft({ school_name: "X", contact_name: "Jane Wanjiru", email: "info@x.ac.ke" }).email_body.startsWith("Hello Jane Wanjiru,")).toBe(true);
+    expect(draft({ school_name: "X", contact_name: "Peter Kimani", email: "peter.kimani@gmail.com" }).email_body.startsWith("Hello Peter Kimani,")).toBe(true);
+  });
+
+  it("uses no name when the address and the contact name point at different people", () => {
+    expect(draft({ school_name: "X", contact_name: "Jane Wanjiru", email: "peter.kimani@gmail.com" }).email_body.startsWith("Hello,\n\n")).toBe(true);
+  });
+
+  it("never puts the email address into a draft and leaves the WhatsApp greeting alone", () => {
+    const d = draft({ school_name: "Sunrise Academy", email: "peter.kimani@gmail.com" });
+    expect(d.email_body).not.toContain("peter.kimani");
+    expect(d.whatsapp.startsWith("Hello! ")).toBe(true);
+  });
+
+  it("tells a children's home it will not be charged, instead of quoting the price", () => {
+    const d = draft({ school_name: "Mercy Children's Home", email: "mary.wanjiku@gmail.com" });
+    expect(d.email_body.startsWith("Hello Mary,\n\n")).toBe(true);
+    expect(d.email_body).toContain(CHILDRENS_HOME_FREE_LINE);
+    expect(d.email_body).not.toContain("KES");
+    expect(d.email_body).toContain("support your children's home?");
+    expect(d.email_body).toContain("just reply and we will not contact you again");
+    // No conflicting price in the WhatsApp draft, and no free-of-charge promise there.
+    expect(d.whatsapp).not.toContain("KES");
+    expect(d.whatsapp).not.toMatch(/not charge/i);
+  });
+
+  it("falls back to a children's-home opening (not school fees) when the model's opening is unusable", () => {
+    const r = parseScoringResponse(JSON.stringify({ fit_score: 60, fit_reason: "ok", email_subject: "s" }), { school_name: "Mercy Children's Home" });
+    expect(r.ok && r.value.email_body).toContain("for the children in your care can take a great deal of time");
+    expect(r.ok && r.value.email_body).not.toContain("considerable time for a school");
+  });
+
+  it("keeps the normal paid offer for ordinary schools and school-like names", () => {
+    for (const school_name of ["Sunrise Academy", "Little Angels Orphans Academy"]) {
+      const body = draft({ school_name }).email_body;
+      expect(body, school_name).toContain("Our pricing starts at KES 100 per student per term");
+      expect(body, school_name).not.toContain(CHILDRENS_HOME_FREE_LINE);
+    }
+  });
+
+  it("never lets the AI promise free use: the model's opening is still rejected when it says free", () => {
+    const r = parseScoringResponse(
+      JSON.stringify({ fit_score: 60, fit_reason: "ok", email_subject: "s", opening: "EduCore is completely free for homes like yours, so you can focus on the children." }),
+      { school_name: "Mercy Children's Home" },
+    );
+    expect(r.ok && r.value.email_body).not.toContain("completely free");
+  });
+
+  it("tells the scoring prompt not to talk about fees for a children's home", () => {
+    const p = buildScoringPrompt({ school_name: "Mercy Children's Home", town_county: null, school_type: null, website: null, contact_name: null, contact_role: null, student_count: null });
+    expect(p).toContain("This is a children's home");
+    expect(p).toContain("Do not mention fees, payments, pricing or cost");
   });
 });

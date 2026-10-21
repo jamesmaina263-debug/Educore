@@ -87,7 +87,7 @@ export const VERIFIED_FACTS: readonly ProductFact[] = [
 // security boundary (a human still approves every message), but they stop the common failure modes.
 export const PITCH_RULES: readonly string[] = [
   "Never claim approval, certification, endorsement or affiliation by KICD, the Ministry of Education, KNEC, Safaricom or any government body or regulator. Do not use the words 'approved', 'certified', 'accredited' or 'official' about EduCore.",
-  "Never state any price other than the published rate above. Never offer or imply a discount, a free extension or custom terms.",
+  "Never state any price other than the published rate above. Never offer or imply a discount, a free extension or custom terms. Never write any pricing or free-of-charge wording yourself: the only free offer is a fixed sentence the system adds for children's homes, outside your output.",
   "Never mention customer names, testimonials, statistics, awards or results.",
   "Never promise an integration, feature, timeline or availability that is not in the list above.",
   "Never mention competitors.",

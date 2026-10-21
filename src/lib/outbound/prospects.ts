@@ -6,6 +6,8 @@
 import { PUBLISHED_PRICE_KES_PER_STUDENT_TERM, renderProductFactsForPrompt } from "@/lib/growth/product-facts";
 import { SITE_URL } from "@/lib/site";
 import { OWNERSHIP_LABELS, ownershipSignal } from "./ownership";
+import { contactNameIncludes, nameFromEmail } from "@/lib/outbound/email-name";
+import { isChildrenHome } from "@/lib/outbound/children-home";
 
 export const MAX_IMPORT_ROWS = 500;
 export const MAX_SCORE_BATCH = 10;
@@ -245,6 +247,13 @@ export const OUTREACH_OFFER = {
 
 const OFFER_LINE = `Our pricing starts at KES ${OUTREACH_OFFER.pricePerStudentPerTermKes} per student per term, with a ${OUTREACH_OFFER.trialDays}-day free trial and no payment card required.`;
 
+// Children's homes and orphanages are not charged (owner decision). This is fixed text written by the code,
+// never by the model, and only added when the organisation's NAME clearly says it is a children's home (see
+// src/lib/outbound/children-home.ts). It replaces the pricing sentence so one email never quotes a price AND
+// promises free use. Billing for these homes is handled separately from this wording.
+export const CHILDRENS_HOME_FREE_LINE =
+  "We would like to support the children in your care, so EduCore will not charge your children's home for using the software.";
+
 // Links added to every draft. Fixed text (never written by the model) so they can't be altered or invented.
 // Each carries UTM tags so a signup or contact-form lead can be traced back to outreach (the site stores
 // them first-touch: see src/lib/attribution.ts). utm_medium says which channel, utm_content which link.
@@ -262,6 +271,8 @@ export function outreachLink(path: "" | "/signup" | "/contact", channel: Outreac
 
 const DEFAULT_OPENING_SCHOOL =
   "Managing admissions, student records, fee collection through M-Pesa, and end-of-term assessments can take considerable time for a school.";
+const DEFAULT_OPENING_CHILDRENS_HOME =
+  "Keeping accurate records, daily attendance and progress reports for the children in your care can take a great deal of time.";
 const DEFAULT_OPENING_KINDERGARTEN =
   "Keeping up with admissions, fee collection and regular updates to parents can take a great deal of a kindergarten's time.";
 
@@ -269,6 +280,8 @@ export type DraftContext = {
   school_name?: string | null;
   contact_name?: string | null;
   school_level?: string | null;
+  /** The address the email will go to. Used only to pick a greeting name; never written into the draft. */
+  email?: string | null;
 };
 
 /** The name to greet, or null when it's missing or just the school/office label ("Hello," instead). */
@@ -283,9 +296,31 @@ export function greetingName(contactName: string | null | undefined, schoolName?
   return name;
 }
 
+/**
+ * The name for the EMAIL greeting. Rule: if we are not sure, use no name.
+ *  - The address clearly names a person (peter.kimani@..., james@...): greet by that given name, unless the
+ *    contact name we hold is a different person, in which case we can't tell who owns the inbox, so no name.
+ *  - The address says nothing about a person (info@, principal@, jmaina263@): fall back to the contact name.
+ */
+export function emailGreetingName(ctx: DraftContext): string | null {
+  const contact = greetingName(ctx.contact_name, ctx.school_name);
+  const fromEmail = nameFromEmail(ctx.email, ctx.school_name);
+  if (!fromEmail) return contact;
+  if (!contact) return fromEmail;
+  return contactNameIncludes(contact, fromEmail) ? contact : null;
+}
+
 /** The AI-written opening is only used if it is a plain short paragraph with no figures, prices or links. */
-export function sanitizeOpening(raw: unknown, level: OutboundSchoolLevel | null | undefined): string {
-  const fallback = level === "kindergarten" ? DEFAULT_OPENING_KINDERGARTEN : DEFAULT_OPENING_SCHOOL;
+export function sanitizeOpening(
+  raw: unknown,
+  level: OutboundSchoolLevel | null | undefined,
+  childrensHome = false,
+): string {
+  const fallback = childrensHome
+    ? DEFAULT_OPENING_CHILDRENS_HOME
+    : level === "kindergarten"
+      ? DEFAULT_OPENING_KINDERGARTEN
+      : DEFAULT_OPENING_SCHOOL;
   if (typeof raw !== "string") return fallback;
   const t = raw.replace(/\s+/g, " ").trim();
   if (t.length < 20 || t.length > 400) return fallback;
@@ -306,14 +341,15 @@ const PRODUCT_PARAGRAPH = {
 
 export function assembleEmailBody(openingRaw: unknown, ctx: DraftContext = {}): string {
   const level = normalizeSchoolLevel(ctx.school_level ?? null);
-  const name = greetingName(ctx.contact_name, ctx.school_name);
+  const name = emailGreetingName(ctx);
+  const home = isChildrenHome(ctx.school_name);
   const product = level === "kindergarten" ? PRODUCT_PARAGRAPH.kindergarten : level === null ? PRODUCT_PARAGRAPH.neutral : PRODUCT_PARAGRAPH.full;
   return [
     name ? `Hello ${name},` : "Hello,",
-    sanitizeOpening(openingRaw, level),
+    sanitizeOpening(openingRaw, level, home),
     product,
-    OFFER_LINE,
-    "Would you be open to a brief online demonstration to see how EduCore could support your school?",
+    home ? CHILDRENS_HOME_FREE_LINE : OFFER_LINE,
+    `Would you be open to a brief online demonstration to see how EduCore could support your ${home ? "children's home" : "school"}?`,
     `Start your free trial: ${outreachLink("/signup", "email")}\nContact us: ${outreachLink("/contact", "email")}`,
     `Kind regards,\nEduCore Africa\n${outreachLink("", "email")}`,
     "If you would rather not hear from us, just reply and we will not contact you again.",
@@ -347,7 +383,11 @@ function buildWhatsApp(ctx: DraftContext): string {
   return [
     `Hello${name ? ` ${name}` : ""}! 👋 We’re EduCore Africa, helping ${who} simplify their daily administration.`,
     product,
-    `Pricing starts at KES ${OUTREACH_OFFER.pricePerStudentPerTermKes} per student per term, and you can explore the system with a ${OUTREACH_OFFER.trialDays}-day free trial, with no payment card required.`,
+    // A children's home is not charged, so don't quote a price that contradicts the email. The free-of-charge
+    // promise itself is only made in the reviewed email; a rep can add it here by hand.
+    isChildrenHome(ctx.school_name)
+      ? `You can explore the system with a ${OUTREACH_OFFER.trialDays}-day free trial, with no payment card required.`
+      : `Pricing starts at KES ${OUTREACH_OFFER.pricePerStudentPerTermKes} per student per term, and you can explore the system with a ${OUTREACH_OFFER.trialDays}-day free trial, with no payment card required.`,
     "Would you be open to a short demo to see how EduCore could support your school?",
     `📝 Start your free trial: ${outreachLink("/signup", "whatsapp")}`,
     `💬 Contact us: ${outreachLink("/contact", "whatsapp")}`,
@@ -387,9 +427,11 @@ Return ONLY a JSON object with these keys:
 - "fit_reason": one or two plain sentences explaining the score, using only the facts above.
 - "email_subject": under 70 characters, plain and professional, no clickbait, no ALL CAPS, no exclamation marks.
 - "opening": ONE paragraph of 1-2 sentences (under 45 words) that opens a first email by naming an administrative burden a school like this typically faces (for example admissions, fee follow-up, assessments, or updating parents). Plain text. Do not greet, do not mention EduCore, and do not include any numbers, prices, percentages, offers, links or promises. ${
-    level === "kindergarten"
-      ? "This is a kindergarten/nursery: talk about admissions, fees and updating parents, not exams."
-      : "Keep it general to a Kenyan school."
+    isChildrenHome(p.school_name)
+      ? "This is a children's home: talk about keeping records, attendance and progress reports for the children in its care. Do not mention fees, payments, pricing or cost at all."
+      : level === "kindergarten"
+        ? "This is a kindergarten/nursery: talk about admissions, fees and updating parents, not exams."
+        : "Keep it general to a Kenyan school."
   }
 
 Hard rules: never claim we visited, spoke to, or were referred by anyone; never invent facts about the school or its current systems; never mention competitors. Write in clear, respectful Kenyan business English.`;
