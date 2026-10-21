@@ -133,9 +133,12 @@ export default async function AdminAnalyticsPage({
       .lte("created_at", dayEndUtc(prior.endIso)),
     // Everyone who pressed Continue on step 1 of the demo form and had their contact details
     // saved, whatever happened next (still open, contacted, or went on to submit).
+    // Team test submissions are named "TEST – ignore" (any dash style / casing), so they are left
+    // out of the count. The .or() keeps rows with no name: a plain not.ilike would drop NULLs.
     supabase
       .from("marketing_demo_partial_leads")
       .select("id", { count: "exact", head: true })
+      .or("name.is.null,name.not.ilike.test*ignore")
       .gte("created_at", dayStartUtc(startIso))
       .lte("created_at", dayEndUtc(endIso)),
   ]);
