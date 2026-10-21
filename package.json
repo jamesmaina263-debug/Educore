@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "vitest run"
+    "test": "vitest run",
+    "migration:new": "python3 scripts/new_migration.py"
   },
   "dependencies": {
     "@fontsource-variable/inter": "^5.3.0",
@@ -48,11 +49,11 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
-    "@types/node": "^22",
+    "@types/node": "^26",
     "@types/papaparse": "^5.5.2",
     "@types/react": "^19",
     "@types/react-dom": "^19",
-    "eslint": "^9",
+    "eslint": "^10",
     "eslint-config-next": "16.4.0",
     "fake-indexeddb": "^6.2.5",
     "tailwindcss": "^4",
