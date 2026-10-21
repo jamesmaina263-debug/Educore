@@ -30,6 +30,8 @@ export type BillingData = {
   plan_name: string | null;
   trial_ends_at: string | null;
   current_period_end: string | null;
+  /** No-charge school (e.g. a children's home): no trial countdown, no plan wording, nothing to pay. */
+  complimentary: boolean;
   invoices: BillingInvoice[];
 };
 
@@ -60,7 +62,9 @@ export function BillingPanel({ data, canManage }: { data: BillingData; canManage
       <div className="panel flex items-center gap-3 p-4">
         <div className="flex-1">
           <p className="text-sm text-muted-foreground">Plan</p>
-          <p className="font-medium">{data.plan_name ?? "No plan assigned"}</p>
+          <p className="font-medium">
+            {data.complimentary ? "Complimentary — no charge" : (data.plan_name ?? "No plan assigned")}
+          </p>
         </div>
         <div className="flex-1">
           <p className="text-sm text-muted-foreground">Status</p>
@@ -69,13 +73,13 @@ export function BillingPanel({ data, canManage }: { data: BillingData; canManage
             label={data.status ?? "unknown"}
           />
         </div>
-        {data.status === "trialing" && data.trial_ends_at && (
+        {!data.complimentary && data.status === "trialing" && data.trial_ends_at && (
           <div className="flex-1">
             <p className="text-sm text-muted-foreground">Trial ends</p>
             <p className="font-medium">{new Date(data.trial_ends_at).toLocaleDateString()}</p>
           </div>
         )}
-        {data.current_period_end && (
+        {!data.complimentary && data.current_period_end && (
           <div className="flex-1">
             <p className="text-sm text-muted-foreground">Current period ends</p>
             <p className="font-medium">{new Date(data.current_period_end).toLocaleDateString()}</p>

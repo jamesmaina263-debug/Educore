@@ -140,3 +140,28 @@ Note: `platform_invoices.notes` and `cancel_reason` are visible to the school th
 * **Pause automation** – untick "Generate invoices automatically"; nothing else changes.
 * **Suspension interplay** – cancelling an overdue invoice does *not* reactivate a suspended school;
   paying it in full does (only if no other invoice is overdue and the subscription is active).
+
+## Complimentary (no-charge) schools
+
+Some schools are not charged, for example a verified children's home or orphanage. EduCore marks these with
+`school_subscriptions.complimentary` (migration `20261021090000_complimentary_subscriptions`), set only by a
+platform super admin from **Admin → Billing → Manage → No-charge (complimentary) school**, with a required reason.
+
+What the flag does:
+
+- The subscription becomes `active` with a KES 0 price, and a school that the 30-day trial had suspended is
+  reactivated. A complimentary school never expires (`expire_trials()` skips it).
+- The automated invoice planner skips it (reason `complimentary`) and `generate_platform_invoice()` refuses it,
+  so no KES 0 invoices are ever issued to it.
+- The school's own Billing tab shows "Complimentary — no charge" instead of a plan, trial countdown or period end.
+
+Operating notes:
+
+- **Verify by hand.** Self-signup lets anyone type any school name, so the name is never proof. The admin
+  table shows a hint when the name looks like a children's home; it grants nothing on its own.
+- **Do it before day 30.** The trial still expires after 30 days for a school that has not been flagged.
+- **The reason is visible** to that school's staff who hold `billing.read`. Keep it factual.
+- **Removing the flag** clears it and the KES 0 price but leaves the subscription active. Assign a plan or terms
+  next; until then the planner skips the school (`no_plan_assigned`), so nothing is billed by surprise.
+- The outreach email's "we will not charge your children's home" line is written by code for names that clearly
+  say children's home (`src/lib/outbound/children-home.ts`). Sending it does not itself flag the school here.

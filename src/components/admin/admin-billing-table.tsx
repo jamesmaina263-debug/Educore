@@ -17,7 +17,9 @@ import {
   suspendSchoolSubscription,
   generateSchoolInvoice,
   recordSchoolPayment,
+  setSchoolComplimentary,
 } from "@/app/(admin)/admin/billing/actions";
+import { isChildrenHome } from "@/lib/outbound/children-home";
 
 export type InvoiceRow = {
   id: string;
@@ -37,6 +39,8 @@ export type SchoolBillingRow = {
   plan_id: string | null;
   trial_ends_at: string | null;
   current_period_end: string | null;
+  complimentary: boolean;
+  complimentary_reason: string | null;
   invoices: InvoiceRow[];
 };
 
@@ -64,6 +68,7 @@ export function AdminBillingTable({ rows, plans }: { rows: SchoolBillingRow[]; p
   const [periodEnd, setPeriodEnd] = useState<Record<string, string>>({});
   const [invoicePeriod, setInvoicePeriod] = useState<Record<string, { start: string; end: string }>>({});
   const [paymentRef, setPaymentRef] = useState<Record<string, string>>({});
+  const [complimentaryReason, setComplimentaryReason] = useState<Record<string, string>>({});
 
   function run(fn: () => Promise<{ error: string } | { success: true }>) {
     setError(null);
@@ -112,6 +117,11 @@ export function AdminBillingTable({ rows, plans }: { rows: SchoolBillingRow[]; p
                         tone={toneFor(row.subscription_status)}
                         label={row.subscription_status ?? "no subscription"}
                       />
+                      {row.complimentary && (
+                        <span className="ml-1.5">
+                          <StatusBadge tone="success" label="complimentary" />
+                        </span>
+                      )}
                     </td>
                     <td className="text-muted-foreground">
                       {row.trial_ends_at
@@ -134,6 +144,62 @@ export function AdminBillingTable({ rows, plans }: { rows: SchoolBillingRow[]; p
                     <tr key={`${row.school_id}-expanded`}>
                       <td colSpan={5} className="bg-muted/30">
                         <div className="flex flex-col gap-4 p-4">
+                          <div className="flex flex-col gap-2 rounded-md border border-border bg-background p-3">
+                            <p className="text-xs font-medium">No-charge (complimentary) school</p>
+                            {row.complimentary ? (
+                              <>
+                                <p className="text-xs text-muted-foreground">
+                                  Not charged and never expires. Reason on file: {row.complimentary_reason ?? "—"}
+                                </p>
+                                <div>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    disabled={pending}
+                                    onClick={() => run(() => setSchoolComplimentary(row.school_id, false, ""))}
+                                  >
+                                    Remove complimentary status
+                                  </Button>
+                                </div>
+                              </>
+                            ) : (
+                              <>
+                                {isChildrenHome(row.school_name) && (
+                                  <p className="text-xs text-muted-foreground">
+                                    The name looks like a children&apos;s home. Check it is genuine before marking it
+                                    complimentary; the name alone is not proof.
+                                  </p>
+                                )}
+                                <div className="flex flex-wrap items-end gap-2">
+                                  <div className="space-y-1">
+                                    <p className="text-xs text-muted-foreground">
+                                      Reason (how it was verified; the school&apos;s billing staff can see this)
+                                    </p>
+                                    <Input
+                                      className="w-80"
+                                      maxLength={300}
+                                      value={complimentaryReason[row.school_id] ?? ""}
+                                      onChange={(e) =>
+                                        setComplimentaryReason((p) => ({ ...p, [row.school_id]: e.target.value }))
+                                      }
+                                    />
+                                  </div>
+                                  <Button
+                                    size="sm"
+                                    disabled={pending || (complimentaryReason[row.school_id] ?? "").trim().length < 3}
+                                    onClick={() =>
+                                      run(() =>
+                                        setSchoolComplimentary(row.school_id, true, complimentaryReason[row.school_id] ?? ""),
+                                      )
+                                    }
+                                  >
+                                    Make complimentary
+                                  </Button>
+                                </div>
+                              </>
+                            )}
+                          </div>
+
                           <div className="flex flex-wrap items-end gap-2">
                             <div className="space-y-1">
                               <p className="text-xs text-muted-foreground">Activate on plan</p>
@@ -219,7 +285,12 @@ export function AdminBillingTable({ rows, plans }: { rows: SchoolBillingRow[]; p
                             <Button
                               size="sm"
                               variant="outline"
-                              disabled={pending || !invoicePeriod[row.school_id]?.start || !invoicePeriod[row.school_id]?.end}
+                              disabled={
+                                pending ||
+                                row.complimentary ||
+                                !invoicePeriod[row.school_id]?.start ||
+                                !invoicePeriod[row.school_id]?.end
+                              }
                               onClick={() =>
                                 run(() =>
                                   generateSchoolInvoice(

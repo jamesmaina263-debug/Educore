@@ -137,7 +137,7 @@ export async function loadSettingsContext(): Promise<SettingsContext> {
   if (canReadBilling === true) {
     const { data: sub } = await supabase
       .from("school_subscriptions")
-      .select("status, trial_ends_at, current_period_end, subscription_plans(name)")
+      .select("status, trial_ends_at, current_period_end, complimentary, subscription_plans(name)")
       .maybeSingle();
     const { data: invoiceRows } = await supabase
       .from("platform_invoices")
@@ -150,6 +150,7 @@ export async function loadSettingsContext(): Promise<SettingsContext> {
       plan_name: plan?.name ?? null,
       trial_ends_at: sub?.trial_ends_at ?? null,
       current_period_end: sub?.current_period_end ?? null,
+      complimentary: sub?.complimentary ?? false,
       invoices: (invoiceRows ?? []).map((r) => ({
         ...r,
         amount_kes: Number(r.amount_kes),
