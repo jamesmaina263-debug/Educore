@@ -8,6 +8,7 @@ import {
   isBotUserAgent,
   parsePageViewPayload,
 } from "@/lib/marketing/page-view";
+import { hasInternalVisitorCookie } from "@/lib/marketing/internal-visitor";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -42,6 +43,8 @@ export async function POST(request: NextRequest) {
 
     const userAgent = request.headers.get("user-agent");
     if (isBotUserAgent(userAgent)) return noContent();
+    // A staff browser marked "don't count my visits" (a flag cookie set only for signed-in platform admins).
+    if (hasInternalVisitorCookie(request.headers.get("cookie"))) return noContent();
 
     const declared = Number(request.headers.get("content-length") ?? "0");
     if (declared > PAGE_VIEW_MAX_BODY_BYTES) return noContent();

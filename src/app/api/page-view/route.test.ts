@@ -32,6 +32,12 @@ describe("POST /api/page-view", () => {
     expect(res.status).toBe(204);
     expect(rpc).toHaveBeenCalledWith("record_page_view", expect.objectContaining({ p_path: "/pricing", p_country: "KE", p_device: "desktop", p_click_platform: "google", p_is_entry: true }));
   });
+  it("records nothing for a browser marked as internal, and still records one with other cookies", async () => {
+    expect((await run(req({ path: "/pricing" }, { cookie: "ec_internal=1" }))).status).toBe(204);
+    expect(rpc).not.toHaveBeenCalled();
+    await run(req({ path: "/pricing" }, { cookie: "theme=dark; other=1" }));
+    expect(rpc).toHaveBeenCalledTimes(1);
+  });
   it("silently drops bots, cross-site, malformed and internal paths", async () => {
     for (const r of [
       req({ path: "/" }, { "user-agent": "Googlebot/2.1 (+http://www.google.com/bot.html)" }),

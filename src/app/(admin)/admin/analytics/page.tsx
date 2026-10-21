@@ -15,6 +15,7 @@ import { ChannelPerformanceList } from "@/components/admin/analytics/channel-per
 import { ConversionFunnel, type FunnelStage } from "@/components/admin/analytics/conversion-funnel";
 import { GrowthReport } from "@/components/admin/analytics/growth-report";
 import { TrialFunnelPanel } from "@/components/admin/analytics/trial-funnel";
+import { ExcludeMyVisits } from "@/components/admin/analytics/exclude-my-visits";
 import { DataHealthBanner } from "@/components/admin/analytics/data-health-banner";
 import {
   DEMO_PARTIAL_RETENTION_DAYS,
@@ -373,6 +374,8 @@ export default async function AdminAnalyticsPage({
           on the site. The live panel below reads GA4&apos;s Realtime feed and is current.
         </p>
       )}
+
+      <ExcludeMyVisits />
 
       <FirstPartyTrafficPanel
         key={`${startIso}_${endIso}`}
