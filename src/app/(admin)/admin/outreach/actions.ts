@@ -388,7 +388,7 @@ export async function scoreOutboundProspects(
   // RLS limits this read to platform super admins, so a non-admin just gets nothing back.
   const { data: rows, error: readErr } = await supabase
     .from("outbound_prospects")
-    .select("id, school_name, town_county, school_type, school_level, website, contact_name, contact_role, student_count, status")
+    .select("id, school_name, town_county, school_type, school_level, website, email, contact_name, contact_role, student_count, status")
     .in("id", ids);
   if (readErr) return { error: readErr.message };
   if (!rows || rows.length === 0) return { error: "Those prospects weren't found." };
@@ -433,6 +433,7 @@ export async function scoreOutboundProspects(
         school_name: row.school_name,
         contact_name: row.contact_name,
         school_level: row.school_level,
+        email: row.email,
       });
       if (!parsed.ok) throw new Error(parsed.error);
 
