@@ -1,6 +1,6 @@
 import "fake-indexeddb/auto";
 import { IDBFactory } from "fake-indexeddb";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 // db.ts caches its connection in a module-level variable, and each test
 // needs a clean IndexedDB + a fresh module instance to see it, so every
@@ -13,6 +13,16 @@ async function freshModules() {
   const handlersMod = await import("./handlers");
   return { dbMod, queueMod, handlersMod };
 }
+
+// The first freshModules() in a worker pays a one-off cost: ./handlers pulls in every Server Action module in the app,
+// and each has to be transformed before it can run. That takes ~1s on a quiet machine but several seconds on a cold or
+// busy CI runner, which blew the default 5s per-test timeout on whichever test ran first. The timed-out test then kept
+// running in the background and leaked entries into the next one, so the failure showed up as a confusing
+// "expected 1 but got 2". Paying that cost here, under a generous hook timeout, leaves the tests themselves fast
+// (they re-import from the warm transform cache) and removes the flake without raising the per-test timeout.
+beforeAll(async () => {
+  await freshModules();
+}, 120_000);
 
 beforeEach(() => {
   // fake-indexeddb persists per-name across `new IDBFactory()` unless reset;

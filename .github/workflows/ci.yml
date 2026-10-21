@@ -14,7 +14,11 @@ jobs:
 
       - uses: actions/setup-node@v7
         with:
-          node-version: 20
+          # Keep this equal to the Node.js version of the Vercel project (Settings > General > Node.js Version),
+          # so CI type-checks, tests and builds on the same runtime production runs. Tested on 20 and 24: the
+          # unit tests (1371) and the production build pass on both, so this is a like-for-like alignment, not a
+          # behaviour change. Do not turn this into a matrix: the required status check is named "ci".
+          node-version: 24
           cache: npm
 
       - run: npm ci
