@@ -43,6 +43,16 @@ on:
 
 jobs:
   rls-behavior-check:
+    # Skip on Dependabot-authored PRs only (2026-10-21). GitHub withholds Actions secrets from
+    # runs triggered by dependabot[bot], so the SUPABASE_DB_URL guard below always failed there
+    # (5 of 5 runs on the actions/checkout bump, #543; it only passed once a human updated the
+    # branch). This workflow's own file is in the `paths` filter above, so any Dependabot bump of
+    # an action used here trips it. Skipping is safe: Dependabot only edits dependency manifests
+    # and workflow files -- never supabase/migrations/** or the SQL test, the things this check
+    # exists to guard -- and the check still runs WITH real secrets on the push to main after the
+    # PR merges, and nightly. Deliberately NOT fixed by adding SUPABASE_DB_URL to Dependabot
+    # secrets: that would expose a production database credential to bot-authored PR runs.
+    if: ${{ !(github.event_name == 'pull_request' && github.actor == 'dependabot[bot]') }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
