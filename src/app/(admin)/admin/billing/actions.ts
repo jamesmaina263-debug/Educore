@@ -39,6 +39,33 @@ export async function suspendSchoolSubscription(schoolId: string, reason: string
   return { success: true };
 }
 
+// Marks a school as not charged (e.g. a verified children's home), or clears that. The database function
+// enforces super-admin only and a required reason; it also keeps trial expiry, the invoice planner and
+// manual invoicing away from the school (supabase/migrations/20261021090000_complimentary_subscriptions.sql).
+export async function setSchoolComplimentary(
+  schoolId: string,
+  complimentary: boolean,
+  reason: string,
+): Promise<ActionResult> {
+  const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
+  const cleanReason = reason.trim();
+  if (complimentary && cleanReason.length < 3) return { error: "Give a short reason, e.g. how the home was verified." };
+  const { error } = await supabase.rpc("set_school_complimentary", {
+    p_school_id: schoolId,
+    p_complimentary: complimentary,
+    p_reason: complimentary ? cleanReason : null,
+  });
+  if (error) return { error: error.message };
+  void logAdminAction(supabase, "set_school_complimentary", {
+    school_id: schoolId,
+    complimentary,
+    reason: complimentary ? cleanReason : null,
+  });
+  revalidatePath("/admin/billing");
+  return { success: true };
+}
+
 export async function generateSchoolInvoice(
   schoolId: string,
   periodStart: string,

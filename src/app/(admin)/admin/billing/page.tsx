@@ -19,7 +19,7 @@ export default async function AdminBillingPage() {
   const [{ data: schools }, { data: subs }, { data: plans }, { data: invoices }, { data: overdueInvoices }] =
     await Promise.all([
       supabase.from("schools").select("id, name, status").order("name"),
-      supabase.from("school_subscriptions").select("school_id, status, plan_id, trial_ends_at, current_period_end"),
+      supabase.from("school_subscriptions").select("school_id, status, plan_id, trial_ends_at, current_period_end, complimentary, complimentary_reason"),
       supabase
         .from("subscription_plans")
         .select("id, code, name, price_per_student_kes")
@@ -49,6 +49,8 @@ export default async function AdminBillingPage() {
       plan_id: sub?.plan_id ?? null,
       trial_ends_at: sub?.trial_ends_at ?? null,
       current_period_end: sub?.current_period_end ?? null,
+      complimentary: sub?.complimentary ?? false,
+      complimentary_reason: sub?.complimentary_reason ?? null,
       invoices: (invoices ?? []).filter((i) => i.school_id === sc.id),
     };
   });
