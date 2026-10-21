@@ -168,6 +168,13 @@ jobs:
   auto-reconcile-drift:
     needs: check-drift
     if: failure() && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main'))
+    # Serialise (2026-10-21): this job force-pushes one fixed branch and does list-then-create on
+    # one PR. deploy-migrations.yml now dispatches this workflow on every failed push to main, so
+    # two runs can overlap; without this they could race between `gh pr list` and `gh pr create`.
+    # cancel-in-progress: false -- never kill a run halfway through pushing/merging.
+    concurrency:
+      group: migration-drift-reconcile
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     permissions:
       contents: write

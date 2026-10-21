@@ -43,6 +43,10 @@ on:
 jobs:
   push-migrations:
     runs-on: ubuntu-latest
+    # actions: write is used ONLY by the self-heal dispatch step at the bottom.
+    permissions:
+      contents: read
+      actions: write
     steps:
       - uses: actions/checkout@v7
 
@@ -88,3 +92,26 @@ jobs:
           fi
           python3 -c "import json, os; text = ':rotating_light: *Deploy migrations failed* -- a merged migration may not be live on production.\n• *run*: ' + os.environ['RUN_URL']; json.dump({'text': text}, open('/tmp/slack_payload.json', 'w'))"
           curl -s -X POST -H "Content-Type: application/json" -d @/tmp/slack_payload.json "$WEBHOOK_URL" > /dev/null || true
+
+      # Self-heal (2026-10-21). On 2026-10-19 two migrations applied straight to production sat
+      # unreconciled for ~3h, and every push to main in between failed here ("Remote migration
+      # versions not found in local migrations directory") -- including pushes that touched no
+      # migration. migration-drift-check.yml's push trigger is path-filtered to supabase/migrations/**,
+      # so those pushes never started its auto-reconcile; only the (best-effort, hours-late) cron or
+      # a later migration push did. This dispatches the drift check, whose auto-reconcile-drift job
+      # opens + auto-merges the reconcile PR, the moment ANY push to main fails here.
+      #
+      # workflow_dispatch is the one event GITHUB_TOKEN is allowed to trigger. One-directional on
+      # purpose: the drift check never dispatches this workflow, so there is no loop. Never fails
+      # the job (it is already red) and is a no-op for manual dry-run dispatches.
+      - name: Trigger drift reconcile on failure
+        if: failure() && github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          if gh workflow run migration-drift-check.yml --repo "$GITHUB_REPOSITORY" --ref "$REF_NAME"; then
+            echo "Dispatched migration-drift-check.yml on $REF_NAME -- its auto-reconcile job will open a reconcile PR if production has migrations the repo lacks."
+          else
+            echo "::warning::Could not dispatch migration-drift-check.yml. If this failure is 'Remote migration versions not found', run that workflow manually (Actions -> Migration drift check -> Run workflow)."
+          fi

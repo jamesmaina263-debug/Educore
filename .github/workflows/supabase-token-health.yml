@@ -11,6 +11,13 @@ name: Supabase token health
 # After rotating the token, update the SUPABASE_TOKEN_EXPIRES repo variable
 # (Settings -> Secrets and variables -> Actions -> Variables), format YYYY-MM-DD.
 # The fallback below is the expiry of the token created on 2026-09-30.
+#
+# Second job (2026-10-21): reconcile-pat-health does the same for RECONCILE_PAT, the token the
+# auto-reconcile job in migration-drift-check.yml uses to open the reconcile PR so that the
+# required checks run on it and auto-merge fires. If it lapsed silently the self-heal would
+# quietly degrade to "a human must push to the PR". Unlike the Supabase API, GitHub DOES report
+# a token's expiry (the `github-authentication-token-expiration` response header on any
+# authenticated call), so no manually-maintained date variable is needed here.
 
 on:
   schedule:
@@ -102,4 +109,98 @@ jobs:
         if: steps.api.outputs.status == 'rejected' || steps.api.outputs.status == 'missing'
         run: |
           echo "::error::Supabase access token is ${{ steps.api.outputs.status }}."
+          exit 1
+
+  reconcile-pat-health:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RECONCILE_PAT: ${{ secrets.RECONCILE_PAT }}
+      WARN_DAYS: "14"
+      INVALID_TITLE: "RECONCILE_PAT is invalid, expired or missing"
+      EXPIRING_TITLE: "RECONCILE_PAT expires soon"
+    steps:
+      - name: Check the token is accepted and read its expiry
+        id: pat
+        run: |
+          if [ -z "$RECONCILE_PAT" ]; then
+            echo "status=missing" >> "$GITHUB_OUTPUT"
+            echo "days_left=none" >> "$GITHUB_OUTPUT"
+            echo "RECONCILE_PAT repo secret is not set."
+            exit 0
+          fi
+          # GET /user needs no permissions, so this works for a minimally-scoped fine-grained PAT.
+          CODE=$(curl -s -D /tmp/pat_headers -o /dev/null -w "%{http_code}" \
+            --header "Authorization: Bearer $RECONCILE_PAT" \
+            "https://api.github.com/user" || echo "000")
+          echo "GitHub API responded HTTP $CODE"
+          case "$CODE" in
+            200) echo "status=ok" >> "$GITHUB_OUTPUT" ;;
+            401|403) echo "status=rejected" >> "$GITHUB_OUTPUT"; echo "days_left=none" >> "$GITHUB_OUTPUT"; exit 0 ;;
+            *) echo "status=unreachable" >> "$GITHUB_OUTPUT"; echo "days_left=none" >> "$GITHUB_OUTPUT"; exit 0 ;;  # 5xx / network: not the token's fault
+          esac
+          # e.g. "github-authentication-token-expiration: 2026-10-24 06:01:17 UTC". Absent => the
+          # token has no expiry set.
+          EXP=$(grep -i '^github-authentication-token-expiration:' /tmp/pat_headers | cut -d' ' -f2- | tr -d '\r')
+          if [ -z "$EXP" ]; then
+            echo "days_left=none" >> "$GITHUB_OUTPUT"
+            echo "Token has no expiry date."
+            exit 0
+          fi
+          if ! END=$(date -u -d "$EXP" +%s 2>/dev/null); then
+            echo "days_left=none" >> "$GITHUB_OUTPUT"
+            echo "::warning::Could not parse the token expiry header: '$EXP'"
+            exit 0
+          fi
+          DAYS=$(( (END - $(date -u +%s)) / 86400 ))
+          echo "days_left=$DAYS" >> "$GITHUB_OUTPUT"
+          echo "expires=$EXP" >> "$GITHUB_OUTPUT"
+          echo "Token expires $EXP ($DAYS days left)."
+
+      - name: Open an issue if the token is rejected or missing
+        if: steps.pat.outputs.status == 'rejected' || steps.pat.outputs.status == 'missing'
+        run: |
+          EXISTING=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --search "\"$INVALID_TITLE\" in:title" --json number --jq '.[0].number // empty')
+          BODY="The daily check got \`${{ steps.pat.outputs.status }}\` for the \`RECONCILE_PAT\` repo secret.
+
+          **What this breaks:** the auto-reconcile job in migration-drift-check.yml opens its reconcile PR with this token so the required checks run on it and auto-merge fires. Without it, that PR is opened with the default token and sits un-mergeable until a human pushes to it, so migration drift (production migrations missing from git) is no longer fixed automatically and every push to main fails 'Deploy migrations' until it is.
+
+          **Fix:**
+          1. Create a fine-grained PAT limited to **this repository only**: Contents = read/write, Pull requests = read/write, nothing else. Expiry 90 days.
+          2. Update the \`RECONCILE_PAT\` repo secret: https://github.com/$GITHUB_REPOSITORY/settings/secrets/actions
+          3. That is all -- the next daily run closes this issue by itself.
+
+          Run: https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          if [ -n "$EXISTING" ]; then
+            gh issue comment "$EXISTING" --repo "$GITHUB_REPOSITORY" --body "Still failing as of $(date -u +%F): $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          else
+            gh issue create --repo "$GITHUB_REPOSITORY" --title "$INVALID_TITLE" --body "$BODY"
+          fi
+
+      - name: Open an issue if the token expires soon
+        if: steps.pat.outputs.status == 'ok' && steps.pat.outputs.days_left != 'none' && fromJSON(steps.pat.outputs.days_left) <= fromJSON(env.WARN_DAYS)
+        run: |
+          EXISTING=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --search "\"$EXPIRING_TITLE\" in:title" --json number --jq '.[0].number // empty')
+          if [ -z "$EXISTING" ]; then
+            gh issue create --repo "$GITHUB_REPOSITORY" --title "$EXPIRING_TITLE" --body "The RECONCILE_PAT token used by the migration auto-reconcile expires ${{ steps.pat.outputs.expires }} (${{ steps.pat.outputs.days_left }} days left). Create a replacement fine-grained PAT (this repo only; Contents + Pull requests read/write; 90 days) and update the RECONCILE_PAT repo secret: https://github.com/$GITHUB_REPOSITORY/settings/secrets/actions . This issue closes itself on the next daily run once the new token is in place."
+          fi
+
+      - name: Close resolved issues
+        if: steps.pat.outputs.status == 'ok'
+        run: |
+          for N in $(gh issue list --repo "$GITHUB_REPOSITORY" --state open --search "\"$INVALID_TITLE\" in:title" --json number --jq '.[].number'); do
+            gh issue close "$N" --repo "$GITHUB_REPOSITORY" --comment "RECONCILE_PAT accepted again ($(date -u +%F)). Closing."
+          done
+          # The expiry is read from GitHub each run, so a rotated token closes its own warning.
+          D="${{ steps.pat.outputs.days_left }}"
+          if [ "$D" = "none" ] || [ "$D" -gt "$WARN_DAYS" ]; then
+            for N in $(gh issue list --repo "$GITHUB_REPOSITORY" --state open --search "\"$EXPIRING_TITLE\" in:title" --json number --jq '.[].number'); do
+              gh issue close "$N" --repo "$GITHUB_REPOSITORY" --comment "Token rotated or no longer near expiry ($(date -u +%F)). Closing."
+            done
+          fi
+
+      - name: Fail the run if the token is rejected or missing
+        if: steps.pat.outputs.status == 'rejected' || steps.pat.outputs.status == 'missing'
+        run: |
+          echo "::error::RECONCILE_PAT is ${{ steps.pat.outputs.status }}."
           exit 1
