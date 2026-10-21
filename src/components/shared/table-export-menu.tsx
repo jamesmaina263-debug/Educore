@@ -38,6 +38,8 @@ export interface TableExportMenuProps {
    * Optional: every other page keeps the standard table PDF.
    */
   onExportPdf?: () => void | Promise<void>;
+  /** Button text; defaults to "Export". Set when a page shows more than one export menu. */
+  label?: string;
 }
 
 function sanitize(stub: string) {
@@ -209,14 +211,14 @@ async function exportPDF(
   doc.save(`${sanitize(filenameStub)}.pdf`);
 }
 
-export function TableExportMenu({ filenameStub, title, rows, subtitle, size = "sm", logoUrl, signOff, onExportPdf }: TableExportMenuProps) {
+export function TableExportMenu({ filenameStub, title, rows, subtitle, size = "sm", logoUrl, signOff, onExportPdf, label }: TableExportMenuProps) {
   const disabled = rows.length === 0;
 
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button size={size} variant="outline" disabled={disabled}>
-          <Download className="size-4" aria-hidden /> Export
+          <Download className="size-4" aria-hidden /> {label ?? "Export"}
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
