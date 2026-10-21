@@ -35,7 +35,7 @@ jobs:
       - name: Build dataset
         run: python3 scripts/build_osm_schools.py kenya-latest.osm.pbf src/data/osm-schools-ke.json
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: osm-schools-ke
           path: src/data/osm-schools-ke.json
