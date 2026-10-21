@@ -325,6 +325,9 @@ export function sanitizeOpening(
   const t = raw.replace(/\s+/g, " ").trim();
   if (t.length < 20 || t.length > 400) return fallback;
   if (/[0-9%]|kes|ksh|http|www\.|@|free|discount|guarantee|approved|certified|accredited|official|endorse|kicd|knec|ministry|safaricom|simple/i.test(t)) return fallback;
+  // A children's home is not charged and does not collect fees: an opening about fees, payments, prices or
+  // parents would contradict the offer, so it falls back to the fixed children's-home opening.
+  if (childrensHome && /\b(fees?|pay(?:s|ing|ments?|ers?)?|pric\w*|cost\w*|charg\w*|invoic\w*|m-?pesa|parents?|school fees|admissions?|tuition|budget\w*)\b/i.test(t)) return fallback;
   return t;
 }
 
@@ -339,11 +342,24 @@ const PRODUCT_PARAGRAPH = {
   full: "EduCore Africa helps Kenyan schools bring admissions, student records and fee collection through M-Pesa together in one cloud-based school management system. It also supports student attendance, parent communication through SMS and WhatsApp, and exam management and report cards, including supported CBC competency-based reporting and marks-based grading.",
 } as const;
 
+// Children's homes are not charged and do not collect fees, so their paragraph leaves out fee collection, pricing
+// and "parent" wording and keeps only verified claims (src/lib/growth/product-facts.ts): records, attendance,
+// and report cards where exam claims are verified. Same level rules as above: no exam wording for a
+// kindergarten or an unknown level; PP1/PP2 and competency-based reports only for a kindergarten.
+const HOME_PRODUCT_PARAGRAPH = {
+  kindergarten:
+    "EduCore Africa is a cloud-based school management system built for Kenyan schools. It keeps learner records and daily attendance in one place, supports Pre-Primary (PP1 and PP2) classes, and provides competency-based learner progress reports.",
+  neutral:
+    "EduCore Africa is a cloud-based school management system built for Kenyan schools. It keeps student records and student attendance together in one place.",
+  full: "EduCore Africa is a cloud-based school management system built for Kenyan schools. It keeps student records and attendance in one place, and supports exam management and report cards, including supported CBC competency-based reporting and marks-based grading.",
+} as const;
+
 export function assembleEmailBody(openingRaw: unknown, ctx: DraftContext = {}): string {
   const level = normalizeSchoolLevel(ctx.school_level ?? null);
   const name = emailGreetingName(ctx);
   const home = isChildrenHome(ctx.school_name);
-  const product = level === "kindergarten" ? PRODUCT_PARAGRAPH.kindergarten : level === null ? PRODUCT_PARAGRAPH.neutral : PRODUCT_PARAGRAPH.full;
+  const paragraphs = home ? HOME_PRODUCT_PARAGRAPH : PRODUCT_PARAGRAPH;
+  const product = level === "kindergarten" ? paragraphs.kindergarten : level === null ? paragraphs.neutral : paragraphs.full;
   return [
     name ? `Hello ${name},` : "Hello,",
     sanitizeOpening(openingRaw, level, home),
