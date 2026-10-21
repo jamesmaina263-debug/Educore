@@ -93,3 +93,9 @@ verify_jwt = true
 # inside the function (same DISPATCH_SECRET and constant-time compare as send-communication).
 [functions.send-prospect-sequence]
 verify_jwt = false
+
+# Called only by the /api/cron/followup-digest Vercel Cron route, with no user session, so it cannot present
+# a Supabase JWT. Authenticated instead by the x-dispatch-secret header checked inside the function (same
+# DISPATCH_SECRET and constant-time compare as send-prospect-sequence).
+[functions.send-followup-digest]
+verify_jwt = false
