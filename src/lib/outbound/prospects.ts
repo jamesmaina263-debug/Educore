@@ -6,7 +6,6 @@
 import { PUBLISHED_PRICE_KES_PER_STUDENT_TERM, renderProductFactsForPrompt } from "@/lib/growth/product-facts";
 import { SITE_URL } from "@/lib/site";
 import { OWNERSHIP_LABELS, ownershipSignal } from "./ownership";
-import { contactNameIncludes, nameFromEmail } from "@/lib/outbound/email-name";
 import { isChildrenHome } from "@/lib/outbound/children-home";
 
 export const MAX_IMPORT_ROWS = 500;
@@ -280,8 +279,6 @@ export type DraftContext = {
   school_name?: string | null;
   contact_name?: string | null;
   school_level?: string | null;
-  /** The address the email will go to. Used only to pick a greeting name; never written into the draft. */
-  email?: string | null;
 };
 
 /** The name to greet, or null when it's missing or just the school/office label ("Hello," instead). */
@@ -297,17 +294,23 @@ export function greetingName(contactName: string | null | undefined, schoolName?
 }
 
 /**
- * The name for the EMAIL greeting. Rule: if we are not sure, use no name.
- *  - The address clearly names a person (peter.kimani@..., james@...): greet by that given name, unless the
- *    contact name we hold is a different person, in which case we can't tell who owns the inbox, so no name.
- *  - The address says nothing about a person (info@, principal@, jmaina263@): fall back to the contact name.
+ * The EMAIL greeting always addresses the school by its name ("Hello St Veronica Academy,"), never a person.
+ * We do not know who reads the inbox, a wrong personal name reads worse than none, and the school's name is
+ * the one thing we always have. Only tidies the name: collapses whitespace, and title-cases a name that was
+ * typed or imported in ALL CAPS. Falls back to a plain "Hello," when there is no school name.
+ * (WhatsApp keeps its own greeting; see greetingName and assembleWhatsApp.)
  */
-export function emailGreetingName(ctx: DraftContext): string | null {
-  const contact = greetingName(ctx.contact_name, ctx.school_name);
-  const fromEmail = nameFromEmail(ctx.email, ctx.school_name);
-  if (!fromEmail) return contact;
-  if (!contact) return fromEmail;
-  return contactNameIncludes(contact, fromEmail) ? contact : null;
+export function schoolGreetingName(schoolName: string | null | undefined): string | null {
+  const name = (schoolName ?? "").replace(/\s+/g, " ").trim();
+  if (!name) return null;
+  const letters = name.replace(/[^A-Za-z]/g, "");
+  if (letters.length > 3 && letters === letters.toUpperCase()) {
+    return name
+      .split(" ")
+      .map((w) => (w ? w.charAt(0).toUpperCase() + w.slice(1).toLowerCase() : w))
+      .join(" ");
+  }
+  return name;
 }
 
 /** The AI-written opening is only used if it is a plain short paragraph with no figures, prices or links. */
@@ -356,7 +359,7 @@ const HOME_PRODUCT_PARAGRAPH = {
 
 export function assembleEmailBody(openingRaw: unknown, ctx: DraftContext = {}): string {
   const level = normalizeSchoolLevel(ctx.school_level ?? null);
-  const name = emailGreetingName(ctx);
+  const name = schoolGreetingName(ctx.school_name);
   const home = isChildrenHome(ctx.school_name);
   const paragraphs = home ? HOME_PRODUCT_PARAGRAPH : PRODUCT_PARAGRAPH;
   // The brochure shows plan tiers and "billed per learner", which contradicts a children's home's no-charge
