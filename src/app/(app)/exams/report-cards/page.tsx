@@ -7,6 +7,8 @@ import { AppShell } from "@/components/app-shell/app-shell";
 import { ReportCardPicker } from "@/components/exams/report-card-picker";
 import { ReportCardList, type ReportCardRow } from "@/components/exams/report-card-list";
 import { MarkSheetExportMenu } from "@/components/exams/mark-sheet-export-menu";
+import { MeritListExportMenu } from "@/components/exams/merit-list-export-menu";
+import { meritListEligibility } from "@/lib/academics/merit-list";
 import { buildReportCardInsights } from "@/lib/academics/report-card-insights";
 import { loadMarkSheetModel } from "@/lib/academics/load-mark-sheet";
 import { DEFAULT_REPORT_SETTINGS, loadReportSettings } from "@/lib/academics/report-settings";
@@ -237,6 +239,17 @@ export default async function ReportCardsPage({
           </div>
           <div className="flex items-center gap-2">
             {markSheetModel && <MarkSheetExportMenu model={markSheetModel} filenameStub={`${schoolName ?? "educore"}-${selectedClassName}-${selectedExamName}-mark-sheet`} />}
+            {markSheetModel &&
+              (meritListEligibility(markSheetModel).available ? (
+                <MeritListExportMenu model={markSheetModel} filenameStub={`${schoolName ?? "educore"}-${selectedClassName}-${selectedExamName}-merit-list`} />
+              ) : (
+                <span
+                  className="inline-flex h-8 cursor-help items-center rounded-md border border-dashed border-border px-3 text-sm text-muted-foreground"
+                  title={(meritListEligibility(markSheetModel) as { reason: string }).reason}
+                >
+                  Merit list: n/a
+                </span>
+              ))}
             {rows.length > 0 && selectedExamId && selectedClassId && (
               <Link
                 href={`/exams/report-cards/print?exam=${selectedExamId}&class=${selectedClassId}`}
