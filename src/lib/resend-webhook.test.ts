@@ -65,8 +65,16 @@ describe("parseResendEvent", () => {
     expect(parseResendEvent({ data: {} })).toBeNull();
     expect(parseResendEvent({ type: "email.delivered", data: { subject: "x".repeat(900) } })!.subject).toHaveLength(300);
   });
-  it("tracks only the five delivery outcomes", () => {
-    expect([...TRACKED_EVENT_TYPES].sort()).toEqual(["email.bounced", "email.complained", "email.delivered", "email.delivery_delayed", "email.failed"]);
-    expect(TRACKED_EVENT_TYPES.has("email.opened")).toBe(false);
+  it("tracks the five delivery outcomes plus opens and clicks, and nothing else", () => {
+    expect([...TRACKED_EVENT_TYPES].sort()).toEqual([
+      "email.bounced",
+      "email.clicked",
+      "email.complained",
+      "email.delivered",
+      "email.delivery_delayed",
+      "email.failed",
+      "email.opened",
+    ]);
+    expect(TRACKED_EVENT_TYPES.has("email.sent")).toBe(false);
   });
 });
