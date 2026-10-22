@@ -17,6 +17,7 @@ export function MarkSheetExportMenu({ model, filenameStub }: { model: MarkSheetM
     <TableExportMenu
       filenameStub={filenameStub}
       title="Class Mark Sheet"
+      label="Mark sheet"
       rows={markSheetExportRows(model)}
       onExportPdf={exportPdf}
     />
