@@ -20,6 +20,30 @@ const OUTREACH_LOGO_HTML =
   `<img src="${OUTREACH_LOGO_URL}" width="156" height="50" alt="EduCore Africa" ` +
   `style="display:block;border:0;outline:none;width:156px;height:auto;margin:0 0 14px">`;
 
+// Per-school tracked links. Outreach drafts carry fixed links (built by outreachLink() in src/lib/outbound/prospects.ts):
+// <site>/[signup|contact|brochure]?utm_source=outreach&utm_medium=email&utm_campaign=school_outreach&utm_content=<key>.
+// At send time each one is swapped for <site>/api/outreach-link/<recipient id>/<key>, which records that this school
+// clicked and redirects to the very same page with the very same UTM tags (src/app/api/outreach-link). Only those
+// exact links on our own site are touched: any other text or URL in a body is left alone, and a body that does not
+// match (a different site origin, an edited link) simply stays untracked and keeps working.
+const TRACKED_LINK_PATHS: Record<string, string> = { home: "/", signup: "/signup", contact: "/contact", brochure: "/brochure" };
+
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+export function trackOutreachLinks(body: string, recipientId: string, siteUrl: string): string {
+  const site = siteUrl.replace(/\/$/, "");
+  if (!site || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(recipientId)) return body;
+  const re = new RegExp(
+    `${escapeRegExp(site)}(/(?:signup|contact|brochure)?)\\?utm_source=outreach&utm_medium=email&utm_campaign=school_outreach&utm_content=(home|signup|contact|brochure)(?![\\w&=%])`,
+    "g",
+  );
+  return body.replace(re, (whole, path: string, key: string) =>
+    TRACKED_LINK_PATHS[key] === path ? `${site}/api/outreach-link/${recipientId}/${key}` : whole,
+  );
+}
+
 export function escapeHtml(s: string): string {
   return s
     .replace(/&/g, "&amp;")
@@ -54,7 +78,7 @@ export function renderCampaignEmail(input: CampaignEmailInput): { text: string; 
   const text = `${body}\n\n--\n${footerLine}\nUnsubscribe: ${input.unsubscribeUrl}\nEduCore - https://educoreafrica.com`;
 
   // Blank line = new paragraph, single newline = <br>. Everything is escaped first, so a body
-  // can never inject markup; links are left as plain text on purpose (no tracking, no rewriting).
+  // can never inject markup; links are left as plain text on purpose (any tracking is done on the body before it gets here: trackOutreachLinks).
   const blocks = body.split(/\n{2,}/);
   // Logo goes straight after the sign-off ("Kind regards,"), above the opt-out line. If a reviewer edited the
   // sign-off away, it goes at the end instead so a signature-less email still ends with the brand.
