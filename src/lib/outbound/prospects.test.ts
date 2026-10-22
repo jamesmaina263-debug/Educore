@@ -442,4 +442,49 @@ describe("email greeting name and children's home wording", () => {
     expect(p).toContain("This is a children's home");
     expect(p).toContain("Do not mention fees, payments, pricing or cost");
   });
+
+  describe("children's home product paragraph", () => {
+    const home = (school_level: string | null) =>
+      draft({ school_name: "Mercy Children's Home", school_level: school_level as never }).email_body;
+
+    it("never mentions fees, M-Pesa, KES or parents, whatever the level", () => {
+      for (const level of ["kindergarten", "primary", "secondary", "other", null]) {
+        const body = home(level);
+        expect(body, String(level)).not.toMatch(/fee|m-pesa|KES|parent/i);
+        expect(body, String(level)).toContain("EduCore Africa is a cloud-based school management system built for Kenyan schools.");
+        expect(body, String(level)).toContain(CHILDRENS_HOME_FREE_LINE);
+      }
+    });
+
+    it("follows the level rules: PP1/PP2 only for a kindergarten, exams never for a kindergarten or unknown level", () => {
+      expect(home("kindergarten")).toContain("Pre-Primary (PP1 and PP2)");
+      expect(home("kindergarten")).not.toMatch(/exam|marks-based/i);
+      expect(home(null)).not.toMatch(/exam|PP1|marks-based/i);
+      expect(home("other")).toContain("exam management and report cards");
+      expect(home("other")).not.toContain("PP1");
+    });
+
+    it("falls back to the fixed children's-home opening when the model writes about fees, payments or parents", () => {
+      for (const o of [
+        "Following up on school fees and report cards each term can take a lot of a school's time.",
+        "Collecting payments and chasing parents every term takes time away from the children in your care.",
+        "Keeping the budget straight while looking after so many children takes a great deal of effort.",
+      ]) {
+        const r = parseScoringResponse(JSON.stringify({ fit_score: 60, fit_reason: "ok", email_subject: "s", opening: o }), { school_name: "Mercy Children's Home" });
+        expect(r.ok && r.value.email_body, o).toContain("for the children in your care can take a great deal of time");
+        expect(r.ok && r.value.email_body, o).not.toContain(o);
+      }
+    });
+
+    it("keeps a clean model opening for a children's home", () => {
+      const o = "Looking after the records and daily routines of so many children can take real time and care.";
+      const r = parseScoringResponse(JSON.stringify({ fit_score: 60, fit_reason: "ok", email_subject: "s", opening: o }), { school_name: "Mercy Children's Home" });
+      expect(r.ok && r.value.email_body).toContain(o);
+    });
+
+    it("leaves ordinary schools on their existing paragraphs", () => {
+      const body = draft({ school_name: "Sunrise Academy", school_level: "primary" }).email_body;
+      expect(body).toContain("fee collection through M-Pesa");
+    });
+  });
 });
