@@ -75,7 +75,16 @@ export async function GET(request: Request) {
     });
   }
 
+  // Resend delivery events hold recipient addresses, so they are kept 180 days. Same non-fatal pattern.
+  const emailEventsPurged = await adminClient.rpc("purge_old_email_events", { p_days: 180 });
+  if (emailEventsPurged.error) {
+    void sendSecurityAlert("Communication-retention cron (email events purge) failed", {
+      error: emailEventsPurged.error.message,
+    });
+  }
+
   return NextResponse.json({
+    email_events_purged: emailEventsPurged.error ? null : emailEventsPurged.data,
     page_views_purged: pageViewsPurged.error ? null : pageViewsPurged.data,
     archived: archived.data,
     purged: purged.data,
