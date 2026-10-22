@@ -159,6 +159,7 @@ Operating notes:
 
 - **Verify by hand.** Self-signup lets anyone type any school name, so the name is never proof. The admin
   table shows a hint when the name looks like a children's home; it grants nothing on its own.
+- **The Signups page prompts you.** A waiting or recently approved signup whose name looks like a children's home shows a notice linking to Billing. It is a reminder only (the name is not proof) and changes nothing by itself.
 - **Do it before day 30.** The trial still expires after 30 days for a school that has not been flagged.
 - **The reason is visible** to that school's staff who hold `billing.read`. Keep it factual.
 - **Removing the flag** clears it and the KES 0 price but leaves the subscription active. Assign a plan or terms

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
@@ -13,6 +14,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { reviewSchoolSignup } from "@/app/(admin)/admin/signups/actions";
+import { isChildrenHome } from "@/lib/outbound/children-home";
 
 export type SignupRow = {
   id: string;
@@ -44,6 +46,26 @@ function OwnerCell({ row }: { row: SignupRow }) {
       <div className="break-all text-xs text-muted-foreground">{row.owner_email ?? "—"}</div>
       <div className="text-xs text-muted-foreground">{row.owner_phone ?? ""}</div>
     </div>
+  );
+}
+
+// EduCore's outreach tells children's homes it will not charge them, and a new signup only gets a normal 30-day
+// trial. So a signup whose NAME looks like a children's home needs a person to verify it and, if genuine, mark it
+// complimentary in Billing before the trial ends. This is a prompt only: the name is never proof (anyone can type
+// any school name at signup) and nothing here changes billing.
+function ChildrensHomeNotice({ approved }: { approved: boolean }) {
+  return (
+    <p className="rounded-md border border-warning/25 bg-warning-subtle p-2 text-xs text-warning">
+      <strong>Looks like a children&apos;s home.</strong>{" "}
+      {approved
+        ? "If it is genuine, mark it complimentary in "
+        : "Check it is genuine before approving. If it is, approve it, then mark it complimentary in "}
+      <Link href="/admin/billing" className="underline">
+        Billing
+      </Link>{" "}
+      before its 30-day trial ends, or it will be suspended even though our outreach says we do not charge children&apos;s
+      homes.
+    </p>
   );
 }
 
@@ -86,19 +108,22 @@ export function AdminSignupApprovals({ rows }: { rows: SignupRow[] }) {
         ) : (
           <ul className="divide-y divide-border rounded-md border border-border">
             {waiting.map((row) => (
-              <li key={row.id} className="flex flex-col gap-3 p-3 sm:flex-row sm:items-center sm:justify-between">
-                <div className="grid flex-1 gap-3 sm:grid-cols-2">
-                  <SchoolCell row={row} />
-                  <OwnerCell row={row} />
+              <li key={row.id} className="flex flex-col gap-3 p-3">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="grid flex-1 gap-3 sm:grid-cols-2">
+                    <SchoolCell row={row} />
+                    <OwnerCell row={row} />
+                  </div>
+                  <div className="flex shrink-0 items-center gap-2">
+                    <Button size="sm" disabled={busy} onClick={() => decide(row.id, "approved")}>
+                      Approve
+                    </Button>
+                    <Button size="sm" variant="outline" disabled={busy} onClick={() => setRejectTarget(row)}>
+                      Reject
+                    </Button>
+                  </div>
                 </div>
-                <div className="flex shrink-0 items-center gap-2">
-                  <Button size="sm" disabled={busy} onClick={() => decide(row.id, "approved")}>
-                    Approve
-                  </Button>
-                  <Button size="sm" variant="outline" disabled={busy} onClick={() => setRejectTarget(row)}>
-                    Reject
-                  </Button>
-                </div>
+                {isChildrenHome(row.name) ? <ChildrensHomeNotice approved={false} /> : null}
               </li>
             ))}
           </ul>
@@ -132,12 +157,15 @@ export function AdminSignupApprovals({ rows }: { rows: SignupRow[] }) {
           <h2 className="text-sm font-semibold">Recently approved</h2>
           <ul className="divide-y divide-border rounded-md border border-border">
             {recent.map((row) => (
-              <li key={row.id} className="flex items-center justify-between gap-3 p-3">
-                <SchoolCell row={row} />
-                <StatusBadge
-                  tone="success"
-                  label={`Approved ${row.reviewed_at ? new Date(row.reviewed_at).toLocaleDateString() : ""}`.trim()}
-                />
+              <li key={row.id} className="flex flex-col gap-3 p-3">
+                <div className="flex items-center justify-between gap-3">
+                  <SchoolCell row={row} />
+                  <StatusBadge
+                    tone="success"
+                    label={`Approved ${row.reviewed_at ? new Date(row.reviewed_at).toLocaleDateString() : ""}`.trim()}
+                  />
+                </div>
+                {isChildrenHome(row.name) ? <ChildrensHomeNotice approved /> : null}
               </li>
             ))}
           </ul>
