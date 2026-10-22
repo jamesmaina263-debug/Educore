@@ -19,6 +19,7 @@ import {
 import { StatusBadge } from "@/components/status-badge";
 import { cn } from "@/lib/utils";
 import { suspendSchool, reactivateSchool } from "@/app/(admin)/admin/actions";
+import { AdminDeleteSchoolDialog } from "@/components/admin/admin-delete-school-dialog";
 
 export interface SchoolListRow {
   id: string;
@@ -99,6 +100,8 @@ export function AdminSchoolList({ schools }: { schools: SchoolListRow[] }) {
   // across rows rather than one per row, same reasoning as Billing's single expanded-row state.
   const [suspendTarget, setSuspendTarget] = useState<SchoolListRow | null>(null);
   const [reason, setReason] = useState("");
+  // Permanent deletion is only offered for schools that are already suspended/cancelled.
+  const [deleteTarget, setDeleteTarget] = useState<SchoolListRow | null>(null);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -211,14 +214,25 @@ export function AdminSchoolList({ schools }: { schools: SchoolListRow[] }) {
                 <span className="text-xs text-muted-foreground">{school.plan_name ?? "No plan"}</span>
                 <div className="mt-1 flex items-center gap-1.5">
                   {school.status === "suspended" || school.status === "cancelled" ? (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      disabled={pending}
-                      onClick={() => run(() => reactivateSchool(school.id))}
-                    >
-                      Reactivate
-                    </Button>
+                    <>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={pending}
+                        onClick={() => run(() => reactivateSchool(school.id))}
+                      >
+                        Reactivate
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="text-destructive hover:text-destructive"
+                        disabled={pending}
+                        onClick={() => setDeleteTarget(school)}
+                      >
+                        Delete…
+                      </Button>
+                    </>
                   ) : (
                     <Button size="sm" variant="destructive" disabled={pending} onClick={() => openSuspend(school)}>
                       Suspend
@@ -242,6 +256,12 @@ export function AdminSchoolList({ schools }: { schools: SchoolListRow[] }) {
           ))
         )}
       </div>
+
+      <AdminDeleteSchoolDialog
+        school={deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onDeleted={() => router.refresh()}
+      />
 
       <Dialog open={suspendTarget !== null} onOpenChange={(open) => !open && setSuspendTarget(null)}>
         <DialogContent>
