@@ -17,6 +17,7 @@ import { GrowthReport } from "@/components/admin/analytics/growth-report";
 import { TrialFunnelPanel } from "@/components/admin/analytics/trial-funnel";
 import { ExcludeMyVisits } from "@/components/admin/analytics/exclude-my-visits";
 import { SignupVisitorsPanel } from "@/components/admin/analytics/signup-visitors-panel";
+import { EmailDeliveryPanel } from "@/components/admin/analytics/email-delivery-panel";
 import { DataHealthBanner } from "@/components/admin/analytics/data-health-banner";
 import {
   DEMO_PARTIAL_RETENTION_DAYS,
@@ -575,6 +576,7 @@ export default async function AdminAnalyticsPage({
 
       <TrialFunnelPanel startIso={startIso} endIso={endIso} />
       <SignupVisitorsPanel startIso={startIso} endIso={endIso} />
+      <EmailDeliveryPanel startIso={startIso} endIso={endIso} />
 
       <GrowthReport startIso={startIso} endIso={endIso} />
     </div>
