@@ -6,8 +6,10 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 
 export const SVIX_TOLERANCE_SECONDS = 5 * 60;
 
-/** Event types we record. Opens and clicks are not tracked, so they are ignored. */
+/** Event types we record. Opens and clicks only arrive once open/click tracking is enabled in Resend. */
 export const TRACKED_EVENT_TYPES = new Set([
+  "email.opened",
+  "email.clicked",
   "email.delivered",
   "email.bounced",
   "email.complained",

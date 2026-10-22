@@ -5,7 +5,7 @@ import { TRACKED_EVENT_TYPES, parseResendEvent, verifySvixSignature } from "@/li
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-// POST /api/webhooks/resend -> records Resend delivery events (delivered, bounced, complained, delayed, failed)
+// POST /api/webhooks/resend -> records Resend delivery events (delivered, bounced, complained, delayed, failed, plus opened and clicked)
 // in public.email_delivery_events so /admin/analytics can show whether outreach reaches inboxes.
 //
 // Public by necessity (Resend calls it), so it is authenticated by the Svix signature on the raw body, checked

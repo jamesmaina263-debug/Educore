@@ -61,11 +61,20 @@ describe("POST /api/webhooks/resend", () => {
   });
 
   it("acknowledges but does not record events it does not track, or unreadable bodies", async () => {
-    const opened = await POST(signed({ type: "email.opened", data: {} }));
-    expect(opened.status).toBe(200);
-    expect(await opened.json()).toMatchObject({ ignored: "email.opened" });
+    const sent = await POST(signed({ type: "email.sent", data: {} }));
+    expect(sent.status).toBe(200);
+    expect(await sent.json()).toMatchObject({ ignored: "email.sent" });
     expect((await POST(signed("not json"))).status).toBe(200);
     expect(rpc).not.toHaveBeenCalled();
+  });
+
+  it("records opens and clicks like any other tracked event", async () => {
+    for (const type of ["email.opened", "email.clicked"]) {
+      rpc.mockClear();
+      const res = await POST(signed({ type, created_at: "2026-10-22T10:00:00Z", data: { email_id: "e9", to: ["School@Example.KE"], subject: "Hi" } }, { id: `msg_${type}` }));
+      expect(res.status).toBe(200);
+      expect(rpc).toHaveBeenCalledWith("record_email_event", expect.objectContaining({ p_svix_id: `msg_${type}`, p_event_type: type, p_to: "School@Example.KE" }));
+    }
   });
 
   it("answers 500 (so Resend retries) when the database call fails", async () => {

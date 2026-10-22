@@ -45,6 +45,7 @@ import {
   type ProspectContactSummary,
 } from "@/lib/outbound/contact";
 import { readListFile } from "@/lib/outbound/spreadsheet";
+import { engagementLines, hasClicked, type ProspectEngagement } from "@/lib/outbound/engagement";
 import { MAX_SCORE_BATCH, SCHOOL_LEVEL_LABELS, type OutboundSchoolLevel } from "@/lib/outbound/prospects";
 
 export type OutboundProspectRow = {
@@ -103,11 +104,14 @@ export function AdminOutreach({
   reps,
   contactEnabled,
   contactSummary,
+  engagement = {},
 }: {
   prospects: OutboundProspectRow[];
   reps: { id: string; name: string }[];
   contactEnabled: boolean;
   contactSummary: Record<string, ProspectContactSummary>;
+  // Which schools clicked or opened their outreach email (admin_outreach_engagement); empty when unavailable.
+  engagement?: Record<string, ProspectEngagement>;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -120,6 +124,7 @@ export function AdminOutreach({
   const [csvText, setCsvText] = useState("");
   const [csvSource, setCsvSource] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
+  const [clickedOnly, setClickedOnly] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [openSnap, setOpen] = useState<OutboundProspectRow | null>(null);
   // The dialog shows the latest server data for the open row, not the snapshot from when it was opened.
@@ -158,10 +163,12 @@ export function AdminOutreach({
       prospects.filter(
         (p) =>
           (filter === "all" || p.status === filter) &&
-          passesOwnershipFilter(ownershipSignal(p), listOwnership),
+          passesOwnershipFilter(ownershipSignal(p), listOwnership) &&
+          (!clickedOnly || hasClicked(engagement[p.id])),
       ),
-    [prospects, filter, listOwnership],
+    [prospects, filter, listOwnership, clickedOnly, engagement],
   );
+  const clickedCount = useMemo(() => prospects.filter((p) => hasClicked(engagement[p.id])).length, [prospects, engagement]);
 
   function run(fn: () => Promise<{ error: string } | ({ success: true } & Record<string, unknown>)>, ok: (r: Record<string, unknown>) => string) {
     setNotice(null);
@@ -523,6 +530,16 @@ export function AdminOutreach({
               {f === "all" ? "All" : STATUS[f].label} ({counts[f] ?? 0})
             </Button>
           ))}
+          {clickedCount > 0 || clickedOnly ? (
+            <Button
+              size="sm"
+              variant={clickedOnly ? "default" : "outline"}
+              aria-pressed={clickedOnly}
+              onClick={() => setClickedOnly((v) => !v)}
+            >
+              Clicked a link ({clickedCount})
+            </Button>
+          ) : null}
         </div>
 
         {visible.length === 0 ? (
@@ -598,6 +615,15 @@ export function AdminOutreach({
                             Opted out ({contactSummary[p.id].optedOut.map((c) => CHANNEL_LABELS[c as ContactChannel] ?? c).join(", ")})
                           </div>
                         ) : null}
+                        {engagementLines(engagement[p.id]).map((l) => (
+                          <div
+                            key={l.text}
+                            className={l.tone === "strong" ? "mt-1 text-xs font-medium text-green-700" : "mt-1 text-xs text-muted-foreground"}
+                          >
+                            {l.text}
+                            {l.at ? ` · ${shortDate(l.at)}` : ""}
+                          </div>
+                        ))}
                         {contactEnabled && contactSummary[p.id]?.last ? (
                           <div className="mt-1 text-xs text-muted-foreground">
                             {describeContactEvent(contactSummary[p.id].last!.channel, contactSummary[p.id].last!.event)} ·{" "}

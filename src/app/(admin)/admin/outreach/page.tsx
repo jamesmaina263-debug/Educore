@@ -4,6 +4,7 @@ import { AdminOutreach, type OutboundProspectRow } from "@/components/admin/admi
 import { AdminOutreachEmailPanel } from "@/components/admin/admin-outreach-email-panel";
 import { getOutreachEmailAudience } from "./actions";
 import { summariseContactLog, type ContactLogRow } from "@/lib/outbound/contact";
+import { parseEngagementRows } from "@/lib/outbound/engagement";
 
 // "Find contacts" fetches several web pages per school and calls Gemini; allow the full minute.
 export const maxDuration = 60;
@@ -22,7 +23,7 @@ export default async function AdminOutreachPage() {
   const { data: isSuperAdmin } = await supabase.rpc("auth_is_super_admin");
   if (isSuperAdmin !== true) redirect("/dashboard");
 
-  const [prospectsRes, teamRes, logRes] = await Promise.all([
+  const [prospectsRes, teamRes, logRes, engagementRes] = await Promise.all([
     supabase
       .from("outbound_prospects")
       .select(
@@ -39,11 +40,15 @@ export default async function AdminOutreachPage() {
       .select("prospect_id, channel, event, created_at")
       .order("created_at", { ascending: false })
       .limit(5000),
+    // Which schools clicked / opened their outreach email. If the engagement migration has not been applied
+    // yet this errors; the page then simply shows no engagement.
+    supabase.rpc("admin_outreach_engagement"),
   ]);
   // Tolerates the outreach-email migration not being applied yet: the panel then shows the error only.
   const emailAudience = await getOutreachEmailAudience();
   const contactEnabled = !logRes.error;
   const contactSummary = Object.fromEntries(summariseContactLog((logRes.data ?? []) as ContactLogRow[]));
+  const engagement = engagementRes.error ? {} : parseEngagementRows(engagementRes.data);
 
   // Same posture as /admin/sales-pipeline: if the table isn't there yet, say so instead of crashing.
   if (prospectsRes.error) {
@@ -80,6 +85,7 @@ export default async function AdminOutreachPage() {
         reps={(teamRes.data ?? []) as { id: string; name: string }[]}
         contactEnabled={contactEnabled}
         contactSummary={contactSummary}
+        engagement={engagement}
       />
     </div>
   );
