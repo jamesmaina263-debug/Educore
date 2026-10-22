@@ -487,4 +487,32 @@ describe("email greeting name and children's home wording", () => {
       expect(body).toContain("fee collection through M-Pesa");
     });
   });
+
+  describe("brochure link", () => {
+    const brochure = "Brochure: https://www.educoreafrica.com/brochure?utm_source=outreach&utm_medium=email&utm_campaign=school_outreach&utm_content=brochure";
+
+    it("adds one tracked brochure line to an ordinary school's email, right after the contact link", () => {
+      const body = draft({ school_name: "Sunrise Academy" }).email_body;
+      expect(body).toContain(brochure);
+      expect(body.split("Brochure:").length - 1).toBe(1);
+      expect(body).toMatch(/Contact us: [^\n]+\nBrochure: /);
+    });
+
+    it("leaves the brochure out of a children's home's email (it shows plan tiers and per-learner billing)", () => {
+      const body = draft({ school_name: "Mercy Children's Home" }).email_body;
+      expect(body).not.toContain("Brochure:");
+      expect(body).not.toContain("/brochure");
+      expect(body).toContain(CHILDRENS_HOME_FREE_LINE);
+    });
+
+    it("is email only: the WhatsApp draft is unchanged", () => {
+      expect(draft({ school_name: "Sunrise Academy" }).whatsapp).not.toContain("/brochure");
+    });
+
+    it("points at the landing page, not the PDF, so the click can be tracked", () => {
+      expect(outreachLink("/brochure", "email")).toBe(
+        "https://www.educoreafrica.com/brochure?utm_source=outreach&utm_medium=email&utm_campaign=school_outreach&utm_content=brochure",
+      );
+    });
+  });
 });

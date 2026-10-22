@@ -258,7 +258,7 @@ export const CHILDRENS_HOME_FREE_LINE =
 // Each carries UTM tags so a signup or contact-form lead can be traced back to outreach (the site stores
 // them first-touch: see src/lib/attribution.ts). utm_medium says which channel, utm_content which link.
 export type OutreachChannel = "email" | "whatsapp";
-export function outreachLink(path: "" | "/signup" | "/contact", channel: OutreachChannel): string {
+export function outreachLink(path: "" | "/signup" | "/contact" | "/brochure", channel: OutreachChannel): string {
   const content = path === "" ? "home" : path.slice(1);
   const q = new URLSearchParams({
     utm_source: "outreach",
@@ -359,6 +359,10 @@ export function assembleEmailBody(openingRaw: unknown, ctx: DraftContext = {}): 
   const name = emailGreetingName(ctx);
   const home = isChildrenHome(ctx.school_name);
   const paragraphs = home ? HOME_PRODUCT_PARAGRAPH : PRODUCT_PARAGRAPH;
+  // The brochure shows plan tiers and "billed per learner", which contradicts a children's home's no-charge
+  // offer, so it is left out of those emails. Everyone else gets one tracked line: the landing page records the
+  // click with the email's UTM tags, then hands over the PDF (src/app/(marketing)/brochure/page.tsx).
+  const brochureLine = home ? "" : `\nBrochure: ${outreachLink("/brochure", "email")}`;
   const product = level === "kindergarten" ? paragraphs.kindergarten : level === null ? paragraphs.neutral : paragraphs.full;
   return [
     name ? `Hello ${name},` : "Hello,",
@@ -366,7 +370,7 @@ export function assembleEmailBody(openingRaw: unknown, ctx: DraftContext = {}): 
     product,
     home ? CHILDRENS_HOME_FREE_LINE : OFFER_LINE,
     `Would you be open to a brief online demonstration to see how EduCore could support your ${home ? "children's home" : "school"}?`,
-    `Start your free trial: ${outreachLink("/signup", "email")}\nContact us: ${outreachLink("/contact", "email")}`,
+    `Start your free trial: ${outreachLink("/signup", "email")}\nContact us: ${outreachLink("/contact", "email")}${brochureLine}`,
     `Kind regards,\nEduCore Africa\n${outreachLink("", "email")}`,
     "If you would rather not hear from us, just reply and we will not contact you again.",
   ].join("\n\n");
