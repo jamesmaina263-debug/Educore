@@ -92,6 +92,31 @@ export function parseCsv(text: string): string[][] {
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
+/** Spreadsheets often hold several values in one cell ("a@x.com; b@x.com"). Returns the pieces, trimmed. */
+function splitMulti(raw: string): string[] {
+  return raw
+    .split(/[;\n,/]|\s+or\s+/i)
+    .map((x) => x.trim())
+    .filter(Boolean);
+}
+
+/** First well-formed email in a cell that may hold several; null if none. */
+export function firstValidEmail(raw: string | null | undefined): string | null {
+  for (const part of splitMulti((raw ?? "").toLowerCase())) {
+    if (part.length <= 254 && EMAIL_RE.test(part)) return part;
+  }
+  return null;
+}
+
+/** First usable phone number in a cell that may hold several ("(+254) 722..; (+254) 721.."); null if none. */
+export function firstValidPhone(raw: string | null | undefined): string | null {
+  for (const part of (raw ?? "").split(/[;\n]|\s+or\s+/i)) {
+    const p = normalizePhone(part.replace(/[()]/g, ""));
+    if (p) return p;
+  }
+  return null;
+}
+
 export function normalizeSchoolType(raw: string | null | undefined): OutboundSchoolType | null {
   const v = (raw ?? "").trim().toLowerCase();
   if (!v) return null;
@@ -177,11 +202,11 @@ export function parseProspectCsv(text: string): ParseImportResult {
       return;
     }
     const emailRaw = get("email").toLowerCase();
-    const email = emailRaw && emailRaw.length <= 254 && EMAIL_RE.test(emailRaw) ? emailRaw : null;
+    const email = firstValidEmail(emailRaw);
     if (emailRaw && !email) warnings.push(`Row ${line}: email looks invalid, left blank.`);
 
     const phoneRaw = get("phone");
-    const phone = normalizePhone(phoneRaw);
+    const phone = firstValidPhone(phoneRaw);
     if (phoneRaw && !phone) warnings.push(`Row ${line}: phone looks invalid, left blank.`);
 
     const countRaw = get("student_count").replace(/[, ]/g, "");
