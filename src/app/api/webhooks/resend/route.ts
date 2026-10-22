@@ -13,7 +13,9 @@ export const runtime = "nodejs";
 // retrying instead of dropping events once the secret is added. Recording is idempotent on the svix-id, so a
 // retried delivery is stored once. A database failure answers 500 for the same reason.
 //
-// Read-only with respect to email sending: it never sends, edits or suppresses anything.
+// It never sends or edits email. Suppression is done in the database, in the same transaction as the event:
+// record_email_event() adds a permanent bounce or spam complaint to marketing_email_suppressions
+// (20261022095254_auto_suppress_bounced_and_complained_emails.sql), so promotional sends skip that address.
 export async function POST(request: Request) {
   const secret = process.env.RESEND_WEBHOOK_SECRET;
   if (!secret) {
