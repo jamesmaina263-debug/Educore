@@ -11,6 +11,15 @@ export interface CampaignEmailInput {
   audience?: "owners" | "prospects" | "outreach";
 }
 
+// Outreach emails carry a small logo in the signature. Hosted on our own site (never embedded), sized for retina
+// (the file is 312x99, shown at 156x50), on a white pad so the dark wordmark stays readable in dark-mode mail apps.
+// Many clients hide remote images from unknown senders, so it is decoration only: the sign-off above it is text
+// and the plain-text part has no logo. Other audiences (owners, prospects) are unchanged.
+export const OUTREACH_LOGO_URL = "https://www.educoreafrica.com/email/educore-logo-email.png";
+const OUTREACH_LOGO_HTML =
+  `<img src="${OUTREACH_LOGO_URL}" width="156" height="50" alt="EduCore Africa" ` +
+  `style="display:block;border:0;outline:none;width:156px;height:auto;margin:0 0 14px">`;
+
 export function escapeHtml(s: string): string {
   return s
     .replace(/&/g, "&amp;")
@@ -46,9 +55,16 @@ export function renderCampaignEmail(input: CampaignEmailInput): { text: string; 
 
   // Blank line = new paragraph, single newline = <br>. Everything is escaped first, so a body
   // can never inject markup; links are left as plain text on purpose (no tracking, no rewriting).
-  const paragraphs = body
-    .split(/\n{2,}/)
-    .map((p) => `<p style="margin:0 0 14px">${escapeHtml(p).replace(/\n/g, "<br>")}</p>`)
+  const blocks = body.split(/\n{2,}/);
+  // Logo goes straight after the sign-off ("Kind regards,"), above the opt-out line. If a reviewer edited the
+  // sign-off away, it goes at the end instead so a signature-less email still ends with the brand.
+  const signOffAt = blocks.findIndex((p) => /^kind regards\b/i.test(p.trim()));
+  const logoAt = signOffAt >= 0 ? signOffAt : blocks.length - 1;
+  const paragraphs = blocks
+    .map((p, i) => {
+      const para = `<p style="margin:0 0 14px">${escapeHtml(p).replace(/\n/g, "<br>")}</p>`;
+      return input.audience === "outreach" && i === logoAt ? para + OUTREACH_LOGO_HTML : para;
+    })
     .join("");
 
   const html =
