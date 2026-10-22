@@ -1,7 +1,8 @@
 import { existsSync, statSync } from "fs";
 import path from "path";
 import { describe, it, expect } from "vitest";
-import { OUTREACH_LOGO_URL, escapeHtml, firstName, personalize, renderCampaignEmail } from "../../supabase/functions/_shared/campaignEmail";
+import { OUTREACH_LOGO_URL, escapeHtml, firstName, personalize, renderCampaignEmail, trackOutreachLinks } from "../../supabase/functions/_shared/campaignEmail";
+import { assembleEmailBody } from "./outbound/prospects";
 
 const base = { schoolName: "Tetu Bygrace Academy", unsubscribeUrl: "https://www.educoreafrica.com/unsubscribe/abc" };
 
@@ -118,5 +119,62 @@ describe("outreach signature logo", () => {
     const file = path.join(process.cwd(), "public", "email", "educore-logo-email.png");
     expect(existsSync(file)).toBe(true);
     expect(statSync(file).size).toBeLessThan(25_000);
+  });
+});
+
+describe("trackOutreachLinks (per-school tracked links)", () => {
+  const SITE = "https://www.educoreafrica.com";
+  const RID = "10000000-0000-4000-8000-000000000001";
+  const link = (path: string, key: string) =>
+    `${SITE}${path}?utm_source=outreach&utm_medium=email&utm_campaign=school_outreach&utm_content=${key}`;
+  const tracked = (key: string) => `${SITE}/api/outreach-link/${RID}/${key}`;
+
+  it("rewrites every link of a real outreach draft and leaves no untracked outreach link behind", () => {
+    const body = assembleEmailBody("Opening line.", { school_name: "Sunrise Academy", school_level: "primary" });
+    expect(body).toContain("utm_source=outreach");
+    const out = trackOutreachLinks(body, RID, SITE);
+    expect(out).not.toContain("utm_source=outreach");
+    for (const key of ["signup", "contact", "brochure", "home"]) expect(out).toContain(tracked(key));
+    // Everything that is not one of those links is untouched.
+    expect(out.replace(/https:\/\/www\.educoreafrica\.com\/api\/outreach-link\/\S+/g, "LINK")).toBe(
+      body.replace(/https:\/\/www\.educoreafrica\.com\/\S*utm_source=outreach\S*/g, "LINK"),
+    );
+  });
+
+  it("covers a children's home draft (no brochure line) too", () => {
+    const out = trackOutreachLinks(assembleEmailBody("x", { school_name: "Hope Children's Home" }), RID, SITE);
+    expect(out).not.toContain("utm_source=outreach");
+    expect(out).not.toContain("/brochure");
+  });
+
+  it("keeps sentence punctuation after a link", () => {
+    expect(trackOutreachLinks(`Sign up: ${link("/signup", "signup")}.`, RID, SITE)).toBe(`Sign up: ${tracked("signup")}.`);
+  });
+
+  it("leaves other links, other origins, edited links and mismatched path/key alone", () => {
+    const other = "https://example.com/signup?utm_source=outreach&utm_medium=email&utm_campaign=school_outreach&utm_content=signup";
+    const extra = `${link("/signup", "signup")}&ref=1`;
+    const mismatch = link("/contact", "signup");
+    const plain = `${SITE}/pricing and https://educoreafrica.com`;
+    for (const body of [other, extra, mismatch, plain]) expect(trackOutreachLinks(body, RID, SITE)).toBe(body);
+  });
+
+  it("changes nothing without a valid recipient id or site", () => {
+    const body = `Go: ${link("/signup", "signup")}`;
+    expect(trackOutreachLinks(body, "not-a-uuid", SITE)).toBe(body);
+    expect(trackOutreachLinks(body, "", SITE)).toBe(body);
+    expect(trackOutreachLinks(body, RID, "")).toBe(body);
+  });
+
+  it("tolerates a trailing slash on the site url", () => {
+    expect(trackOutreachLinks(link("/contact", "contact"), RID, `${SITE}/`)).toBe(tracked("contact"));
+  });
+
+  it("is what the tracked route expects: the key set matches the route's destinations", async () => {
+    const { TRACKED_DESTINATIONS, trackedDestinationUrl } = await import("./outbound/tracked-links");
+    for (const key of TRACKED_DESTINATIONS) {
+      const out = trackOutreachLinks(trackedDestinationUrl(key), RID, SITE);
+      expect(out).toBe(tracked(key));
+    }
   });
 });
