@@ -56,6 +56,6 @@ export const config = {
   // matched on purpose (rootAuthFallback). src/proxy.test.ts keeps this list in sync with the
   // real (marketing) folders and proves every app/auth/api path is still matched.
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|sw\\.js|offline\\.html|manifest\\.webmanifest|robots\\.txt|sitemap\\.xml|(?:about|ai-automation|blog|cbc-school-management|contact|faq|finance-fees|parent-communication|platform|pricing|privacy|school-attendance-management|security|solutions|student-management-system|student-performance-appraisal|teacher-performance-management|terms)(?:/|$)|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|txt|xml|json|webmanifest|pdf|doc|docx|zip)$).*)",
+    "/((?!_next/static|_next/image|favicon.ico|sw\\.js|offline\\.html|manifest\\.webmanifest|robots\\.txt|sitemap\\.xml|(?:about|ai-automation|blog|brochure|cbc-school-management|contact|faq|finance-fees|parent-communication|platform|pricing|privacy|school-attendance-management|security|solutions|student-management-system|student-performance-appraisal|teacher-performance-management|terms)(?:/|$)|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|txt|xml|json|webmanifest|pdf|doc|docx|zip)$).*)",
   ],
 };
