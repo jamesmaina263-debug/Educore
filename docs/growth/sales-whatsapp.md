@@ -70,7 +70,7 @@ separately.
 
 ## Before the Twilio PR (what only you can do)
 
-Nothing exists yet for sales on WhatsApp. For the second PR you will need, in Twilio and Meta:
+Nothing exists yet for sales on WhatsApp (status and decisions as of 2026-10-21 are in the next section). For the second PR you will need, in Twilio and Meta:
 
 1. A **separate WhatsApp-enabled number for sales** (not the parent-bot number), registered as a Twilio WhatsApp sender, with
    Meta business verification and an approved display name.
@@ -84,6 +84,68 @@ Nothing exists yet for sales on WhatsApp. For the second PR you will need, in Tw
 The second PR then adds: sending approved messages through Twilio as templates, a separate inbound webhook for the sales
 number (signature-verified, STOP and similar words withdraw the agreement and record the opt-out, replies stored and shown),
 delivery status, and a sending switch that starts OFF.
+
+## Setup decisions and status (recorded 2026-10-21)
+
+**Status when this was written**
+- No Meta Business Portfolio exists yet for EduCore, so there is nothing to verify yet.
+- The business registration is **underway** (not finished), so the documents Meta needs for business verification do not exist yet.
+- Nothing is registered for sales in Twilio. The second PR is therefore **not started** and is blocked on the sender and
+  templates, by design (so it can be tested against a real sender).
+- Unknown: whether the parent bot runs on Twilio's shared WhatsApp sandbox (testing only) or on a registered sender. The repo
+  only reads one `TWILIO_WHATSAPP_FROM` value, so it cannot tell. To check: Twilio Console > Messaging > Senders > WhatsApp
+  senders. A registered sender is listed there; a sandbox is not. If it is the sandbox, real parents are being served by a
+  testing sender, and the same verified Meta business could later cover both numbers.
+
+**Decision: which number sales uses**
+- The sales number is a business number that is **already on the WhatsApp Business app**. The owner's personal number stays
+  personal and is not used for sales. (Numbers are kept out of this document on purpose.)
+- **Now:** use the sales number in the WhatsApp Business app with the manual flow on `/admin/sales-whatsapp`.
+- **Later:** migrate it to Twilio, but only once Meta business verification is complete and the templates are approved.
+- Why the order matters: Twilio's migration guide says a number that is registered on WhatsApp or the WhatsApp Business app has to
+  have that account **deleted** first, after which the number can no longer be used in either app. Until verification is complete
+  a number can sit in a pending state and cannot send, so deleting the app account early would leave the number with no
+  WhatsApp at all. Coexistence (one number on the Business app and the API together) exists at Meta, but Twilio support is
+  unconfirmed (no Twilio documentation was found for it), so assume the number leaves the app.
+- **Migration steps when the time comes:** back up the Business-app chats; confirm verification and template approval; delete
+  the Business-app account on the number; register it as a Twilio WhatsApp sender; set the sales secrets; point the sales
+  inbound webhook at the new function; then build and enable the second PR (sending switch starts OFF).
+
+**Until Twilio is live, STOP is handled by hand.** Replies arrive in the Business app, which this system cannot see. If someone
+says stop, no, or similar, open their entry on `/admin/sales-whatsapp` and use Withdraw (it cancels open messages and writes the
+permanent opt-out). Automatic STOP handling comes with the Twilio PR.
+
+**Order of work (all owner actions until step 4)**
+1. Finish the company registration. Use the exactly registered spelling of the name in the Business-app profile, on the website
+   and in Meta. (The name was written two different ways in conversation; confirm the registered one.)
+2. Create the Meta Business Portfolio under the registered name and submit business verification. Meta's review can take up
+   to 2 to 4 weeks after the documents are submitted.
+3. Create the Twilio WhatsApp sender and submit the template drafts below for approval.
+4. Report back; then the second PR is built and tested against the real sender.
+
+**Costs (as found on 2026-10-21; re-check before relying on them)**
+- Meta charges per delivered template message (since 1 July 2025). Published Kenya rates: roughly USD 0.004 for utility and
+  USD 0.0225 for marketing messages (third-party rate table, matched by press reporting). From 1 October 2026 Meta also charges
+  for replies after 1,000 free per number per month, and for utility templates sent inside the 24-hour window.
+- Twilio adds its own per-message fee. Its rate was **not** looked up.
+- At the 40-a-day platform cap, the all-marketing worst case is about USD 0.90 a day.
+
+**Template drafts to submit** (Meta decides the final category; promotional wording will likely be classed as marketing).
+There is deliberately **no promotional template**: an offer has to be written by the owner, be true, and wait for the legal
+review of marketing messages under Kenya's Data Protection Act.
+- `demo_request_received` (utility): "Hello {{1}}, thank you for requesting an EduCore demo for {{2}}. We will contact you on
+  this number to agree a time. If you prefer another way, just reply here. Reply STOP to stop WhatsApp messages."
+- `demo_reminder` (utility): "Hello {{1}}, a reminder that your EduCore demo for {{2}} is on {{3}} at {{4}}. Reply here if you
+  need to change the time. Reply STOP to stop WhatsApp messages."
+- `trial_checkin` (utility, may be classed as marketing): "Hello {{1}}, this is the EduCore team checking how the free trial for
+  {{2}} is going. Is there anything we can set up or explain? Just reply here and we will help. Reply STOP to stop WhatsApp
+  messages."
+
+**Sources used** (Twilio and Meta documentation, October 2026): Twilio WhatsApp Self Sign-up
+(`twilio.com/docs/whatsapp/self-sign-up`), Twilio "Migrate phone numbers and WhatsApp senders"
+(`twilio.com/docs/whatsapp/migrate-numbers-and-senders`), Twilio "Register senders using the API"
+(`twilio.com/docs/whatsapp/register-senders-using-api`), Meta WhatsApp Business Platform pricing
+(`developers.facebook.com/docs/whatsapp/pricing`).
 
 ## Deploy order and rollback
 
