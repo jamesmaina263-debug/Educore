@@ -15,6 +15,11 @@ import { Section } from "@/components/marketing/section";
 // /downloads/educore-brochure.pdf, so it can be replaced without touching code. Replace the file, keep the name.
 const PDF_PATH = "/downloads/educore-brochure.pdf";
 
+// MarketingButton is whitespace-nowrap with a fixed height, so a long label cannot wrap and widens the whole
+// page on a phone (the page then scrolls sideways and the left edge is cut off). These classes let the label wrap
+// and make both buttons fill the width on small screens.
+const BUTTON_FIT = "h-auto min-h-12 w-full whitespace-normal py-3 text-center sm:w-auto";
+
 export const metadata: Metadata = {
   title: "EduCore brochure — school management software for Kenya",
   description: "A six-page overview of EduCore, the school management system built for Kenyan schools.",
@@ -33,14 +38,14 @@ export default function BrochurePage() {
         A six-page overview of what EduCore covers: admissions, student records, fees with M-Pesa, attendance,
         communication, academics and more.
       </p>
-      <div className="mt-8 flex flex-wrap items-center gap-3">
-        <MarketingButton asChild size="lg">
+      <div className="mt-8 flex min-w-0 flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+        <MarketingButton asChild size="lg" className={BUTTON_FIT}>
           <a href={PDF_PATH} download>
-            <Download className="size-4" aria-hidden="true" />
-            Download the brochure (PDF, about 1.5 MB)
+            <Download className="size-4 shrink-0" aria-hidden="true" />
+            Download the brochure (PDF, 1.4 MB)
           </a>
         </MarketingButton>
-        <MarketingButton asChild size="lg" variant="outline-on-dark">
+        <MarketingButton asChild size="lg" variant="outline-on-dark" className={BUTTON_FIT}>
           <a href="/contact">Book a demo</a>
         </MarketingButton>
       </div>
