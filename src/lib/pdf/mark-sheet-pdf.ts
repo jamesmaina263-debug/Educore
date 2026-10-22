@@ -1,4 +1,5 @@
 import type { CellDef, RowInput } from "jspdf-autotable";
+import { MARGIN, drawPageFooters, drawSchoolHeader, drawSignatureBlock, formatDate, hexToRgb, type LoadedLogo } from "@/lib/pdf/pdf-common";
 import type { MarkSheetModel } from "@/lib/academics/mark-sheet-model";
 import { MISSING, NOT_TAKEN, assessmentTitle as sharedAssessmentTitle, gradingLabel } from "@/lib/academics/mark-sheet-model";
 
@@ -6,30 +7,10 @@ import { MISSING, NOT_TAKEN, assessmentTitle as sharedAssessmentTitle, gradingLa
 // libraries the generic export already used; no new dependency). It does no calculation of its
 // own. Everything printed comes from the model, so the PDF, Excel and CSV agree.
 
-export interface LoadedLogo {
-  dataUrl: string;
-  width: number;
-  height: number;
-}
-
-const NAVY: [number, number, number] = [30, 41, 59];
-const GOLD: [number, number, number] = [202, 138, 4];
-const MARGIN = 12;
-
-function hexToRgb(hex: string | null): [number, number, number] {
-  const m = hex?.trim().match(/^#?([0-9a-f]{6})$/i);
-  if (!m) return NAVY;
-  const n = parseInt(m[1], 16);
-  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
-}
+export type { LoadedLogo };
 
 function assessmentTitle(model: MarkSheetModel): string {
   return sharedAssessmentTitle(model.exam.name, model.exam.examType);
-}
-
-function formatDate(iso: string): string {
-  const d = new Date(iso);
-  return d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
 }
 
 export async function buildMarkSheetPdf(model: MarkSheetModel, logo: LoadedLogo | null) {
@@ -46,44 +27,7 @@ export async function buildMarkSheetPdf(model: MarkSheetModel, logo: LoadedLogo 
   const accent = hexToRgb(model.school.primaryColor);
 
   // ---- School header (first page) ----
-  let textX = MARGIN;
-  if (logo) {
-    const logoH = 18;
-    const logoW = Math.min(36, (logo.width / logo.height) * logoH);
-    try {
-      doc.addImage(logo.dataUrl, "PNG", MARGIN, 9, logoW, logoH);
-      textX = MARGIN + logoW + 4;
-    } catch {
-      // Embedding failed; carry on with a logo-less header.
-    }
-  }
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(15);
-  doc.setTextColor(...accent);
-  doc.text(model.school.name, textX, 15);
-  let hy = 15;
-  doc.setFont("helvetica", "normal");
-  doc.setTextColor(90);
-  if (model.school.motto) {
-    hy += 4.5;
-    doc.setFont("helvetica", "italic");
-    doc.setFontSize(8.5);
-    doc.text(model.school.motto, textX, hy);
-    doc.setFont("helvetica", "normal");
-  }
-  const contact = [model.school.address, model.school.phone, model.school.email].filter(Boolean).join("  ·  ");
-  if (contact) {
-    hy += 4.5;
-    doc.setFontSize(8);
-    doc.text(contact, textX, hy);
-  }
-  const ruleY = Math.max(hy + 4, 29);
-  doc.setDrawColor(...accent);
-  doc.setLineWidth(0.7);
-  doc.line(MARGIN, ruleY, pageW - MARGIN, ruleY);
-  doc.setDrawColor(...GOLD);
-  doc.setLineWidth(0.3);
-  doc.line(MARGIN, ruleY + 1.2, pageW - MARGIN, ruleY + 1.2);
+  const ruleY = drawSchoolHeader(doc, model.school, logo);
 
   // ---- Title + assessment details ----
   let y = ruleY + 8;
@@ -242,43 +186,14 @@ export async function buildMarkSheetPdf(model: MarkSheetModel, logo: LoadedLogo 
   ny += wrapped.length * 3.5 + 8;
 
   // ---- Verification block (compact: one row per signatory); a school can switch it off ----
-  doc.setTextColor(0);
-  doc.setFontSize(8.5);
-  const fields = [
-    { label: "Prepared by", value: model.preparedBy },
-    { label: "Verified by (HOD / Deputy)", value: null },
-  ];
-  const colW = (pageW - 2 * MARGIN) / 2;
-  (model.options.showSignatures ? fields : []).forEach((f, i) => {
-    const x = MARGIN + i * colW;
-    doc.setFont("helvetica", "bold");
-    doc.text(f.label, x, ny);
-    doc.setFont("helvetica", "normal");
-    const ly = ny + 7;
-    const seg = (colW - 6) / 3;
-    ["Name:", "Signature:", "Date:"].forEach((lab, j) => {
-      const sx = x + j * seg;
-      doc.text(lab, sx, ly);
-      doc.setDrawColor(120);
-      doc.setLineWidth(0.2);
-      const lx = sx + doc.getTextWidth(lab) + 1.5;
-      doc.line(lx, ly + 1, sx + seg - 3, ly + 1);
-      if (j === 0 && f.value) doc.text(doc.splitTextToSize(f.value, sx + seg - 3 - lx)[0] as string, lx + 0.5, ly - 0.5);
-    });
-  });
+  if (model.options.showSignatures) {
+    drawSignatureBlock(doc, ny, [
+      { label: "Prepared by", value: model.preparedBy },
+      { label: "Verified by (HOD / Deputy)", value: null },
+    ]);
+  }
 
   // ---- Footer with page X of Y on every page ----
-  const pages = doc.getNumberOfPages();
-  for (let p = 1; p <= pages; p++) {
-    doc.setPage(p);
-    doc.setDrawColor(...GOLD);
-    doc.setLineWidth(0.3);
-    doc.line(MARGIN, pageH - 12, pageW - MARGIN, pageH - 12);
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(7.5);
-    doc.setTextColor(90);
-    doc.text(`${model.school.name}  ·  ${model.exam.name}  ·  ${model.classLabel}`, MARGIN, pageH - 8);
-    doc.text(`Generated ${formatDate(model.generatedAt)}   ·   Page ${p} of ${pages}`, pageW - MARGIN, pageH - 8, { align: "right" });
-  }
+  drawPageFooters(doc, `${model.school.name}  ·  ${model.exam.name}  ·  ${model.classLabel}`, model.generatedAt);
   return doc;
 }
