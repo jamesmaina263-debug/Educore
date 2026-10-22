@@ -21,4 +21,16 @@ describe("brochure landing page", () => {
     expect(html).toContain('href="/signup"');
     expect(html).not.toMatch(/KES|\d+\+\s*schools/i);
   });
+
+  it("lets both buttons wrap and fill the width on a phone, so a long label can't push the page sideways", () => {
+    // Each button must override the shared whitespace-nowrap + fixed h-12, and be full width below the sm breakpoint.
+    const buttons = html.match(/<a [^>]*class="[^"]*"[^>]*>/g)?.filter((a) => /href="(\/downloads|\/contact)/.test(a)) ?? [];
+    expect(buttons).toHaveLength(2);
+    for (const a of buttons) {
+      expect(a).toContain("whitespace-normal");
+      expect(a).toContain("h-auto");
+      expect(a).toContain("w-full");
+      expect(a).toContain("sm:w-auto");
+    }
+  });
 });
