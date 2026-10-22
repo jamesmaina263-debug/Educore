@@ -44,6 +44,7 @@ import {
   type ContactLogRow,
   type ProspectContactSummary,
 } from "@/lib/outbound/contact";
+import { readListFile } from "@/lib/outbound/spreadsheet";
 import { MAX_SCORE_BATCH, SCHOOL_LEVEL_LABELS, type OutboundSchoolLevel } from "@/lib/outbound/prospects";
 
 export type OutboundProspectRow = {
@@ -128,6 +129,24 @@ export function AdminOutreach({
   const [actor, setActor] = useState<string>("");
   const [optReason, setOptReason] = useState<string>("stop_reply");
   const openId = useRef<string | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  async function onPickFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    setNotice(null);
+    const r = await readListFile(file);
+    if (!r.ok) {
+      setNotice({ tone: "error", text: r.error });
+      return;
+    }
+    setCsvText(r.csv);
+    setNotice({
+      tone: "ok",
+      text: `Loaded ${file.name}. Check the preview, say where the list came from, then press Import.`,
+    });
+  }
 
   const counts = useMemo(() => {
     const c: Record<string, number> = { all: prospects.length };
@@ -378,12 +397,26 @@ export function AdminOutreach({
 
         <section className="panel flex flex-col gap-3 p-4" aria-labelledby="import-h">
           <h2 id="import-h" className="text-sm font-semibold">
-            Import a list (CSV)
+            Import a list (Excel or CSV)
           </h2>
           <p className="text-xs text-muted-foreground">
             Needs a <code>school_name</code> column. Optional: county, type, level, website, phone, email, contact_name,
-            contact_role, students. Up to 500 rows.
+            contact_role, students. Up to 500 rows. Upload an .xlsx or .csv file, or paste below. Cells with several
+            emails or phones keep the first valid one.
           </p>
+          <div className="flex flex-wrap items-center gap-2">
+            <input
+              ref={fileRef}
+              type="file"
+              accept=".xlsx,.csv,.txt,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+              className="hidden"
+              aria-label="Upload a list file"
+              onChange={onPickFile}
+            />
+            <Button size="sm" variant="outline" disabled={pending} onClick={() => fileRef.current?.click()}>
+              Upload file (.xlsx / .csv)
+            </Button>
+          </div>
           <Textarea
             aria-label="CSV contents"
             rows={4}
