@@ -52,9 +52,12 @@ export function trackOutreachLinks(body: string, recipientId: string, siteUrl: s
 const OWN_LABELLED_LINK = /^(.{1,60}?):\s+(https:\/\/(?:www\.)?educoreafrica\.com(?:\/\S*)?)$/;
 const OWN_BARE_LINK = /^(https:\/\/(?:www\.)?educoreafrica\.com(?:\/\S*)?)$/;
 const LINK_STYLE = "color:#1a56db;text-decoration:underline";
+// Labelled links sit on lines of their own, so each gets vertical padding: it separates them visually and gives
+// a finger-sized tap target on a phone. (The sign-off site name sits under the signature and stays tight.)
+const LABELLED_LINK_STYLE = `${LINK_STYLE};display:inline-block;padding:8px 0`;
 
-function ownLinkHtml(url: string, text: string): string {
-  return `<a href="${escapeHtml(url)}" style="${LINK_STYLE}">${escapeHtml(text)}</a>`;
+function ownLinkHtml(url: string, text: string, style: string = LINK_STYLE): string {
+  return `<a href="${escapeHtml(url)}" style="${style}">${escapeHtml(text)}</a>`;
 }
 
 function renderOutreachLine(line: string): string {
@@ -62,7 +65,7 @@ function renderOutreachLine(line: string): string {
   const labelled = OWN_LABELLED_LINK.exec(t);
   // A label that itself contains a link, or a URL ending in punctuation (probably a sentence), is left alone.
   if (labelled && !/https?:|www\./i.test(labelled[1]) && !/[.,;:!?)]$/.test(labelled[2])) {
-    return ownLinkHtml(labelled[2], labelled[1].trim());
+    return ownLinkHtml(labelled[2], labelled[1].trim(), LABELLED_LINK_STYLE);
   }
   const bare = OWN_BARE_LINK.exec(t);
   if (bare && !/[.,;:!?)]$/.test(bare[1])) return ownLinkHtml(bare[1], new URL(bare[1]).host);
