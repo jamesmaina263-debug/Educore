@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { readdirSync, statSync } from "fs";
+import { readdirSync, readFileSync, statSync } from "fs";
 import path from "path";
 import { config } from "./proxy";
 import { APP_ROUTE_SEGMENTS, NEVER_PREFIX } from "./lib/school-slug-routing";
@@ -85,8 +85,11 @@ describe("proxy matcher: everything that needs the proxy is still matched", () =
       "/admin/analytics",
       "/notifications",
       "/unsubscribe/abc123",
-      "/api/cron/billing",
-      "/api/mpesa/callback",
+      "/api/admin/analytics-live",
+      "/api/admin/page-views",
+      "/api/billing/invoices/abc/pdf",
+      "/api/sentry-check",
+      "/api/some-brand-new-route", // new API routes default to going through the proxy
       "/totally-unknown-slug",
       "/some-school",
       "/wp-login.php",
@@ -118,5 +121,62 @@ describe("proxy matcher: everything that needs the proxy is still matched", () =
     ]) {
       expect(matches(p), p).toBe(false);
     }
+  });
+});
+
+// ---- machine-to-machine API routes that skip the proxy -------------------------------------------
+// These never use the Supabase session (bearer-secret crons, Svix-signed webhook, flag-cookie
+// beacons, public report/unsubscribe endpoints). For an /api path the proxy only refreshed session
+// cookies, so running it was a wasted function invocation on every hit.
+
+const EXCLUDED_API = ["cron", "webhooks", "page-view", "outreach-link", "csp-report", "unsubscribe"];
+const apiDir = path.join(__dirname, "app", "api");
+
+function routeFiles(dir: string): string[] {
+  return readdirSync(dir).flatMap((name) => {
+    const full = path.join(dir, name);
+    return statSync(full).isDirectory() ? routeFiles(full) : name === "route.ts" ? [full] : [];
+  });
+}
+
+describe("proxy matcher: machine-to-machine API routes skip the proxy", () => {
+  it("excludes each listed API route and everything under it", () => {
+    expect(matches("/api/cron/billing")).toBe(false);
+    expect(matches("/api/cron/mpesa-stale-pending")).toBe(false);
+    expect(matches("/api/webhooks/resend")).toBe(false);
+    expect(matches("/api/page-view")).toBe(false);
+    expect(matches("/api/outreach-link/abc/pricing")).toBe(false);
+    expect(matches("/api/csp-report")).toBe(false);
+    expect(matches("/api/unsubscribe/some-token")).toBe(false);
+  });
+
+  it("does not exclude look-alike or other API prefixes", () => {
+    expect(matches("/api/cronjob")).toBe(true);
+    expect(matches("/api/webhooks-admin")).toBe(true);
+    expect(matches("/api/page-views")).toBe(true);
+    expect(matches("/api/admin/page-views")).toBe(true);
+    expect(matches("/api")).toBe(true);
+    expect(matches("/some-school/api/cron/billing")).toBe(true);
+  });
+
+  it("every excluded name is a real folder under src/app/api, and every OTHER api route is still matched", () => {
+    const top = readdirSync(apiDir).filter((n) => statSync(path.join(apiDir, n)).isDirectory());
+    for (const name of EXCLUDED_API) expect(top, name).toContain(name);
+    for (const file of routeFiles(apiDir)) {
+      const url = "/api/" + path.relative(apiDir, path.dirname(file)).split(path.sep).join("/").replace(/\[[^\]]+\]/g, "x");
+      const excluded = EXCLUDED_API.includes(url.split("/")[2]);
+      expect(matches(url), url).toBe(!excluded);
+    }
+  });
+
+  it("no excluded API route reads the Supabase session (it would silently lose cookie refresh)", () => {
+    const offenders: string[] = [];
+    for (const file of routeFiles(apiDir)) {
+      const rel = path.relative(apiDir, file).split(path.sep);
+      if (!EXCLUDED_API.includes(rel[0])) continue;
+      const src = readFileSync(file, "utf8");
+      if (/supabase\/server|createServerClient|\.auth\.(getUser|getSession|getClaims)\(/.test(src)) offenders.push(rel.join("/"));
+    }
+    expect(offenders).toEqual([]);
   });
 });
