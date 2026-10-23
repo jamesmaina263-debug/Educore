@@ -46,6 +46,7 @@ import {
 } from "@/lib/outbound/contact";
 import { readListFile } from "@/lib/outbound/spreadsheet";
 import { engagementLines, hasClicked, type ProspectEngagement } from "@/lib/outbound/engagement";
+import { trackWhatsAppLinks } from "@/lib/outbound/tracked-links";
 import { MAX_SCORE_BATCH, SCHOOL_LEVEL_LABELS, type OutboundSchoolLevel } from "@/lib/outbound/prospects";
 
 export type OutboundProspectRow = {
@@ -742,13 +743,13 @@ export function AdminOutreach({
                   </div>
                   <div className="rounded border border-border p-3">
                     <div className="mb-1 text-xs font-medium">WhatsApp</div>
-                    <p className="whitespace-pre-wrap">{open.draft_whatsapp}</p>
+                    <p className="whitespace-pre-wrap">{trackWhatsAppLinks(open.draft_whatsapp ?? "", open.id)}</p>
                     <Button
                       className="mt-2"
                       size="sm"
                       variant="outline"
                       disabled={contactEnabled && blockReason(open, "whatsapp") !== null}
-                      onClick={() => copyDraft(open, "whatsapp", open.draft_whatsapp ?? "")}
+                      onClick={() => copyDraft(open, "whatsapp", trackWhatsAppLinks(open.draft_whatsapp ?? "", open.id))}
                     >
                       Copy WhatsApp
                     </Button>
