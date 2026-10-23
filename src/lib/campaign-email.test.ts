@@ -178,3 +178,55 @@ describe("trackOutreachLinks (per-school tracked links)", () => {
     }
   });
 });
+
+describe("outreach email links read as labels, not long URLs", () => {
+  const SITE = "https://www.educoreafrica.com";
+  const RID = "10000000-0000-4000-8000-000000000001";
+  const visible = (html: string) => html.replace(/<[^>]+>/g, "");
+  const render = (body: string) => renderCampaignEmail({ body, unsubscribeUrl: `${SITE}/unsubscribe/x`, audience: "outreach", schoolName: "Sunrise Academy" });
+
+  it("shows a real draft's links as clickable labels, with the tracked URL as the target and no URL in the visible text", () => {
+    const draft = trackOutreachLinks(assembleEmailBody("Opening.", { school_name: "Sunrise Academy", school_level: "primary" }), RID, SITE);
+    const { html, text } = render(draft);
+    for (const [label, key] of [["Start your free trial", "signup"], ["Contact us", "contact"], ["Brochure", "brochure"]]) {
+      expect(html).toContain(`<a href="${SITE}/api/outreach-link/${RID}/${key}" style="color:#1a56db;text-decoration:underline">${label}</a>`);
+    }
+    // The sign-off link shows the site name and goes to the tracked home link.
+    expect(html).toContain(`<a href="${SITE}/api/outreach-link/${RID}/home" style="color:#1a56db;text-decoration:underline">www.educoreafrica.com</a>`);
+    expect(visible(html)).not.toContain("outreach-link");
+    expect(visible(html)).not.toContain("http");
+    // Plain text keeps every URL in full.
+    expect(text).toContain(`${SITE}/api/outreach-link/${RID}/signup`);
+    expect(text).toContain("Start your free trial: ");
+  });
+
+  it("works on untracked links too (utm links keep working as the target)", () => {
+    const draft = assembleEmailBody("Opening.", { school_name: "Sunrise Academy", school_level: "primary" });
+    const { html } = render(draft);
+    expect(html).toContain('>Start your free trial</a>');
+    expect(visible(html)).not.toContain("utm_source");
+  });
+
+  it("escapes labels and targets, and leaves other lines, other sites and sentence-ending links as text", () => {
+    const { html } = render(`A <b>bold</b> claim: ${SITE}/signup?a=1&b=2\nSee https://example.com/x for more\nVisit ${SITE}/signup.\nHello: https://evil.example/phish`);
+    expect(html).toContain(`<a href="${SITE}/signup?a=1&amp;b=2" style="color:#1a56db;text-decoration:underline">A &lt;b&gt;bold&lt;/b&gt; claim</a>`);
+    expect(html).toContain("See https://example.com/x for more");
+    expect(html).toContain(`Visit ${SITE}/signup.`);
+    expect(html).not.toContain('href="https://evil.example');
+    expect(html).not.toContain("<b>");
+  });
+
+  it("never turns a label containing a link, or a javascript: target, into an anchor", () => {
+    const { html } = render(`Go to https://www.educoreafrica.com now: ${SITE}/signup\njavascript:alert(1)\nTry: javascript:alert(1)`);
+    expect(html).not.toContain('href="javascript');
+    expect(html).not.toMatch(/<a href="[^"]*"[^>]*>Go to/);
+  });
+
+  it("does not change owner or prospect emails at all", () => {
+    for (const audience of ["owners", "prospects"] as const) {
+      const { html } = renderCampaignEmail({ body: `Start your free trial: ${SITE}/signup`, unsubscribeUrl: "u", audience });
+      expect(html).toContain(`Start your free trial: ${SITE}/signup</p>`);
+      expect(html).not.toContain("color:#1a56db");
+    }
+  });
+});
