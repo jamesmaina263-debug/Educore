@@ -44,6 +44,8 @@ import {
   type ContactLogRow,
   type ProspectContactSummary,
 } from "@/lib/outbound/contact";
+import { readListFile } from "@/lib/outbound/spreadsheet";
+import { engagementLines, hasClicked, type ProspectEngagement } from "@/lib/outbound/engagement";
 import { MAX_SCORE_BATCH, SCHOOL_LEVEL_LABELS, type OutboundSchoolLevel } from "@/lib/outbound/prospects";
 
 export type OutboundProspectRow = {
@@ -102,11 +104,14 @@ export function AdminOutreach({
   reps,
   contactEnabled,
   contactSummary,
+  engagement = {},
 }: {
   prospects: OutboundProspectRow[];
   reps: { id: string; name: string }[];
   contactEnabled: boolean;
   contactSummary: Record<string, ProspectContactSummary>;
+  // Which schools clicked or opened their outreach email (admin_outreach_engagement); empty when unavailable.
+  engagement?: Record<string, ProspectEngagement>;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -119,6 +124,7 @@ export function AdminOutreach({
   const [csvText, setCsvText] = useState("");
   const [csvSource, setCsvSource] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
+  const [clickedOnly, setClickedOnly] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [openSnap, setOpen] = useState<OutboundProspectRow | null>(null);
   // The dialog shows the latest server data for the open row, not the snapshot from when it was opened.
@@ -128,6 +134,24 @@ export function AdminOutreach({
   const [actor, setActor] = useState<string>("");
   const [optReason, setOptReason] = useState<string>("stop_reply");
   const openId = useRef<string | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  async function onPickFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    setNotice(null);
+    const r = await readListFile(file);
+    if (!r.ok) {
+      setNotice({ tone: "error", text: r.error });
+      return;
+    }
+    setCsvText(r.csv);
+    setNotice({
+      tone: "ok",
+      text: `Loaded ${file.name}. Check the preview, say where the list came from, then press Import.`,
+    });
+  }
 
   const counts = useMemo(() => {
     const c: Record<string, number> = { all: prospects.length };
@@ -139,10 +163,12 @@ export function AdminOutreach({
       prospects.filter(
         (p) =>
           (filter === "all" || p.status === filter) &&
-          passesOwnershipFilter(ownershipSignal(p), listOwnership),
+          passesOwnershipFilter(ownershipSignal(p), listOwnership) &&
+          (!clickedOnly || hasClicked(engagement[p.id])),
       ),
-    [prospects, filter, listOwnership],
+    [prospects, filter, listOwnership, clickedOnly, engagement],
   );
+  const clickedCount = useMemo(() => prospects.filter((p) => hasClicked(engagement[p.id])).length, [prospects, engagement]);
 
   function run(fn: () => Promise<{ error: string } | ({ success: true } & Record<string, unknown>)>, ok: (r: Record<string, unknown>) => string) {
     setNotice(null);
@@ -378,12 +404,26 @@ export function AdminOutreach({
 
         <section className="panel flex flex-col gap-3 p-4" aria-labelledby="import-h">
           <h2 id="import-h" className="text-sm font-semibold">
-            Import a list (CSV)
+            Import a list (Excel or CSV)
           </h2>
           <p className="text-xs text-muted-foreground">
             Needs a <code>school_name</code> column. Optional: county, type, level, website, phone, email, contact_name,
-            contact_role, students. Up to 500 rows.
+            contact_role, students. Up to 500 rows. Upload an .xlsx or .csv file, or paste below. Cells with several
+            emails or phones keep the first valid one.
           </p>
+          <div className="flex flex-wrap items-center gap-2">
+            <input
+              ref={fileRef}
+              type="file"
+              accept=".xlsx,.csv,.txt,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+              className="hidden"
+              aria-label="Upload a list file"
+              onChange={onPickFile}
+            />
+            <Button size="sm" variant="outline" disabled={pending} onClick={() => fileRef.current?.click()}>
+              Upload file (.xlsx / .csv)
+            </Button>
+          </div>
           <Textarea
             aria-label="CSV contents"
             rows={4}
@@ -490,6 +530,16 @@ export function AdminOutreach({
               {f === "all" ? "All" : STATUS[f].label} ({counts[f] ?? 0})
             </Button>
           ))}
+          {clickedCount > 0 || clickedOnly ? (
+            <Button
+              size="sm"
+              variant={clickedOnly ? "default" : "outline"}
+              aria-pressed={clickedOnly}
+              onClick={() => setClickedOnly((v) => !v)}
+            >
+              Clicked a link ({clickedCount})
+            </Button>
+          ) : null}
         </div>
 
         {visible.length === 0 ? (
@@ -565,6 +615,15 @@ export function AdminOutreach({
                             Opted out ({contactSummary[p.id].optedOut.map((c) => CHANNEL_LABELS[c as ContactChannel] ?? c).join(", ")})
                           </div>
                         ) : null}
+                        {engagementLines(engagement[p.id]).map((l) => (
+                          <div
+                            key={l.text}
+                            className={l.tone === "strong" ? "mt-1 text-xs font-medium text-green-700" : "mt-1 text-xs text-muted-foreground"}
+                          >
+                            {l.text}
+                            {l.at ? ` · ${shortDate(l.at)}` : ""}
+                          </div>
+                        ))}
                         {contactEnabled && contactSummary[p.id]?.last ? (
                           <div className="mt-1 text-xs text-muted-foreground">
                             {describeContactEvent(contactSummary[p.id].last!.channel, contactSummary[p.id].last!.event)} ·{" "}

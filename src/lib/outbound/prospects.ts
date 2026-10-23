@@ -6,7 +6,6 @@
 import { PUBLISHED_PRICE_KES_PER_STUDENT_TERM, renderProductFactsForPrompt } from "@/lib/growth/product-facts";
 import { SITE_URL } from "@/lib/site";
 import { OWNERSHIP_LABELS, ownershipSignal } from "./ownership";
-import { contactNameIncludes, nameFromEmail } from "@/lib/outbound/email-name";
 import { isChildrenHome } from "@/lib/outbound/children-home";
 
 export const MAX_IMPORT_ROWS = 500;
@@ -93,6 +92,31 @@ export function parseCsv(text: string): string[][] {
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
+/** Spreadsheets often hold several values in one cell ("a@x.com; b@x.com"). Returns the pieces, trimmed. */
+function splitMulti(raw: string): string[] {
+  return raw
+    .split(/[;\n,/]|\s+or\s+/i)
+    .map((x) => x.trim())
+    .filter(Boolean);
+}
+
+/** First well-formed email in a cell that may hold several; null if none. */
+export function firstValidEmail(raw: string | null | undefined): string | null {
+  for (const part of splitMulti((raw ?? "").toLowerCase())) {
+    if (part.length <= 254 && EMAIL_RE.test(part)) return part;
+  }
+  return null;
+}
+
+/** First usable phone number in a cell that may hold several ("(+254) 722..; (+254) 721.."); null if none. */
+export function firstValidPhone(raw: string | null | undefined): string | null {
+  for (const part of (raw ?? "").split(/[;\n]|\s+or\s+/i)) {
+    const p = normalizePhone(part.replace(/[()]/g, ""));
+    if (p) return p;
+  }
+  return null;
+}
+
 export function normalizeSchoolType(raw: string | null | undefined): OutboundSchoolType | null {
   const v = (raw ?? "").trim().toLowerCase();
   if (!v) return null;
@@ -178,11 +202,11 @@ export function parseProspectCsv(text: string): ParseImportResult {
       return;
     }
     const emailRaw = get("email").toLowerCase();
-    const email = emailRaw && emailRaw.length <= 254 && EMAIL_RE.test(emailRaw) ? emailRaw : null;
+    const email = firstValidEmail(emailRaw);
     if (emailRaw && !email) warnings.push(`Row ${line}: email looks invalid, left blank.`);
 
     const phoneRaw = get("phone");
-    const phone = normalizePhone(phoneRaw);
+    const phone = firstValidPhone(phoneRaw);
     if (phoneRaw && !phone) warnings.push(`Row ${line}: phone looks invalid, left blank.`);
 
     const countRaw = get("student_count").replace(/[, ]/g, "");
@@ -258,7 +282,7 @@ export const CHILDRENS_HOME_FREE_LINE =
 // Each carries UTM tags so a signup or contact-form lead can be traced back to outreach (the site stores
 // them first-touch: see src/lib/attribution.ts). utm_medium says which channel, utm_content which link.
 export type OutreachChannel = "email" | "whatsapp";
-export function outreachLink(path: "" | "/signup" | "/contact", channel: OutreachChannel): string {
+export function outreachLink(path: "" | "/signup" | "/contact" | "/brochure", channel: OutreachChannel): string {
   const content = path === "" ? "home" : path.slice(1);
   const q = new URLSearchParams({
     utm_source: "outreach",
@@ -280,8 +304,6 @@ export type DraftContext = {
   school_name?: string | null;
   contact_name?: string | null;
   school_level?: string | null;
-  /** The address the email will go to. Used only to pick a greeting name; never written into the draft. */
-  email?: string | null;
 };
 
 /** The name to greet, or null when it's missing or just the school/office label ("Hello," instead). */
@@ -297,17 +319,23 @@ export function greetingName(contactName: string | null | undefined, schoolName?
 }
 
 /**
- * The name for the EMAIL greeting. Rule: if we are not sure, use no name.
- *  - The address clearly names a person (peter.kimani@..., james@...): greet by that given name, unless the
- *    contact name we hold is a different person, in which case we can't tell who owns the inbox, so no name.
- *  - The address says nothing about a person (info@, principal@, jmaina263@): fall back to the contact name.
+ * The EMAIL greeting always addresses the school by its name ("Hello St Veronica Academy,"), never a person.
+ * We do not know who reads the inbox, a wrong personal name reads worse than none, and the school's name is
+ * the one thing we always have. Only tidies the name: collapses whitespace, and title-cases a name that was
+ * typed or imported in ALL CAPS. Falls back to a plain "Hello," when there is no school name.
+ * (WhatsApp keeps its own greeting; see greetingName and assembleWhatsApp.)
  */
-export function emailGreetingName(ctx: DraftContext): string | null {
-  const contact = greetingName(ctx.contact_name, ctx.school_name);
-  const fromEmail = nameFromEmail(ctx.email, ctx.school_name);
-  if (!fromEmail) return contact;
-  if (!contact) return fromEmail;
-  return contactNameIncludes(contact, fromEmail) ? contact : null;
+export function schoolGreetingName(schoolName: string | null | undefined): string | null {
+  const name = (schoolName ?? "").replace(/\s+/g, " ").trim();
+  if (!name) return null;
+  const letters = name.replace(/[^A-Za-z]/g, "");
+  if (letters.length > 3 && letters === letters.toUpperCase()) {
+    return name
+      .split(" ")
+      .map((w) => (w ? w.charAt(0).toUpperCase() + w.slice(1).toLowerCase() : w))
+      .join(" ");
+  }
+  return name;
 }
 
 /** The AI-written opening is only used if it is a plain short paragraph with no figures, prices or links. */
@@ -325,6 +353,9 @@ export function sanitizeOpening(
   const t = raw.replace(/\s+/g, " ").trim();
   if (t.length < 20 || t.length > 400) return fallback;
   if (/[0-9%]|kes|ksh|http|www\.|@|free|discount|guarantee|approved|certified|accredited|official|endorse|kicd|knec|ministry|safaricom|simple/i.test(t)) return fallback;
+  // A children's home is not charged and does not collect fees: an opening about fees, payments, prices or
+  // parents would contradict the offer, so it falls back to the fixed children's-home opening.
+  if (childrensHome && /\b(fees?|pay(?:s|ing|ments?|ers?)?|pric\w*|cost\w*|charg\w*|invoic\w*|m-?pesa|parents?|school fees|admissions?|tuition|budget\w*)\b/i.test(t)) return fallback;
   return t;
 }
 
@@ -339,18 +370,35 @@ const PRODUCT_PARAGRAPH = {
   full: "EduCore Africa helps Kenyan schools bring admissions, student records and fee collection through M-Pesa together in one cloud-based school management system. It also supports student attendance, parent communication through SMS and WhatsApp, and exam management and report cards, including supported CBC competency-based reporting and marks-based grading.",
 } as const;
 
+// Children's homes are not charged and do not collect fees, so their paragraph leaves out fee collection, pricing
+// and "parent" wording and keeps only verified claims (src/lib/growth/product-facts.ts): records, attendance,
+// and report cards where exam claims are verified. Same level rules as above: no exam wording for a
+// kindergarten or an unknown level; PP1/PP2 and competency-based reports only for a kindergarten.
+const HOME_PRODUCT_PARAGRAPH = {
+  kindergarten:
+    "EduCore Africa is a cloud-based school management system built for Kenyan schools. It keeps learner records and daily attendance in one place, supports Pre-Primary (PP1 and PP2) classes, and provides competency-based learner progress reports.",
+  neutral:
+    "EduCore Africa is a cloud-based school management system built for Kenyan schools. It keeps student records and student attendance together in one place.",
+  full: "EduCore Africa is a cloud-based school management system built for Kenyan schools. It keeps student records and attendance in one place, and supports exam management and report cards, including supported CBC competency-based reporting and marks-based grading.",
+} as const;
+
 export function assembleEmailBody(openingRaw: unknown, ctx: DraftContext = {}): string {
   const level = normalizeSchoolLevel(ctx.school_level ?? null);
-  const name = emailGreetingName(ctx);
+  const name = schoolGreetingName(ctx.school_name);
   const home = isChildrenHome(ctx.school_name);
-  const product = level === "kindergarten" ? PRODUCT_PARAGRAPH.kindergarten : level === null ? PRODUCT_PARAGRAPH.neutral : PRODUCT_PARAGRAPH.full;
+  const paragraphs = home ? HOME_PRODUCT_PARAGRAPH : PRODUCT_PARAGRAPH;
+  // The brochure shows plan tiers and "billed per learner", which contradicts a children's home's no-charge
+  // offer, so it is left out of those emails. Everyone else gets one tracked line: the landing page records the
+  // click with the email's UTM tags, then hands over the PDF (src/app/(marketing)/brochure/page.tsx).
+  const brochureLine = home ? "" : `\nBrochure: ${outreachLink("/brochure", "email")}`;
+  const product = level === "kindergarten" ? paragraphs.kindergarten : level === null ? paragraphs.neutral : paragraphs.full;
   return [
     name ? `Hello ${name},` : "Hello,",
     sanitizeOpening(openingRaw, level, home),
     product,
     home ? CHILDRENS_HOME_FREE_LINE : OFFER_LINE,
     `Would you be open to a brief online demonstration to see how EduCore could support your ${home ? "children's home" : "school"}?`,
-    `Start your free trial: ${outreachLink("/signup", "email")}\nContact us: ${outreachLink("/contact", "email")}`,
+    `Start your free trial: ${outreachLink("/signup", "email")}\nContact us: ${outreachLink("/contact", "email")}${brochureLine}`,
     `Kind regards,\nEduCore Africa\n${outreachLink("", "email")}`,
     "If you would rather not hear from us, just reply and we will not contact you again.",
   ].join("\n\n");

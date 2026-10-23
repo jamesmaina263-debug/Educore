@@ -1,5 +1,8 @@
+import { existsSync, statSync } from "fs";
+import path from "path";
 import { describe, it, expect } from "vitest";
-import { escapeHtml, firstName, personalize, renderCampaignEmail } from "../../supabase/functions/_shared/campaignEmail";
+import { OUTREACH_LOGO_URL, escapeHtml, firstName, personalize, renderCampaignEmail, trackOutreachLinks } from "../../supabase/functions/_shared/campaignEmail";
+import { assembleEmailBody } from "./outbound/prospects";
 
 const base = { schoolName: "Tetu Bygrace Academy", unsubscribeUrl: "https://www.educoreafrica.com/unsubscribe/abc" };
 
@@ -65,5 +68,113 @@ describe("outreach audience footer", () => {
     expect(text).not.toContain("asked about EduCore on our website");
     expect(text).toContain("Unsubscribe: https://example.com/unsubscribe/abc");
     expect(html).toContain("Unsubscribe");
+  });
+});
+
+describe("outreach signature logo", () => {
+  const outreach = {
+    recipientName: "Mary",
+    schoolName: "Sunrise Academy",
+    unsubscribeUrl: "https://example.com/unsubscribe/abc",
+    audience: "outreach" as const,
+  };
+  const body = "Hello Mary,\n\nA short pitch.\n\nKind regards,\nEduCore Africa\nhttps://www.educoreafrica.com/\n\nIf you would rather not hear from us, just reply and we will not contact you again.";
+
+  it("puts one small, sized, alt-texted logo right after the sign-off and before the opt-out line", () => {
+    const { html } = renderCampaignEmail({ ...outreach, body });
+    expect(html.split("<img").length - 1).toBe(1);
+    expect(html).toContain(`src="${OUTREACH_LOGO_URL}"`);
+    expect(html).toContain('width="156" height="50" alt="EduCore Africa"');
+    const logo = html.indexOf("<img");
+    expect(html.indexOf("Kind regards")).toBeLessThan(logo);
+    expect(logo).toBeLessThan(html.indexOf("If you would rather not hear from us"));
+  });
+
+  it("falls back to the end of the message when the sign-off was edited away", () => {
+    const { html } = renderCampaignEmail({ ...outreach, body: "Hello Mary,\n\nJust a note." });
+    expect(html.split("<img").length - 1).toBe(1);
+    expect(html.indexOf("Just a note.")).toBeLessThan(html.indexOf("<img"));
+  });
+
+  it("never adds the logo to the plain-text part", () => {
+    const { text } = renderCampaignEmail({ ...outreach, body });
+    expect(text).not.toContain("educore-logo-email");
+    expect(text).not.toContain("<img");
+  });
+
+  it("leaves owner and prospect emails exactly as before (no logo)", () => {
+    for (const audience of [undefined, "owners", "prospects"] as const) {
+      const { html } = renderCampaignEmail({ ...outreach, audience, body });
+      expect(html, String(audience)).not.toContain("<img");
+    }
+  });
+
+  it("still escapes a body that tries to inject an image", () => {
+    const { html } = renderCampaignEmail({ ...outreach, body: "Hi\n\n<img src=x onerror=1>\n\nKind regards,\nEduCore Africa" });
+    expect(html).toContain("&lt;img src=x");
+    expect(html.split("<img").length - 1).toBe(1); // only ours
+  });
+
+  it("points at a logo file that exists in public/ and is small enough for email", () => {
+    const file = path.join(process.cwd(), "public", "email", "educore-logo-email.png");
+    expect(existsSync(file)).toBe(true);
+    expect(statSync(file).size).toBeLessThan(25_000);
+  });
+});
+
+describe("trackOutreachLinks (per-school tracked links)", () => {
+  const SITE = "https://www.educoreafrica.com";
+  const RID = "10000000-0000-4000-8000-000000000001";
+  const link = (path: string, key: string) =>
+    `${SITE}${path}?utm_source=outreach&utm_medium=email&utm_campaign=school_outreach&utm_content=${key}`;
+  const tracked = (key: string) => `${SITE}/api/outreach-link/${RID}/${key}`;
+
+  it("rewrites every link of a real outreach draft and leaves no untracked outreach link behind", () => {
+    const body = assembleEmailBody("Opening line.", { school_name: "Sunrise Academy", school_level: "primary" });
+    expect(body).toContain("utm_source=outreach");
+    const out = trackOutreachLinks(body, RID, SITE);
+    expect(out).not.toContain("utm_source=outreach");
+    for (const key of ["signup", "contact", "brochure", "home"]) expect(out).toContain(tracked(key));
+    // Everything that is not one of those links is untouched.
+    expect(out.replace(/https:\/\/www\.educoreafrica\.com\/api\/outreach-link\/\S+/g, "LINK")).toBe(
+      body.replace(/https:\/\/www\.educoreafrica\.com\/\S*utm_source=outreach\S*/g, "LINK"),
+    );
+  });
+
+  it("covers a children's home draft (no brochure line) too", () => {
+    const out = trackOutreachLinks(assembleEmailBody("x", { school_name: "Hope Children's Home" }), RID, SITE);
+    expect(out).not.toContain("utm_source=outreach");
+    expect(out).not.toContain("/brochure");
+  });
+
+  it("keeps sentence punctuation after a link", () => {
+    expect(trackOutreachLinks(`Sign up: ${link("/signup", "signup")}.`, RID, SITE)).toBe(`Sign up: ${tracked("signup")}.`);
+  });
+
+  it("leaves other links, other origins, edited links and mismatched path/key alone", () => {
+    const other = "https://example.com/signup?utm_source=outreach&utm_medium=email&utm_campaign=school_outreach&utm_content=signup";
+    const extra = `${link("/signup", "signup")}&ref=1`;
+    const mismatch = link("/contact", "signup");
+    const plain = `${SITE}/pricing and https://educoreafrica.com`;
+    for (const body of [other, extra, mismatch, plain]) expect(trackOutreachLinks(body, RID, SITE)).toBe(body);
+  });
+
+  it("changes nothing without a valid recipient id or site", () => {
+    const body = `Go: ${link("/signup", "signup")}`;
+    expect(trackOutreachLinks(body, "not-a-uuid", SITE)).toBe(body);
+    expect(trackOutreachLinks(body, "", SITE)).toBe(body);
+    expect(trackOutreachLinks(body, RID, "")).toBe(body);
+  });
+
+  it("tolerates a trailing slash on the site url", () => {
+    expect(trackOutreachLinks(link("/contact", "contact"), RID, `${SITE}/`)).toBe(tracked("contact"));
+  });
+
+  it("is what the tracked route expects: the key set matches the route's destinations", async () => {
+    const { TRACKED_DESTINATIONS, trackedDestinationUrl } = await import("./outbound/tracked-links");
+    for (const key of TRACKED_DESTINATIONS) {
+      const out = trackOutreachLinks(trackedDestinationUrl(key), RID, SITE);
+      expect(out).toBe(tracked(key));
+    }
   });
 });

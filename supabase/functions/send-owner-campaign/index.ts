@@ -1,7 +1,7 @@
 import { createClient } from "jsr:@supabase/supabase-js@2.112.4";
 import { buildCorsHeaders } from "../_shared/cors.ts";
 import { getEmailProvider } from "../_shared/email/index.ts";
-import { renderCampaignEmail } from "../_shared/campaignEmail.ts";
+import { renderCampaignEmail, trackOutreachLinks } from "../_shared/campaignEmail.ts";
 
 // Sends a promotional campaign (school owners or prospects), one small batch per call.
 //
@@ -63,8 +63,11 @@ Deno.serve(async (req) => {
       if (!subject || !body) return json({ error: "Subject and body are required." }, 400);
 
       const unsubscribeUrl = `${siteUrl}/unsubscribe/00000000-0000-0000-0000-000000000000`;
+      // Outreach test emails carry the same tracked links as real ones, with an id that matches no school, so
+      // the links can be tried end to end but nothing is recorded.
+      const testBody = payload.audience === "outreach" ? trackOutreachLinks(body, "00000000-0000-0000-0000-000000000000", siteUrl) : body;
       const { text, html } = renderCampaignEmail({
-        body,
+        body: testBody,
         recipientName: "Test Owner",
         schoolName: "Your School (test)",
         unsubscribeUrl,
@@ -126,8 +129,10 @@ Deno.serve(async (req) => {
         continue;
       }
       const unsubscribeUrl = `${siteUrl}/unsubscribe/${r.unsubscribe_token}`;
+      // Outreach only: each school gets its own tracked links (recipient id), so a click shows which school it was.
+      const trackedBody = audience === "outreach" ? trackOutreachLinks(bodyText, r.id, siteUrl) : bodyText;
       const { text, html } = renderCampaignEmail({
-        body: bodyText,
+        body: trackedBody,
         recipientName: r.recipient_name,
         schoolName: r.school_name,
         unsubscribeUrl,

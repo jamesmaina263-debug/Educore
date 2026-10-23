@@ -19,6 +19,7 @@ import {
   parseScoringResponse,
   sanitizeOpening,
   CHILDRENS_HOME_FREE_LINE,
+  schoolGreetingName,
 } from "./prospects";
 
 describe("parseCsv", () => {
@@ -189,7 +190,7 @@ describe("parseScoringResponse + fixed draft template", () => {
     expect(r.ok).toBe(true);
     if (!r.ok) return;
     const body = r.value.email_body;
-    expect(body.startsWith("Hello Jane Wanjiru,\n\n")).toBe(true);
+    expect(body.startsWith("Hello Sunrise Academy,\n\n")).toBe(true); // school name, not the contact person
     expect(body).toContain(good.opening);
     expect(body).toContain("Our pricing starts at KES 100 per student per term, with a 30-day free trial and no payment card required.");
     expect(body).toContain("supported CBC competency-based reporting and marks-based grading");
@@ -200,14 +201,16 @@ describe("parseScoringResponse + fixed draft template", () => {
     expect(body).toContain("just reply and we will not contact you again");
   });
 
-  it("greets with plain 'Hello,' when the contact is missing or is really the school's name", () => {
+  it("greets the school by name whatever the contact name is, and a plain 'Hello,' only when there is no school name", () => {
     const none = parseScoringResponse(JSON.stringify(good), { school_name: "Nyeri Junior School", contact_name: null });
-    expect(none.ok && none.value.email_body.startsWith("Hello,\n\n")).toBe(true);
-    const schoolish = parseScoringResponse(JSON.stringify(good), { school_name: "Nyeri Junior School", contact_name: "Nyeri Junior" });
-    expect(schoolish.ok && schoolish.value.email_body.startsWith("Hello,\n\n")).toBe(true);
+    expect(none.ok && none.value.email_body.startsWith("Hello Nyeri Junior School,\n\n")).toBe(true);
+    const person = parseScoringResponse(JSON.stringify(good), { school_name: "Nyeri Junior School", contact_name: "Jane Wanjiru" });
+    expect(person.ok && person.value.email_body.startsWith("Hello Nyeri Junior School,\n\n")).toBe(true);
     const office = parseScoringResponse(JSON.stringify(good), { school_name: "X", contact_name: "School Office" });
-    expect(office.ok && office.value.email_body.startsWith("Hello,\n\n")).toBe(true);
+    expect(office.ok && office.value.email_body.startsWith("Hello X,\n\n")).toBe(true);
+    // greetingName still serves the WhatsApp draft, which keeps its contact-name behaviour.
     expect(greetingName("Jane Wanjiru", "Sunrise Academy")).toBe("Jane Wanjiru");
+    expect(greetingName("Nyeri Junior", "Nyeri Junior School")).toBeNull();
   });
 
   it("rejects an AI opening that contains figures, prices, links or offers and uses the default instead", () => {
@@ -367,7 +370,7 @@ describe("sanitizeProspectRows (rows sent from the browser are never trusted)", 
   });
 });
 
-describe("email greeting name and children's home wording", () => {
+describe("email greeting (school name) and children's home wording", () => {
   const opening = "Following up on fees and preparing report cards each term can take a lot of a school's time.";
   const draft = (ctx: Parameters<typeof parseScoringResponse>[1]) => {
     const r = parseScoringResponse(
@@ -378,34 +381,38 @@ describe("email greeting name and children's home wording", () => {
     return r.value;
   };
 
-  it("greets by the name in a personal-looking email address", () => {
-    expect(draft({ school_name: "Sunrise Academy", email: "peter.kimani@gmail.com" }).email_body.startsWith("Hello Peter,\n\n")).toBe(true);
+  it("greets every email by the school's name, never a person", () => {
+    expect(draft({ school_name: "St Veronica Academy" }).email_body.startsWith("Hello St Veronica Academy,\n\n")).toBe(true);
+    expect(draft({ school_name: "Mercy Children's Home" }).email_body.startsWith("Hello Mercy Children's Home,\n\n")).toBe(true);
   });
 
-  it("uses no name when the address is not clearly a person", () => {
-    for (const email of ["info@sunrise.ac.ke", "jmaina263@gmail.com", "j.kimani@gmail.com", null]) {
-      expect(draft({ school_name: "Sunrise Academy", email }).email_body.startsWith("Hello,\n\n"), String(email)).toBe(true);
-    }
+  it("ignores the contact name and the address, so a personal name can never be used", () => {
+    const d = draft({ school_name: "Sunrise Academy", contact_name: "Jane Wanjiru", email: "peter.kimani@gmail.com" } as never);
+    expect(d.email_body.startsWith("Hello Sunrise Academy,\n\n")).toBe(true);
+    expect(d.email_body).not.toMatch(/Jane|Wanjiru|Peter|Kimani|peter\.kimani/);
   });
 
-  it("keeps the contact name when the address says nothing about a person, or agrees with it", () => {
-    expect(draft({ school_name: "X", contact_name: "Jane Wanjiru", email: "info@x.ac.ke" }).email_body.startsWith("Hello Jane Wanjiru,")).toBe(true);
-    expect(draft({ school_name: "X", contact_name: "Peter Kimani", email: "peter.kimani@gmail.com" }).email_body.startsWith("Hello Peter Kimani,")).toBe(true);
+  it("tidies the school name: collapses whitespace and title-cases an ALL CAPS name", () => {
+    expect(schoolGreetingName("  St   Veronica \n Academy ")).toBe("St Veronica Academy");
+    expect(schoolGreetingName("ST VERONICA ACADEMY")).toBe("St Veronica Academy");
+    expect(schoolGreetingName("CHILDREN'S HOME")).toBe("Children's Home");
+    expect(schoolGreetingName("St Veronica Academy")).toBe("St Veronica Academy");
+    expect(schoolGreetingName("KCB Junior School")).toBe("KCB Junior School"); // mixed case left alone
   });
 
-  it("uses no name when the address and the contact name point at different people", () => {
-    expect(draft({ school_name: "X", contact_name: "Jane Wanjiru", email: "peter.kimani@gmail.com" }).email_body.startsWith("Hello,\n\n")).toBe(true);
+  it("falls back to a plain 'Hello,' only when there is no school name", () => {
+    expect(schoolGreetingName(null)).toBeNull();
+    expect(schoolGreetingName("   ")).toBeNull();
+    expect(draft({ school_name: "" }).email_body.startsWith("Hello,\n\n")).toBe(true);
   });
 
-  it("never puts the email address into a draft and leaves the WhatsApp greeting alone", () => {
-    const d = draft({ school_name: "Sunrise Academy", email: "peter.kimani@gmail.com" });
-    expect(d.email_body).not.toContain("peter.kimani");
-    expect(d.whatsapp.startsWith("Hello! ")).toBe(true);
+  it("leaves the WhatsApp greeting alone", () => {
+    expect(draft({ school_name: "Sunrise Academy" }).whatsapp.startsWith("Hello! ")).toBe(true);
   });
 
   it("tells a children's home it will not be charged, instead of quoting the price", () => {
-    const d = draft({ school_name: "Mercy Children's Home", email: "mary.wanjiku@gmail.com" });
-    expect(d.email_body.startsWith("Hello Mary,\n\n")).toBe(true);
+    const d = draft({ school_name: "Mercy Children's Home" });
+    expect(d.email_body.startsWith("Hello Mercy Children's Home,\n\n")).toBe(true);
     expect(d.email_body).toContain(CHILDRENS_HOME_FREE_LINE);
     expect(d.email_body).not.toContain("KES");
     expect(d.email_body).toContain("support your children's home?");
@@ -441,5 +448,78 @@ describe("email greeting name and children's home wording", () => {
     const p = buildScoringPrompt({ school_name: "Mercy Children's Home", town_county: null, school_type: null, website: null, contact_name: null, contact_role: null, student_count: null });
     expect(p).toContain("This is a children's home");
     expect(p).toContain("Do not mention fees, payments, pricing or cost");
+  });
+
+  describe("children's home product paragraph", () => {
+    const home = (school_level: string | null) =>
+      draft({ school_name: "Mercy Children's Home", school_level: school_level as never }).email_body;
+
+    it("never mentions fees, M-Pesa, KES or parents, whatever the level", () => {
+      for (const level of ["kindergarten", "primary", "secondary", "other", null]) {
+        const body = home(level);
+        expect(body, String(level)).not.toMatch(/fee|m-pesa|KES|parent/i);
+        expect(body, String(level)).toContain("EduCore Africa is a cloud-based school management system built for Kenyan schools.");
+        expect(body, String(level)).toContain(CHILDRENS_HOME_FREE_LINE);
+      }
+    });
+
+    it("follows the level rules: PP1/PP2 only for a kindergarten, exams never for a kindergarten or unknown level", () => {
+      expect(home("kindergarten")).toContain("Pre-Primary (PP1 and PP2)");
+      expect(home("kindergarten")).not.toMatch(/exam|marks-based/i);
+      expect(home(null)).not.toMatch(/exam|PP1|marks-based/i);
+      expect(home("other")).toContain("exam management and report cards");
+      expect(home("other")).not.toContain("PP1");
+    });
+
+    it("falls back to the fixed children's-home opening when the model writes about fees, payments or parents", () => {
+      for (const o of [
+        "Following up on school fees and report cards each term can take a lot of a school's time.",
+        "Collecting payments and chasing parents every term takes time away from the children in your care.",
+        "Keeping the budget straight while looking after so many children takes a great deal of effort.",
+      ]) {
+        const r = parseScoringResponse(JSON.stringify({ fit_score: 60, fit_reason: "ok", email_subject: "s", opening: o }), { school_name: "Mercy Children's Home" });
+        expect(r.ok && r.value.email_body, o).toContain("for the children in your care can take a great deal of time");
+        expect(r.ok && r.value.email_body, o).not.toContain(o);
+      }
+    });
+
+    it("keeps a clean model opening for a children's home", () => {
+      const o = "Looking after the records and daily routines of so many children can take real time and care.";
+      const r = parseScoringResponse(JSON.stringify({ fit_score: 60, fit_reason: "ok", email_subject: "s", opening: o }), { school_name: "Mercy Children's Home" });
+      expect(r.ok && r.value.email_body).toContain(o);
+    });
+
+    it("leaves ordinary schools on their existing paragraphs", () => {
+      const body = draft({ school_name: "Sunrise Academy", school_level: "primary" }).email_body;
+      expect(body).toContain("fee collection through M-Pesa");
+    });
+  });
+
+  describe("brochure link", () => {
+    const brochure = "Brochure: https://www.educoreafrica.com/brochure?utm_source=outreach&utm_medium=email&utm_campaign=school_outreach&utm_content=brochure";
+
+    it("adds one tracked brochure line to an ordinary school's email, right after the contact link", () => {
+      const body = draft({ school_name: "Sunrise Academy" }).email_body;
+      expect(body).toContain(brochure);
+      expect(body.split("Brochure:").length - 1).toBe(1);
+      expect(body).toMatch(/Contact us: [^\n]+\nBrochure: /);
+    });
+
+    it("leaves the brochure out of a children's home's email (it shows plan tiers and per-learner billing)", () => {
+      const body = draft({ school_name: "Mercy Children's Home" }).email_body;
+      expect(body).not.toContain("Brochure:");
+      expect(body).not.toContain("/brochure");
+      expect(body).toContain(CHILDRENS_HOME_FREE_LINE);
+    });
+
+    it("is email only: the WhatsApp draft is unchanged", () => {
+      expect(draft({ school_name: "Sunrise Academy" }).whatsapp).not.toContain("/brochure");
+    });
+
+    it("points at the landing page, not the PDF, so the click can be tracked", () => {
+      expect(outreachLink("/brochure", "email")).toBe(
+        "https://www.educoreafrica.com/brochure?utm_source=outreach&utm_medium=email&utm_campaign=school_outreach&utm_content=brochure",
+      );
+    });
   });
 });
