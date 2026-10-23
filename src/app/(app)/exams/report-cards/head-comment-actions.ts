@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { tagSentryRequestContext } from "@/lib/observability/sentry-context";
 
-export const HEAD_COMMENT_MAX_CHARS = 1000;
+const HEAD_COMMENT_MAX_CHARS = 1000; // not exported: a "use server" file may only export async functions
 
 // Saves (or, with blank text, clears) the head teacher's comment on a report card, ONLY through
 // set_report_card_head_comment(): it re-checks report_cards.comment_head and that the card belongs

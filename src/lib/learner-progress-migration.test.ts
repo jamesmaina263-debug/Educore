@@ -6,7 +6,7 @@ import path from "node:path";
 // permission, school scoping, release-inherited read access, direct writes denied, term-only
 // attendance, RLS honoured by the attendance summary, settings whitelist) was proven against a real
 // Postgres engine when it was written; these checks stop a later edit silently removing them.
-const sql = readFileSync(path.resolve(__dirname, "../../supabase/migrations/20261022090000_learner_progress_report.sql"), "utf8");
+const sql = readFileSync(path.resolve(__dirname, "../../supabase/migrations/20261022200000_learner_progress_report.sql"), "utf8");
 const code = sql.replace(/^--.*$/gm, "");
 
 describe("learner progress report migration", () => {
