@@ -44,6 +44,34 @@ export function trackOutreachLinks(body: string, recipientId: string, siteUrl: s
   );
 }
 
+// Outreach emails (HTML part only): a long tracking URL printed in the message looks like phishing to readers and to
+// spam filters. A line that is "<label>: <link to our own site>" is shown as the label, as a real link
+// ("Start your free trial", "Contact us"); a line that is just a link to our site (the sign-off) is shown as the
+// site name. Both keep the full URL as the link target, and the plain-text part keeps every URL in full because
+// plain text cannot hide one. Only https links to educoreafrica.com are converted; any other line stays text.
+const OWN_LABELLED_LINK = /^(.{1,60}?):\s+(https:\/\/(?:www\.)?educoreafrica\.com(?:\/\S*)?)$/;
+const OWN_BARE_LINK = /^(https:\/\/(?:www\.)?educoreafrica\.com(?:\/\S*)?)$/;
+const LINK_STYLE = "color:#1a56db;text-decoration:underline";
+// Labelled links sit on lines of their own, so each gets vertical padding: it separates them visually and gives
+// a finger-sized tap target on a phone. (The sign-off site name sits under the signature and stays tight.)
+const LABELLED_LINK_STYLE = `${LINK_STYLE};display:inline-block;padding:8px 0`;
+
+function ownLinkHtml(url: string, text: string, style: string = LINK_STYLE): string {
+  return `<a href="${escapeHtml(url)}" style="${style}">${escapeHtml(text)}</a>`;
+}
+
+function renderOutreachLine(line: string): string {
+  const t = line.trim();
+  const labelled = OWN_LABELLED_LINK.exec(t);
+  // A label that itself contains a link, or a URL ending in punctuation (probably a sentence), is left alone.
+  if (labelled && !/https?:|www\./i.test(labelled[1]) && !/[.,;:!?)]$/.test(labelled[2])) {
+    return ownLinkHtml(labelled[2], labelled[1].trim(), LABELLED_LINK_STYLE);
+  }
+  const bare = OWN_BARE_LINK.exec(t);
+  if (bare && !/[.,;:!?)]$/.test(bare[1])) return ownLinkHtml(bare[1], new URL(bare[1]).host);
+  return escapeHtml(line);
+}
+
 export function escapeHtml(s: string): string {
   return s
     .replace(/&/g, "&amp;")
@@ -78,7 +106,7 @@ export function renderCampaignEmail(input: CampaignEmailInput): { text: string; 
   const text = `${body}\n\n--\n${footerLine}\nUnsubscribe: ${input.unsubscribeUrl}\nEduCore - https://educoreafrica.com`;
 
   // Blank line = new paragraph, single newline = <br>. Everything is escaped first, so a body
-  // can never inject markup; links are left as plain text on purpose (any tracking is done on the body before it gets here: trackOutreachLinks).
+  // can never inject markup; links are left as plain text on purpose, except our own labelled links in outreach emails (renderOutreachLine); any tracking is done on the body before it gets here (trackOutreachLinks).
   const blocks = body.split(/\n{2,}/);
   // Logo goes straight after the sign-off ("Kind regards,"), above the opt-out line. If a reviewer edited the
   // sign-off away, it goes at the end instead so a signature-less email still ends with the brand.
@@ -86,7 +114,9 @@ export function renderCampaignEmail(input: CampaignEmailInput): { text: string; 
   const logoAt = signOffAt >= 0 ? signOffAt : blocks.length - 1;
   const paragraphs = blocks
     .map((p, i) => {
-      const para = `<p style="margin:0 0 14px">${escapeHtml(p).replace(/\n/g, "<br>")}</p>`;
+      const inner =
+        input.audience === "outreach" ? p.split("\n").map(renderOutreachLine).join("<br>") : escapeHtml(p).replace(/\n/g, "<br>");
+      const para = `<p style="margin:0 0 14px">${inner}</p>`;
       return input.audience === "outreach" && i === logoAt ? para + OUTREACH_LOGO_HTML : para;
     })
     .join("");

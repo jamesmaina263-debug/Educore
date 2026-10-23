@@ -5,14 +5,14 @@ import { OUTREACH_HEADER_SOURCE, buildCsp, marketingHeaderSources } from "./src/
 
 const nextConfig: NextConfig = {
   experimental: {
-    // Client-side cache for dynamic pages: revisiting a module within 30s reuses the page already
+    // Client-side cache for dynamic pages: revisiting a module within 90s reuses the page already
     // fetched instead of re-running the server render (this app is dynamic everywhere, so the
     // default is 0s = every click is a full server round trip). Server Actions that call
     // revalidatePath/revalidateTag or set cookies, and router.refresh(), still invalidate it, so
-    // a user's own edits show immediately; changes made by OTHER users can take up to 30s to
+    // a user's own edits show immediately; changes made by OTHER users can take up to 90s to
     // appear on a page this browser already loaded. Layouts and back/forward behaviour unchanged.
     staleTimes: {
-      dynamic: 30,
+      dynamic: 90,
     },
     serverActions: {
       // Default is 1MB, which real admission-document uploads (scanned birth

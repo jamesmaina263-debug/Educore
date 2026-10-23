@@ -47,24 +47,36 @@ export function PlatformNotificationBell() {
 
   useEffect(() => {
     let cancelled = false;
-    getPlatformNotifications().then((result) => {
-      if (cancelled) return;
-      if ("success" in result) {
-        setNotifications(result.notifications);
-        setLoaded(true);
-      }
-    });
-    // Polling, not realtime -- matches this app's other admin pages (no Supabase Realtime
-    // subscription infra exists here yet). 60s is frequent enough that "a new demo request came
-    // in" surfaces well before anyone would notice it missing, without hammering the DB.
-    const interval = setInterval(() => {
+    let lastFetch = 0;
+    const refresh = (markLoaded: boolean) => {
+      lastFetch = Date.now();
       getPlatformNotifications().then((result) => {
-        if (!cancelled && "success" in result) setNotifications(result.notifications);
+        if (cancelled || !("success" in result)) return;
+        setNotifications(result.notifications);
+        if (markLoaded) setLoaded(true);
       });
-    }, 60_000);
+    };
+    refresh(true);
+    // Polling, not realtime -- matches this app's other admin pages (no Supabase Realtime
+    // subscription infra exists here yet). Every poll is a serverless invocation (proxy auth
+    // check + server action), so it runs every 5 min and ONLY while the tab is visible; a tab
+    // left open in the background costs nothing. Returning to the tab refreshes immediately,
+    // throttled to once a minute so rapid tab-switching cannot cause a burst of calls.
+    const POLL_MS = 300_000;
+    const MIN_GAP_MS = 60_000;
+    const interval = setInterval(() => {
+      if (document.visibilityState === "visible") refresh(false);
+    }, POLL_MS);
+    const onVisible = () => {
+      if (document.visibilityState === "visible" && Date.now() - lastFetch > MIN_GAP_MS) {
+        refresh(false);
+      }
+    };
+    document.addEventListener("visibilitychange", onVisible);
     return () => {
       cancelled = true;
       clearInterval(interval);
+      document.removeEventListener("visibilitychange", onVisible);
     };
   }, []);
 
