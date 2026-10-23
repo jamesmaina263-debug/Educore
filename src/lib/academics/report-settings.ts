@@ -13,6 +13,12 @@ export interface ReportSettings {
   showSignatures: boolean;
   /** Print class mean / highest / lowest (or the CBC level summary) on the mark sheet. */
   showClassStatistics: boolean;
+  /** Print the term attendance summary on report cards (only when the register has records for the term). */
+  showAttendance: boolean;
+  /** Print the head teacher's comment on report cards (only when one has been written). */
+  showHeadTeacherComment: boolean;
+  /** Print the parent/guardian acknowledgement block on report cards. */
+  showParentAcknowledgement: boolean;
 }
 
 export const DEFAULT_REPORT_SETTINGS: ReportSettings = {
@@ -20,6 +26,12 @@ export const DEFAULT_REPORT_SETTINGS: ReportSettings = {
   showCompetencyRatings: true,
   showSignatures: true,
   showClassStatistics: true,
+  // New sections that would change how existing report cards look default to OFF, so merging them
+  // changes nothing for a school until an administrator opts in. The head teacher comment defaults
+  // on because nothing prints until a comment has actually been written.
+  showAttendance: false,
+  showHeadTeacherComment: true,
+  showParentAcknowledgement: false,
 };
 
 /** Stored key for each setting; must match the whitelist in update_report_settings(). */
@@ -28,6 +40,9 @@ export const REPORT_SETTING_KEYS: Record<keyof ReportSettings, string> = {
   showCompetencyRatings: "show_competency_ratings",
   showSignatures: "show_signatures",
   showClassStatistics: "show_class_statistics",
+  showAttendance: "show_attendance",
+  showHeadTeacherComment: "show_head_teacher_comment",
+  showParentAcknowledgement: "show_parent_acknowledgement",
 };
 
 export function resolveReportSettings(raw: unknown): ReportSettings {

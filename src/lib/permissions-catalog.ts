@@ -89,6 +89,7 @@ export const PERMISSION_CATALOG: PermissionGroup[] = [
     permissions: [
       { key: "report_cards.approve", label: "Approve own report cards" },
       { key: "report_cards.approve_any", label: "Approve any report cards" },
+      { key: "report_cards.comment_head", label: "Write the head teacher comment" },
     ],
   },
   {

@@ -24,7 +24,7 @@ export default async function ReportCardsPage({
   const user = await getCachedUser();
   if (!user) redirect("/login");
 
-  const [{ data: schoolUser }, { data: canGenerate }, { data: canApproveOwn }, { data: canApproveAny }] = await Promise.all([
+  const [{ data: schoolUser }, { data: canGenerate }, { data: canApproveOwn }, { data: canApproveAny }, { data: canCommentHead }] = await Promise.all([
     supabase
       .from("school_users")
       .select("school_id, full_name, roles(display_name), schools(name)")
@@ -33,6 +33,7 @@ export default async function ReportCardsPage({
     supabase.rpc("auth_has_permission", { p_permission_key: "exams.write" }),
     supabase.rpc("auth_has_permission", { p_permission_key: "report_cards.approve" }),
     supabase.rpc("auth_has_permission", { p_permission_key: "report_cards.approve_any" }),
+    supabase.rpc("auth_has_permission", { p_permission_key: "report_cards.comment_head" }),
   ]);
 
   const roleName = (schoolUser?.roles as unknown as { display_name: string } | null)?.display_name;
@@ -63,7 +64,7 @@ export default async function ReportCardsPage({
           .select("student_id, raw_score, subjects(name), grading_scale_bands(label, level_order, grading_scale_id)")
           .eq("exam_id", selectedExamId)
           .eq("class_id", selectedClassId),
-        supabase.from("report_cards").select("student_id, comment, comment_source").eq("exam_id", selectedExamId).eq("class_id", selectedClassId),
+        supabase.from("report_cards").select("id, student_id, comment, comment_source").eq("exam_id", selectedExamId).eq("class_id", selectedClassId),
         supabase.from("class_rankings").select("student_id, average_score, rank_in_stream").eq("exam_id", selectedExamId),
         supabase
           .from("competency_marks")
@@ -73,6 +74,13 @@ export default async function ReportCardsPage({
           .eq("exam_id", selectedExamId)
           .eq("class_id", selectedClassId),
       ]);
+
+    // Head teacher comments for these cards (read under the caller's RLS; one small query).
+    const cardIds = (reportCardRows ?? []).map((c) => c.id as string);
+    const { data: headCommentRows } = cardIds.length
+      ? await supabase.from("report_card_head_comments").select("report_card_id, comment").in("report_card_id", cardIds)
+      : { data: [] };
+    const headCommentByCard = new Map((headCommentRows ?? []).map((h) => [h.report_card_id as string, h.comment as string]));
 
     const streamIds = (streamRows ?? []).map((s) => s.id);
     const { data: students } = streamIds.length
@@ -210,7 +218,12 @@ export default async function ReportCardsPage({
         average_score: rk?.average_score ?? null,
         insights: insightsByStudent.get(s.id) ?? { achievementDistribution: [], strengths: [], areasForSupport: [] },
         report_card: rc
-          ? { comment: rc.comment, comment_source: rc.comment_source as "none" | "ai" | "teacher_approved" | "teacher_written" }
+          ? {
+              id: rc.id as string,
+              head_comment: headCommentByCard.get(rc.id as string) ?? null,
+              comment: rc.comment,
+              comment_source: rc.comment_source as "none" | "ai" | "teacher_approved" | "teacher_written",
+            }
           : null,
       };
     });
@@ -286,6 +299,8 @@ export default async function ReportCardsPage({
             canGenerate={canGenerate === true}
             canApprove={canApproveOwn === true || canApproveAny === true}
             rankingEnabled={reportSettings.rankingEnabled}
+            headCommentEnabled={reportSettings.showHeadTeacherComment}
+            canCommentHead={canCommentHead === true}
           />
         )}
       </div>

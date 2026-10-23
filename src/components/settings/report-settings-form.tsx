@@ -17,6 +17,13 @@ const OPTIONS: { key: keyof ReportSettings; label: string; hint: string }[] = [
   { key: "showCompetencyRatings", label: "Show competency ratings on report cards", hint: "The CBC strand and sub-strand ratings table." },
   { key: "showSignatures", label: "Show signature lines", hint: "Class teacher, principal and parent lines on report cards, and the prepared-by / verified-by block on mark sheets." },
   { key: "showClassStatistics", label: "Show class statistics on mark sheets", hint: "Class mean, highest and lowest (or the performance-level summary for competency-based exams)." },
+  {
+    key: "showAttendance",
+    label: "Show attendance summary on report cards",
+    hint: "Days present, late and absent for the term. Only shown when the attendance register has records for that learner in the term; otherwise the section is left out.",
+  },
+  { key: "showHeadTeacherComment", label: "Show the head teacher's comment on report cards", hint: "Printed only for learners whose head teacher comment has been written. Principals and deputies write it on the Report Cards page." },
+  { key: "showParentAcknowledgement", label: "Add a parent / guardian acknowledgement to report cards", hint: "A printed block where the parent or guardian signs to confirm they received the report." },
 ];
 
 export function ReportSettingsForm({ initial, canWrite }: { initial: ReportSettings; canWrite: boolean }) {

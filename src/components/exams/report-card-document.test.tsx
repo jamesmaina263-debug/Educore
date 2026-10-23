@@ -14,7 +14,9 @@ const doc = (over: Partial<ReportCardDocumentData> = {}): ReportCardDocumentData
   rank: 2,
   released: true,
   comment: "Excellent progress",
-  options: { showRank: true, showCompetencies: true, showSignatures: true },
+  attendance: null,
+  headTeacherComment: null,
+  options: { showRank: true, showCompetencies: true, showSignatures: true, showAcknowledgement: false },
   ...over,
 });
 
@@ -63,11 +65,37 @@ describe("ReportCardDocumentSet", () => {
     expect(on).toContain("Position in stream");
     expect(on).toContain("CBC competency ratings");
     expect(on).toContain("Parent / Guardian");
-    const off = html([{ ...withComp, options: { showRank: false, showCompetencies: false, showSignatures: false } }]);
+    const off = html([{ ...withComp, options: { showRank: false, showCompetencies: false, showSignatures: false, showAcknowledgement: false } }]);
     expect(off).not.toContain("Position in stream");
     expect(off).not.toContain("CBC competency ratings");
     expect(off).not.toContain("Parent / Guardian");
     expect(off).toContain("Average:");
+  });
+
+  it("prints the attendance summary, head teacher comment and parent acknowledgement only when present/enabled", () => {
+    const plain = html([doc()]);
+    for (const absent of ["Attendance this term", "Head teacher", "Parent / Guardian acknowledgement"]) expect(plain).not.toContain(absent);
+
+    const full = html([
+      doc({
+        attendance: { presentDays: 50, lateDays: 2, absentDays: 3, recordedDays: 55, attendancePercent: 94.5 },
+        headTeacherComment: "A pleasure to teach.",
+        options: { showRank: true, showCompetencies: true, showSignatures: true, showAcknowledgement: true },
+      }),
+    ]);
+    expect(full).toContain("Attendance this term");
+    expect(full).toContain("52 of 55 recorded days attended");
+    expect(full).toContain("94.5%");
+    expect(full).toContain("Head teacher");
+    expect(full).toContain("A pleasure to teach.");
+    expect(full).toContain("Parent / Guardian acknowledgement");
+    expect(full).toContain("I confirm that I have received and read this report.");
+  });
+
+  it("the acknowledgement shows even when signature lines are switched off (they are independent options)", () => {
+    const out = html([doc({ options: { showRank: true, showCompetencies: true, showSignatures: false, showAcknowledgement: true } })]);
+    expect(out).toContain("Parent / Guardian acknowledgement");
+    expect(out).not.toContain("Class teacher (signature");
   });
 });
 

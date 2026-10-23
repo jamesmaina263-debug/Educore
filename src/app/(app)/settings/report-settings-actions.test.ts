@@ -7,7 +7,7 @@ vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 
 const { updateReportSettings } = await import("./report-settings-actions");
 
-const valid = { rankingEnabled: false, showCompetencyRatings: true, showSignatures: true, showClassStatistics: true };
+const valid = { rankingEnabled: false, showCompetencyRatings: true, showSignatures: true, showClassStatistics: true, showAttendance: true, showHeadTeacherComment: true, showParentAcknowledgement: false };
 function client(opts: { user?: unknown; rpcError?: { message: string } | null } = {}) {
   const rpc = vi.fn().mockResolvedValue({ error: opts.rpcError ?? null });
   const from = vi.fn();
@@ -30,7 +30,15 @@ describe("updateReportSettings", () => {
     mockCreateClient.mockResolvedValue(c);
     expect(await updateReportSettings(valid)).toEqual({ success: true });
     expect(rpc).toHaveBeenCalledWith("update_report_settings", {
-      p_settings: { ranking_enabled: false, show_competency_ratings: true, show_signatures: true, show_class_statistics: true },
+      p_settings: {
+        ranking_enabled: false,
+        show_competency_ratings: true,
+        show_signatures: true,
+        show_class_statistics: true,
+        show_attendance: true,
+        show_head_teacher_comment: true,
+        show_parent_acknowledgement: false,
+      },
     });
     expect(from).not.toHaveBeenCalled(); // never writes schools directly (that would need branding permission)
   });

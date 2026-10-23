@@ -79,7 +79,7 @@ export default async function PortalPage({ searchParams }: { searchParams: Promi
     supabase.from("terms").select("id, start_date, end_date").eq("status", "active").maybeSingle(),
     supabase
       .from("report_cards")
-      .select("comment, generated_at, exam_id, exams(name, term_id), class_rankings(average_score, rank_in_stream)")
+      .select("id, comment, generated_at, exam_id, exams(name, term_id), class_rankings(average_score, rank_in_stream)")
       .eq("student_id", selected.id)
       .in("comment_source", ["teacher_approved", "teacher_written"])
       .order("generated_at", { ascending: false })
@@ -308,6 +308,7 @@ export default async function PortalPage({ searchParams }: { searchParams: Promi
     .limit(12);
 
   const rc = latestReportCard as unknown as {
+    id: string;
     comment: string | null;
     generated_at: string;
     exam_id: string;
@@ -315,6 +316,13 @@ export default async function PortalPage({ searchParams }: { searchParams: Promi
     class_rankings: { average_score: number; rank_in_stream: number } | { average_score: number; rank_in_stream: number }[] | null;
   } | null;
   const ranking = rc?.class_rankings ? (Array.isArray(rc.class_rankings) ? rc.class_rankings[0] : rc.class_rankings) : null;
+
+  // The head teacher's comment on the same released card. RLS lets a guardian read it only because they
+  // can already read the (released) report card itself.
+  const { data: headCommentRow } =
+    rc && reportSettings.showHeadTeacherComment
+      ? await supabase.from("report_card_head_comments").select("comment").eq("report_card_id", rc.id).maybeSingle()
+      : { data: null };
 
   // Sub-strand CBC competency breakdown for that same released report card, if this class
   // uses the CBC (band-based) grading model -- an empty array for a purely numeric class is
@@ -498,6 +506,11 @@ export default async function PortalPage({ searchParams }: { searchParams: Promi
               {ranking && ` — Average ${ranking.average_score}${reportSettings.rankingEnabled ? `, Rank ${ranking.rank_in_stream} in stream` : ""}`}
             </p>
             {rc.comment && <p className="mt-1 text-sm text-muted-foreground">{rc.comment}</p>}
+            {headCommentRow?.comment && (
+              <p className="mt-1 text-sm text-muted-foreground">
+                <span className="font-medium">Head teacher:</span> {headCommentRow.comment}
+              </p>
+            )}
             <Link href={`/portal/report-cards/${rc.exam_id}?child=${selected.id}`} className="mt-2 inline-block text-sm font-medium underline underline-offset-2">
               View &amp; print full report card
             </Link>
