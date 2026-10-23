@@ -55,7 +55,17 @@ export const config = {
   // invocation + a Supabase client per hit (including every crawler hit). "/" itself stays
   // matched on purpose (rootAuthFallback). src/proxy.test.ts keeps this list in sync with the
   // real (marketing) folders and proves every app/auth/api path is still matched.
+  //
+  // Machine-to-machine API routes are excluded too (api/cron, api/webhooks, api/page-view,
+  // api/outreach-link, api/csp-report, api/unsubscribe). None reads the Supabase session: crons
+  // authenticate with a bearer secret, the Resend webhook with its Svix signature, the page-view
+  // and outreach-link beacons use a plain flag cookie, csp-report/unsubscribe are public. For an
+  // /api path the proxy did nothing but refresh session cookies ("api" is not a protected,
+  // maintenance-gated or slug-routed segment), so each hit just cost an extra function
+  // invocation. The session-using routes (api/admin/*, api/billing/*, api/sentry-check) and any
+  // NEW api route stay behind the proxy by default. src/proxy.test.ts enforces both directions,
+  // including that no excluded route imports the session client.
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|sw\\.js|offline\\.html|manifest\\.webmanifest|robots\\.txt|sitemap\\.xml|(?:about|ai-automation|blog|brochure|cbc-school-management|contact|faq|finance-fees|parent-communication|platform|pricing|privacy|school-attendance-management|security|solutions|student-management-system|student-performance-appraisal|teacher-performance-management|terms)(?:/|$)|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|txt|xml|json|webmanifest|pdf|doc|docx|zip)$).*)",
+    "/((?!_next/static|_next/image|favicon.ico|sw\\.js|offline\\.html|manifest\\.webmanifest|robots\\.txt|sitemap\\.xml|(?:about|ai-automation|blog|brochure|cbc-school-management|contact|faq|finance-fees|parent-communication|platform|pricing|privacy|school-attendance-management|security|solutions|student-management-system|student-performance-appraisal|teacher-performance-management|terms)(?:/|$)|api/(?:cron|webhooks|page-view|outreach-link|csp-report|unsubscribe)(?:/|$)|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|txt|xml|json|webmanifest|pdf|doc|docx|zip)$).*)",
   ],
 };
