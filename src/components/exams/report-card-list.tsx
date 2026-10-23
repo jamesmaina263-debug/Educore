@@ -9,6 +9,7 @@ import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@
 import { generateReportCards, approveComment, writeComment, draftCommentWithAI } from "@/app/(app)/exams/report-cards/actions";
 import { ReportCardInsightsPanel } from "@/components/exams/report-card-insights-panel";
 import { RemarkBankPicker } from "@/components/exams/remark-bank-picker";
+import { HeadTeacherCommentEditor } from "@/components/exams/head-teacher-comment-editor";
 import type { ReportCardInsights } from "@/lib/academics/report-card-insights";
 
 export interface StudentMarkLine {
@@ -33,6 +34,9 @@ export interface ReportCardRow {
   average_score: number | null;
   insights: ReportCardInsights;
   report_card: {
+    id?: string;
+    /** The head teacher's comment, when the school shows that section and one was written. */
+    head_comment?: string | null;
     comment: string | null;
     comment_source: "none" | "ai" | "teacher_approved" | "teacher_written";
   } | null;
@@ -45,6 +49,8 @@ export function ReportCardList({
   canGenerate,
   canApprove,
   rankingEnabled = true,
+  headCommentEnabled = false,
+  canCommentHead = false,
 }: {
   examId: string;
   classId: string;
@@ -53,6 +59,10 @@ export function ReportCardList({
   canApprove: boolean;
   /** School setting: when false the Rank text is hidden (the average still shows). */
   rankingEnabled?: boolean;
+  /** School setting: show the head teacher comment section. */
+  headCommentEnabled?: boolean;
+  /** Caller holds report_cards.comment_head. */
+  canCommentHead?: boolean;
 }) {
   const router = useRouter();
   const [pending, setPending] = useState(false);
@@ -255,6 +265,10 @@ export function ReportCardList({
                     <p className="text-sm text-muted-foreground">No comment yet.</p>
                   )}
                 </div>
+              )}
+
+              {r.report_card?.id && headCommentEnabled && (
+                <HeadTeacherCommentEditor reportCardId={r.report_card.id} initial={r.report_card.head_comment ?? ""} canEdit={canCommentHead} />
               )}
             </div>
           ))}

@@ -122,6 +122,13 @@ function ReportCardPage({ data }: { data: ReportCardDocumentData }) {
           <p style={{ fontSize: 12, color: "#71717a" }}>No marks recorded for this exam.</p>
         )}
 
+        {data.attendance && (
+          <p style={{ margin: "0 0 16px", padding: "6px 8px", border: "1px solid #e4e4e7", borderRadius: 6, fontSize: 12 }}>
+            <strong>Attendance this term:</strong> {data.attendance.presentDays + data.attendance.lateDays} of {data.attendance.recordedDays} recorded days attended (
+            {data.attendance.attendancePercent}%) &middot; Present {data.attendance.presentDays} &middot; Late {data.attendance.lateDays} &middot; Absent {data.attendance.absentDays}
+          </p>
+        )}
+
         {data.competencies.length > 0 && data.options.showCompetencies && (
           <>
             <p style={{ margin: "0 0 6px", fontSize: 12, fontWeight: 600 }}>CBC competency ratings</p>
@@ -140,10 +147,32 @@ function ReportCardPage({ data }: { data: ReportCardDocumentData }) {
           </>
         )}
 
-        <div style={{ border: "1px solid #e4e4e7", borderRadius: 6, padding: 12, marginBottom: 24, minHeight: 56 }}>
+        <div style={{ border: "1px solid #e4e4e7", borderRadius: 6, padding: 12, marginBottom: data.headTeacherComment ? 12 : 24, minHeight: 56 }}>
           <p style={{ margin: "0 0 4px", fontSize: 12, fontWeight: 600 }}>Class teacher&apos;s comment</p>
           <p style={{ margin: 0, fontSize: 12, whiteSpace: "pre-wrap" }}>{data.comment ?? (data.released ? "—" : "Pending approval.")}</p>
         </div>
+
+        {data.headTeacherComment && (
+          <div style={{ border: "1px solid #e4e4e7", borderRadius: 6, padding: 12, marginBottom: 24, minHeight: 56 }}>
+            <p style={{ margin: "0 0 4px", fontSize: 12, fontWeight: 600 }}>Head teacher&apos;s comment</p>
+            <p style={{ margin: 0, fontSize: 12, whiteSpace: "pre-wrap" }}>{data.headTeacherComment}</p>
+          </div>
+        )}
+
+        {data.options.showAcknowledgement && (
+          <div style={{ border: "1px solid #e4e4e7", borderRadius: 6, padding: 12, marginBottom: 24, fontSize: 11, color: "#3f3f46" }}>
+            <p style={{ margin: "0 0 14px", fontWeight: 600, fontSize: 12 }}>Parent / Guardian acknowledgement</p>
+            <p style={{ margin: "0 0 14px" }}>I confirm that I have received and read this report.</p>
+            <div style={{ display: "flex", gap: 24 }}>
+              {["Name", "Signature", "Date"].map((label) => (
+                <div key={label} style={{ flex: 1 }}>
+                  <div style={{ borderBottom: "1px solid #71717a", height: 18 }} />
+                  <p style={{ margin: "4px 0 0" }}>{label}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {data.options.showSignatures && (
           <div style={{ display: "flex", gap: 24, fontSize: 11, color: "#52525b", marginTop: 28 }}>

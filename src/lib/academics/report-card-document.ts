@@ -53,8 +53,35 @@ export interface ReportCardDocumentData {
   released: boolean;
   /** Only ever the released comment (see releasedComment). */
   comment: string | null;
-  /** The school's report options (report-settings.ts); all default to on. */
-  options: { showRank: boolean; showCompetencies: boolean; showSignatures: boolean };
+  /** Term attendance from the register; null when the section is off or the register has no records for this learner in the term. */
+  attendance: AttendanceSummary | null;
+  /** The head teacher's comment; null when none was written or the section is off. */
+  headTeacherComment: string | null;
+  /** The school's report options (report-settings.ts). */
+  options: { showRank: boolean; showCompetencies: boolean; showSignatures: boolean; showAcknowledgement: boolean };
+}
+
+export interface AttendanceSummary {
+  presentDays: number;
+  lateDays: number;
+  absentDays: number;
+  /** Days with a register entry in the term. A learner with none has no summary at all. */
+  recordedDays: number;
+  /** (present + late) / recorded, one decimal place. */
+  attendancePercent: number;
+}
+
+/** One summary row -> the printed figures. No recorded days = no summary (never a made-up 0%). */
+export function summariseAttendance(row: { present_days: number; late_days: number; absent_days: number; recorded_days: number } | null | undefined): AttendanceSummary | null {
+  if (!row || !(row.recorded_days > 0)) return null;
+  const attended = row.present_days + row.late_days;
+  return {
+    presentDays: row.present_days,
+    lateDays: row.late_days,
+    absentDays: row.absent_days,
+    recordedDays: row.recorded_days,
+    attendancePercent: Math.round((attended / row.recorded_days) * 1000) / 10,
+  };
 }
 
 type Client = Awaited<ReturnType<typeof createClient>>;
@@ -67,7 +94,7 @@ export async function loadReportCardDocuments(
   scope: ReportCardScope,
   opts: { includeClassSize?: boolean } = {},
 ): Promise<ReportCardDocumentData[]> {
-  let cardQuery = supabase.from("report_cards").select("student_id, class_id, comment, comment_source").eq("exam_id", examId);
+  let cardQuery = supabase.from("report_cards").select("id, student_id, class_id, comment, comment_source").eq("exam_id", examId);
   if ("classId" in scope) cardQuery = cardQuery.eq("class_id", scope.classId);
   if ("studentId" in scope) cardQuery = cardQuery.eq("student_id", scope.studentId);
   const { data: cards } = await cardQuery;
@@ -117,6 +144,18 @@ export async function loadReportCardDocuments(
       }
     }
   }
+  // Optional sections: only queried when the school switched them on. Both run under the caller's
+  // own RLS, so a section the caller may not read comes back empty and is simply left out.
+  const [attendanceRes, headCommentRes] = await Promise.all([
+    settings.showAttendance ? supabase.rpc("report_card_attendance_summary", { p_exam_id: examId, p_student_ids: studentIds }) : Promise.resolve({ data: null }),
+    settings.showHeadTeacherComment
+      ? supabase.from("report_card_head_comments").select("report_card_id, comment").in("report_card_id", cards.map((c) => c.id as string))
+      : Promise.resolve({ data: null }),
+  ]);
+  const attendanceByStudent = new Map(
+    ((attendanceRes.data ?? []) as { student_id: string; present_days: number; late_days: number; absent_days: number; recorded_days: number }[]).map((r) => [r.student_id, r]),
+  );
+  const headCommentByCard = new Map(((headCommentRes.data ?? []) as { report_card_id: string; comment: string }[]).map((r) => [r.report_card_id, r.comment]));
   const generatedAt = new Date().toISOString();
 
   const one = <T,>(v: T | T[] | null | undefined): T | null => (Array.isArray(v) ? (v[0] ?? null) : (v ?? null));
@@ -181,7 +220,14 @@ export async function loadReportCardDocuments(
       rank: rank?.rank_in_stream ?? null,
       released: isReleased(card?.comment_source),
       comment: releasedComment(card?.comment_source, card?.comment),
-      options: { showRank: settings.rankingEnabled, showCompetencies: settings.showCompetencyRatings, showSignatures: settings.showSignatures },
+      attendance: settings.showAttendance ? summariseAttendance(attendanceByStudent.get(id)) : null,
+      headTeacherComment: settings.showHeadTeacherComment && card ? (headCommentByCard.get(card.id as string) ?? null) : null,
+      options: {
+        showRank: settings.rankingEnabled,
+        showCompetencies: settings.showCompetencyRatings,
+        showSignatures: settings.showSignatures,
+        showAcknowledgement: settings.showParentAcknowledgement,
+      },
     };
   });
 

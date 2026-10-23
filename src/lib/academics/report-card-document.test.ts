@@ -1,10 +1,14 @@
 import { describe, it, expect } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { isReleased, releasedComment, loadReportCardDocuments } from "./report-card-document";
+import { isReleased, releasedComment, loadReportCardDocuments, summariseAttendance } from "./report-card-document";
 
 function fakeSupabase(results: Record<string, unknown>) {
   const calls: string[] = [];
   const client = {
+    rpc(name: string) {
+      calls.push(`rpc:${name}`);
+      return Promise.resolve({ data: results[`rpc:${name}`] ?? null, error: null });
+    },
     from(table: string) {
       const proxy: unknown = new Proxy(
         {},
@@ -127,9 +131,67 @@ describe("loadReportCardDocuments", () => {
   it("takes the display options from the school's report settings (defaults when none are stored)", async () => {
     const cards = [{ student_id: "s1", comment: "ok", comment_source: "teacher_approved" }];
     const plain = fakeSupabase({ ...base, report_cards: cards });
-    expect((await loadReportCardDocuments(plain.client, "e1", { studentId: "s1" }))[0].options).toEqual({ showRank: true, showCompetencies: true, showSignatures: true });
+    expect((await loadReportCardDocuments(plain.client, "e1", { studentId: "s1" }))[0].options).toEqual({ showRank: true, showCompetencies: true, showSignatures: true, showAcknowledgement: false });
     const custom = fakeSupabase({ ...base, schools: { ...base.schools, report_settings: { ranking_enabled: false, show_signatures: false } }, report_cards: cards });
-    expect((await loadReportCardDocuments(custom.client, "e1", { studentId: "s1" }))[0].options).toEqual({ showRank: false, showCompetencies: true, showSignatures: false });
+    expect((await loadReportCardDocuments(custom.client, "e1", { studentId: "s1" }))[0].options).toEqual({ showRank: false, showCompetencies: true, showSignatures: false, showAcknowledgement: false });
+  });
+
+  it("by default attendance is off (no query, no section) and a card with no head comment shows none", async () => {
+    const f = fakeSupabase({ ...base, report_cards: [{ id: "rc1", student_id: "s1", comment: "ok", comment_source: "teacher_approved" }] });
+    const [doc] = await loadReportCardDocuments(f.client, "e1", { studentId: "s1" });
+    expect(doc.attendance).toBeNull();
+    expect(f.calls).not.toContain("rpc:report_card_attendance_summary"); // opt-in: no query unless the school enabled it
+    expect(doc.headTeacherComment).toBeNull(); // default-on section, but nothing is printed until a comment exists
+  });
+
+  it("when switched on, loads the term attendance and the head teacher comment under the caller's access", async () => {
+    const f = fakeSupabase({
+      ...base,
+      schools: { ...base.schools, report_settings: { show_attendance: true, show_head_teacher_comment: true } },
+      report_cards: [
+        { id: "rc1", student_id: "s1", comment: "ok", comment_source: "teacher_approved" },
+        { id: "rc2", student_id: "s2", comment: "ok", comment_source: "teacher_approved" },
+      ],
+      "rpc:report_card_attendance_summary": [{ student_id: "s1", present_days: 2, late_days: 1, absent_days: 1, recorded_days: 4 }],
+      report_card_head_comments: [{ report_card_id: "rc1", comment: "A pleasure to teach." }],
+    });
+    const docs = await loadReportCardDocuments(f.client, "e1", { classId: "c1" });
+    const s1 = docs.find((d) => d.student.id === "s1")!;
+    const s2 = docs.find((d) => d.student.id === "s2")!;
+    expect(s1.attendance).toEqual({ presentDays: 2, lateDays: 1, absentDays: 1, recordedDays: 4, attendancePercent: 75 });
+    expect(s1.headTeacherComment).toBe("A pleasure to teach.");
+    expect(s2.attendance).toBeNull(); // no register rows => section left out, never a fake 0%
+    expect(s2.headTeacherComment).toBeNull();
+  });
+
+  it("the head teacher comment section can be switched off", async () => {
+    const f = fakeSupabase({
+      ...base,
+      schools: { ...base.schools, report_settings: { show_head_teacher_comment: false } },
+      report_cards: [{ id: "rc1", student_id: "s1", comment: "ok", comment_source: "teacher_approved" }],
+      report_card_head_comments: [{ report_card_id: "rc1", comment: "hidden" }],
+    });
+    const [doc] = await loadReportCardDocuments(f.client, "e1", { studentId: "s1" });
+    expect(doc.headTeacherComment).toBeNull();
+    expect(f.calls).not.toContain("report_card_head_comments.select");
+  });
+
+  it("the parent acknowledgement option is read from the settings", async () => {
+    const f = fakeSupabase({ ...base, schools: { ...base.schools, report_settings: { show_parent_acknowledgement: true } }, report_cards: [{ id: "rc1", student_id: "s1", comment: "ok", comment_source: "teacher_approved" }] });
+    expect((await loadReportCardDocuments(f.client, "e1", { studentId: "s1" }))[0].options.showAcknowledgement).toBe(true);
   });
 });
 
+describe("summariseAttendance", () => {
+  it("counts present and late as attended and rounds to one decimal", () => {
+    expect(summariseAttendance({ present_days: 50, late_days: 2, absent_days: 3, recorded_days: 55 })).toEqual({ presentDays: 50, lateDays: 2, absentDays: 3, recordedDays: 55, attendancePercent: 94.5 });
+  });
+  it("no row or no recorded days means no summary: never a made-up 0% or 100%", () => {
+    expect(summariseAttendance(null)).toBeNull();
+    expect(summariseAttendance(undefined)).toBeNull();
+    expect(summariseAttendance({ present_days: 0, late_days: 0, absent_days: 0, recorded_days: 0 })).toBeNull();
+  });
+  it("a learner who was absent every recorded day really is 0%", () => {
+    expect(summariseAttendance({ present_days: 0, late_days: 0, absent_days: 5, recorded_days: 5 })?.attendancePercent).toBe(0);
+  });
+});
