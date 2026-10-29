@@ -67,6 +67,12 @@ verify_jwt = false
 [functions.send-platform-invoice]
 verify_jwt = false
 
+# One-time welcome email to a newly registered school. verify_jwt is false: it is called
+# server-to-server by the signup server action and authenticated inside the function by the
+# x-dispatch-secret header (DISPATCH_SECRET), same pattern as send-platform-invoice's cron path.
+[functions.send-school-welcome]
+verify_jwt = false
+
 [functions.verify-otp]
 verify_jwt = false
 

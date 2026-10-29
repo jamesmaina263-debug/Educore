@@ -11,6 +11,7 @@ import { getRealClientIp } from "@/lib/get-real-client-ip";
 import { sendSecurityAlert } from "@/lib/security-alert";
 import { safeStorageFilename } from "@/lib/storage-path";
 import { generateTemporaryPassword } from "@/lib/temporary-password";
+import { sendSchoolWelcomeEmail } from "@/lib/signup-welcome-email";
 import { verifyTurnstileToken } from "@/lib/turnstile";
 import { parseAttributionFormData } from "@/lib/marketing/attribution-fields";
 import {
@@ -484,6 +485,13 @@ export async function signUpSchool(
     emailSent = false;
     console.error("signup: set-password email threw", e instanceof Error ? e.message : e);
   }
+
+  // ---- 7. Welcome email (best-effort -- never fails or delays the signup) ----
+  // A separate, one-time email from the set-password one above. The Edge Function claims
+  // schools.welcome_email_sent_at atomically, so a retried or replayed signup cannot send it twice,
+  // and it never throws here: whatever happens, the school is already registered and the owner can
+  // still verify, set a password and sign in.
+  await sendSchoolWelcomeEmail(school.id);
 
   return {
     error: null,
