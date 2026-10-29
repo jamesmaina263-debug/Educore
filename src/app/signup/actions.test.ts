@@ -9,6 +9,7 @@ const h = vi.hoisted(() => {
   const resetPasswordForEmail = vi.fn();
   const verifyTurnstileToken = vi.fn();
   const sendSecurityAlert = vi.fn();
+  const sendSchoolWelcomeEmail = vi.fn();
   const state = { origin: "https://www.educoreafrica.com" };
 
   function builder(table: string) {
@@ -27,7 +28,7 @@ const h = vi.hoisted(() => {
     return b;
   }
   const admin = { from: (t: string) => builder(t), rpc, auth: { admin: { createUser, deleteUser } } };
-  return { state, calls, results, createUser, deleteUser, rpc, resetPasswordForEmail, verifyTurnstileToken, sendSecurityAlert, admin };
+  return { state, calls, results, createUser, deleteUser, rpc, resetPasswordForEmail, verifyTurnstileToken, sendSecurityAlert, sendSchoolWelcomeEmail, admin };
 });
 
 vi.mock("next/headers", () => ({
@@ -39,6 +40,7 @@ vi.mock("@/lib/supabase/server", () => ({
 }));
 vi.mock("@/lib/turnstile", () => ({ verifyTurnstileToken: h.verifyTurnstileToken }));
 vi.mock("@/lib/security-alert", () => ({ sendSecurityAlert: h.sendSecurityAlert }));
+vi.mock("@/lib/signup-welcome-email", () => ({ sendSchoolWelcomeEmail: h.sendSchoolWelcomeEmail }));
 
 const { signUpSchool } = await import("./actions");
 
@@ -68,6 +70,7 @@ describe("signUpSchool", () => {
     h.verifyTurnstileToken.mockResolvedValue(true);
     h.createUser.mockResolvedValue({ data: { user: { id: "abcdef123456" } }, error: null });
     h.resetPasswordForEmail.mockResolvedValue({ error: null });
+    h.sendSchoolWelcomeEmail.mockResolvedValue({ sent: true });
     h.deleteUser.mockResolvedValue({ error: null });
     h.results["subscription_plans.maybeSingle"] = { data: { id: "p1", code: "starter" } };
     h.results["schools.single"] = { data: { id: "s1" }, error: null };
@@ -126,6 +129,41 @@ describe("signUpSchool", () => {
   it("treats a thrown email error the same way", async () => {
     h.resetPasswordForEmail.mockRejectedValue(new Error("smtp down"));
     expect(await signUpSchool({ error: null }, form())).toMatchObject({ success: true, emailSent: false });
+  });
+
+  describe("welcome email", () => {
+    it("asks for the welcome email once, for the school that was just created, after the set-password email", async () => {
+      const res = await signUpSchool({ error: null }, form());
+      expect(res).toMatchObject({ success: true, emailSent: true });
+      expect(h.sendSchoolWelcomeEmail).toHaveBeenCalledTimes(1);
+      expect(h.sendSchoolWelcomeEmail).toHaveBeenCalledWith("s1");
+      // The existing set-password email is untouched and still goes out.
+      expect(h.resetPasswordForEmail).toHaveBeenCalledTimes(1);
+      expect(h.resetPasswordForEmail.mock.invocationCallOrder[0]).toBeLessThan(h.sendSchoolWelcomeEmail.mock.invocationCallOrder[0]);
+    });
+
+    it("does not fail or change the signup result when the welcome email is not sent", async () => {
+      h.sendSchoolWelcomeEmail.mockResolvedValue({ sent: false, reason: "status_502" });
+      const res = await signUpSchool({ error: null }, form());
+      expect(res).toEqual({ error: null, success: true, schoolName: "Sunrise Academy", email: "jane@sunrise.ac.ke", emailSent: true });
+      expect(h.deleteUser).not.toHaveBeenCalled();
+    });
+
+    it("still sends the welcome email when the set-password email failed (the account exists either way)", async () => {
+      h.resetPasswordForEmail.mockResolvedValue({ error: { status: 429 } });
+      const res = await signUpSchool({ error: null }, form());
+      expect(res).toMatchObject({ success: true, emailSent: false });
+      expect(h.sendSchoolWelcomeEmail).toHaveBeenCalledWith("s1");
+    });
+
+    it("sends nothing when registration fails, is a bot, or is rejected", async () => {
+      h.results["schools.single"] = { data: null, error: { message: "boom" } };
+      expect((await signUpSchool({ error: null }, form())).error).toBe("boom");
+      h.createUser.mockResolvedValue({ data: { user: null }, error: { message: "A user with this email address has already been registered" } });
+      expect((await signUpSchool({ error: null }, form())).error).toMatch(/already exists/);
+      expect(await signUpSchool({ error: null }, form({ company_website: "http://spam" }))).toMatchObject({ honeypot: true });
+      expect(h.sendSchoolWelcomeEmail).not.toHaveBeenCalled();
+    });
   });
 
   it.each([
