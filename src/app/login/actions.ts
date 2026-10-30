@@ -162,6 +162,15 @@ export async function login(
     }
   }
 
+  // Onboarding monitor: record this successful sign-in (one row per person per Nairobi day; the database
+  // function takes no arguments and derives the person from the session, so it is idempotent and cannot be
+  // pointed at someone else). Best-effort on purpose: a login must never fail or slow down because of it.
+  try {
+    await supabase.rpc("record_school_login");
+  } catch {
+    // Ignore -- the monitor also treats real app use (last_seen_at) as login evidence.
+  }
+
   // Slug is cosmetic (see school-slug-cookie.ts) -- never block or fail the
   // login itself if this lookup has any trouble. The actual redirect() call is
   // deliberately kept outside this try/catch: redirect() works by throwing, so a bare
