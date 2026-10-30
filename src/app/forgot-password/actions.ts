@@ -6,6 +6,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getRealClientIp } from "@/lib/get-real-client-ip";
 import { sendSecurityAlert } from "@/lib/security-alert";
 import { resolveAuthRedirectOrigin } from "@/lib/auth/reset-link";
+import { EMAIL_SEND_FAILED_MESSAGE } from "@/lib/auth/password-messages";
 
 export type ForgotPasswordState = { error: string | null; sent: boolean };
 
@@ -31,7 +32,7 @@ export async function requestPasswordReset(
     return { error: "Enter your email address.", sent: false };
   }
 
-  // Rate limiting: tighter than login's (20/hr IP, 10/hr email) because this
+  // Rate limiting: per-email is tighter than login's (10/hr) because this
   // endpoint triggers a real outbound email through Supabase's shared SMTP
   // (rate-limited on their end too, and a soft-launch-scale project like
   // this one hasn't set up a custom SMTP provider yet -- see the note left
@@ -45,7 +46,7 @@ export async function requestPasswordReset(
     const [{ data: withinIpLimit }, { data: withinEmailLimit }] = await Promise.all([
       adminClient.rpc("increment_and_check_rate_limit", {
         p_bucket: `password-reset-ip:${clientIp}`,
-        p_max_events: 10,
+        p_max_events: 30,
         p_window_seconds: 3600,
       }),
       adminClient.rpc("increment_and_check_rate_limit", {
@@ -56,7 +57,7 @@ export async function requestPasswordReset(
     ]);
     if (withinIpLimit === false || withinEmailLimit === false) {
       void sendSecurityAlert("Password reset rate limit tripped", {
-        limit: withinIpLimit === false ? "per-IP (10/hr)" : "per-email (3/hr)",
+        limit: withinIpLimit === false ? "per-IP (30/hr)" : "per-email (3/hr)",
         ip: clientIp,
         email_domain: email.toLowerCase().split("@").at(-1) ?? "unknown",
       });
@@ -80,10 +81,22 @@ export async function requestPasswordReset(
   // is, by design, always unauthenticated -- there is no point in this function where a session
   // exists to tag, so the call would be a guaranteed no-op every single time, not worth the extra
   // round trip on a rate-limited endpoint.
-  const supabase = await createClient();
-  await supabase.auth.resetPasswordForEmail(email, {
-    redirectTo: `${origin}/auth/confirm?next=/reset-password`,
-  });
+  // Surface a real send failure instead of always saying "sent". Supabase returns success for an
+  // address that has no account, so a failure here (rate limit, SMTP problem) is not about whether
+  // the account exists and showing it does not undo the anti-enumeration behaviour above.
+  try {
+    const supabase = await createClient();
+    const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${origin}/auth/confirm?next=/reset-password`,
+    });
+    if (resetError) {
+      console.error("forgot-password: reset email failed", resetError.status ?? resetError.code);
+      return { error: EMAIL_SEND_FAILED_MESSAGE, sent: false };
+    }
+  } catch (e) {
+    console.error("forgot-password: reset email threw", e instanceof Error ? e.message : e);
+    return { error: EMAIL_SEND_FAILED_MESSAGE, sent: false };
+  }
 
   return { error: null, sent: true };
 }
