@@ -578,7 +578,7 @@ $$;
 -- ============================================================
 -- Scheduled evaluation (service role only): raise alerts, clear resolved ones, queue the two emails.
 -- ============================================================
-create or replace function public.onboarding_run_rules()
+create or replace function public.onboarding_run_rules(p_queue_emails boolean default true)
 returns jsonb
 language plpgsql
 security definer
@@ -650,7 +650,9 @@ begin
 
   -- 3. Automatic service emails: only when a super admin has approved the templates and switched everything on,
   -- and only for schools registered since automation_start_at.
-  v_active := public._onboarding_automation_active();
+  -- p_queue_emails=false lets the caller run alerts only (e.g. when the send path is not configured), so
+  -- nothing is queued that could not be sent and quietly use up the trial-nudge frequency caps.
+  v_active := public._onboarding_automation_active() and coalesce(p_queue_emails, true);
   if v_active then
     for x in
       select r.school_id, r.status, r.registered_at, r.password_changed_at
@@ -1262,11 +1264,11 @@ revoke all on function public._onboarding_automation_active() from public, anon,
 revoke all on function public._onboarding_rows() from public, anon, authenticated;
 revoke all on function public._onboarding_queue_email(uuid, text) from public, anon, authenticated;
 revoke all on function public._onboarding_require_member(uuid) from public, anon, authenticated;
-revoke all on function public.onboarding_run_rules() from public, anon, authenticated;
+revoke all on function public.onboarding_run_rules(boolean) from public, anon, authenticated;
 revoke all on function public.onboarding_pending_sends(integer) from public, anon, authenticated;
 revoke all on function public.onboarding_recheck_before_send(uuid) from public, anon, authenticated;
 revoke all on function public.onboarding_record_delivery(uuid, boolean, text) from public, anon, authenticated;
-grant execute on function public.onboarding_run_rules() to service_role;
+grant execute on function public.onboarding_run_rules(boolean) to service_role;
 grant execute on function public.onboarding_pending_sends(integer) to service_role;
 grant execute on function public.onboarding_recheck_before_send(uuid) to service_role;
 grant execute on function public.onboarding_record_delivery(uuid, boolean, text) to service_role;
