@@ -269,3 +269,67 @@ describe("getOverviewStats", () => {
     });
   });
 });
+
+describe("runReport concurrency and 429 backoff", () => {
+  const range: [string, string] = ["2026-10-17", "2026-10-17"];
+  const rateLimited = { ok: false, status: 429, json: async () => ({}), text: async () => "quota exhausted" };
+  const okResponse = { ok: true, status: 200, json: async () => ({ rowCount: 0 }), text: async () => "" };
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("never has more than four report calls in flight, and still completes them all", async () => {
+    let inFlight = 0;
+    let peak = 0;
+    const fetchMock = vi.fn(async () => {
+      inFlight++;
+      peak = Math.max(peak, inFlight);
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      inFlight--;
+      return okResponse;
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const { getOverviewStats } = await loadGa4();
+
+    const results = await Promise.all(Array.from({ length: 12 }, () => getOverviewStats(range)));
+
+    expect(results.every((r) => r !== null)).toBe(true);
+    expect(fetchMock).toHaveBeenCalledTimes(12);
+    expect(peak).toBeLessThanOrEqual(4);
+  });
+
+  it("retries a 429 after a short backoff and returns the data once Google accepts", async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi.fn().mockResolvedValueOnce(rateLimited).mockResolvedValue(okResponse);
+    vi.stubGlobal("fetch", fetchMock);
+    const { getOverviewStats } = await loadGa4();
+
+    const pending = getOverviewStats(range);
+    await vi.advanceTimersByTimeAsync(2000);
+
+    expect(await pending).not.toBeNull();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("gives up after three attempts on a persistent 429, returning null and logging it", async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi.fn().mockResolvedValue(rateLimited);
+    vi.stubGlobal("fetch", fetchMock);
+    const { getOverviewStats } = await loadGa4();
+
+    const pending = getOverviewStats(range);
+    await vi.advanceTimersByTimeAsync(5000);
+
+    expect(await pending).toBeNull();
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(console.error).toHaveBeenCalledWith(expect.stringContaining("429"));
+  });
+
+  it("does not retry errors other than 429", async () => {
+    const fetchMock = respondWith({ error: "denied" }, { ok: false, status: 403 });
+    const { getOverviewStats } = await loadGa4();
+    expect(await getOverviewStats(range)).toBeNull();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+});
