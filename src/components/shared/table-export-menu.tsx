@@ -68,11 +68,11 @@ function downloadBlob(content: BlobPart, filename: string, type: string) {
   URL.revokeObjectURL(url);
 }
 
-function exportCSV(rows: Record<string, string | number>[], filenameStub: string) {
+export function exportCSV(rows: Record<string, string | number>[], filenameStub: string) {
   downloadBlob(toCSV(rows), `${sanitize(filenameStub)}.csv`, "text/csv;charset=utf-8;");
 }
 
-async function exportExcel(rows: Record<string, string | number>[], filenameStub: string, sheetName: string) {
+export async function exportExcel(rows: Record<string, string | number>[], filenameStub: string, sheetName: string) {
   await downloadXlsxFromObjectRows(rows, sheetName, `${sanitize(filenameStub)}.xlsx`);
 }
 

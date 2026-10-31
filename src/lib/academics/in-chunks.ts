@@ -33,3 +33,26 @@ export async function selectInChunks<T>(
   }
   return results.flat();
 }
+
+/**
+ * Read every row of a query that can return more than the API's per-request cap (~1000). Pages are
+ * fetched in order with .range(); it stops at the first short page, so it is never worse than a single
+ * query (if the server's cap is lower than `pageSize` it returns what one query would have). The query
+ * MUST have a deterministic ORDER BY or pages can overlap or skip rows. A failed page throws.
+ */
+export async function selectAllPages<T>(
+  run: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: { message: string } | null }>,
+  pageSize = 1000,
+  maxPages = 50,
+): Promise<T[]> {
+  const all: T[] = [];
+  for (let page = 0; page < maxPages; page += 1) {
+    const from = page * pageSize;
+    const res = await run(from, from + pageSize - 1);
+    if (res.error) throw new Error(`Query failed: ${res.error.message}`);
+    const rows = res.data ?? [];
+    all.push(...rows);
+    if (rows.length < pageSize) break;
+  }
+  return all;
+}
