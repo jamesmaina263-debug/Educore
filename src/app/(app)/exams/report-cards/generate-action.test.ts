@@ -35,3 +35,34 @@ describe("generateReportCards", () => {
     expect(h.revalidate).not.toHaveBeenCalled();
   });
 });
+
+describe("generateReportCards: staff notification", () => {
+  const notifyCalls = () => h.rpc.mock.calls.filter((c) => c[0] === "notify_report_card_event");
+
+  it("tells the class teachers the cards are ready when new cards were created", async () => {
+    h.rpc.mockResolvedValue({ data: 5, error: null });
+    await generateReportCards("e1", "c1");
+    expect(notifyCalls()).toHaveLength(1);
+    expect(notifyCalls()[0][1]).toEqual({ p_event: "ready_for_comments", p_exam_id: "e1", p_class_id: "c1", p_stream_id: null, p_student_id: null });
+  });
+
+  it("stays quiet when nothing new was created (already complete)", async () => {
+    h.rpc.mockResolvedValue({ data: 0, error: null });
+    await generateReportCards("e1", "c1");
+    expect(notifyCalls()).toHaveLength(0);
+  });
+
+  it("stays quiet when generation failed", async () => {
+    h.rpc.mockResolvedValue({ data: null, error: { message: "Not authorized to generate report cards." } });
+    await generateReportCards("e1", "c1");
+    expect(notifyCalls()).toHaveLength(0);
+  });
+
+  it("a failing notification does not fail generation", async () => {
+    h.rpc.mockImplementation(async (name: string) => {
+      if (name === "notify_report_card_event") throw new Error("down");
+      return { data: 4, error: null };
+    });
+    expect(await generateReportCards("e1", "c1")).toEqual({ success: true, created: 4 });
+  });
+});

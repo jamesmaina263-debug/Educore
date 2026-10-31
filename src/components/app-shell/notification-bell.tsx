@@ -34,29 +34,42 @@ export function NotificationBell() {
   const [open, setOpen] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [clearing, setClearing] = useState(false);
+  // The exact unread total from the server (the list below is capped at 20), kept in step locally when
+  // something is read or cleared, and refreshed on a timer and when the tab regains focus.
+  const [unreadCount, setUnreadCount] = useState(0);
 
-  const unreadCount = notifications.filter((n) => !n.read_at).length;
   const actionRequiredCount = notifications.filter((n) => !n.read_at && n.action_url).length;
 
   async function load() {
     const result = await getMyInAppNotifications();
     if ("success" in result) {
       setNotifications(result.notifications);
+      setUnreadCount(result.unread_count);
       setLoaded(true);
     }
   }
 
   useEffect(() => {
     let cancelled = false;
-    getMyInAppNotifications().then((result) => {
-      if (cancelled) return;
-      if ("success" in result) {
+    const refresh = () => {
+      getMyInAppNotifications().then((result) => {
+        if (cancelled || !("success" in result)) return;
         setNotifications(result.notifications);
+        setUnreadCount(result.unread_count);
         setLoaded(true);
-      }
-    });
+      });
+    };
+    refresh();
+    // New notifications arrive while someone works (a colleague drafts or approves comments), so keep the
+    // count current: poll once a minute while the tab is visible, and refresh when it regains focus.
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === "visible") refresh();
+    }, 60_000);
+    window.addEventListener("focus", refresh);
     return () => {
       cancelled = true;
+      window.clearInterval(timer);
+      window.removeEventListener("focus", refresh);
     };
   }, []);
 
@@ -71,12 +84,14 @@ export function NotificationBell() {
     setClearing(false);
     if (result && "success" in result) {
       setNotifications([]);
+      setUnreadCount(0);
     }
   }
 
   async function handleClick(n: InAppNotification) {
     if (!n.read_at) {
       setNotifications((prev) => prev.map((x) => (x.id === n.id ? { ...x, read_at: new Date().toISOString() } : x)));
+      setUnreadCount((c) => Math.max(0, c - 1));
       await markNotificationReadAction(n.id);
     }
     if (n.action_url) {
@@ -88,12 +103,19 @@ export function NotificationBell() {
   return (
     <DropdownMenu open={open} onOpenChange={handleOpenChange}>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon" aria-label="Notifications" className="relative">
+        <Button
+          variant="ghost"
+          size="icon"
+          aria-label={unreadCount > 0 ? `Notifications, ${unreadCount} unread` : "Notifications"}
+          className="relative"
+        >
           <Bell className="size-4.5" />
           {unreadCount > 0 && (
             <span
-              className={`absolute right-1 top-1 flex size-2 rounded-full ${actionRequiredCount > 0 ? "bg-danger" : "bg-primary"}`}
-            />
+              className={`absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[0.625rem] font-semibold leading-none text-white ${actionRequiredCount > 0 ? "bg-danger" : "bg-primary"}`}
+            >
+              {unreadCount > 9 ? "9+" : unreadCount}
+            </span>
           )}
         </Button>
       </DropdownMenuTrigger>
