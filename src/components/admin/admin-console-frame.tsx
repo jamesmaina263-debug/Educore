@@ -25,6 +25,7 @@ import {
   FileUp,
   ShieldCheck,
   Hourglass,
+  ClipboardCheck,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -81,6 +82,7 @@ const NAV_GROUPS: AdminNavGroup[] = [
       { href: "/admin/leads", label: "Leads", icon: UserPlus },
       { href: "/admin/sales-pipeline", label: "Sales Pipeline", icon: Briefcase },
       { href: "/admin/trials", label: "Trial Follow-up", icon: Hourglass },
+      { href: "/admin/onboarding", label: "School Onboarding", icon: ClipboardCheck },
       { href: "/admin/outreach", label: "Outreach", icon: Compass },
     ],
   },
