@@ -133,14 +133,36 @@ export function filterStreamGroups(groups: StreamGroup[], query: string): Stream
     .filter((g) => g.students.length > 0);
 }
 
-export function summariseStream(students: StudentSummary[]): { total: number; approved: number; needsAttention: number; notGenerated: number } {
+export function summariseStream(students: StudentSummary[]): {
+  total: number;
+  approved: number;
+  needsAttention: number;
+  notGenerated: number;
+  /** Generated with no comment at all: what "Draft AI comments" would fill. */
+  draftable: number;
+  /** AI drafts waiting for a teacher, plus reset cards that kept their text: what "Approve" would release. */
+  approvable: number;
+} {
   let approved = 0;
   let needsAttention = 0;
   let notGenerated = 0;
+  let draftable = 0;
+  let approvable = 0;
   for (const s of students) {
     if (s.status === "approved") approved += 1;
     else if (s.status === "not_generated") notGenerated += 1;
     else needsAttention += 1;
+    if (s.status === "needs_comment") draftable += 1;
+    if (s.status === "ai_draft" || s.status === "needs_reapproval") approvable += 1;
   }
-  return { total: students.length, approved, needsAttention, notGenerated };
+  return { total: students.length, approved, needsAttention, notGenerated, draftable, approvable };
+}
+
+/**
+ * Which report cards a bulk "approve" may release: still unreleased (AI draft, or reset to 'none') AND
+ * carrying actual comment text. A card with no text is never approved in bulk: approving releases it
+ * to parents, so an empty comment must not go out.
+ */
+export function selectBulkApprovable<T extends { comment_source: string | null; comment: string | null }>(cards: T[]): T[] {
+  return cards.filter((c) => (c.comment_source === "ai" || c.comment_source === "none") && !!c.comment?.trim());
 }
