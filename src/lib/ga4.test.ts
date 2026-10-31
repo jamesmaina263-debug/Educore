@@ -279,15 +279,16 @@ describe("runReport concurrency and 429 backoff", () => {
     vi.useRealTimers();
   });
 
-  it("never has more than four report calls in flight, and still completes them all", async () => {
+  it("never has more than four requests in flight, and still completes every report", async () => {
     let inFlight = 0;
     let peak = 0;
-    const fetchMock = vi.fn(async () => {
+    const fetchMock = vi.fn(async (_url: string, init?: { body?: string }) => {
       inFlight++;
       peak = Math.max(peak, inFlight);
       await new Promise((resolve) => setTimeout(resolve, 5));
       inFlight--;
-      return okResponse;
+      const requests = JSON.parse(init?.body ?? "{}").requests ?? [];
+      return { ...okResponse, json: async () => ({ reports: requests.map(() => ({ rowCount: 0 })) }) };
     });
     vi.stubGlobal("fetch", fetchMock);
     const { getOverviewStats } = await loadGa4();
@@ -295,7 +296,8 @@ describe("runReport concurrency and 429 backoff", () => {
     const results = await Promise.all(Array.from({ length: 12 }, () => getOverviewStats(range)));
 
     expect(results.every((r) => r !== null)).toBe(true);
-    expect(fetchMock).toHaveBeenCalledTimes(12);
+    // 12 reports are sent as batches of 5, 5 and 2 -- three requests, not twelve.
+    expect(fetchMock).toHaveBeenCalledTimes(3);
     expect(peak).toBeLessThanOrEqual(4);
   });
 
@@ -331,5 +333,139 @@ describe("runReport concurrency and 429 backoff", () => {
     const { getOverviewStats } = await loadGa4();
     expect(await getOverviewStats(range)).toBeNull();
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("runReport batching (batchRunReports)", () => {
+  type FakeResponse = { ok: boolean; status: number; json: () => Promise<unknown>; text: () => Promise<string> };
+  // Each report's totals carry the start date it was asked for, so a test can tell that every
+  // caller received its own report back rather than a neighbour's.
+  function batchResponder(onBatch?: (requests: Array<{ dateRanges: Array<{ startDate: string }> }>) => void) {
+    return vi.fn(async (url: string, init?: { body?: string }) => {
+      const parsed = JSON.parse(init?.body ?? "{}");
+      const reportFor = (r: { dateRanges: Array<{ startDate: string }> }) => ({
+        totals: [{ metricValues: [r.dateRanges[0].startDate.slice(-2), "0", "0", "0", "0", "0"].map((value) => ({ value })) }],
+      });
+      let payload: unknown;
+      if (String(url).includes(":batchRunReports")) {
+        onBatch?.(parsed.requests);
+        payload = { reports: parsed.requests.map(reportFor) };
+      } else {
+        payload = reportFor(parsed);
+      }
+      return { ok: true, status: 200, json: async () => payload, text: async () => "" };
+    });
+  }
+
+  const day = (n: number): [string, string] => [`2026-10-${String(n).padStart(2, "0")}`, `2026-10-${String(n).padStart(2, "0")}`];
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("sends 20 concurrent reports as four batchRunReports requests and routes each result back to its caller", async () => {
+    const sizes: number[] = [];
+    const fetchMock = batchResponder((requests) => sizes.push(requests.length));
+    vi.stubGlobal("fetch", fetchMock);
+    const { getOverviewStats } = await loadGa4();
+
+    const results = await Promise.all(Array.from({ length: 20 }, (_, i) => getOverviewStats(day(i + 1))));
+
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+    expect(sizes).toEqual([5, 5, 5, 5]);
+    for (const [url] of fetchMock.mock.calls) expect(String(url)).toContain(":batchRunReports");
+    results.forEach((r, i) => expect(r?.visitors).toBe(i + 1));
+  });
+
+  it("uses the plain runReport endpoint for a lone report", async () => {
+    const fetchMock = batchResponder();
+    vi.stubGlobal("fetch", fetchMock);
+    const { getOverviewStats } = await loadGa4();
+
+    expect((await getOverviewStats(day(7)))?.visitors).toBe(7);
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(String(fetchMock.mock.calls[0][0])).toContain(":runReport");
+  });
+
+  it("forms the same batch bodies whatever order the reports are requested in (keeps the fetch cache warm)", async () => {
+    const bodies: string[] = [];
+    const record = () =>
+      vi.fn(async (_url: string, init?: { body?: string }) => {
+        bodies.push(init?.body ?? "");
+        const n = JSON.parse(init?.body ?? "{}").requests.length;
+        return { ok: true, status: 200, json: async () => ({ reports: Array.from({ length: n }, () => ({})) }), text: async () => "" };
+      });
+
+    vi.stubGlobal("fetch", record());
+    let ga4 = await loadGa4();
+    await Promise.all([day(1), day(2), day(3)].map((d) => ga4.getOverviewStats(d)));
+    vi.stubGlobal("fetch", record());
+    ga4 = await loadGa4();
+    await Promise.all([day(3), day(1), day(2)].map((d) => ga4.getOverviewStats(d)));
+
+    expect(bodies).toHaveLength(2);
+    expect(bodies[0]).toBe(bodies[1]);
+  });
+
+  it("falls back to individual reports when GA4 rejects a batch, so one bad report cannot blank the others", async () => {
+    const fetchMock = vi.fn(async (url: string, init?: { body?: string }): Promise<FakeResponse> => {
+      if (String(url).includes(":batchRunReports")) {
+        return { ok: false, status: 400, json: async () => ({}), text: async () => "Field foo is not a valid dimension" };
+      }
+      const body = JSON.parse(init?.body ?? "{}");
+      const start: string = body.dateRanges[0].startDate;
+      if (start.endsWith("02")) return { ok: false, status: 400, json: async () => ({}), text: async () => "bad report" };
+      return { ok: true, status: 200, json: async () => ({ totals: [{ metricValues: [start.slice(-2), "0", "0", "0", "0", "0"].map((value) => ({ value })) }] }), text: async () => "" };
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const { getOverviewStats } = await loadGa4();
+
+    const [a, b, c] = await Promise.all([getOverviewStats(day(1)), getOverviewStats(day(2)), getOverviewStats(day(3))]);
+
+    expect(a?.visitors).toBe(1);
+    expect(b).toBeNull(); // the genuinely bad report fails alone
+    expect(c?.visitors).toBe(3);
+    expect(fetchMock).toHaveBeenCalledTimes(1 + 3); // one batch attempt, then one call per report
+  });
+
+  it("falls back to individual reports when the batch response has the wrong shape", async () => {
+    const fetchMock = vi.fn(async (url: string, init?: { body?: string }): Promise<FakeResponse> => {
+      if (String(url).includes(":batchRunReports")) {
+        return { ok: true, status: 200, json: async () => ({ reports: [{}] }), text: async () => "" };
+      }
+      const start: string = JSON.parse(init?.body ?? "{}").dateRanges[0].startDate;
+      return { ok: true, status: 200, json: async () => ({ totals: [{ metricValues: [start.slice(-2), "0", "0", "0", "0", "0"].map((value) => ({ value })) }] }), text: async () => "" };
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const { getOverviewStats } = await loadGa4();
+
+    const [a, b] = await Promise.all([getOverviewStats(day(4)), getOverviewStats(day(5))]);
+
+    expect([a?.visitors, b?.visitors]).toEqual([4, 5]);
+    expect(console.error).toHaveBeenCalledWith(expect.stringContaining("unexpected shape"));
+  });
+
+  it("does not fan a persistent 429 out into individual retries: the batch backs off, then every report is null", async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi.fn(async (_url: string): Promise<FakeResponse> => ({ ok: false, status: 429, json: async () => ({}), text: async () => "quota exhausted" }));
+    vi.stubGlobal("fetch", fetchMock);
+    const { getOverviewStats } = await loadGa4();
+
+    const pending = Promise.all([getOverviewStats(day(1)), getOverviewStats(day(2)), getOverviewStats(day(3))]);
+    await vi.advanceTimersByTimeAsync(5000);
+
+    expect(await pending).toEqual([null, null, null]);
+    expect(fetchMock).toHaveBeenCalledTimes(3); // the one batch, three attempts -- no per-report calls
+    for (const [url] of fetchMock.mock.calls) expect(String(url)).toContain(":batchRunReports");
+    expect(console.error).toHaveBeenCalledWith(expect.stringContaining("429"));
+  });
+
+  it("returns null for every report without calling GA4 when it is not configured", async () => {
+    vi.stubEnv("GA4_PROPERTY_ID", "");
+    const fetchMock = respondWith({});
+    const { getOverviewStats } = await loadGa4();
+    expect(await Promise.all([getOverviewStats(day(1)), getOverviewStats(day(2))])).toEqual([null, null]);
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });
