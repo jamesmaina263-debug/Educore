@@ -9,7 +9,18 @@ import { saveHeadTeacherComment } from "@/app/(app)/exams/report-cards/head-comm
 // One report card's head teacher comment. Editors (report_cards.comment_head) can write or clear it;
 // everyone else sees it read-only, and nothing at all when there is none. Self-contained so the
 // shared report card list only needs one line to host it.
-export function HeadTeacherCommentEditor({ reportCardId, initial, canEdit }: { reportCardId: string; initial: string; canEdit: boolean }) {
+export function HeadTeacherCommentEditor({
+  reportCardId,
+  initial,
+  canEdit,
+  onSaved,
+}: {
+  reportCardId: string;
+  initial: string;
+  canEdit: boolean;
+  /** Optional: lets a host that loads the card lazily refetch it after a successful save. */
+  onSaved?: () => void;
+}) {
   const router = useRouter();
   const [text, setText] = useState(initial);
   const [pending, setPending] = useState(false);
@@ -32,6 +43,7 @@ export function HeadTeacherCommentEditor({ reportCardId, initial, canEdit }: { r
       const result = await saveHeadTeacherComment(reportCardId, text);
       if ("error" in result) return setError(result.error);
       router.refresh();
+      onSaved?.();
     } catch {
       setError("Couldn't save the comment. Please try again.");
     } finally {

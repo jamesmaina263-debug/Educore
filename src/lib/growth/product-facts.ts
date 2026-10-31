@@ -63,7 +63,7 @@ export const VERIFIED_FACTS: readonly ProductFact[] = [
   {
     id: "competency-reports",
     claim: "Competency-based learner progress reports, with CBC competency ratings by sub-strand.",
-    evidence: "src/components/exams/report-card-list.tsx",
+    evidence: "src/components/exams/student-report-card-detail.tsx",
   },
   {
     id: "pre-primary",

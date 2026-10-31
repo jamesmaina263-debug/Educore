@@ -326,7 +326,7 @@ export default async function PortalPage({ searchParams }: { searchParams: Promi
 
   // Sub-strand CBC competency breakdown for that same released report card, if this class
   // uses the CBC (band-based) grading model -- an empty array for a purely numeric class is
-  // expected and renders nothing extra, same as report-card-list.tsx's equivalent section.
+  // expected and renders nothing extra, same as the staff report-card review panel (student-report-card-detail.tsx).
   const { data: competencyRows } = rc
     ? await supabase
         .from("competency_marks")
@@ -355,7 +355,7 @@ export default async function PortalPage({ searchParams }: { searchParams: Promi
 
   // ---- Report-card redesign (Phase 14 / Step 10): achievement distribution + Strengths/Areas
   // for Support, built once via buildReportCardInsights() and shown by ReportCardInsightsPanel
-  // both here and on the staff-facing report-card-list.tsx. See report-card-insights.ts for the
+  // both here and on the staff-facing student-report-card-detail.tsx. See report-card-insights.ts for the
   // (unit-tested) derivation rules -- every line here is a plain threshold, never an AI guess.
   let reportCardInsights: ReturnType<typeof buildReportCardInsights> | null = null;
   if (rc?.exams?.term_id) {
