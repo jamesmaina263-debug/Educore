@@ -167,27 +167,40 @@ export function ClassReportCardsView({
             const panelId = `stream-${g.id}`;
             return (
               <section key={g.id} className="panel overflow-hidden">
-                <button
-                  type="button"
-                  className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  aria-expanded={open}
-                  aria-controls={panelId}
-                  onClick={() => !searching && setOpenStreams((prev) => toggle(prev, g.id))}
-                >
-                  {open ? <ChevronDown className="size-4 shrink-0" aria-hidden /> : <ChevronRight className="size-4 shrink-0" aria-hidden />}
-                  <span className="font-medium">{g.name}</span>
-                  {mixedApproval && (
-                    <span className="rounded border border-border px-1.5 py-0.5 text-xs text-muted-foreground">{g.canApprove ? "Your stream" : "View only"}</span>
+                <div className="flex items-center">
+                  <button
+                    type="button"
+                    className="flex min-w-0 flex-1 items-center gap-3 px-4 py-3 text-left hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    aria-expanded={open}
+                    aria-controls={panelId}
+                    onClick={() => !searching && setOpenStreams((prev) => toggle(prev, g.id))}
+                  >
+                    {open ? <ChevronDown className="size-4 shrink-0" aria-hidden /> : <ChevronRight className="size-4 shrink-0" aria-hidden />}
+                    <span className="font-medium">{g.name}</span>
+                    {mixedApproval && (
+                      <span className="rounded border border-border px-1.5 py-0.5 text-xs text-muted-foreground">{g.canApprove ? "Your stream" : "View only"}</span>
+                    )}
+                    <span className="text-sm text-muted-foreground">
+                      {stats.total} {stats.total === 1 ? "student" : "students"}
+                    </span>
+                    <span className="ml-auto flex flex-wrap items-center justify-end gap-2 text-xs">
+                      <span className="text-success">{stats.approved} approved</span>
+                      {stats.needsAttention > 0 && <span className="text-warning">{stats.needsAttention} to review</span>}
+                      {stats.notGenerated > 0 && <span className="text-muted-foreground">{stats.notGenerated} not generated</span>}
+                    </span>
+                  </button>
+                  {stats.total - stats.notGenerated > 0 && (
+                    <a
+                      href={`/exams/report-cards/print?exam=${examId}&stream=${g.id}&class=${classId}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      title="Opens every generated report card in this stream, one A4 page each. Cards not yet approved print without a teacher comment."
+                      className="shrink-0 px-4 py-3 text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
+                    >
+                      Print stream ({stats.total - stats.notGenerated})
+                    </a>
                   )}
-                  <span className="text-sm text-muted-foreground">
-                    {stats.total} {stats.total === 1 ? "student" : "students"}
-                  </span>
-                  <span className="ml-auto flex flex-wrap items-center justify-end gap-2 text-xs">
-                    <span className="text-success">{stats.approved} approved</span>
-                    {stats.needsAttention > 0 && <span className="text-warning">{stats.needsAttention} to review</span>}
-                    {stats.notGenerated > 0 && <span className="text-muted-foreground">{stats.notGenerated} not generated</span>}
-                  </span>
-                </button>
+                </div>
 
                 {open && (
                   <ul id={panelId} className="divide-y divide-border border-t border-border">
