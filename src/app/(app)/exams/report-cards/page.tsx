@@ -7,10 +7,7 @@ import { AppShell } from "@/components/app-shell/app-shell";
 import { ReportCardPicker } from "@/components/exams/report-card-picker";
 import { ClassOverviewGrid } from "@/components/exams/class-overview-grid";
 import { ClassReportCardsView } from "@/components/exams/class-report-cards-view";
-import { MarkSheetExportMenu } from "@/components/exams/mark-sheet-export-menu";
-import { MeritListExportMenu } from "@/components/exams/merit-list-export-menu";
-import { meritListEligibility } from "@/lib/academics/merit-list";
-import { loadMarkSheetModel } from "@/lib/academics/load-mark-sheet";
+import { ClassExportsMenu } from "@/components/exams/class-exports-menu";
 import { loadClassOverview, sortExamClasses } from "@/lib/academics/load-class-overview";
 import { cardStatusOf, streamsUserCanApprove, summariseClassStatus, type StreamGroup, type StudentSummary } from "@/lib/academics/report-card-status";
 import { DEFAULT_REPORT_SETTINGS, loadReportSettings } from "@/lib/academics/report-settings";
@@ -132,10 +129,6 @@ export default async function ReportCardsPage({
   }
 
   const reportSettings = schoolUser?.school_id ? await loadReportSettings(supabase, schoolUser.school_id as string) : DEFAULT_REPORT_SETTINGS;
-  const markSheetModel =
-    classSummary.total > 0 && selectedExamId && selectedClassId
-      ? await loadMarkSheetModel(supabase, { examId: selectedExamId, classId: selectedClassId, preparedBy: schoolUser?.full_name ?? null })
-      : null;
   const selectedClassName = classOptions.find((c) => c.id === selectedClassId)?.name ?? "";
   const selectedExamName = examOptions.find((e) => e.id === selectedExamId)?.name ?? "";
 
@@ -153,18 +146,9 @@ export default async function ReportCardsPage({
             <p className="text-sm text-muted-foreground">Generated from closed exams only</p>
           </div>
           <div className="flex items-center gap-2">
-            {markSheetModel && <MarkSheetExportMenu model={markSheetModel} filenameStub={`${schoolName ?? "educore"}-${selectedClassName}-${selectedExamName}-mark-sheet`} />}
-            {markSheetModel &&
-              (meritListEligibility(markSheetModel).available ? (
-                <MeritListExportMenu model={markSheetModel} filenameStub={`${schoolName ?? "educore"}-${selectedClassName}-${selectedExamName}-merit-list`} />
-              ) : (
-                <span
-                  className="inline-flex h-8 cursor-help items-center rounded-md border border-dashed border-border px-3 text-sm text-muted-foreground"
-                  title={(meritListEligibility(markSheetModel) as { reason: string }).reason}
-                >
-                  Merit list: n/a
-                </span>
-              ))}
+            {classSummary.total > 0 && selectedExamId && selectedClassId && (
+              <ClassExportsMenu examId={selectedExamId} classId={selectedClassId} filenameBase={`${schoolName ?? "educore"}-${selectedClassName}-${selectedExamName}`} />
+            )}
             {classSummary.generated > 0 && selectedExamId && selectedClassId && (
               <Link
                 href={`/exams/report-cards/print?exam=${selectedExamId}&class=${selectedClassId}`}

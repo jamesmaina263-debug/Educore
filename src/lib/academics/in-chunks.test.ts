@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { chunk, selectInChunks } from "./in-chunks";
+import { chunk, selectAllPages, selectInChunks } from "./in-chunks";
 
 describe("chunk", () => {
   it("splits into groups of at most `size`, keeping order", () => {
@@ -62,5 +62,50 @@ describe("selectInChunks", () => {
   it("returns nothing for no ids and treats null data as empty", async () => {
     expect(await selectInChunks<string>([], 5, async () => ({ data: ["x"], error: null }))).toEqual([]);
     expect(await selectInChunks<string>(["a"], 5, async () => ({ data: null, error: null }))).toEqual([]);
+  });
+});
+
+describe("selectAllPages", () => {
+  const table = Array.from({ length: 2500 }, (_, i) => i);
+  const page = (from: number, to: number) => Promise.resolve({ data: table.slice(from, to + 1), error: null });
+
+  it("reads every row past the per-request cap, in order, with no gaps or repeats", async () => {
+    const rows = await selectAllPages<number>(page, 1000);
+    expect(rows).toHaveLength(2500);
+    expect(rows).toEqual(table);
+  });
+
+  it("stops at the first short page (one request when everything fits)", async () => {
+    let calls = 0;
+    const rows = await selectAllPages<number>((from, to) => (calls++, Promise.resolve({ data: table.slice(from, Math.min(to + 1, 10)), error: null })), 1000);
+    expect(rows).toHaveLength(10);
+    expect(calls).toBe(1);
+  });
+
+  it("when the server caps below the page size it returns what one query would have, never looping", async () => {
+    let calls = 0;
+    const rows = await selectAllPages<number>((from) => (calls++, Promise.resolve({ data: table.slice(from, from + 500), error: null })), 1000);
+    expect(rows).toHaveLength(500);
+    expect(calls).toBe(1);
+  });
+
+  it("an exact multiple of the page size costs one extra empty request, then stops", async () => {
+    const exact = table.slice(0, 2000);
+    let calls = 0;
+    const rows = await selectAllPages<number>((from, to) => (calls++, Promise.resolve({ data: exact.slice(from, to + 1), error: null })), 1000);
+    expect(rows).toHaveLength(2000);
+    expect(calls).toBe(3);
+  });
+
+  it("throws on a failed page instead of returning a partial list", async () => {
+    await expect(
+      selectAllPages<number>((from) => Promise.resolve(from >= 1000 ? { data: null, error: { message: "timeout" } } : { data: table.slice(from, from + 1000), error: null }), 1000),
+    ).rejects.toThrow(/timeout/);
+  });
+
+  it("is bounded by maxPages", async () => {
+    let calls = 0;
+    await selectAllPages<number>(() => (calls++, Promise.resolve({ data: table.slice(0, 1000), error: null })), 1000, 3);
+    expect(calls).toBe(3);
   });
 });
