@@ -5,12 +5,14 @@ import { getCachedUser } from "@/lib/supabase/get-user";
 import { logout } from "@/app/login/actions";
 import { AppShell } from "@/components/app-shell/app-shell";
 import { ReportCardPicker } from "@/components/exams/report-card-picker";
-import { ReportCardList, type ReportCardRow } from "@/components/exams/report-card-list";
+import { ClassOverviewGrid } from "@/components/exams/class-overview-grid";
+import { ClassReportCardsView } from "@/components/exams/class-report-cards-view";
 import { MarkSheetExportMenu } from "@/components/exams/mark-sheet-export-menu";
 import { MeritListExportMenu } from "@/components/exams/merit-list-export-menu";
 import { meritListEligibility } from "@/lib/academics/merit-list";
-import { buildReportCardInsights } from "@/lib/academics/report-card-insights";
 import { loadMarkSheetModel } from "@/lib/academics/load-mark-sheet";
+import { loadClassOverview, sortExamClasses } from "@/lib/academics/load-class-overview";
+import { cardStatusOf, summariseClassStatus, type StreamGroup, type StudentSummary } from "@/lib/academics/report-card-status";
 import { DEFAULT_REPORT_SETTINGS, loadReportSettings } from "@/lib/academics/report-settings";
 
 export default async function ReportCardsPage({
@@ -44,194 +46,83 @@ export default async function ReportCardsPage({
   const selectedExamId = examParam || examOptions[0]?.id || null;
 
   const { data: examClassRows } = selectedExamId
-    ? await supabase.from("exam_classes").select("class_id, classes(id, name)").eq("exam_id", selectedExamId)
+    ? await supabase.from("exam_classes").select("class_id, classes(id, name, level_order)").eq("exam_id", selectedExamId)
     : { data: [] };
-  const classOptions = (examClassRows ?? []).map((r) => {
-    const c = r.classes as unknown as { id: string; name: string };
-    return { id: c.id, name: c.name };
-  });
-  const selectedClassId = classParam || classOptions[0]?.id || null;
+  const classOptions = sortExamClasses(
+    (examClassRows ?? []).map((r) => {
+      const c = r.classes as unknown as { id: string; name: string; level_order: number | null };
+      return { id: c.id, name: c.name, levelOrder: c.level_order ?? 0 };
+    }),
+  );
+  // No class chosen (or an unknown one) -> the class overview. A class is only opened on purpose.
+  const selectedClassId = classParam && classOptions.some((c) => c.id === classParam) ? classParam : null;
 
-  let rows: ReportCardRow[] = [];
+  const overviewRows = selectedExamId && !selectedClassId ? await loadClassOverview(supabase, selectedExamId, classOptions) : [];
+
+  // Class view: compact per-student summaries only (name, admission number, average, rank, comment
+  // status). Marks, competency ratings and insights are loaded per student when a row is expanded.
+  let streamGroups: StreamGroup[] = [];
+  let classSummary = summariseClassStatus(0, []);
   if (selectedExamId && selectedClassId) {
-    const { data: examTermRow } = await supabase.from("exams").select("term_id").eq("id", selectedExamId).maybeSingle();
+    const { data: streamRows } = await supabase.from("streams").select("id, name").eq("class_id", selectedClassId);
+    const streamIds = (streamRows ?? []).map((st) => st.id as string);
 
-    const [{ data: streamRows }, { data: marksRows }, { data: reportCardRows }, { data: rankingRows }, { data: competencyRows }] =
-      await Promise.all([
-        supabase.from("streams").select("id").eq("class_id", selectedClassId),
-        supabase
-          .from("marks")
-          .select("student_id, raw_score, subjects(name), grading_scale_bands(label, level_order, grading_scale_id)")
-          .eq("exam_id", selectedExamId)
-          .eq("class_id", selectedClassId),
-        supabase.from("report_cards").select("id, student_id, comment, comment_source").eq("exam_id", selectedExamId).eq("class_id", selectedClassId),
-        supabase.from("class_rankings").select("student_id, average_score, rank_in_stream").eq("exam_id", selectedExamId),
-        supabase
-          .from("competency_marks")
-          .select(
-            "student_id, grading_scale_bands(label, level_order, grading_scale_id), curriculum_sub_strands(name, curriculum_strands(name, subjects(name)))",
-          )
-          .eq("exam_id", selectedExamId)
-          .eq("class_id", selectedClassId),
-      ]);
+    const [{ data: students }, { data: reportCardRows }, { data: rankingRows }] = streamIds.length
+      ? await Promise.all([
+          supabase
+            .from("students")
+            .select("id, first_name, last_name, admission_number, current_class_id")
+            .in("current_class_id", streamIds)
+            .eq("status", "active")
+            .order("last_name")
+            .order("first_name"),
+          supabase.from("report_cards").select("id, student_id, comment_source").eq("exam_id", selectedExamId).eq("class_id", selectedClassId),
+          // Scoped to this class (class_rankings carries class_id), not the whole exam.
+          supabase
+            .from("class_rankings")
+            .select("student_id, average_score, rank_in_stream")
+            .eq("exam_id", selectedExamId)
+            .eq("class_id", selectedClassId),
+        ])
+      : [{ data: [] }, { data: [] }, { data: [] }];
 
-    // Head teacher comments for these cards (read under the caller's RLS; one small query).
-    const cardIds = (reportCardRows ?? []).map((c) => c.id as string);
-    const { data: headCommentRows } = cardIds.length
-      ? await supabase.from("report_card_head_comments").select("report_card_id, comment").in("report_card_id", cardIds)
-      : { data: [] };
-    const headCommentByCard = new Map((headCommentRows ?? []).map((h) => [h.report_card_id as string, h.comment as string]));
+    const reportCardByStudent = new Map((reportCardRows ?? []).map((rc) => [rc.student_id as string, rc]));
+    const rankingByStudent = new Map((rankingRows ?? []).map((rk) => [rk.student_id as string, rk]));
 
-    const streamIds = (streamRows ?? []).map((s) => s.id);
-    const { data: students } = streamIds.length
-      ? await supabase.from("students").select("id, first_name, last_name").in("current_class_id", streamIds).eq("status", "active").order("last_name")
-      : { data: [] };
-
-    // Core-competency/value/PCI ratings (Step 5/6) are term-scoped, not exam-scoped -- fetched
-    // once for the whole roster + this exam's term, same shape as the portal page's own fetch.
-    const studentIds = (students ?? []).map((s) => s.id);
-    const { data: indicatorRows } = examTermRow?.term_id && studentIds.length
-      ? await supabase
-          .from("competency_indicator_ratings")
-          .select("student_id, competency_indicators(name), grading_scale_bands(label, level_order, grading_scale_id)")
-          .eq("term_id", examTermRow.term_id)
-          .in("student_id", studentIds)
-      : { data: [] };
-
-    const scaleIds = new Set<string>();
-    for (const m of marksRows ?? []) {
-      const band = m.grading_scale_bands as unknown as { grading_scale_id: string } | null;
-      if (band) scaleIds.add(band.grading_scale_id);
-    }
-    for (const c of competencyRows ?? []) {
-      const band = c.grading_scale_bands as unknown as { grading_scale_id: string } | null;
-      if (band) scaleIds.add(band.grading_scale_id);
-    }
-    for (const r of indicatorRows ?? []) {
-      const band = r.grading_scale_bands as unknown as { grading_scale_id: string } | null;
-      if (band) scaleIds.add(band.grading_scale_id);
-    }
-    const { data: allBandsForScales } = scaleIds.size
-      ? await supabase.from("grading_scale_bands").select("grading_scale_id, level_order").in("grading_scale_id", [...scaleIds])
-      : { data: [] };
-    const maxLevelOrderByScale = new Map<string, number>();
-    for (const b of allBandsForScales ?? []) {
-      maxLevelOrderByScale.set(b.grading_scale_id, Math.max(maxLevelOrderByScale.get(b.grading_scale_id) ?? 0, b.level_order));
-    }
-
-    const marksByStudent = new Map<string, ReportCardRow["marks"]>();
-    for (const m of marksRows ?? []) {
-      const list = marksByStudent.get(m.student_id) ?? [];
+    const byStream = new Map<string, StudentSummary[]>();
+    for (const st of students ?? []) {
+      const rc = reportCardByStudent.get(st.id as string);
+      const rk = rankingByStudent.get(st.id as string);
+      const list = byStream.get(st.current_class_id as string) ?? [];
       list.push({
-        subject_name: (m.subjects as unknown as { name: string } | null)?.name ?? "",
-        raw_score: m.raw_score,
-        band_label: (m.grading_scale_bands as unknown as { label: string } | null)?.label ?? null,
+        student_id: st.id as string,
+        full_name: `${st.first_name} ${st.last_name}`,
+        admission_number: (st.admission_number as string | null) ?? null,
+        stream_id: st.current_class_id as string,
+        average_score: (rk?.average_score as number | null | undefined) ?? null,
+        rank_in_stream: (rk?.rank_in_stream as number | null | undefined) ?? null,
+        status: cardStatusOf(rc ? { comment_source: rc.comment_source as string } : null),
+        report_card_id: (rc?.id as string | undefined) ?? null,
       });
-      marksByStudent.set(m.student_id, list);
+      byStream.set(st.current_class_id as string, list);
     }
+    streamGroups = (streamRows ?? [])
+      .map((st) => ({ id: st.id as string, name: st.name as string, students: byStream.get(st.id as string) ?? [] }))
+      .filter((g) => g.students.length > 0)
+      .sort((x, y) => x.name.localeCompare(y.name, undefined, { numeric: true }));
 
-    const reportCardByStudent = new Map((reportCardRows ?? []).map((rc) => [rc.student_id, rc]));
-    const rankingByStudent = new Map((rankingRows ?? []).map((rk) => [rk.student_id, rk]));
-
-    const competencyByStudent = new Map<string, ReportCardRow["competency"]>();
-    for (const c of competencyRows ?? []) {
-      const subStrand = c.curriculum_sub_strands as unknown as {
-        name: string;
-        curriculum_strands: { name: string; subjects: { name: string } | null } | null;
-      } | null;
-      const strand = subStrand?.curriculum_strands ?? null;
-      const list = competencyByStudent.get(c.student_id) ?? [];
-      list.push({
-        subject_name: strand?.subjects?.name ?? "",
-        strand_name: strand?.name ?? "",
-        sub_strand_name: subStrand?.name ?? "",
-        band_label: (c.grading_scale_bands as unknown as { label: string } | null)?.label ?? "—",
-      });
-      competencyByStudent.set(c.student_id, list);
-    }
-
-    // Achievement distribution + Strengths/Areas for Support (Phase 14 / Step 10) -- reuses
-    // marks + competency_marks bands already fetched above, plus this exam's term-scoped
-    // indicator ratings. Deliberately excludes growth-trend signals here (unlike the parent
-    // portal's single-student view): computing getStudentGrowth() per row would mean 3 extra
-    // queries multiplied by class size, a real N+1 for a large roster -- flagged as a known gap
-    // rather than silently accepted, not solved in this pass.
-    const insightsByStudent = new Map<string, ReturnType<typeof buildReportCardInsights>>();
-    for (const s of students ?? []) {
-      const rawMarkBands = (marksRows ?? []).filter((m) => m.student_id === s.id);
-      const rawCompetencyBands = (competencyRows ?? []).filter((c) => c.student_id === s.id);
-      const achievementBands = [
-        ...rawMarkBands.flatMap((m) => {
-          const band = m.grading_scale_bands as unknown as { label: string; level_order: number } | null;
-          return band ? [{ label: band.label, levelOrder: band.level_order }] : [];
-        }),
-        ...rawCompetencyBands.flatMap((c) => {
-          const band = c.grading_scale_bands as unknown as { label: string; level_order: number } | null;
-          return band ? [{ label: band.label, levelOrder: band.level_order }] : [];
-        }),
-      ];
-      const competencyRatings = [
-        ...rawCompetencyBands.flatMap((c) => {
-          const subStrand = c.curriculum_sub_strands as unknown as { name: string } | null;
-          const band = c.grading_scale_bands as unknown as { label: string; level_order: number; grading_scale_id: string } | null;
-          if (!subStrand || !band) return [];
-          return [
-            {
-              name: subStrand.name,
-              label: band.label,
-              levelOrder: band.level_order,
-              maxLevelOrder: maxLevelOrderByScale.get(band.grading_scale_id) ?? band.level_order,
-            },
-          ];
-        }),
-        ...(indicatorRows ?? [])
-          .filter((r) => r.student_id === s.id)
-          .flatMap((r) => {
-            const indicator = r.competency_indicators as unknown as { name: string } | null;
-            const band = r.grading_scale_bands as unknown as { label: string; level_order: number; grading_scale_id: string } | null;
-            if (!indicator || !band) return [];
-            return [
-              {
-                name: indicator.name,
-                label: band.label,
-                levelOrder: band.level_order,
-                maxLevelOrder: maxLevelOrderByScale.get(band.grading_scale_id) ?? band.level_order,
-              },
-            ];
-          }),
-      ];
-      insightsByStudent.set(
-        s.id,
-        buildReportCardInsights({ achievementBands, competencyRatings, improvingSubjects: [], decliningSubjects: [] }),
-      );
-    }
-
-    rows = (students ?? []).map((s) => {
-      const rc = reportCardByStudent.get(s.id);
-      const rk = rankingByStudent.get(s.id);
-      return {
-        student_id: s.id,
-        full_name: `${s.first_name} ${s.last_name}`,
-        marks: marksByStudent.get(s.id) ?? [],
-        competency: competencyByStudent.get(s.id) ?? [],
-        rank_in_stream: rk?.rank_in_stream ?? null,
-        average_score: rk?.average_score ?? null,
-        insights: insightsByStudent.get(s.id) ?? { achievementDistribution: [], strengths: [], areasForSupport: [] },
-        report_card: rc
-          ? {
-              id: rc.id as string,
-              head_comment: headCommentByCard.get(rc.id as string) ?? null,
-              comment: rc.comment,
-              comment_source: rc.comment_source as "none" | "ai" | "teacher_approved" | "teacher_written",
-            }
-          : null,
-      };
-    });
+    // Same population as the overview card: active students in this class's streams, and the cards
+    // belonging to them.
+    const activeIds = new Set((students ?? []).map((st) => st.id as string));
+    classSummary = summariseClassStatus(
+      activeIds.size,
+      (reportCardRows ?? []).filter((rc) => activeIds.has(rc.student_id as string)).map((rc) => ({ comment_source: rc.comment_source as string })),
+    );
   }
 
   const reportSettings = schoolUser?.school_id ? await loadReportSettings(supabase, schoolUser.school_id as string) : DEFAULT_REPORT_SETTINGS;
   const markSheetModel =
-    rows.length > 0 && selectedExamId && selectedClassId
+    classSummary.total > 0 && selectedExamId && selectedClassId
       ? await loadMarkSheetModel(supabase, { examId: selectedExamId, classId: selectedClassId, preparedBy: schoolUser?.full_name ?? null })
       : null;
   const selectedClassName = classOptions.find((c) => c.id === selectedClassId)?.name ?? "";
@@ -263,7 +154,7 @@ export default async function ReportCardsPage({
                   Merit list: n/a
                 </span>
               ))}
-            {rows.length > 0 && selectedExamId && selectedClassId && (
+            {classSummary.generated > 0 && selectedExamId && selectedClassId && (
               <Link
                 href={`/exams/report-cards/print?exam=${selectedExamId}&class=${selectedClassId}`}
                 target="_blank"
@@ -287,21 +178,36 @@ export default async function ReportCardsPage({
           <div className="panel border-dashed p-10 text-center text-sm text-muted-foreground">
             No closed exams yet — report cards can only be generated once an exam is closed.
           </div>
-        ) : !selectedClassId ? (
+        ) : classOptions.length === 0 ? (
           <div className="panel border-dashed p-10 text-center text-sm text-muted-foreground">
             This exam has no classes configured.
           </div>
+        ) : !selectedClassId ? (
+          <ClassOverviewGrid examId={selectedExamId as string} rows={overviewRows} />
         ) : (
-          <ReportCardList
-            examId={selectedExamId as string}
-            classId={selectedClassId}
-            rows={rows}
-            canGenerate={canGenerate === true}
-            canApprove={canApproveOwn === true || canApproveAny === true}
-            rankingEnabled={reportSettings.rankingEnabled}
-            headCommentEnabled={reportSettings.showHeadTeacherComment}
-            canCommentHead={canCommentHead === true}
-          />
+          <>
+            <div className="flex items-center gap-2 text-sm">
+              <Link
+                href={`/exams/report-cards?exam=${encodeURIComponent(selectedExamId as string)}`}
+                className="text-muted-foreground underline underline-offset-2 hover:text-foreground"
+              >
+                ← All classes
+              </Link>
+              <span className="text-muted-foreground">/</span>
+              <span className="font-medium">{selectedClassName}</span>
+            </div>
+            <ClassReportCardsView
+              examId={selectedExamId as string}
+              classId={selectedClassId}
+              streams={streamGroups}
+              summary={classSummary}
+              canGenerate={canGenerate === true}
+              canApprove={canApproveOwn === true || canApproveAny === true}
+              rankingEnabled={reportSettings.rankingEnabled}
+              headCommentEnabled={reportSettings.showHeadTeacherComment}
+              canCommentHead={canCommentHead === true}
+            />
+          </>
         )}
       </div>
     </AppShell>

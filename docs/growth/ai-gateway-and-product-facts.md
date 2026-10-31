@@ -44,7 +44,7 @@ by KICD, the Ministry of Education, KNEC, Safaricom or any regulator; discounts 
 names, testimonials or statistics; integrations or features that are not live.
 
 Wording note: report output is described as **competency-based learner progress reports**. The code shows CBC
-competency ratings by sub-strand on report cards (`src/components/exams/report-card-list.tsx`), but nothing is
+competency ratings by sub-strand on report cards (`src/components/exams/student-report-card-detail.tsx`), but nothing is
 specific to pre-primary, so kindergarten wording must not say the reports are "designed for" pre-primary.
 
 ## Rollback
