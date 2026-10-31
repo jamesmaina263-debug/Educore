@@ -1,5 +1,6 @@
 "use server";
 
+import { schoolIdErrorMessage } from "@/lib/auth/session-expired";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { tagSentryRequestContext } from "@/lib/observability/sentry-context";
@@ -79,8 +80,8 @@ export async function addDocumentRequirement(label: string, required: boolean): 
   const checked = validateRequirementLabel(label);
   if (!checked.ok) return { error: checked.error };
 
-  const { data: schoolId } = await supabase.rpc("auth_school_id");
-  if (!schoolId) return { error: "Could not resolve your school." };
+  const { data: schoolId, error: schoolIdError } = await supabase.rpc("auth_school_id");
+  if (!schoolId) return { error: schoolIdErrorMessage(schoolIdError) };
 
   const { data: existing } = await supabase
     .from("application_document_requirements")

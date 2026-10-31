@@ -1,5 +1,6 @@
 "use server";
 
+import { schoolIdErrorMessage } from "@/lib/auth/session-expired";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { tagSentryRequestContext } from "@/lib/observability/sentry-context";
@@ -248,7 +249,7 @@ export async function importSchoolData(sheets: RawImportSheets): Promise<ImportO
   if (!canImport) return { error: "You don't have permission to import school data." };
 
   const { data: schoolId, error: schoolIdError } = await supabase.rpc("auth_school_id");
-  if (schoolIdError || !schoolId) return { error: "Could not resolve your school." };
+  if (schoolIdError || !schoolId) return { error: schoolIdErrorMessage(schoolIdError) };
 
   const totalRows = Object.values(sheets).reduce((n, rows) => n + (rows?.length ?? 0), 0);
   if (totalRows === 0) return { error: "No rows found in that file." };

@@ -1,5 +1,6 @@
 "use server";
 
+import { schoolIdErrorMessage } from "@/lib/auth/session-expired";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { setSentryRequestContext } from "@/lib/observability/sentry-context";
@@ -8,7 +9,7 @@ type ActionResult = { error: string } | { success: true };
 
 async function schoolId(supabase: Awaited<ReturnType<typeof createClient>>) {
   const { data, error } = await supabase.rpc("auth_school_id");
-  if (error || !data) throw new Error("Could not resolve your school.");
+  if (error || !data) throw new Error(schoolIdErrorMessage(error));
   setSentryRequestContext({ schoolId: data as string });
   return data as string;
 }

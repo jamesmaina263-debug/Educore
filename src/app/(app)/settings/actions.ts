@@ -1,5 +1,6 @@
 "use server";
 
+import { schoolIdErrorMessage } from "@/lib/auth/session-expired";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { tagSentryRequestContext } from "@/lib/observability/sentry-context";
@@ -22,7 +23,7 @@ export async function updateBranding(input: {
   const supabase = await createClient();
   await tagSentryRequestContext(supabase);
   const { data: schoolId, error: schoolIdError } = await supabase.rpc("auth_school_id");
-  if (schoolIdError || !schoolId) return { error: "Could not resolve your school." };
+  if (schoolIdError || !schoolId) return { error: schoolIdErrorMessage(schoolIdError) };
 
   // updateBranding has two callers that each send a DIFFERENT subset of fields: BrandingForm
   // (name/motto/logo_url/primary_color) and GeneralSettingsPanel (name/email/kra_pin/
@@ -60,7 +61,7 @@ export async function uploadSchoolLogo(
   const supabase = await createClient();
   await tagSentryRequestContext(supabase);
   const { data: schoolId, error: schoolIdError } = await supabase.rpc("auth_school_id");
-  if (schoolIdError || !schoolId) return { error: "Could not resolve your school." };
+  if (schoolIdError || !schoolId) return { error: schoolIdErrorMessage(schoolIdError) };
 
   const { data: canWrite, error: permError } = await supabase.rpc("auth_has_permission", {
     p_permission_key: "settings.branding.write",
@@ -101,7 +102,7 @@ export async function inviteStaffMember(input: {
   const supabase = await createClient();
   await tagSentryRequestContext(supabase);
   const { data: schoolId, error: schoolIdError } = await supabase.rpc("auth_school_id");
-  if (schoolIdError || !schoolId) return { error: "Could not resolve your school." };
+  if (schoolIdError || !schoolId) return { error: schoolIdErrorMessage(schoolIdError) };
 
   // Belt-and-braces: the school_users insert policy already requires
   // staff.manage, but check here too so we give a clean error instead of
@@ -221,7 +222,7 @@ export async function resetStaffPassword(schoolUserId: string): Promise<InviteRe
   const supabase = await createClient();
   await tagSentryRequestContext(supabase);
   const { data: schoolId, error: schoolIdError } = await supabase.rpc("auth_school_id");
-  if (schoolIdError || !schoolId) return { error: "Could not resolve your school." };
+  if (schoolIdError || !schoolId) return { error: schoolIdErrorMessage(schoolIdError) };
 
   const { data: canManage } = await supabase.rpc("auth_has_permission", { p_permission_key: "staff.manage" });
   if (!canManage) return { error: "You don't have permission to reset staff passwords." };
@@ -281,7 +282,7 @@ export async function issueSchoolApiKey(input: {
   const supabase = await createClient();
   await tagSentryRequestContext(supabase);
   const { data: schoolId, error: schoolIdError } = await supabase.rpc("auth_school_id");
-  if (schoolIdError || !schoolId) return { error: "Could not resolve your school." };
+  if (schoolIdError || !schoolId) return { error: schoolIdErrorMessage(schoolIdError) };
 
   const { data, error } = await supabase
     .rpc("issue_api_key", {
@@ -395,7 +396,7 @@ export async function createLeaveType(input: {
   const supabase = await createClient();
   await tagSentryRequestContext(supabase);
   const { data: schoolId, error: schoolIdError } = await supabase.rpc("auth_school_id");
-  if (schoolIdError || !schoolId) return { error: "Could not resolve your school." };
+  if (schoolIdError || !schoolId) return { error: schoolIdErrorMessage(schoolIdError) };
 
   const { error } = await supabase.from("leave_types").insert({
     school_id: schoolId,
