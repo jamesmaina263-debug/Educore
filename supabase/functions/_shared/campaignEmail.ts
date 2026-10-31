@@ -60,6 +60,21 @@ function ownLinkHtml(url: string, text: string, style: string = LINK_STYLE): str
   return `<a href="${escapeHtml(url)}" style="${style}">${escapeHtml(text)}</a>`;
 }
 
+// Owner emails (HTML part only): a line that is "<label>: https://wa.me/254702904562" is shown as the label, as a real
+// link. Many owners find it hard to copy a phone number into WhatsApp, so "Click here to chat with us on WhatsApp"
+// opens the chat directly. This is the ONLY link owner emails turn into a link: every other line, including links to our
+// own site, stays exactly as before. The plain-text part keeps the full URL.
+export const WHATSAPP_SUPPORT_URL = "https://wa.me/254702904562";
+const OWNER_LABELLED_LINK = /^(.{1,60}?):\s+(https:\/\/wa\.me\/254702904562)$/;
+
+function renderOwnerLine(line: string): string {
+  const labelled = OWNER_LABELLED_LINK.exec(line.trim());
+  if (labelled && !/https?:|www\./i.test(labelled[1]) && !/[.,;:!?)]$/.test(labelled[2])) {
+    return ownLinkHtml(labelled[2], labelled[1].trim(), LABELLED_LINK_STYLE);
+  }
+  return escapeHtml(line);
+}
+
 function renderOutreachLine(line: string): string {
   const t = line.trim();
   const labelled = OWN_LABELLED_LINK.exec(t);
@@ -106,7 +121,7 @@ export function renderCampaignEmail(input: CampaignEmailInput): { text: string; 
   const text = `${body}\n\n--\n${footerLine}\nUnsubscribe: ${input.unsubscribeUrl}\nEduCore - https://educoreafrica.com`;
 
   // Blank line = new paragraph, single newline = <br>. Everything is escaped first, so a body
-  // can never inject markup; links are left as plain text on purpose, except our own labelled links in outreach emails (renderOutreachLine); any tracking is done on the body before it gets here (trackOutreachLinks).
+  // can never inject markup; links are left as plain text on purpose, except labelled links to our own site and WhatsApp support in owner emails (renderOwnerLine) and our own labelled links in outreach emails (renderOutreachLine); any tracking is done on the body before it gets here (trackOutreachLinks).
   const blocks = body.split(/\n{2,}/);
   // Logo goes straight after the sign-off ("Kind regards,"), above the opt-out line. If a reviewer edited the
   // sign-off away, it goes at the end instead so a signature-less email still ends with the brand.
@@ -115,7 +130,11 @@ export function renderCampaignEmail(input: CampaignEmailInput): { text: string; 
   const paragraphs = blocks
     .map((p, i) => {
       const inner =
-        input.audience === "outreach" ? p.split("\n").map(renderOutreachLine).join("<br>") : escapeHtml(p).replace(/\n/g, "<br>");
+        input.audience === "outreach"
+          ? p.split("\n").map(renderOutreachLine).join("<br>")
+          : input.audience === "prospects"
+            ? escapeHtml(p).replace(/\n/g, "<br>")
+            : p.split("\n").map(renderOwnerLine).join("<br>");
       const para = `<p style="margin:0 0 14px">${inner}</p>`;
       return input.audience === "outreach" && i === logoAt ? para + OUTREACH_LOGO_HTML : para;
     })
