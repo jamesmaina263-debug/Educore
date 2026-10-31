@@ -1,5 +1,6 @@
 "use server";
 
+import { schoolIdErrorMessage } from "@/lib/auth/session-expired";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { setSentryRequestContext } from "@/lib/observability/sentry-context";
@@ -26,7 +27,7 @@ async function resolveClass(supabase: Client, classId: string): Promise<{ error:
   if (!allowed) return { error: "You do not have permission to change subject enrolment." };
 
   const { data: schoolId, error: schoolErr } = await supabase.rpc("auth_school_id");
-  if (schoolErr || !schoolId) return { error: "Could not resolve your school." };
+  if (schoolErr || !schoolId) return { error: schoolIdErrorMessage(schoolErr) };
   setSentryRequestContext({ schoolId: schoolId as string });
 
   const { data: cls } = await supabase.from("classes").select("id, academic_year_id").eq("id", classId).maybeSingle();

@@ -42,6 +42,15 @@ export function setSentryRequestContext(params: { schoolId?: string | null; user
 // createClient();`, in any Server Action that doesn't already resolve school_id itself.
 export async function tagSentryRequestContext(supabase: Awaited<ReturnType<typeof createClient>>) {
   try {
+    // No session -> nothing to tag. auth_school_id() is revoked from `anon` on purpose, so calling
+    // it without a user token just returns 401 / 42501 and leaves a "permission denied for
+    // function auth_school_id" line in the Postgres logs (seen in production on login-adjacent and
+    // expired-session requests). getSession() only reads the auth cookie (no network round trip
+    // in the normal case); we deliberately look at nothing but whether a session exists.
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+    if (!session) return;
     const [{ data: userData }, { data: schoolId }] = await Promise.all([supabase.auth.getUser(), supabase.rpc("auth_school_id")]);
     setSentryRequestContext({ userId: userData.user?.id, schoolId: schoolId as string | null });
   } catch {

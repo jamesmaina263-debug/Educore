@@ -58,6 +58,10 @@ const BANNED_PHRASES = [
 const DOMAIN_RE =
   /((?:[a-z0-9][a-z0-9-]*\.)+(?:com|co\.ke|or\.ke|ac\.ke|sc\.ke|org|net|io|app|me|ly|info|biz|xyz|link|ke))\b/g;
 
+/** EduCore's WhatsApp support link: the only link outside educoreafrica.com a trial or onboarding message may carry. */
+export const APPROVED_WHATSAPP_LINK = "https://wa.me/254702904562";
+const APPROVED_WHATSAPP_RE = /https:\/\/wa\.me\/254702904562(?![0-9a-z])/g;
+
 const OFFER_RE =
   /(\b(discount|discounted|promo|promotion|promotional|coupon|voucher|waive|waived)\b|% off|percent off|special offer|limited[- ]time|free month)/;
 
@@ -82,7 +86,9 @@ export function contentProblem(kind: unknown, subject: unknown, body: unknown): 
   if (/(\{\{|\}\})/.test(v.replace(/\{\{\s*(name|school)\s*\}\}/g, ""))) {
     return "Only {{name}} and {{school}} can be used as placeholders.";
   }
-  for (const m of v.matchAll(DOMAIN_RE)) {
+  // The one outside link that is allowed: EduCore's own WhatsApp support number (same exception as the database).
+  const scan = v.replace(APPROVED_WHATSAPP_RE, "");
+  for (const m of scan.matchAll(DOMAIN_RE)) {
     const d = m[1];
     if (d !== "educoreafrica.com" && !d.endsWith(".educoreafrica.com")) {
       return `Links and addresses may only point to educoreafrica.com (found "${d}").`;
