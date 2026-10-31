@@ -1,4 +1,5 @@
 import type { createClient } from "@/lib/supabase/server";
+import { selectAllPages } from "@/lib/academics/in-chunks";
 import { buildMarkSheetModel, type MarkSheetModel } from "@/lib/academics/mark-sheet-model";
 import { loadEnrolmentRows } from "@/lib/academics/load-subject-enrolment";
 import { loadReportSettings } from "@/lib/academics/report-settings";
@@ -17,16 +18,23 @@ export async function loadMarkSheetModel(
   args: { examId: string; classId: string; preparedBy: string | null },
 ): Promise<MarkSheetModel | null> {
   const { examId, classId } = args;
-  const [{ data: exam }, { data: cls }, { data: examSubjects }, { data: streams }, { data: marks }, { data: rankings }] = await Promise.all([
+  const [{ data: exam }, { data: cls }, { data: examSubjects }, { data: streams }, marks, { data: rankings }] = await Promise.all([
     supabase.from("exams").select("name, exam_type, status, terms(name, academic_year_id, academic_years(name))").eq("id", examId).maybeSingle(),
     supabase.from("classes").select("name, school_id").eq("id", classId).maybeSingle(),
     supabase.from("exam_subjects").select("max_score, subjects(id, name)").eq("exam_id", examId).eq("class_id", classId),
     supabase.from("streams").select("id, name").eq("class_id", classId),
-    supabase
-      .from("marks")
-      .select("student_id, subject_id, raw_score, grading_scale_bands(label, level_order)")
-      .eq("exam_id", examId)
-      .eq("class_id", classId),
+    // A class's marks are students x subjects rows, which passes the API's ~1000-row cap in a large
+    // class and would silently drop marks from the sheet. Paged with a stable order (selectAllPages).
+    selectAllPages<Record<string, unknown>>((from, to) =>
+      supabase
+        .from("marks")
+        .select("student_id, subject_id, raw_score, grading_scale_bands(label, level_order)")
+        .eq("exam_id", examId)
+        .eq("class_id", classId)
+        .order("student_id")
+        .order("subject_id")
+        .range(from, to),
+    ),
     supabase.from("class_rankings").select("student_id, total_score, average_score, rank_in_stream, rank_in_class").eq("exam_id", examId).eq("class_id", classId),
   ]);
   if (!exam || !cls) return null;
