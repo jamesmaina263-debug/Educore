@@ -32,6 +32,7 @@ export function ClassReportCardsView({
   examId,
   classId,
   streams,
+  initialStreamId,
   summary,
   canGenerate,
   rankingEnabled,
@@ -41,6 +42,8 @@ export function ClassReportCardsView({
   examId: string;
   classId: string;
   streams: StreamGroup[];
+  /** Opens this stream on arrival (a notification's link points at the stream that needs attention). */
+  initialStreamId: string | null;
   summary: ClassStatusSummary;
   canGenerate: boolean;
   rankingEnabled: boolean;
@@ -51,7 +54,7 @@ export function ClassReportCardsView({
   const [query, setQuery] = useState("");
   const deferredQuery = useDeferredValue(query);
   const searching = deferredQuery.trim().length > 0;
-  const [openStreams, setOpenStreams] = useState<Set<string>>(new Set());
+  const [openStreams, setOpenStreams] = useState<Set<string>>(() => new Set(initialStreamId ? [initialStreamId] : []));
   const [openStudents, setOpenStudents] = useState<Set<string>>(new Set());
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);

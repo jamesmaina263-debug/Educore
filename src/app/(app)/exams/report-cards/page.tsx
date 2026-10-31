@@ -16,9 +16,9 @@ import { DEFAULT_REPORT_SETTINGS, loadReportSettings } from "@/lib/academics/rep
 export default async function ReportCardsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ exam?: string; class?: string }>;
+  searchParams: Promise<{ exam?: string; class?: string; stream?: string }>;
 }) {
-  const { exam: examParam, class: classParam } = await searchParams;
+  const { exam: examParam, class: classParam, stream: streamParam } = await searchParams;
 
   const supabase = await createClient();
   const user = await getCachedUser();
@@ -199,6 +199,7 @@ export default async function ReportCardsPage({
               examId={selectedExamId as string}
               classId={selectedClassId}
               streams={streamGroups}
+              initialStreamId={streamParam && streamGroups.some((g) => g.id === streamParam) ? streamParam : null}
               summary={classSummary}
               canGenerate={canGenerate === true}
               rankingEnabled={reportSettings.rankingEnabled}

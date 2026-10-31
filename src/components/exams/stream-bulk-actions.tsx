@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { draftCommentWithAI } from "@/app/(app)/exams/report-cards/actions";
-import { approveStreamComments } from "@/app/(app)/exams/report-cards/bulk-actions";
+import { approveStreamComments, notifyStreamAwaitingApproval } from "@/app/(app)/exams/report-cards/bulk-actions";
 import { runBulkDraft, type DraftProgress } from "@/lib/academics/bulk-draft";
 import type { StreamGroup } from "@/lib/academics/report-card-status";
 
@@ -66,6 +66,8 @@ export function StreamBulkActions({
     );
     setProgress(result);
     setRunning(false);
+    // Drafts skip the per-draft notification; tell the approvers once, now that the run is over.
+    if (result.succeeded > 0) void notifyStreamAwaitingApproval({ exam_id: examId, stream_id: stream.id });
     router.refresh();
   }
 
