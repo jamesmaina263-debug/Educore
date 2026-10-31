@@ -6,19 +6,21 @@ import { isReleased } from "@/lib/academics/report-card-document";
 // A student's report card is in exactly one of four states:
 //   not_generated  no report_cards row yet for this exam (generate_report_cards hasn't covered them,
 //                  e.g. a student admitted after the class was generated)
-//   needs_comment  row exists, comment_source = 'none' (fresh, or reset by a post-close mark correction)
+//   needs_comment  row exists, comment_source = 'none' and no comment text (freshly generated)
+//   needs_reapproval  comment_source = 'none' but comment text exists: a post-close mark correction
+//                  reset an approved card (the text is kept on purpose so re-approval is one click)
 //   ai_draft       comment_source = 'ai': drafted, waiting for a teacher to approve
 //   approved       comment_source = 'teacher_approved' | 'teacher_written': released to the portal
 // "Approved" deliberately reuses isReleased() from report-card-document.ts, the same rule RLS applies
 // before a guardian can see a card, so the overview never disagrees with the portal.
 
-export type CardStatus = "not_generated" | "needs_comment" | "ai_draft" | "approved";
+export type CardStatus = "not_generated" | "needs_comment" | "needs_reapproval" | "ai_draft" | "approved";
 
-export function cardStatusOf(card: { comment_source: string | null } | null | undefined): CardStatus {
+export function cardStatusOf(card: { comment_source: string | null; comment?: string | null } | null | undefined): CardStatus {
   if (!card) return "not_generated";
   if (isReleased(card.comment_source)) return "approved";
   if (card.comment_source === "ai") return "ai_draft";
-  return "needs_comment";
+  return card.comment?.trim() ? "needs_reapproval" : "needs_comment";
 }
 
 export interface ClassStatusSummary {
@@ -92,7 +94,27 @@ export interface StudentSummary {
 export interface StreamGroup {
   id: string;
   name: string;
+  /** Whether the signed-in user may approve / write / AI-draft comments for this stream's students. */
+  canApprove: boolean;
   students: StudentSummary[];
+}
+
+/**
+ * Streams whose comments the user may approve, mirroring the report_cards update policies:
+ *   report_cards.approve_any  -> every stream
+ *   report_cards.approve      -> only streams where they are the class teacher
+ * This only decides which controls the page shows; the database policies remain the real gate.
+ */
+export function streamsUserCanApprove(params: {
+  canApproveAny: boolean;
+  canApproveOwn: boolean;
+  schoolUserId: string | null;
+  streams: { id: string; class_teacher_id: string | null }[];
+}): Set<string> {
+  const { canApproveAny, canApproveOwn, schoolUserId, streams } = params;
+  if (canApproveAny) return new Set(streams.map((s) => s.id));
+  if (!canApproveOwn || !schoolUserId) return new Set();
+  return new Set(streams.filter((s) => s.class_teacher_id === schoolUserId).map((s) => s.id));
 }
 
 /** Case-insensitive; every whitespace-separated word must appear in "name admission-number", so

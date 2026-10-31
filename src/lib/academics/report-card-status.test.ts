@@ -4,6 +4,7 @@ import {
   cardStatusOf,
   classHealthOf,
   filterStreamGroups,
+  streamsUserCanApprove,
   studentMatchesQuery,
   summariseClassStatus,
   summariseStream,
@@ -31,6 +32,14 @@ describe("cardStatusOf", () => {
     expect(cardStatusOf({ comment_source: "ai" })).toBe("ai_draft");
     expect(cardStatusOf({ comment_source: "teacher_approved" })).toBe("approved");
     expect(cardStatusOf({ comment_source: "teacher_written" })).toBe("approved");
+  });
+
+  it("flags a reset card that still has comment text as needing re-approval", () => {
+    expect(cardStatusOf({ comment_source: "none", comment: "Good progress." })).toBe("needs_reapproval");
+    expect(cardStatusOf({ comment_source: "none", comment: "   " })).toBe("needs_comment");
+    expect(cardStatusOf({ comment_source: "none", comment: null })).toBe("needs_comment");
+    expect(cardStatusOf({ comment_source: "teacher_approved", comment: "x" })).toBe("approved");
+    expect(cardStatusOf({ comment_source: "ai", comment: "x" })).toBe("ai_draft");
   });
 });
 
@@ -100,8 +109,8 @@ describe("search", () => {
 
   it("filterStreamGroups keeps only streams with matches", () => {
     const groups: StreamGroup[] = [
-      { id: "a", name: "7A", students: [student({ student_id: "1", full_name: "Jane Wanjiku" }), student({ student_id: "2", full_name: "John Otieno", admission_number: "55" })] },
-      { id: "b", name: "7B", students: [student({ student_id: "3", full_name: "Mary Achieng", admission_number: "77" })] },
+      { id: "a", name: "7A", canApprove: true, students: [student({ student_id: "1", full_name: "Jane Wanjiku" }), student({ student_id: "2", full_name: "John Otieno", admission_number: "55" })] },
+      { id: "b", name: "7B", canApprove: true, students: [student({ student_id: "3", full_name: "Mary Achieng", admission_number: "77" })] },
     ];
     expect(filterStreamGroups(groups, "")).toBe(groups);
     const out = filterStreamGroups(groups, "otieno");
@@ -122,5 +131,26 @@ describe("summariseStream", () => {
         student({ status: "not_generated" }),
       ]),
     ).toEqual({ total: 4, approved: 1, needsAttention: 2, notGenerated: 1 });
+  });
+});
+
+describe("streamsUserCanApprove", () => {
+  const streams = [
+    { id: "a", class_teacher_id: "u1" },
+    { id: "b", class_teacher_id: "u2" },
+    { id: "c", class_teacher_id: null },
+  ];
+  it("approve_any covers every stream", () => {
+    expect([...streamsUserCanApprove({ canApproveAny: true, canApproveOwn: false, schoolUserId: "u1", streams })].sort()).toEqual(["a", "b", "c"]);
+  });
+  it("approve (own) covers only the user's streams", () => {
+    expect([...streamsUserCanApprove({ canApproveAny: false, canApproveOwn: true, schoolUserId: "u2", streams })]).toEqual(["b"]);
+  });
+  it("no permission, or no identity, covers nothing", () => {
+    expect(streamsUserCanApprove({ canApproveAny: false, canApproveOwn: false, schoolUserId: "u1", streams }).size).toBe(0);
+    expect(streamsUserCanApprove({ canApproveAny: false, canApproveOwn: true, schoolUserId: null, streams }).size).toBe(0);
+  });
+  it("approve_any wins even with no matching stream", () => {
+    expect(streamsUserCanApprove({ canApproveAny: true, canApproveOwn: true, schoolUserId: null, streams }).size).toBe(3);
   });
 });

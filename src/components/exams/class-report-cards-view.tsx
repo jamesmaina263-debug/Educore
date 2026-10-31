@@ -19,6 +19,7 @@ import {
 const STATUS_BADGE: Record<CardStatus, { tone: "success" | "warning" | "info" | "neutral"; label: string }> = {
   not_generated: { tone: "neutral", label: "Not generated" },
   needs_comment: { tone: "warning", label: "No comment" },
+  needs_reapproval: { tone: "warning", label: "Needs re-approval" },
   ai_draft: { tone: "info", label: "AI draft — needs approval" },
   approved: { tone: "success", label: "Approved" },
 };
@@ -32,7 +33,6 @@ export function ClassReportCardsView({
   streams,
   summary,
   canGenerate,
-  canApprove,
   rankingEnabled,
   headCommentEnabled,
   canCommentHead,
@@ -42,7 +42,6 @@ export function ClassReportCardsView({
   streams: StreamGroup[];
   summary: ClassStatusSummary;
   canGenerate: boolean;
-  canApprove: boolean;
   rankingEnabled: boolean;
   headCommentEnabled: boolean;
   canCommentHead: boolean;
@@ -57,6 +56,9 @@ export function ClassReportCardsView({
   const [error, setError] = useState<string | null>(null);
 
   const visibleStreams = useMemo(() => filterStreamGroups(streams, deferredQuery), [streams, deferredQuery]);
+  // Some streams are the user's to approve and some aren't (a class teacher): say so, instead of
+  // letting them hit a permission error after clicking.
+  const mixedApproval = streams.some((g) => g.canApprove) && streams.some((g) => !g.canApprove);
   const matchCount = useMemo(() => visibleStreams.reduce((n, g) => n + g.students.length, 0), [visibleStreams]);
 
   function toggle(set: Set<string>, id: string): Set<string> {
@@ -123,6 +125,10 @@ export function ClassReportCardsView({
         )}
       </div>
 
+      {mixedApproval && (
+        <p className="text-sm text-muted-foreground">You can approve and write comments for your own streams. Other streams are view-only for you.</p>
+      )}
+
       <div className="flex flex-wrap items-center gap-2">
         <div className="relative w-full max-w-sm">
           <Search className="pointer-events-none absolute left-2.5 top-2.5 size-4 text-muted-foreground" aria-hidden />
@@ -170,6 +176,9 @@ export function ClassReportCardsView({
                 >
                   {open ? <ChevronDown className="size-4 shrink-0" aria-hidden /> : <ChevronRight className="size-4 shrink-0" aria-hidden />}
                   <span className="font-medium">{g.name}</span>
+                  {mixedApproval && (
+                    <span className="rounded border border-border px-1.5 py-0.5 text-xs text-muted-foreground">{g.canApprove ? "Your stream" : "View only"}</span>
+                  )}
                   <span className="text-sm text-muted-foreground">
                     {stats.total} {stats.total === 1 ? "student" : "students"}
                   </span>
@@ -225,7 +234,7 @@ export function ClassReportCardsView({
                                 classId={classId}
                                 studentId={s.student_id}
                                 studentName={s.full_name}
-                                canApprove={canApprove}
+                                canApprove={g.canApprove}
                                 headCommentEnabled={headCommentEnabled}
                                 canCommentHead={canCommentHead}
                               />

@@ -42,6 +42,7 @@ export function StudentReportCardDetail({
   const [pending, setPending] = useState(false);
   const [draft, setDraft] = useState("");
   const [reloadKey, setReloadKey] = useState(0);
+  const [rewriting, setRewriting] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -65,6 +66,7 @@ export function StudentReportCardDetail({
 
   // After any change: refresh this panel's data and the page's summary rows / class counts.
   const refreshAll = useCallback(() => {
+    setRewriting(false);
     setReloadKey((k) => k + 1);
     router.refresh();
   }, [router]);
@@ -211,6 +213,33 @@ export function StudentReportCardDetail({
             <div className="rounded-md border border-success/30 bg-success/10 p-3">
               <StatusBadge tone="success" label={card.comment_source === "teacher_approved" ? "Approved" : "Teacher comment"} />
               <p className="mt-1 text-sm">{card.comment}</p>
+            </div>
+          ) : card.comment_source === "none" && card.comment?.trim() && !rewriting ? (
+            // A mark was corrected after approval, which reset the card but kept the comment text:
+            // show it so re-approval is one click, with the option to rewrite instead.
+            <div className="rounded-md border border-warning/30 bg-warning/10 p-3">
+              <StatusBadge tone="warning" label="Needs re-approval — a mark changed after approval" />
+              <p className="mt-1 text-sm">{card.comment}</p>
+              {canApprove ? (
+                <div className="mt-2 flex gap-2">
+                  <Button size="sm" disabled={pending} onClick={handleApprove}>
+                    Approve as is
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={pending}
+                    onClick={() => {
+                      setDraft(card.comment ?? "");
+                      setRewriting(true);
+                    }}
+                  >
+                    Rewrite
+                  </Button>
+                </div>
+              ) : (
+                <p className="mt-1 text-xs text-muted-foreground">Waiting for the class teacher to re-approve.</p>
+              )}
             </div>
           ) : canApprove ? (
             <div className="flex flex-col gap-2">
