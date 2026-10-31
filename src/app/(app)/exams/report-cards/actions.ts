@@ -92,6 +92,8 @@ export async function draftCommentWithAI(input: {
   exam_id: string;
   student_id: string;
   student_name: string;
+  /** Bulk drafting passes true and refreshes the page once at the end, instead of re-rendering it after every learner. */
+  skip_revalidate?: boolean;
 }): Promise<ActionResult> {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
@@ -199,6 +201,6 @@ export async function draftCommentWithAI(input: {
     return { error: e instanceof Error ? e.message : "Could not reach the AI drafting service." };
   }
 
-  revalidatePath("/exams/report-cards");
+  if (!input.skip_revalidate) revalidatePath("/exams/report-cards");
   return { success: true };
 }
