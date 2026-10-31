@@ -45,6 +45,16 @@ describe("contentProblem (mirrors the database rules)", () => {
     expect(contentProblem("service", "Hi", "See https://app.educoreafrica.com/x")).toBeNull();
   });
 
+  it("allows only EduCore's own WhatsApp support link outside educoreafrica.com", () => {
+    const ok = "Click here to chat with us on WhatsApp: https://wa.me/254702904562";
+    expect(contentProblem("service", "Hi", ok)).toBeNull();
+    expect(contentProblem("service", "Hi", ok + "\nhttps://www.educoreafrica.com/login")).toBeNull();
+    expect(contentProblem("service", "Hi", "Chat: https://wa.me/254711111111")).toMatch(/wa\.me/);
+    expect(contentProblem("service", "Hi", "Chat: https://wa.me/2547029045621")).toMatch(/wa\.me/);
+    expect(contentProblem("service", "Hi", "Chat: http://wa.me/254702904562")).toMatch(/wa\.me/);
+    expect(contentProblem("service", "Hi", "Chat: https://wa.me/254702904562 or https://bit.ly/x")).toMatch(/bit\.ly/);
+  });
+
   it("does not let an offer pass as a service message, but allows it as promotional", () => {
     for (const text of ["Get a discount today", "20% off for you", "A special offer", "limited-time deal", "your first free month", "use this coupon", "we will waive the fee"]) {
       expect(contentProblem("service", "Hi", text), text).toBe("This reads like an offer. Send it as a promotional message instead.");

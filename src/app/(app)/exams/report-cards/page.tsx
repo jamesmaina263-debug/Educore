@@ -6,6 +6,7 @@ import { logout } from "@/app/login/actions";
 import { AppShell } from "@/components/app-shell/app-shell";
 import { ReportCardPicker } from "@/components/exams/report-card-picker";
 import { ClassOverviewGrid } from "@/components/exams/class-overview-grid";
+import { GenerateAllClasses } from "@/components/exams/generate-all-classes";
 import { ClassReportCardsView } from "@/components/exams/class-report-cards-view";
 import { ClassExportsMenu } from "@/components/exams/class-exports-menu";
 import { loadClassOverview, sortExamClasses } from "@/lib/academics/load-class-overview";
@@ -178,7 +179,10 @@ export default async function ReportCardsPage({
             This exam has no classes configured.
           </div>
         ) : !selectedClassId ? (
-          <ClassOverviewGrid examId={selectedExamId as string} rows={overviewRows} />
+          <>
+            <GenerateAllClasses examId={selectedExamId as string} rows={overviewRows} canGenerate={canGenerate === true} />
+            <ClassOverviewGrid examId={selectedExamId as string} rows={overviewRows} />
+          </>
         ) : (
           <>
             <div className="flex items-center gap-2 text-sm">

@@ -8,13 +8,19 @@ import { buildReportCardCommentPrompt, geminiGenerateContentUrl, geminiHeaders, 
 
 type ActionResult = { error: string } | { success: true };
 
-export async function generateReportCards(examId: string, classId: string): Promise<ActionResult> {
+export type GenerateResult = { error: string } | { success: true; created: number };
+
+// Generates (idempotently) the report cards for one class: generate_report_cards inserts with
+// ON CONFLICT DO NOTHING, so it never changes an existing card. `created` is how many NEW cards it
+// made (0 = already complete). "Generate all classes" calls this once per class with skipRevalidate so
+// the page is refreshed once at the end instead of re-rendered after every class.
+export async function generateReportCards(examId: string, classId: string, opts?: { skipRevalidate?: boolean }): Promise<GenerateResult> {
   const supabase = await createClient();
   await tagSentryRequestContext(supabase);
-  const { error } = await supabase.rpc("generate_report_cards", { p_exam_id: examId, p_class_id: classId });
+  const { data, error } = await supabase.rpc("generate_report_cards", { p_exam_id: examId, p_class_id: classId });
   if (error) return { error: error.message };
-  revalidatePath("/exams/report-cards");
-  return { success: true };
+  if (!opts?.skipRevalidate) revalidatePath("/exams/report-cards");
+  return { success: true, created: typeof data === "number" ? data : 0 };
 }
 
 export async function approveComment(input: { exam_id: string; student_id: string }): Promise<ActionResult> {
