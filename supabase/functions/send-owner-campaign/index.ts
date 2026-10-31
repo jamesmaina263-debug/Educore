@@ -11,6 +11,14 @@ import { renderCampaignEmail, trackOutreachLinks } from "../_shared/campaignEmai
 //                                 The admin UI calls this repeatedly until remaining === 0.
 //   { test: true, subject, body } -> send ONE copy to the caller's own login email only.
 //
+// ONE narrow exception to "super admin only": the onboarding monitor's two automatic service emails
+// (password reminder, login guidance). The scheduled job calls with a shared secret (ONBOARDING_SEND_SECRET, never
+// sent by a browser) and { onboarding_nudge_id }. That mode can NEVER take a campaign id from the caller and can
+// never send a test: it resolves the campaign from a queued trial_nudges row created by the monitor (auto_rule is
+// set) and runs onboarding_recheck_before_send first, which re-verifies the school's current state, that automation
+// is still switched on with approved templates, suppression, asked_to_stop and the trial-nudge caps. Without the
+// secret configured the mode is simply off. Every other caller still needs a real super-admin user JWT.
+//
 // Sender identity comes from CAMPAIGN_FROM_ADDRESS / CAMPAIGN_REPLY_TO. It deliberately does NOT
 // fall back to RESEND_FROM_ADDRESS (the transactional sender): promotional mail must never go out
 // under the OTP/billing identity, or a spam complaint would hurt their deliverability.
@@ -19,6 +27,20 @@ const BATCH_SIZE = 20;
 type Audience = "owners" | "prospects" | "outreach";
 function audienceOf(a: unknown): Audience {
   return a === "outreach" ? "outreach" : a === "prospects" ? "prospects" : "owners";
+}
+
+// Constant-time comparison (compares SHA-256 digests so length differences do not leak either).
+async function secretsMatch(presented: string, expected: string): Promise<boolean> {
+  const enc = new TextEncoder();
+  const [a, b] = await Promise.all([
+    crypto.subtle.digest("SHA-256", enc.encode(presented)),
+    crypto.subtle.digest("SHA-256", enc.encode(expected)),
+  ]);
+  const x = new Uint8Array(a);
+  const y = new Uint8Array(b);
+  let diff = 0;
+  for (let i = 0; i < x.length; i++) diff |= x[i] ^ y[i];
+  return diff === 0;
 }
 
 Deno.serve(async (req) => {
@@ -32,14 +54,24 @@ Deno.serve(async (req) => {
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) return json({ error: "Missing Authorization header." }, 401);
 
-    const userClient = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_ANON_KEY")!, {
-      global: { headers: { Authorization: authHeader } },
-    });
-    const { data: userData, error: userErr } = await userClient.auth.getUser();
-    if (userErr || !userData.user) return json({ error: "Not signed in." }, 401);
+    // Onboarding service mode: only when a secret is configured (>= 32 chars) AND the caller presents it.
+    const onboardingSecret = Deno.env.get("ONBOARDING_SEND_SECRET") ?? "";
+    const presentedSecret = req.headers.get("x-onboarding-send-secret") ?? "";
+    const onboardingService =
+      presentedSecret !== "" && onboardingSecret.length >= 32 && (await secretsMatch(presentedSecret, onboardingSecret));
 
-    const { data: isSuperAdmin } = await userClient.rpc("auth_is_super_admin");
-    if (isSuperAdmin !== true) return json({ error: "Only a platform super admin can send campaigns." }, 403);
+    let callerEmail: string | undefined;
+    if (!onboardingService) {
+      const userClient = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_ANON_KEY")!, {
+        global: { headers: { Authorization: authHeader } },
+      });
+      const { data: userData, error: userErr } = await userClient.auth.getUser();
+      if (userErr || !userData.user) return json({ error: "Not signed in." }, 401);
+
+      const { data: isSuperAdmin } = await userClient.rpc("auth_is_super_admin");
+      if (isSuperAdmin !== true) return json({ error: "Only a platform super admin can send campaigns." }, 403);
+      callerEmail = userData.user.email ?? undefined;
+    }
 
     const fromAddress = Deno.env.get("CAMPAIGN_FROM_ADDRESS");
     const replyTo = Deno.env.get("CAMPAIGN_REPLY_TO");
@@ -53,10 +85,11 @@ Deno.serve(async (req) => {
 
     const payload = await req.json().catch(() => ({}));
     const provider = getEmailProvider();
+    if (onboardingService && payload.test === true) return json({ error: "Not available in service mode." }, 403);
 
     // ---- Test mode: one email, to the signed-in admin's own address, nobody else ----
     if (payload.test === true) {
-      const to = userData.user.email;
+      const to = callerEmail;
       const subject = String(payload.subject ?? "").trim();
       const body = String(payload.body ?? "").trim();
       if (!to) return json({ error: "Your account has no email address to send a test to." }, 400);
@@ -80,10 +113,54 @@ Deno.serve(async (req) => {
     }
 
     // ---- Real send: one batch ----
-    const campaignId = String(payload.campaign_id ?? "");
-    if (!/^[0-9a-f-]{36}$/i.test(campaignId)) return json({ error: "campaign_id is required." }, 400);
-
     const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+
+    let campaignId = String(payload.campaign_id ?? "");
+    let onboardingNudgeId = "";
+    if (onboardingService) {
+      // The caller names a nudge, never a campaign. A campaign_id in the body is ignored.
+      onboardingNudgeId = String(payload.onboarding_nudge_id ?? "");
+      if (!/^[0-9a-f-]{36}$/i.test(onboardingNudgeId)) return json({ error: "onboarding_nudge_id is required." }, 400);
+      const { data: nudge } = await admin
+        .from("trial_nudges")
+        .select("id, campaign_id, status, auto_rule")
+        .eq("id", onboardingNudgeId)
+        .maybeSingle();
+      if (!nudge || !nudge.auto_rule || !nudge.campaign_id) return json({ error: "Not an automatic onboarding message." }, 403);
+      campaignId = nudge.campaign_id;
+
+      // If an earlier run already sent (or failed) it but did not get to record it, record it now and stop.
+      const { data: rec } = await admin
+        .from("email_campaign_recipients")
+        .select("status, error")
+        .eq("campaign_id", campaignId)
+        .order("created_at")
+        .limit(1)
+        .maybeSingle();
+      if (rec && rec.status !== "queued") {
+        if (rec.status === "sent") {
+          await admin.rpc("onboarding_record_delivery", { p_nudge_id: onboardingNudgeId, p_ok: true, p_error: null });
+          return json({ sent: 0, failed: 0, remaining: 0, recorded: "sent" });
+        }
+        if (rec.status === "failed" || rec.status === "skipped_unsubscribed") {
+          await admin.rpc("onboarding_record_delivery", {
+            p_nudge_id: onboardingNudgeId,
+            p_ok: false,
+            p_error: rec.status === "skipped_unsubscribed" ? "The owner unsubscribed before this was sent." : (rec.error ?? "Send failed."),
+          });
+          return json({ sent: 0, failed: 1, remaining: 0, recorded: "failed" });
+        }
+        // 'sending': an interrupted send is never auto-retried (a duplicate email is worse than a missed one).
+        return json({ sent: 0, failed: 0, remaining: 0, pending: "sending" });
+      }
+
+      // The last check before anything is sent. It cancels the message itself when it fails.
+      const { data: gate, error: gateErr } = await admin.rpc("onboarding_recheck_before_send", { p_nudge_id: onboardingNudgeId });
+      if (gateErr) return json({ error: gateErr.message }, 500);
+      if (!gate || gate.ok !== true) return json({ sent: 0, failed: 0, remaining: 0, cancelled: String(gate?.reason ?? "check_failed") });
+    } else if (!/^[0-9a-f-]{36}$/i.test(campaignId)) {
+      return json({ error: "campaign_id is required." }, 400);
+    }
 
     const { data: campaign, error: campErr } = await admin
       .from("email_campaigns")
@@ -175,6 +252,26 @@ Deno.serve(async (req) => {
       .select("id", { count: "exact", head: true })
       .eq("campaign_id", campaignId)
       .eq("status", "queued");
+
+    if (onboardingService) {
+      // Close the loop in the monitor's audit trail (attempted -> succeeded / failed).
+      if (sent > 0 && failed === 0) {
+        await admin.rpc("onboarding_record_delivery", { p_nudge_id: onboardingNudgeId, p_ok: true, p_error: null });
+      } else if (failed > 0) {
+        const { data: out } = await admin
+          .from("email_campaign_recipients")
+          .select("error")
+          .eq("campaign_id", campaignId)
+          .eq("status", "failed")
+          .limit(1)
+          .maybeSingle();
+        await admin.rpc("onboarding_record_delivery", {
+          p_nudge_id: onboardingNudgeId,
+          p_ok: false,
+          p_error: out?.error ?? "Send failed.",
+        });
+      }
+    }
 
     return json({ sent, failed, remaining: remaining ?? 0 });
   } catch (e) {
