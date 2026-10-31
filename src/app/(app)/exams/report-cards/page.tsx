@@ -12,7 +12,7 @@ import { MeritListExportMenu } from "@/components/exams/merit-list-export-menu";
 import { meritListEligibility } from "@/lib/academics/merit-list";
 import { loadMarkSheetModel } from "@/lib/academics/load-mark-sheet";
 import { loadClassOverview, sortExamClasses } from "@/lib/academics/load-class-overview";
-import { cardStatusOf, summariseClassStatus, type StreamGroup, type StudentSummary } from "@/lib/academics/report-card-status";
+import { cardStatusOf, streamsUserCanApprove, summariseClassStatus, type StreamGroup, type StudentSummary } from "@/lib/academics/report-card-status";
 import { DEFAULT_REPORT_SETTINGS, loadReportSettings } from "@/lib/academics/report-settings";
 
 export default async function ReportCardsPage({
@@ -29,7 +29,7 @@ export default async function ReportCardsPage({
   const [{ data: schoolUser }, { data: canGenerate }, { data: canApproveOwn }, { data: canApproveAny }, { data: canCommentHead }] = await Promise.all([
     supabase
       .from("school_users")
-      .select("school_id, full_name, roles(display_name), schools(name)")
+      .select("id, school_id, full_name, roles(display_name), schools(name)")
       .eq("auth_user_id", user.id)
       .maybeSingle(),
     supabase.rpc("auth_has_permission", { p_permission_key: "exams.write" }),
@@ -64,7 +64,7 @@ export default async function ReportCardsPage({
   let streamGroups: StreamGroup[] = [];
   let classSummary = summariseClassStatus(0, []);
   if (selectedExamId && selectedClassId) {
-    const { data: streamRows } = await supabase.from("streams").select("id, name").eq("class_id", selectedClassId);
+    const { data: streamRows } = await supabase.from("streams").select("id, name, class_teacher_id").eq("class_id", selectedClassId);
     const streamIds = (streamRows ?? []).map((st) => st.id as string);
 
     const [{ data: students }, { data: reportCardRows }, { data: rankingRows }] = streamIds.length
@@ -76,7 +76,7 @@ export default async function ReportCardsPage({
             .eq("status", "active")
             .order("last_name")
             .order("first_name"),
-          supabase.from("report_cards").select("id, student_id, comment_source").eq("exam_id", selectedExamId).eq("class_id", selectedClassId),
+          supabase.from("report_cards").select("id, student_id, comment_source, comment").eq("exam_id", selectedExamId).eq("class_id", selectedClassId),
           // Scoped to this class (class_rankings carries class_id), not the whole exam.
           supabase
             .from("class_rankings")
@@ -101,13 +101,24 @@ export default async function ReportCardsPage({
         stream_id: st.current_class_id as string,
         average_score: (rk?.average_score as number | null | undefined) ?? null,
         rank_in_stream: (rk?.rank_in_stream as number | null | undefined) ?? null,
-        status: cardStatusOf(rc ? { comment_source: rc.comment_source as string } : null),
+        status: cardStatusOf(rc ? { comment_source: rc.comment_source as string, comment: rc.comment as string | null } : null),
         report_card_id: (rc?.id as string | undefined) ?? null,
       });
       byStream.set(st.current_class_id as string, list);
     }
+    const approvable = streamsUserCanApprove({
+      canApproveAny: canApproveAny === true,
+      canApproveOwn: canApproveOwn === true,
+      schoolUserId: (schoolUser?.id as string | undefined) ?? null,
+      streams: (streamRows ?? []).map((st) => ({ id: st.id as string, class_teacher_id: (st.class_teacher_id as string | null) ?? null })),
+    });
     streamGroups = (streamRows ?? [])
-      .map((st) => ({ id: st.id as string, name: st.name as string, students: byStream.get(st.id as string) ?? [] }))
+      .map((st) => ({
+        id: st.id as string,
+        name: st.name as string,
+        canApprove: approvable.has(st.id as string),
+        students: byStream.get(st.id as string) ?? [],
+      }))
       .filter((g) => g.students.length > 0)
       .sort((x, y) => x.name.localeCompare(y.name, undefined, { numeric: true }));
 
@@ -202,7 +213,6 @@ export default async function ReportCardsPage({
               streams={streamGroups}
               summary={classSummary}
               canGenerate={canGenerate === true}
-              canApprove={canApproveOwn === true || canApproveAny === true}
               rankingEnabled={reportSettings.rankingEnabled}
               headCommentEnabled={reportSettings.showHeadTeacherComment}
               canCommentHead={canCommentHead === true}
