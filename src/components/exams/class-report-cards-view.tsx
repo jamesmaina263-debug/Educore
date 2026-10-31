@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { StatusBadge } from "@/components/status-badge";
 import { generateReportCards } from "@/app/(app)/exams/report-cards/actions";
 import { StudentReportCardDetail } from "@/components/exams/student-report-card-detail";
+import { StreamBulkActions } from "@/components/exams/stream-bulk-actions";
 import {
   filterStreamGroups,
   summariseStream,
@@ -201,6 +202,24 @@ export function ClassReportCardsView({
                     </a>
                   )}
                 </div>
+
+                {open && g.canApprove && (
+                  <StreamBulkActions
+                    examId={examId}
+                    classId={classId}
+                    stream={g}
+                    draftable={stats.draftable}
+                    approvable={stats.approvable}
+                    // Rows open in this stream hold a copy of the old comment state: close them so they reload fresh.
+                    onChanged={() =>
+                      setOpenStudents((prev) => {
+                        const next = new Set(prev);
+                        for (const st of g.students) next.delete(st.student_id);
+                        return next;
+                      })
+                    }
+                  />
+                )}
 
                 {open && (
                   <ul id={panelId} className="divide-y divide-border border-t border-border">
