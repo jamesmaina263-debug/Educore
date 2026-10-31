@@ -99,6 +99,46 @@ type Ga4DimensionValue = { value: string };
 type Ga4Row = { dimensionValues?: Ga4DimensionValue[]; metricValues?: Ga4MetricValue[] };
 type Ga4ReportResponse = { rows?: Ga4Row[]; totals?: Ga4Row[] };
 
+// Google's Data API enforces per-property quotas, including a cap on concurrent requests, and a
+// 429 RESOURCE_EXHAUSTED when any bucket is empty. /admin/analytics fans out ~18 GA4 calls per
+// render via Promise.all, so overlapping renders (tab clicks, prefetches, a stale 5-minute cache
+// refreshing everything at once) can trip that. Two guards, both local to the standard
+// runReport path: a small in-process queue so only a few calls are in flight at a time, and a
+// short exponential backoff on 429 as Google recommends. Anything still failing after that falls
+// through to the existing null-safe behaviour.
+const MAX_CONCURRENT_REPORTS = 4;
+const MAX_429_RETRIES = 2; // 3 attempts in total
+const RETRY_BASE_MS = 400; // waits ~400ms, then ~800ms, plus a little jitter
+
+let activeReports = 0;
+const reportWaiters: Array<() => void> = [];
+
+async function withReportSlot<T>(fn: () => Promise<T>): Promise<T> {
+  if (activeReports >= MAX_CONCURRENT_REPORTS) {
+    // The slot is handed over directly by whoever finishes, so the count is not incremented here.
+    await new Promise<void>((resolve) => reportWaiters.push(resolve));
+  } else {
+    activeReports++;
+  }
+  try {
+    return await fn();
+  } finally {
+    const next = reportWaiters.shift();
+    if (next) next();
+    else activeReports--;
+  }
+}
+
+async function fetchReportWithBackoff(url: string, init: RequestInit & { next?: { revalidate: number } }): Promise<Response> {
+  for (let attempt = 0; ; attempt++) {
+    // The slot covers one attempt only, so a backing-off call does not block the queue.
+    const res = await withReportSlot(() => withNetworkRetry(() => fetch(url, init)));
+    if (res.status !== 429 || attempt >= MAX_429_RETRIES) return res;
+    const delay = RETRY_BASE_MS * 2 ** attempt + Math.floor(Math.random() * 100);
+    await new Promise((resolve) => setTimeout(resolve, delay));
+  }
+}
+
 // Every caller goes through here. Returns null on any configuration gap,
 // auth failure, network failure, or non-2xx response -- never throws.
 async function runReport(body: Record<string, unknown>): Promise<Ga4ReportResponse | null> {
@@ -107,21 +147,19 @@ async function runReport(body: Record<string, unknown>): Promise<Ga4ReportRespon
   if (!token) return null;
 
   try {
-    const res = await withNetworkRetry(() =>
-      fetch(`${API_BASE_URL}/properties/${PROPERTY_ID}:runReport`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(body),
-        // Same staleness tolerance as Plausible -- an admin dashboard doesn't
-        // need second-by-second numbers, and this avoids hammering GA4's
-        // Data API quota if the page or its date-range tabs are hit
-        // repeatedly.
-        next: { revalidate: 300 },
-      }),
-    );
+    const res = await fetchReportWithBackoff(`${API_BASE_URL}/properties/${PROPERTY_ID}:runReport`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+      // Same staleness tolerance as Plausible -- an admin dashboard doesn't
+      // need second-by-second numbers, and this avoids hammering GA4's
+      // Data API quota if the page or its date-range tabs are hit
+      // repeatedly.
+      next: { revalidate: 300 },
+    });
     if (!res.ok) {
       console.error(`GA4 runReport failed: ${res.status} ${await res.text()}`);
       return null;
