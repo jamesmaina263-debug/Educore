@@ -102,9 +102,9 @@ type Ga4ReportResponse = { rows?: Ga4Row[]; totals?: Ga4Row[] };
 // Google's Data API enforces per-property quotas, including a cap on concurrent requests, and a
 // 429 RESOURCE_EXHAUSTED when any bucket is empty. /admin/analytics fans out ~18 GA4 calls per
 // render via Promise.all, so overlapping renders (tab clicks, prefetches, a stale 5-minute cache
-// refreshing everything at once) can trip that. Two guards, both local to the standard
-// runReport path: a small in-process queue so only a few calls are in flight at a time, and a
-// short exponential backoff on 429 as Google recommends. Anything still failing after that falls
+// refreshing everything at once) can trip that. Three guards, all local to the standard
+// runReport path: batching (below), a small in-process queue so only a few requests are in flight
+// at a time, and a short exponential backoff on 429 as Google recommends. Anything still failing after that falls
 // through to the existing null-safe behaviour.
 const MAX_CONCURRENT_REPORTS = 4;
 const MAX_429_RETRIES = 2; // 3 attempts in total
@@ -139,9 +139,10 @@ async function fetchReportWithBackoff(url: string, init: RequestInit & { next?: 
   }
 }
 
-// Every caller goes through here. Returns null on any configuration gap,
-// auth failure, network failure, or non-2xx response -- never throws.
-async function runReport(body: Record<string, unknown>): Promise<Ga4ReportResponse | null> {
+// One standalone runReport request. Returns null on any configuration gap, auth failure, network
+// failure, or non-2xx response -- never throws. Used directly for a lone report and as the
+// per-report fallback when a batch is rejected (see sendBatch below).
+async function runSingleReport(body: Record<string, unknown>): Promise<Ga4ReportResponse | null> {
   if (!PROPERTY_ID) return null;
   const token = await getAccessToken();
   if (!token) return null;
@@ -169,6 +170,110 @@ async function runReport(body: Record<string, unknown>): Promise<Ga4ReportRespon
     console.error("GA4 runReport threw", err);
     return null;
   }
+}
+
+// ---- batching -------------------------------------------------------------------------------
+// The Data API counts each HTTP request against the property's concurrent-request quota, and
+// /admin/analytics fires ~20 reports per render. batchRunReports accepts up to 5 reports in one
+// request (one concurrent slot), so reports requested in the same tick are coalesced into batches
+// instead of being sent one by one. Callers still just `await runReport(body)`.
+//
+// Two safeguards, because GA4 fails a whole batch if any single report in it is invalid (the same
+// all-or-nothing behaviour noted in the file header):
+//   - a non-429 failure of a batch falls back to sending its reports individually, so one bad
+//     report can't blank the rest of the dashboard;
+//   - a 429 is NOT retried individually (that would multiply the load on an exhausted quota);
+//     fetchReportWithBackoff has already retried the batch, so its reports resolve to null.
+const MAX_BATCH_SIZE = 5; // batchRunReports hard limit
+
+type PendingReport = {
+  body: Record<string, unknown>;
+  key: string;
+  resolve: (report: Ga4ReportResponse | null) => void;
+};
+
+let pendingReports: PendingReport[] = [];
+let flushScheduled = false;
+
+// Every caller goes through here. Returns null on any configuration gap, auth failure, network
+// failure, or non-2xx response -- never throws.
+function runReport(body: Record<string, unknown>): Promise<Ga4ReportResponse | null> {
+  if (!isGa4Configured()) return Promise.resolve(null);
+  return new Promise((resolve) => {
+    pendingReports.push({ body, key: JSON.stringify(body), resolve });
+    if (!flushScheduled) {
+      flushScheduled = true;
+      // A macrotask, so every report requested in this render's Promise.all is queued first.
+      setTimeout(() => void flushPendingReports(), 0);
+    }
+  });
+}
+
+async function flushPendingReports(): Promise<void> {
+  flushScheduled = false;
+  const queued = pendingReports;
+  pendingReports = [];
+  // Sorted so the same set of reports always forms the same batch bodies, which keeps the
+  // 5-minute fetch cache effective regardless of the order callers happened to arrive in.
+  queued.sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
+
+  const chunks: PendingReport[][] = [];
+  for (let i = 0; i < queued.length; i += MAX_BATCH_SIZE) chunks.push(queued.slice(i, i + MAX_BATCH_SIZE));
+
+  await Promise.all(
+    chunks.map(async (chunk) => {
+      try {
+        if (chunk.length === 1) {
+          chunk[0].resolve(await runSingleReport(chunk[0].body));
+          return;
+        }
+        const token = await getAccessToken();
+        if (!token) {
+          for (const p of chunk) p.resolve(null);
+          return;
+        }
+        await sendBatch(chunk, token);
+      } catch (err) {
+        console.error("GA4 report batch threw", err);
+        for (const p of chunk) p.resolve(null);
+      }
+    }),
+  );
+}
+
+async function sendBatch(chunk: PendingReport[], token: string): Promise<void> {
+  try {
+    const res = await fetchReportWithBackoff(`${API_BASE_URL}/properties/${PROPERTY_ID}:batchRunReports`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ requests: chunk.map((p) => p.body) }),
+      next: { revalidate: 300 },
+    });
+    if (res.ok) {
+      const data = (await res.json()) as { reports?: Ga4ReportResponse[] };
+      const reports = data.reports;
+      if (Array.isArray(reports) && reports.length === chunk.length) {
+        chunk.forEach((p, i) => p.resolve(reports[i] ?? {}));
+        return;
+      }
+      console.error("GA4 batchRunReports returned an unexpected shape; sending reports individually");
+    } else if (res.status === 429) {
+      console.error(`GA4 batchRunReports failed: ${res.status} ${await res.text()}`);
+      for (const p of chunk) p.resolve(null);
+      return;
+    } else {
+      console.error(`GA4 batchRunReports failed: ${res.status} ${await res.text()}; sending reports individually`);
+    }
+  } catch (err) {
+    console.error("GA4 batchRunReports threw", err);
+    for (const p of chunk) p.resolve(null);
+    return;
+  }
+  // Isolation fallback: find out which report(s) GA4 actually objects to.
+  await Promise.all(chunk.map(async (p) => p.resolve(await runSingleReport(p.body))));
 }
 
 function toDateRange([startDate, endDate]: GaDateRangeInput) {
