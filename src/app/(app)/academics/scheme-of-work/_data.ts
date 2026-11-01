@@ -22,6 +22,8 @@ export interface SchemeOfWorkDashboardContext {
   canRead: boolean;
   canWrite: boolean;
   canWriteAny: boolean;
+  /** Can open /academics/scheme-of-work/coverage (scheme_of_work.review or write_any). */
+  canViewCoverage: boolean;
   schemes: SchemeListRow[];
   yearOptions: FilterOption[];
   termOptions: FilterOption[];
@@ -46,11 +48,12 @@ export async function loadSchemeOfWorkDashboard(searchParams: {
   const user = await getCachedUser();
   if (!user) redirect("/login");
 
-  const [{ data: schoolUser }, { data: canRead }, { data: canWrite }, { data: canWriteAny }, { data: moduleEnabled }] = await Promise.all([
+  const [{ data: schoolUser }, { data: canRead }, { data: canWrite }, { data: canWriteAny }, { data: canReviewAny }, { data: moduleEnabled }] = await Promise.all([
     supabase.from("school_users").select("id, full_name, roles(display_name), schools(name)").eq("auth_user_id", user.id).maybeSingle(),
     supabase.rpc("auth_has_permission", { p_permission_key: "scheme_of_work.read" }),
     supabase.rpc("auth_has_permission", { p_permission_key: "scheme_of_work.write" }),
     supabase.rpc("auth_has_permission", { p_permission_key: "scheme_of_work.write_any" }),
+    supabase.rpc("auth_has_permission", { p_permission_key: "scheme_of_work.review" }),
     supabase.rpc("auth_school_module_enabled", { p_key: "scheme_of_work" }),
   ]);
   // Per-school module switch (school_modules, default enabled -- see school_module_enabled) --
@@ -75,6 +78,7 @@ export async function loadSchemeOfWorkDashboard(searchParams: {
     // of a scheme they can, at the database layer, already create.
     canWrite: !!canWrite || !!canWriteAny,
     canWriteAny: !!canWriteAny,
+    canViewCoverage: !!canReviewAny || !!canWriteAny,
     schemes: [],
     yearOptions: [],
     termOptions: [],
