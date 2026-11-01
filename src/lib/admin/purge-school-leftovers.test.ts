@@ -54,6 +54,27 @@ describe("removeSchoolFiles", () => {
     expect(res.failures).toEqual(["a: boom"]);
   });
 
+  it("with an allow-list, touches ONLY the listed buckets (trial reset must never empty logos or staff documents)", async () => {
+    const { client, removed } = fakeClient(
+      {
+        [`application-documents:${SCHOOL}`]: [{ name: "a.pdf", id: "1" }],
+        [`school-logos:${SCHOOL}`]: [{ name: "logo.png", id: "2" }],
+        [`staff-documents:${SCHOOL}`]: [{ name: "cv.pdf", id: "3" }],
+      },
+      { buckets: ["application-documents", "school-logos", "staff-documents"] },
+    );
+    const res = await removeSchoolFiles(client, SCHOOL, ["application-documents"]);
+    expect(res).toEqual({ filesRemoved: 1, bucketsChecked: 1, failures: [] });
+    expect(removed).toEqual([`application-documents:${SCHOOL}/a.pdf`]);
+  });
+
+  it("an empty allow-list touches nothing", async () => {
+    const { client, removed } = fakeClient({ [`docs:${SCHOOL}`]: [{ name: "x", id: "1" }] });
+    const res = await removeSchoolFiles(client, SCHOOL, []);
+    expect(res).toEqual({ filesRemoved: 0, bucketsChecked: 0, failures: [] });
+    expect(removed).toEqual([]);
+  });
+
   it("refuses a non-uuid id so a bad value can never become a wide prefix", async () => {
     const listBuckets = vi.fn();
     const res = await removeSchoolFiles({ storage: { listBuckets } } as unknown as PurgeClient, "");
