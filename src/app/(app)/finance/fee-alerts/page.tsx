@@ -2,10 +2,14 @@ import { createClient } from "@/lib/supabase/server";
 import { loadFinanceContext } from "../_data";
 import { FinancePageShell } from "@/components/finance/finance-page-shell";
 import { FeeAlertsSection, type FeeAlertRow } from "@/components/finance/fee-alerts-section";
+import { RemindersLink } from "@/components/finance/reminders-link";
+import { hasFeatureFlag } from "@/lib/feature-flags";
+import { REMINDER_FLAG } from "@/lib/fee-reminders";
 
 export default async function FinanceFeeAlertsPage() {
   const ctx = await loadFinanceContext([]);
   const supabase = await createClient();
+  const showRemindersLink = ctx.canRead && (await hasFeatureFlag(supabase, REMINDER_FLAG));
 
   const { data: alertRows } = ctx.canRead
     ? await supabase
@@ -37,6 +41,7 @@ export default async function FinanceFeeAlertsPage() {
 
   return (
     <FinancePageShell ctx={ctx} section="Fee Alerts" title="Fee Alerts" subtitle="Draft-and-approve fee arrears reminders">
+      {showRemindersLink && <RemindersLink />}
       <FeeAlertsSection
         alerts={alerts}
         threshold={ctx.feeAlertThreshold}
