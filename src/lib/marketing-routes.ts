@@ -13,6 +13,7 @@ const MARKETING_TOP_LEVEL_SEGMENTS = new Set([
   "platform",
   "pricing",
   "privacy",
+  "schools",
   "security",
   "solutions",
   "terms",

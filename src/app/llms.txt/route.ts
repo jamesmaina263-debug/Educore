@@ -19,6 +19,11 @@ export const dynamic = "force-static";
 const PAGES: { path: string; label: string; note: string }[] = [
   { path: "/platform", label: "Platform", note: "Every module and what it does" },
   { path: "/solutions", label: "Solutions", note: "How EduCore fits different kinds of schools" },
+  { path: "/schools/nursery-kindergarten", label: "Nursery and kindergarten schools", note: "Admissions, learner records, M-Pesa fees, attendance and parent messaging" },
+  { path: "/schools/primary-schools", label: "Primary schools", note: "CBC assessment, exams, report cards, attendance and fees" },
+  { path: "/schools/junior-schools", label: "Junior schools", note: "CBE rubrics and assessment, exams, report cards, timetables and fees" },
+  { path: "/schools/secondary-schools", label: "Secondary schools", note: "Exams and marks approval, report cards, fees, boarding, staff and timetables" },
+  { path: "/schools/integrated-schools", label: "Integrated schools", note: "Several levels and campuses on one platform" },
   { path: "/student-management-system", label: "Student management system", note: "Student records, guardians, discipline, medical, certificates" },
   { path: "/cbc-school-management", label: "CBC school management", note: "Numeric and CBC competency-based grading" },
   { path: "/school-attendance-management", label: "School attendance management", note: "Attendance, corrections, guardian SMS alerts" },

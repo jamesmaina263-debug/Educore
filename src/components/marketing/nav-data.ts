@@ -83,6 +83,16 @@ const SOLUTIONS: NavDropdown = {
       ],
     },
     {
+      heading: "By School Type",
+      links: [
+        { href: "/schools/nursery-kindergarten", label: "Nursery & Kindergarten" },
+        { href: "/schools/primary-schools", label: "Primary Schools" },
+        { href: "/schools/junior-schools", label: "Junior Schools" },
+        { href: "/schools/secondary-schools", label: "Secondary Schools" },
+        { href: "/schools/integrated-schools", label: "Integrated Schools" },
+      ],
+    },
+    {
       heading: "By Challenge",
       links: [
         { href: "/platform", label: "Manage School Operations" },
