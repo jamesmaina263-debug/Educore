@@ -5,12 +5,19 @@ import { ReconciliationSection, type StatementBatchRow } from "@/components/fina
 import { PaybillLink } from "@/components/finance/paybill-link";
 import { MpesaCodeCheck } from "@/components/finance/mpesa-code-check";
 import { hasFeatureFlag } from "@/lib/feature-flags";
+import { loadC2bAttention } from "../paybill/attention";
 
 export default async function FinanceReconciliationPage() {
   const ctx = await loadFinanceContext([]);
   const supabase = await createClient();
 
   const showPaybillLink = ctx.canRead && (await hasFeatureFlag(supabase, "feature.finance.c2b_capture"));
+
+  let attentionCount = 0;
+  if (showPaybillLink) {
+    const attention = await loadC2bAttention(supabase);
+    attentionCount = attention.failedCount + attention.staleDeferred;
+  }
 
   let batches: StatementBatchRow[] = [];
   if (ctx.canRead) {
@@ -29,7 +36,7 @@ export default async function FinanceReconciliationPage() {
       title="M-Pesa Reconciliation"
       subtitle="Match a Paybill statement against payments already recorded in the system"
     >
-      {showPaybillLink && <PaybillLink />}
+      {showPaybillLink && <PaybillLink attentionCount={attentionCount} />}
       {ctx.canRead && <MpesaCodeCheck />}
       <ReconciliationSection initialBatches={batches} canWrite={ctx.canWrite} />
     </FinancePageShell>

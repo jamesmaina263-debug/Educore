@@ -3,6 +3,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const sendSecurityAlert = vi.fn();
 vi.mock("@/lib/security-alert", () => ({ sendSecurityAlert: (...a: unknown[]) => sendSecurityAlert(...a) }));
 
+const alertIfStale = vi.fn();
+vi.mock("@/lib/c2b-attention", () => ({ alertIfStale: (...a: unknown[]) => alertIfStale(...a) }));
+
 const rpc = vi.fn();
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ rpc: (...a: unknown[]) => rpc(...a) }) }));
 
@@ -21,6 +24,8 @@ beforeEach(() => {
   process.env.EXTERNAL_CRON_SECRET = "external-secret";
   rpc.mockReset();
   sendSecurityAlert.mockReset();
+  alertIfStale.mockReset();
+  alertIfStale.mockResolvedValue({ staleCount: 0, alerted: false, checkFailed: false });
 });
 
 describe("GET /api/cron/c2b-resolve-deferred", () => {
@@ -59,5 +64,28 @@ describe("GET /api/cron/c2b-resolve-deferred", () => {
     const res = await call("Bearer cron-secret");
     expect(res.status).toBe(500);
     expect(sendSecurityAlert).toHaveBeenCalledTimes(1);
+  });
+
+  it("also checks for events parked over an hour, throttled hourly, and reports the count", async () => {
+    rpc.mockResolvedValue({ data: 0, error: null });
+    alertIfStale.mockResolvedValue({ staleCount: 4, alerted: false, checkFailed: false });
+    const res = await call("Bearer cron-secret");
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ resolved: 0, stale_deferred: 4, stale_check: "ok" });
+    expect(alertIfStale).toHaveBeenCalledWith(expect.anything(), { throttleHourly: true });
+  });
+
+  it("still succeeds when the stale check itself fails", async () => {
+    rpc.mockResolvedValue({ data: 2, error: null });
+    alertIfStale.mockResolvedValue({ staleCount: 0, alerted: false, checkFailed: true });
+    const res = await call("Bearer cron-secret");
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ resolved: 2, stale_check: "failed" });
+  });
+
+  it("does not run the stale check when the resolver itself failed", async () => {
+    rpc.mockResolvedValue({ data: null, error: { message: "boom" } });
+    await call("Bearer cron-secret");
+    expect(alertIfStale).not.toHaveBeenCalled();
   });
 });

@@ -39,6 +39,10 @@
     {
       "path": "/api/cron/fee-reminders",
       "schedule": "30 4 * * *"
+    },
+    {
+      "path": "/api/cron/c2b-stale-check",
+      "schedule": "0 9 * * *"
     }
   ],
   "git": {
