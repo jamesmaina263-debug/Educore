@@ -42,14 +42,21 @@ export default async function SchemeOfWorkPage({
             <h1 className="text-lg font-semibold">Scheme of Work</h1>
             <p className="text-sm text-muted-foreground">Plan, track and review termly schemes — by hand or drafted with AI.</p>
           </div>
-          {ctx.canWrite && (
-            <Button asChild>
-              <Link href="/academics/scheme-of-work/new">
-                <Sparkles className="mr-1.5 size-4" aria-hidden />
-                New Scheme
-              </Link>
-            </Button>
-          )}
+          <div className="flex flex-wrap items-center gap-2">
+            {ctx.canViewCoverage && (
+              <Button asChild variant="outline">
+                <Link href="/academics/scheme-of-work/coverage">Coverage</Link>
+              </Button>
+            )}
+            {ctx.canWrite && (
+              <Button asChild>
+                <Link href="/academics/scheme-of-work/new">
+                  <Sparkles className="mr-1.5 size-4" aria-hidden />
+                  New Scheme
+                </Link>
+              </Button>
+            )}
+          </div>
         </div>
 
         {!ctx.canRead ? (
