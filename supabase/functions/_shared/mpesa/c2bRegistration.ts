@@ -93,7 +93,8 @@ export function interpretC2bRegisterResponse(httpStatus: number, body: unknown):
   const b = body && typeof body === "object" ? (body as Record<string, unknown>) : {};
   const code = b.ResponseCode ?? b.responseCode;
   const desc = String(b.ResponseDescription ?? b.errorMessage ?? b.ResponseDesc ?? "").slice(0, 200);
-  if (httpStatus >= 200 && httpStatus < 300 && String(code) === "0") {
+  // Daraja sandbox answers "00000000"; other products answer "0". Both mean success.
+  if (httpStatus >= 200 && httpStatus < 300 && /^0+$/.test(String(code ?? "").trim())) {
     return { ok: true, description: desc || "Success" };
   }
   return { ok: false, reason: desc || `HTTP ${httpStatus}` };
