@@ -1,5 +1,6 @@
 "use server";
 
+import { schoolIdErrorMessage } from "@/lib/auth/session-expired";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { setSentryRequestContext } from "@/lib/observability/sentry-context";
@@ -133,11 +134,9 @@ export async function saveRubricCriterionScore(input: {
   edit_reason?: string;
 }): Promise<ActionResult> {
   const supabase = await createClient();
-  const school_id = await (async () => {
-    const { data } = await supabase.rpc("auth_school_id");
-    return data as string | null;
-  })();
-  if (!school_id) return { error: "Could not resolve your school." };
+  const { data: schoolIdData, error: schoolIdError } = await supabase.rpc("auth_school_id");
+  const school_id = schoolIdData as string | null;
+  if (!school_id) return { error: schoolIdErrorMessage(schoolIdError) };
   const entered_by = await schoolUserId(supabase);
 
   const { error } = await supabase.from("rubric_criterion_scores").upsert(

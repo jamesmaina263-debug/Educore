@@ -4,6 +4,7 @@ import {
   cardStatusOf,
   classHealthOf,
   filterStreamGroups,
+  selectBulkApprovable,
   streamsUserCanApprove,
   studentMatchesQuery,
   summariseClassStatus,
@@ -130,7 +131,7 @@ describe("summariseStream", () => {
         student({ status: "needs_comment" }),
         student({ status: "not_generated" }),
       ]),
-    ).toEqual({ total: 4, approved: 1, needsAttention: 2, notGenerated: 1 });
+    ).toEqual({ total: 4, approved: 1, needsAttention: 2, notGenerated: 1, draftable: 1, approvable: 1 });
   });
 });
 
@@ -152,5 +153,32 @@ describe("streamsUserCanApprove", () => {
   });
   it("approve_any wins even with no matching stream", () => {
     expect(streamsUserCanApprove({ canApproveAny: true, canApproveOwn: true, schoolUserId: null, streams }).size).toBe(3);
+  });
+});
+
+describe("bulk eligibility", () => {
+  it("summariseStream counts what drafting and approving would touch", () => {
+    const stats = summariseStream([
+      student({ status: "needs_comment" }),
+      student({ status: "needs_comment" }),
+      student({ status: "ai_draft" }),
+      student({ status: "needs_reapproval" }),
+      student({ status: "approved" }),
+      student({ status: "not_generated" }),
+    ]);
+    expect(stats.draftable).toBe(2);
+    expect(stats.approvable).toBe(2);
+  });
+
+  it("selectBulkApprovable takes unreleased cards WITH text and nothing else", () => {
+    const cards = [
+      { id: "1", comment_source: "ai", comment: "Good effort." },
+      { id: "2", comment_source: "none", comment: "Kept after a mark fix." },
+      { id: "3", comment_source: "none", comment: null },
+      { id: "4", comment_source: "ai", comment: "   " },
+      { id: "5", comment_source: "teacher_approved", comment: "Already out." },
+      { id: "6", comment_source: "teacher_written", comment: "Already out." },
+    ];
+    expect(selectBulkApprovable(cards).map((c) => c.id)).toEqual(["1", "2"]);
   });
 });

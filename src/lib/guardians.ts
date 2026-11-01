@@ -1,3 +1,4 @@
+import { schoolIdErrorMessage } from "@/lib/auth/session-expired";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 interface FindOrCreateGuardianInput {
@@ -86,7 +87,7 @@ export async function findOrCreateGuardian(
 
   const { data: schoolId, error: schoolIdError } = await supabase.rpc("auth_school_id");
   if (schoolIdError || !schoolId) {
-    return { error: "Could not resolve your school." };
+    return { error: schoolIdErrorMessage(schoolIdError) };
   }
 
   const { data: created, error: createError } = await supabase

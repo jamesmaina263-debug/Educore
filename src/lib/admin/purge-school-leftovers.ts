@@ -67,7 +67,12 @@ async function collectFiles(
 export type StorageCleanup = { filesRemoved: number; bucketsChecked: number; failures: string[] };
 
 /** Remove every object under `<schoolId>/` in every bucket. Never throws; failures are returned. */
-export async function removeSchoolFiles(client: PurgeClient, schoolId: string): Promise<StorageCleanup> {
+export async function removeSchoolFiles(
+  client: PurgeClient,
+  schoolId: string,
+  /** Optional allow-list. When given, only these buckets are touched (used by the trial "start fresh" reset). */
+  onlyBuckets?: readonly string[],
+): Promise<StorageCleanup> {
   const result: StorageCleanup = { filesRemoved: 0, bucketsChecked: 0, failures: [] };
   // The id becomes a path prefix, so refuse anything that is not exactly a UUID (no "..", no empty prefix).
   if (!isUuid(schoolId)) {
@@ -81,7 +86,7 @@ export async function removeSchoolFiles(client: PurgeClient, schoolId: string): 
     return result;
   }
 
-  for (const bucket of buckets) {
+  for (const bucket of onlyBuckets ? buckets.filter((b) => onlyBuckets.includes(b.name)) : buckets) {
     result.bucketsChecked += 1;
     try {
       const files: string[] = [];

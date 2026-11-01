@@ -2,10 +2,14 @@ import { createClient } from "@/lib/supabase/server";
 import { loadFinanceContext } from "../_data";
 import { FinancePageShell } from "@/components/finance/finance-page-shell";
 import { ReconciliationSection, type StatementBatchRow } from "@/components/finance/reconciliation-section";
+import { PaybillLink } from "@/components/finance/paybill-link";
+import { hasFeatureFlag } from "@/lib/feature-flags";
 
 export default async function FinanceReconciliationPage() {
   const ctx = await loadFinanceContext([]);
   const supabase = await createClient();
+
+  const showPaybillLink = ctx.canRead && (await hasFeatureFlag(supabase, "feature.finance.c2b_capture"));
 
   let batches: StatementBatchRow[] = [];
   if (ctx.canRead) {
@@ -24,6 +28,7 @@ export default async function FinanceReconciliationPage() {
       title="M-Pesa Reconciliation"
       subtitle="Match a Paybill statement against payments already recorded in the system"
     >
+      {showPaybillLink && <PaybillLink />}
       <ReconciliationSection initialBatches={batches} canWrite={ctx.canWrite} />
     </FinancePageShell>
   );

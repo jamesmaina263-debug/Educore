@@ -1,3 +1,4 @@
+import { selectInChunks } from "@/lib/academics/in-chunks";
 import type { createClient } from "@/lib/supabase/server";
 import { loadReportSettings } from "@/lib/academics/report-settings";
 import { assessmentKindOf, assessmentTitle, gradingLabel, MISSING } from "@/lib/academics/mark-sheet-model";
@@ -86,7 +87,8 @@ export function summariseAttendance(row: { present_days: number; late_days: numb
 
 type Client = Awaited<ReturnType<typeof createClient>>;
 
-export type ReportCardScope = { classId: string } | { studentId: string } | { all: true };
+// streamId = one stream's active students (the "print this stream" button on the Report Cards page).
+export type ReportCardScope = { classId: string } | { streamId: string } | { studentId: string } | { all: true };
 
 export async function loadReportCardDocuments(
   supabase: Client,
@@ -94,26 +96,51 @@ export async function loadReportCardDocuments(
   scope: ReportCardScope,
   opts: { includeClassSize?: boolean } = {},
 ): Promise<ReportCardDocumentData[]> {
-  let cardQuery = supabase.from("report_cards").select("id, student_id, class_id, comment, comment_source").eq("exam_id", examId);
-  if ("classId" in scope) cardQuery = cardQuery.eq("class_id", scope.classId);
-  if ("studentId" in scope) cardQuery = cardQuery.eq("student_id", scope.studentId);
-  const { data: cards } = await cardQuery;
-  if (!cards || cards.length === 0) return [];
+  const cardColumns = "id, student_id, class_id, comment, comment_source";
+  type CardRow = { id: string; student_id: string; class_id: string | null; comment: string | null; comment_source: string };
+  let cards: CardRow[];
+  if ("streamId" in scope) {
+    // Same population the Report Cards page lists for a stream: active students currently in it.
+    const { data: roster } = await supabase.from("students").select("id").eq("current_class_id", scope.streamId).eq("status", "active");
+    const rosterIds = (roster ?? []).map((r) => r.id as string);
+    if (rosterIds.length === 0) return [];
+    cards = await selectInChunks<CardRow>(rosterIds, 100, (ids) =>
+      supabase.from("report_cards").select(cardColumns).eq("exam_id", examId).in("student_id", ids),
+    );
+  } else {
+    let cardQuery = supabase.from("report_cards").select(cardColumns).eq("exam_id", examId);
+    if ("classId" in scope) cardQuery = cardQuery.eq("class_id", scope.classId);
+    if ("studentId" in scope) cardQuery = cardQuery.eq("student_id", scope.studentId);
+    const { data } = await cardQuery;
+    cards = (data ?? []) as unknown as CardRow[];
+  }
+  if (cards.length === 0) return [];
   const studentIds = cards.map((c) => c.student_id as string);
 
-  const [{ data: exam }, { data: students }, { data: marks }, { data: rankings }, { data: competency }] = await Promise.all([
+  // Per-student queries are chunked (see in-chunks.ts): a whole class would otherwise blow the URL
+  // length and the ~1000-row API cap, silently dropping marks from printed cards.
+  const [{ data: exam }, students, marks, rankings, competency] = await Promise.all([
     supabase.from("exams").select("id, name, exam_type, terms(name, academic_years(name))").eq("id", examId).maybeSingle(),
-    supabase
-      .from("students")
-      .select("id, school_id, first_name, last_name, other_names, admission_number, streams(name, classes(name))")
-      .in("id", studentIds),
-    supabase.from("marks").select("student_id, raw_score, subjects(name), grading_scale_bands(label)").eq("exam_id", examId).in("student_id", studentIds),
-    supabase.from("class_rankings").select("student_id, average_score, rank_in_stream").eq("exam_id", examId).in("student_id", studentIds),
-    supabase
-      .from("competency_marks")
-      .select("student_id, grading_scale_bands(label), curriculum_sub_strands(name, curriculum_strands(name, subjects(name)))")
-      .eq("exam_id", examId)
-      .in("student_id", studentIds),
+    selectInChunks<Record<string, unknown>>(studentIds, 100, (ids) =>
+      supabase
+        .from("students")
+        .select("id, school_id, first_name, last_name, other_names, admission_number, streams(name, classes(name))")
+        .in("id", ids),
+    ),
+    selectInChunks<Record<string, unknown>>(studentIds, 40, (ids) =>
+      supabase.from("marks").select("student_id, raw_score, subjects(name), grading_scale_bands(label)").eq("exam_id", examId).in("student_id", ids),
+    ),
+    selectInChunks<{ student_id: string; average_score: number | null; rank_in_stream: number | null }>(studentIds, 200, (ids) =>
+      supabase.from("class_rankings").select("student_id, average_score, rank_in_stream").eq("exam_id", examId).in("student_id", ids),
+    ),
+    // A CBC learner can have dozens of sub-strand ratings, so this one chunks small.
+    selectInChunks<Record<string, unknown>>(studentIds, 8, (ids) =>
+      supabase
+        .from("competency_marks")
+        .select("student_id, grading_scale_bands(label), curriculum_sub_strands(name, curriculum_strands(name, subjects(name)))")
+        .eq("exam_id", examId)
+        .in("student_id", ids),
+    ),
   ]);
   if (!exam || !students || students.length === 0) return [];
 
@@ -146,16 +173,20 @@ export async function loadReportCardDocuments(
   }
   // Optional sections: only queried when the school switched them on. Both run under the caller's
   // own RLS, so a section the caller may not read comes back empty and is simply left out.
-  const [attendanceRes, headCommentRes] = await Promise.all([
+  const [attendanceRes, headCommentRows] = await Promise.all([
     settings.showAttendance ? supabase.rpc("report_card_attendance_summary", { p_exam_id: examId, p_student_ids: studentIds }) : Promise.resolve({ data: null }),
     settings.showHeadTeacherComment
-      ? supabase.from("report_card_head_comments").select("report_card_id, comment").in("report_card_id", cards.map((c) => c.id as string))
-      : Promise.resolve({ data: null }),
+      ? selectInChunks<{ report_card_id: string; comment: string }>(
+          cards.map((c) => c.id as string),
+          100,
+          (ids) => supabase.from("report_card_head_comments").select("report_card_id, comment").in("report_card_id", ids),
+        )
+      : Promise.resolve([] as { report_card_id: string; comment: string }[]),
   ]);
   const attendanceByStudent = new Map(
     ((attendanceRes.data ?? []) as { student_id: string; present_days: number; late_days: number; absent_days: number; recorded_days: number }[]).map((r) => [r.student_id, r]),
   );
-  const headCommentByCard = new Map(((headCommentRes.data ?? []) as { report_card_id: string; comment: string }[]).map((r) => [r.report_card_id, r.comment]));
+  const headCommentByCard = new Map(headCommentRows.map((r) => [r.report_card_id, r.comment]));
   const generatedAt = new Date().toISOString();
 
   const one = <T,>(v: T | T[] | null | undefined): T | null => (Array.isArray(v) ? (v[0] ?? null) : (v ?? null));

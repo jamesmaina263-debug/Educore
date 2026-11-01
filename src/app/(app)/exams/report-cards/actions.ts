@@ -4,17 +4,27 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { tagSentryRequestContext } from "@/lib/observability/sentry-context";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { notifyReportCardEvent } from "@/lib/academics/report-card-notify";
 import { buildReportCardCommentPrompt, geminiGenerateContentUrl, geminiHeaders, parseGeminiCommentResponse } from "@/lib/ai/report-card-comment";
 
 type ActionResult = { error: string } | { success: true };
 
-export async function generateReportCards(examId: string, classId: string): Promise<ActionResult> {
+export type GenerateResult = { error: string } | { success: true; created: number };
+
+// Generates (idempotently) the report cards for one class: generate_report_cards inserts with
+// ON CONFLICT DO NOTHING, so it never changes an existing card. `created` is how many NEW cards it
+// made (0 = already complete). "Generate all classes" calls this once per class with skipRevalidate so
+// the page is refreshed once at the end instead of re-rendered after every class.
+export async function generateReportCards(examId: string, classId: string, opts?: { skipRevalidate?: boolean }): Promise<GenerateResult> {
   const supabase = await createClient();
   await tagSentryRequestContext(supabase);
-  const { error } = await supabase.rpc("generate_report_cards", { p_exam_id: examId, p_class_id: classId });
+  const { data, error } = await supabase.rpc("generate_report_cards", { p_exam_id: examId, p_class_id: classId });
   if (error) return { error: error.message };
-  revalidatePath("/exams/report-cards");
-  return { success: true };
+  const created = typeof data === "number" ? data : 0;
+  // New cards = new work: tell each stream's class teacher they are ready for comments (best-effort).
+  if (created > 0) await notifyReportCardEvent(supabase, { event: "ready_for_comments", examId, classId });
+  if (!opts?.skipRevalidate) revalidatePath("/exams/report-cards");
+  return { success: true, created };
 }
 
 export async function approveComment(input: { exam_id: string; student_id: string }): Promise<ActionResult> {
@@ -45,6 +55,8 @@ export async function approveComment(input: { exam_id: string; student_id: strin
   if (!updated || updated.length === 0) {
     return { error: "You don't have permission to approve this report card, or it hasn't been generated yet." };
   }
+  // If someone other than the class teacher approved it, the class teacher is told (best-effort).
+  await notifyReportCardEvent(supabase, { event: "approved", examId: input.exam_id, studentId: input.student_id });
   revalidatePath("/exams/report-cards");
   return { success: true };
 }
@@ -92,6 +104,8 @@ export async function draftCommentWithAI(input: {
   exam_id: string;
   student_id: string;
   student_name: string;
+  /** Bulk drafting passes true and refreshes the page once at the end, instead of re-rendering it after every learner. */
+  skip_revalidate?: boolean;
 }): Promise<ActionResult> {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
@@ -199,6 +213,10 @@ export async function draftCommentWithAI(input: {
     return { error: e instanceof Error ? e.message : "Could not reach the AI drafting service." };
   }
 
-  revalidatePath("/exams/report-cards");
+  if (!input.skip_revalidate) {
+    // A single draft tells the approvers now; a bulk run (skip_revalidate) tells them once per stream at the end.
+    await notifyReportCardEvent(supabase, { event: "awaiting_approval", examId: input.exam_id, studentId: input.student_id });
+    revalidatePath("/exams/report-cards");
+  }
   return { success: true };
 }

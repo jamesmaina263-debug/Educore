@@ -1,15 +1,17 @@
 "use server";
 
+import { schoolIdErrorMessage } from "@/lib/auth/session-expired";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { setSentryRequestContext } from "@/lib/observability/sentry-context";
 import { safeStorageFilename } from "@/lib/storage-path";
+import { notifyReportCardEvent } from "@/lib/academics/report-card-notify";
 
 type ActionResult = { error: string } | { success: true };
 
 async function schoolId(supabase: Awaited<ReturnType<typeof createClient>>) {
   const { data, error } = await supabase.rpc("auth_school_id");
-  if (error || !data) throw new Error("Could not resolve your school.");
+  if (error || !data) throw new Error(schoolIdErrorMessage(error));
   // Production-readiness audit: tag the school on every action that resolves it here, so a
   // Sentry-captured error from this file can be traced back to which school hit it. See
   // src/lib/observability/sentry-context.ts for why/what's (and isn't) attached.
@@ -435,6 +437,12 @@ export async function editMark(input: {
   if (error) return { error: error.message };
   if (!updated || updated.length === 0) {
     return { error: "You don't have permission to edit this mark." };
+  }
+  // A corrected score on a closed exam resets that learner's approved report card (DB trigger), so the
+  // people who approve it are told it needs re-approval (best-effort; the function reads the real state
+  // and sends nothing if no card was reset).
+  if (input.raw_score !== undefined) {
+    await notifyReportCardEvent(supabase, { event: "needs_reapproval", examId: input.exam_id, studentId: input.student_id });
   }
   revalidatePath("/exams", "layout");
   return { success: true };

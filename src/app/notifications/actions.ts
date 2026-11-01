@@ -73,7 +73,7 @@ export interface InAppNotification {
 }
 
 export async function getMyInAppNotifications(): Promise<
-  { error: string } | { success: true; notifications: InAppNotification[] }
+  { error: string } | { success: true; notifications: InAppNotification[]; unread_count: number }
 > {
   const supabase = await createClient();
   await tagSentryRequestContext(supabase);
@@ -106,7 +106,17 @@ export async function getMyInAppNotifications(): Promise<
     .limit(20);
   if (error) return { error: error.message };
 
-  return { success: true, notifications: (data ?? []) as InAppNotification[] };
+  // The list is capped at 20, so the unread badge is counted separately: it must stay right when a
+  // busy week leaves more than 20 unread. Same recipient / not-dismissed scoping as the list.
+  const { count: unreadCount } = await supabase
+    .from("notification_logs")
+    .select("id", { count: "exact", head: true })
+    .eq("channel", "in_app")
+    .eq("recipient_school_user_id", me.id)
+    .is("dismissed_at", null)
+    .is("read_at", null);
+
+  return { success: true, notifications: (data ?? []) as InAppNotification[], unread_count: unreadCount ?? (data ?? []).filter((n) => !n.read_at).length };
 }
 
 export async function markNotificationReadAction(id: string): Promise<{ error: string } | { success: true }> {

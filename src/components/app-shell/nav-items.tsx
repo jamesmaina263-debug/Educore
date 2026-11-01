@@ -39,6 +39,7 @@ import {
   BookMarked,
   CalendarClock,
   RotateCcw,
+  Eraser,
   Building,
   Bed,
   ArrowLeftRight,
@@ -204,6 +205,7 @@ const settingsChildren: NavChild[] = [
   { label: "Audit Log", href: "/settings/audit", icon: History },
   { label: "Data Export", href: "/settings/data-export", icon: FileDown },
   { label: "Data Import", href: "/settings/data-import", icon: FileUp },
+  { label: "Start Fresh", href: "/settings/start-fresh", icon: Eraser },
 ];
 
 export const navGroups: NavGroup[] = [

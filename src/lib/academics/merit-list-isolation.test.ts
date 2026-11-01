@@ -10,7 +10,7 @@ const read = (rel: string) => readFileSync(path.join(root, rel), "utf8");
 const strip = (s: string) => s.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:])\/\/.*$/gm, "$1");
 
 describe("merit list is a read-only view over the mark sheet model", () => {
-  it.each(["src/lib/academics/merit-list.ts", "src/lib/pdf/merit-list-pdf.ts", "src/components/exams/merit-list-export-menu.tsx"])("%s has no database access of its own", (file) => {
+  it.each(["src/lib/academics/merit-list.ts", "src/lib/pdf/merit-list-pdf.ts", "src/components/exams/class-exports-menu.tsx"])("%s has no database access of its own", (file) => {
     const code = strip(read(file));
     expect(code).not.toMatch(/supabase|\.from\(|\.rpc\(|class_rankings|createClient/);
   });
@@ -35,6 +35,7 @@ describe("shared export menu stays the same for other pages", () => {
       expect(menus.length).toBeGreaterThan(0);
       for (const tag of menus) expect(tag).not.toMatch(/\blabel=/);
     }
-    expect(read("src/components/exams/mark-sheet-export-menu.tsx")).toContain('label="Mark sheet"');
+    // The class exports (mark sheet + merit list) now load their data on demand in their own menu, so they no longer use TableExportMenu or its label prop.
+    expect(read("src/components/exams/class-exports-menu.tsx")).toContain("Mark sheet");
   });
 });

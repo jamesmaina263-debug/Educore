@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import { setSentryRequestContext } from "@/lib/observability/sentry-context";
+import { tagSentryRequestContext } from "@/lib/observability/sentry-context";
 
 type ActionResult = { error: string } | { success: true };
 
@@ -15,12 +15,9 @@ type ActionResult = { error: string } | { success: true };
 // actual payroll operation, called once at the top of each action below. Payroll salary data is
 // exactly the kind of thing worth tagging "which school, which user" on if something goes wrong.
 async function tagPayrollActor(supabase: Awaited<ReturnType<typeof createClient>>) {
-  try {
-    const [{ data: userData }, { data: schoolId }] = await Promise.all([supabase.auth.getUser(), supabase.rpc("auth_school_id")]);
-    setSentryRequestContext({ userId: userData.user?.id, schoolId: schoolId as string | null });
-  } catch {
-    // Never let Sentry tagging itself break a payroll action.
-  }
+  // Same best-effort tagging as everywhere else (including skipping the doomed anon RPC when
+  // there is no session) -- delegate instead of keeping a second copy that can drift.
+  await tagSentryRequestContext(supabase);
 }
 
 export async function generatePayrollAction(input: {

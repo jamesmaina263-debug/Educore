@@ -54,6 +54,29 @@ describe("campaign email rendering", () => {
   });
 });
 
+describe("owner emails: labelled links to our own site and WhatsApp support", () => {
+  const wa = "https://wa.me/254702904562";
+  it("shows the label as a real link in html and keeps the full URL in the text part", () => {
+    const body = `Hello\n\nClick here to chat with us on WhatsApp: ${wa}`;
+    const { html, text } = renderCampaignEmail({ ...base, body });
+    expect(html).toMatch(new RegExp(`<a href="${wa}"[^>]*>Click here to chat with us on WhatsApp</a>`));
+    expect(html).not.toContain(`>${wa}<`);
+    expect(text).toContain(`Click here to chat with us on WhatsApp: ${wa}`);
+  });
+
+  it("leaves our own site links, other links, other numbers and bare links as plain text", () => {
+    for (const body of ["Sign in: https://www.educoreafrica.com/login", "Chat: https://wa.me/254711111111", "Pay: https://bit.ly/x", `Chat: ${wa}x`, wa]) {
+      const { html } = renderCampaignEmail({ ...base, body });
+      expect(html, body).not.toMatch(/<a href="(?!https:\/\/www\.educoreafrica\.com\/unsubscribe)/);
+    }
+  });
+
+  it("does not change prospect emails", () => {
+    const { html } = renderCampaignEmail({ ...base, audience: "prospects", body: `Chat: ${wa}` });
+    expect(html).not.toContain(`href="${wa}"`);
+  });
+});
+
 describe("outreach audience footer", () => {
   it("explains why a school is being emailed (not 'you asked on our website') and keeps the unsubscribe link", () => {
     const { text, html } = renderCampaignEmail({
