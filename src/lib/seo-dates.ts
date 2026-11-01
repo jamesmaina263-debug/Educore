@@ -27,6 +27,7 @@ export const PAGE_LAST_MODIFIED: Record<string, string> = {
   "/about": "2026-10-05",
   "/contact": "2026-10-05",
   "/faq": "2026-10-05",
+  "/schools": "2026-10-31",
   "/schools/nursery-kindergarten": "2026-10-31",
   "/schools/primary-schools": "2026-10-31",
   "/schools/junior-schools": "2026-10-31",

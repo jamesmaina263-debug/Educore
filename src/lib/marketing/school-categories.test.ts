@@ -3,6 +3,7 @@ import sitemap from "@/app/sitemap";
 import { isMarketingPath } from "@/lib/marketing-routes";
 import { NEVER_PREFIX } from "@/lib/school-slug-routing";
 import { SCHOOL_CATEGORIES, getSchoolCategory } from "./school-categories";
+import { SCHOOL_CATEGORY_OPTIONS } from "./school-category-options";
 
 const REQUIRED_SLUGS = [
   "nursery-kindergarten",
@@ -114,10 +115,21 @@ describe("school category landing page config", () => {
   });
 });
 
+describe("demo-form school type options", () => {
+  it("offer exactly the landing pages that exist, in the same order", () => {
+    expect(SCHOOL_CATEGORY_OPTIONS.map((o) => o.value)).toEqual(SCHOOL_CATEGORIES.map((c) => c.slug));
+  });
+});
+
 describe("school category routing and discovery", () => {
   it("is allowed through the school-slug rewrite and counts as a marketing path", () => {
     expect(NEVER_PREFIX.has("schools")).toBe(true);
     expect(isMarketingPath("/schools/primary-schools")).toBe(true);
+  });
+
+  it("treats the /schools hub as a marketing path and lists it in the sitemap", () => {
+    expect(isMarketingPath("/schools")).toBe(true);
+    expect(sitemap().some((e) => e.url.endsWith("/schools"))).toBe(true);
   });
 
   it("lists every category in the sitemap with a real lastmod", () => {

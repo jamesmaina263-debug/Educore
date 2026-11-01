@@ -43,12 +43,8 @@ import {
 // existing delegated CTA tracker (analytics.tsx), which already records the page
 // path as cta_location on every /contact and /signup click.
 
-export type SchoolCategorySlug =
-  | "nursery-kindergarten"
-  | "primary-schools"
-  | "junior-schools"
-  | "secondary-schools"
-  | "integrated-schools";
+import type { SchoolCategorySlug } from "@/lib/marketing/school-category-options";
+export type { SchoolCategorySlug };
 
 export type CategoryChallenge = { title: string; problem: string; help: string };
 export type CategoryModule = {
@@ -74,6 +70,8 @@ export type SchoolCategory = {
   eyebrow: string;
   h1: string;
   heroLead: string;
+  /** One sentence for the /schools hub card. */
+  summary: string;
   coreMessage: string;
   /** "Built for ..." chips under the hero copy. */
   audience: string[];
@@ -119,6 +117,8 @@ export const SCHOOL_CATEGORIES: readonly SchoolCategory[] = [
     h1: "Nursery and kindergarten school management software, built for Kenyan schools.",
     heroLead:
       "Spend less time managing paperwork and more time nurturing young learners. Admissions, learner records, fees, attendance and parent updates stay in one place instead of across registers, receipt books and WhatsApp groups.",
+    summary:
+      "Admissions, learner records, M-Pesa fees, attendance and parent updates for PP1, PP2 and early-years schools.",
     coreMessage: "Spend less time managing paperwork and more time nurturing young learners.",
     audience: ["Nursery school owners", "Kindergarten directors", "Early childhood administrators", "PP1 and PP2 administrators"],
     challenges: [
@@ -272,6 +272,8 @@ export const SCHOOL_CATEGORIES: readonly SchoolCategory[] = [
     h1: "The primary school management system built for CBC and for how Kenyan schools get paid.",
     heroLead:
       "Bring your school's academic and administrative operations together in one organised system: learner records, CBC assessment, exams, report cards, attendance, fees and parent communication.",
+    summary:
+      "CBC assessment, exams, report cards, attendance, timetables and fee collection for primary schools.",
     coreMessage: "Bring your school's academic and administrative operations together in one organised system.",
     audience: ["Private primary school owners", "Headteachers", "School directors", "Primary school administrators"],
     challenges: [
@@ -402,6 +404,8 @@ export const SCHOOL_CATEGORIES: readonly SchoolCategory[] = [
     h1: "A junior school management system for CBE assessment and everyday school administration.",
     heroLead:
       "Make learner assessment, academic reporting and school administration easier with EduCore: CBE rubrics, exams, report cards, attendance, timetables and fee collection, working from the same learner records.",
+    summary:
+      "CBE rubrics, exams, report cards and day-to-day administration for junior school sections.",
     coreMessage: "Make learner assessment, academic reporting and school administration easier with EduCore.",
     audience: ["Junior school administrators", "School directors", "CBE-focused institutions", "Academic heads"],
     challenges: [
@@ -531,6 +535,8 @@ export const SCHOOL_CATEGORIES: readonly SchoolCategory[] = [
     h1: "Secondary school management software for exams, fees, boarding and everything around them.",
     heroLead:
       "Manage academics, finances and school operations with greater visibility and control: CATs and exams, report cards, M-Pesa fee reconciliation, timetables, boarding, staff and parent communication.",
+    summary:
+      "Exams and marks approval, report cards, M-Pesa fee reconciliation, boarding, staff and timetables.",
     coreMessage: "Manage academics, finances and school operations with greater visibility and control.",
     audience: ["Private secondary school owners", "Principals and deputy principals", "Bursars", "Academic administrators"],
     challenges: [
@@ -663,6 +669,8 @@ export const SCHOOL_CATEGORIES: readonly SchoolCategory[] = [
     h1: "One connected platform for schools that teach across several levels.",
     heroLead:
       "One connected platform for managing your school's operations across different educational levels, from pre-primary through primary and junior school, whether you run one campus or several.",
+    summary:
+      "One platform for schools that teach several levels or run several campuses, from pre-primary upward.",
     coreMessage: "One connected platform for managing your school's operations across different educational levels.",
     audience: ["Schools with several levels", "Nursery, primary and junior sections", "School groups", "Multi-campus owners"],
     challenges: [

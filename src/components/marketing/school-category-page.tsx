@@ -46,7 +46,9 @@ export function SchoolCategoryPage({ category }: { category: SchoolCategory }) {
   return (
     <>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(faqJsonLd) }} />
-      <BreadcrumbJsonLd items={[HOME_CRUMB, { name: category.navLabel, path: `/schools/${category.slug}` }]} />
+      <BreadcrumbJsonLd
+        items={[HOME_CRUMB, { name: "School types", path: "/schools" }, { name: category.navLabel, path: `/schools/${category.slug}` }]}
+      />
 
       {/* 1. Hero */}
       <Section tone="navy" className="pb-14 pt-16 sm:pb-20 sm:pt-20">
@@ -313,6 +315,14 @@ export function SchoolCategoryPage({ category }: { category: SchoolCategory }) {
               </Link>
             </li>
           ))}
+          <li>
+            <Link
+              href="/schools"
+              className="inline-flex rounded-full border border-marketing-navy-900/15 px-4 py-2 text-sm font-medium text-marketing-navy-900 hover:bg-marketing-navy-900/5"
+            >
+              All school types
+            </Link>
+          </li>
           <li>
             <Link
               href="/solutions"

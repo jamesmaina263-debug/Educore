@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useRef, useState, useTransition } from "react";
+import { useActionState, useEffect, useRef, useState, useSyncExternalStore, useTransition } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { CheckCircle2, Loader2 } from "lucide-react";
@@ -22,6 +22,7 @@ import {
   type RequestType,
   type TimeWindow,
 } from "@/lib/marketing/demo-request";
+import { SCHOOL_CATEGORY_OPTIONS, schoolCategoryFromPath } from "@/lib/marketing/school-category-options";
 import { getStoredCtaSource } from "@/lib/cta-source";
 
 const initialState: DemoRequestState = { status: "idle" };
@@ -46,6 +47,8 @@ type Details = {
   studentCount: string;
   message: string;
   whatsappConsent: boolean;
+  /** null = the visitor hasn't touched the field, so the landing-page prefill applies. "" = they chose "not sure / other". */
+  schoolCategory: string | null;
 };
 const EMPTY_DETAILS: Details = {
   role: "",
@@ -56,7 +59,11 @@ const EMPTY_DETAILS: Details = {
   studentCount: "",
   message: "",
   whatsappConsent: false,
+  schoolCategory: null,
 };
+
+// Nothing to subscribe to: the CTA source is written once, by a click on the previous page.
+const noopSubscribe = () => () => {};
 
 export function DemoRequestForm() {
   const [state, formAction, pending] = useActionState(submitDemoRequest, initialState);
@@ -81,6 +88,18 @@ export function DemoRequestForm() {
   });
   const formRef = useRef<HTMLFormElement>(null);
   const pathname = usePathname();
+  // The /schools/<slug> page whose "Book a Free Demo" (or nav) link brought the visitor here, read
+  // from the CTA source captured on that click (src/lib/cta-source.ts). useSyncExternalStore keeps
+  // the server render and first client render identical ("" -> the stored value), so there is no
+  // hydration mismatch. It only prefills the optional School type field below, which the visitor
+  // can change, and tags an unfinished step-1 lead with the landing page via source_page.
+  const landingCategory = useSyncExternalStore(
+    noopSubscribe,
+    () => schoolCategoryFromPath(getStoredCtaSource().location) ?? "",
+    () => "",
+  );
+  const schoolCategory = details.schoolCategory ?? landingCategory;
+  const sourcePage = landingCategory ? `/schools/${landingCategory}` : pathname;
   const [renderedAt] = useState(() => Date.now());
   // Read once at mount -- whatever was captured earlier in this session by MarketingAnalytics
   // (see src/lib/attribution.ts). Empty strings if nothing was captured; the server action
@@ -211,6 +230,7 @@ export function DemoRequestForm() {
         contact_form_role: details.role,
         contact_form_preferred_method: details.contactMethod,
         contact_form_request_type: details.requestType,
+        contact_form_school_category: schoolCategory,
         cta_location: cta.location ?? "",
         cta_label: cta.label ?? "",
         cta_tier: cta.tier ?? "",
@@ -305,7 +325,7 @@ export function DemoRequestForm() {
         <input id="company_website" name="company_website" type="text" tabIndex={-1} autoComplete="off" />
       </div>
       <input type="hidden" name="rendered_at" value={renderedAt} />
-      <input type="hidden" name="source_page" value={pathname} />
+      <input type="hidden" name="source_page" value={sourcePage} />
       {/* Marketing attribution, forwarded silently -- see src/lib/attribution.ts. */}
       {ATTRIBUTION_KEYS.map((key) => (
         <input key={key} type="hidden" name={key} value={attribution[key] ?? ""} />
@@ -456,6 +476,23 @@ export function DemoRequestForm() {
               {ROLE_OPTIONS.map((r) => (
                 <option key={r} value={r}>
                   {r}
+                </option>
+              ))}
+            </select>
+          </Field>
+
+          <Field label="School type" htmlFor="school_category" optional>
+            <select
+              id="school_category"
+              name="school_category"
+              value={schoolCategory}
+              onChange={(e) => setDetail("schoolCategory", e.target.value)}
+              className={inputClass}
+            >
+              <option value="">Not sure / other</option>
+              {SCHOOL_CATEGORY_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
                 </option>
               ))}
             </select>

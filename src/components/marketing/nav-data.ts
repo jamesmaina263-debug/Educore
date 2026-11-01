@@ -90,6 +90,7 @@ const SOLUTIONS: NavDropdown = {
         { href: "/schools/junior-schools", label: "Junior Schools" },
         { href: "/schools/secondary-schools", label: "Secondary Schools" },
         { href: "/schools/integrated-schools", label: "Integrated Schools" },
+        { href: "/schools", label: "All School Types" },
       ],
     },
     {

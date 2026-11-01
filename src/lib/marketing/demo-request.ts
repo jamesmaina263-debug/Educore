@@ -2,12 +2,18 @@
 // Deliberately has no "use client" / "use server" directive so the browser form, the server
 // action and the unit tests all import the same rules.
 //
-// Storage note: contact method and preferred time are NOT separate database columns. They are
-// written as a short, readable block at the top of the existing `message` column, because the
-// admin console, the new-lead notification email and the assignment email already display
+// Storage note: contact method, preferred time and (optionally) school type are NOT separate
+// database columns. They are written as a short, readable block at the top of the existing
+// `message` column, because the admin console, the new-lead notification email and the assignment email already display
 // `message` verbatim. That keeps this change schema-free (no migration, no deploy-ordering
 // risk, no change to anything that reads marketing_demo_requests). If these ever need to be
 // filtered or reported on, promote them to real columns in a dedicated migration.
+
+import {
+  parseSchoolCategory,
+  schoolCategoryLabel,
+  type SchoolCategorySlug,
+} from "@/lib/marketing/school-category-options";
 
 export const ROLE_OPTIONS = [
   "School Owner",
@@ -130,6 +136,8 @@ export type DemoRequestInput = {
   message: string;
   /** True only when the visitor ticked the WhatsApp tick-box. Never defaulted on. */
   whatsappConsent: boolean;
+  /** Optional: which /schools/<slug> type the visitor chose. Unknown values are dropped, never an error. */
+  schoolCategory?: SchoolCategorySlug | null;
 };
 
 export type DemoRequestParse =
@@ -203,6 +211,7 @@ export function parseDemoRequest(formData: FormData, now: Date = new Date()): De
       studentCount,
       message,
       whatsappConsent: formData.get("whatsapp_consent") === "yes",
+      schoolCategory: parseSchoolCategory(formData.get("school_category")),
     },
   };
 }
@@ -222,6 +231,7 @@ export function buildStoredMessage(input: DemoRequestInput): string {
   } else {
     lines.push("Preferred time: callback requested as soon as possible");
   }
+  if (input.schoolCategory) lines.push(`School type: ${schoolCategoryLabel(input.schoolCategory)}`);
   if (input.message) lines.push("", input.message);
   return lines.join("\n");
 }

@@ -80,6 +80,22 @@ describe("submitDemoRequest", () => {
     expect(h.markIncompleteLeadCompleted).toHaveBeenCalledTimes(1);
   });
 
+  it("stores the chosen school type in the existing message block, with no new column", async () => {
+    const res = await submitDemoRequest({ status: "idle" }, form({ school_category: "junior-schools" }));
+    expect(res).toEqual({ status: "success" });
+    const row = h.insert.mock.calls[0][0] as Record<string, unknown>;
+    expect(row.message).toBe(
+      "Contact via: WhatsApp\nPreferred time: callback requested as soon as possible\nSchool type: Junior school\n\nPlease demo",
+    );
+    expect(Object.keys(row)).not.toContain("school_category");
+  });
+
+  it("ignores an unrecognised school type rather than failing the visitor", async () => {
+    const res = await submitDemoRequest({ status: "idle" }, form({ school_category: "not-a-type" }));
+    expect(res).toEqual({ status: "success" });
+    expect((h.insert.mock.calls[0][0] as { message: string }).message).not.toContain("School type");
+  });
+
   it("rate-limits by trusted IP before writing", async () => {
     await submitDemoRequest({ status: "idle" }, form());
     expect(h.rpc).toHaveBeenCalledWith("increment_and_check_rate_limit", {

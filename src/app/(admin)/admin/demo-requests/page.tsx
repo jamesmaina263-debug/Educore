@@ -46,7 +46,7 @@ export default async function AdminDemoRequestsPage() {
   // moment before the migration), this just comes back empty rather than breaking the page.
   const { data: incompleteLeads } = await supabase
     .from("marketing_demo_partial_leads")
-    .select("id, created_at, updated_at, status, name, school_name, email, phone, utm_source, utm_medium")
+    .select("id, created_at, updated_at, status, name, school_name, email, phone, source_page, utm_source, utm_medium")
     .in("status", ["incomplete", "contacted"])
     .order("created_at", { ascending: false })
     .limit(200);

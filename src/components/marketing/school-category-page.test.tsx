@@ -69,11 +69,14 @@ describe.each(SCHOOL_CATEGORIES)("SchoolCategoryPage: $slug", (category) => {
       expect(text).toContain(item.acceptedAnswer.text);
     }
     const crumbs = blocks.find((b) => b["@type"] === "BreadcrumbList") as { itemListElement: { item: string }[] };
+    expect(crumbs.itemListElement).toHaveLength(3);
+    expect(crumbs.itemListElement[1]?.item).toMatch(/\/schools$/);
     expect(crumbs.itemListElement.at(-1)?.item).toMatch(new RegExp(`/schools/${category.slug}$`));
   });
 
-  it("links to the other school types", () => {
+  it("links to the other school types and to the /schools hub", () => {
     for (const slug of category.related) expect(html).toContain(`href="/schools/${slug}"`);
+    expect(html).toContain('href="/schools"');
   });
 
   it("describes the hero preview for assistive tech and marks previews as illustrative", () => {
