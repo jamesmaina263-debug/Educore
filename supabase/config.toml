@@ -36,6 +36,12 @@ verify_jwt = false
 [functions.fees-c2b-confirmation]
 verify_jwt = false
 
+# Platform-admin-only: registers a school's C2B confirmation URL with Daraja (sandbox only for now).
+# Called with a real user JWT and gated inside by auth_is_super_admin(), so the gateway check stays on.
+# Safe to leave deployed: it refuses unless feature.finance.c2b_capture is on for the school.
+[functions.c2b-register-url]
+verify_jwt = true
+
 [functions.mpesa-stk-push]
 verify_jwt = true
 
