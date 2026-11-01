@@ -3,6 +3,7 @@ import { loadFinanceContext } from "../_data";
 import { FinancePageShell } from "@/components/finance/finance-page-shell";
 import { ReconciliationSection, type StatementBatchRow } from "@/components/finance/reconciliation-section";
 import { PaybillLink } from "@/components/finance/paybill-link";
+import { MpesaCodeCheck } from "@/components/finance/mpesa-code-check";
 import { hasFeatureFlag } from "@/lib/feature-flags";
 
 export default async function FinanceReconciliationPage() {
@@ -29,6 +30,7 @@ export default async function FinanceReconciliationPage() {
       subtitle="Match a Paybill statement against payments already recorded in the system"
     >
       {showPaybillLink && <PaybillLink />}
+      {ctx.canRead && <MpesaCodeCheck />}
       <ReconciliationSection initialBatches={batches} canWrite={ctx.canWrite} />
     </FinancePageShell>
   );
