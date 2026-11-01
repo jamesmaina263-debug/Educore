@@ -2,7 +2,9 @@
 -- Rollback-only, synthetic fixtures.
 --   psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -f supabase/tests/scheduled_fee_reminders.sql
 -- Needs both migrations deployed. Callers are simulated with request.jwt.claims + role authenticated.
--- NOTE: a passing run ends with the exception MY_TEST_PASSED (so nothing can ever be committed).
+-- SAFETY: everything runs inside one transaction that ends in `rollback;` (same shape as
+-- scheme_of_work_rls.sql); a failed assertion aborts and rolls back too. A final tripwire fails
+-- loudly if any fixture row is ever found to have persisted.
 begin;
 
 create function pg_temp.fx_student(p_school uuid, p_role uuid, p_first text, p_amount numeric, p_term uuid)
@@ -13,7 +15,7 @@ begin
     values (p_school, p_role, 'Guardian ' || p_first, '+2547' || lpad((floor(random() * 99999999))::text, 8, '0'), 'active') returning id into g;
   insert into students (id, school_id, first_name, last_name, date_of_birth, gender, status)
     values (s, p_school, p_first, 'Fx', date '2012-02-02', 'male', 'approved');
-  insert into student_guardians (student_id, guardian_user_id, relationship, primary_contact) values (s, g, 'parent', true);
+  insert into student_guardians (student_id, guardian_user_id, relationship, primary_contact) values (s, g, 'guardian', true);
   update students set status = 'active' where id = s;
   insert into invoices (school_id, student_id, term_id, total_amount) values (p_school, s, p_term, p_amount);
   return s;
@@ -62,7 +64,7 @@ begin
     (st2, sa, 'Sue', 'Two', date '2012-01-02', 'female', 'approved'),
     (st3, sa, 'Sid', 'Three', date '2012-01-03', 'male', 'approved');
   insert into student_guardians (student_id, guardian_user_id, relationship, primary_contact) values
-    (st1, su_g1, 'parent', true), (st2, su_g2, 'parent', true), (st3, su_g3, 'parent', true);
+    (st1, su_g1, 'guardian', true), (st2, su_g2, 'guardian', true), (st3, su_g3, 'guardian', true);
   update students set status = 'active' where id in (st1, st2, st3);
   insert into invoices (school_id, student_id, term_id, total_amount) values
     (sa, st1, tm, 5000), (sa, st2, tm, 6000), (sa, st3, tm, 7000);
@@ -303,7 +305,9 @@ begin
   execute 'set local role authenticated';
   perform set_config('request.jwt.claims', json_build_object('sub', u_burs_a, 'role', 'authenticated')::text, true);
   perform generate_fee_reminders(true);
-  assert (select status from fee_reminders where student_id = st9 order by generated_at desc limit 1) = 'cancelled', '20: cleared draft cancelled at the next run';
+  -- (now() is constant inside a transaction, so assert on status rather than on row order)
+  assert not exists (select 1 from fee_reminders where student_id = st9 and status = 'draft'), '20: no pending draft left for a cleared balance';
+  assert exists (select 1 from fee_reminders where student_id = st9 and status = 'cancelled'), '20: cleared draft cancelled at the next run';
 
   -- 21. fee-threshold alert preference: accepted category, independent of fee_reminder
   execute 'reset role';
@@ -326,7 +330,19 @@ begin
   assert not has_function_privilege('anon', 'public.fee_reminder_delivery_statuses()', 'execute'), '22: anon delivery';
   assert not has_function_privilege('authenticated', 'public.fee_reminder_outstanding(uuid)', 'execute'), '22: outstanding is internal';
 
-  raise exception 'MY_TEST_PASSED';
+  raise notice 'scheduled fee reminders behavioural checks: all passed';
 end
 $$;
+
 rollback;
+
+-- Independent tripwire, in its own implicit transaction after the explicit rollback above: if it ever
+-- finds fixture rows, the rollback did not happen, which is a bug in this file, not in the feature.
+do $$
+begin
+  if exists (select 1 from schools where slug in ('fee-rem-a', 'fee-rem-b'))
+     or exists (select 1 from auth.users where email like 'feerem-%@example.invalid') then
+    raise exception 'LEAK DETECTED: fee-reminder test fixtures were not rolled back -- fix this test file before trusting it again';
+  end if;
+end
+$$;

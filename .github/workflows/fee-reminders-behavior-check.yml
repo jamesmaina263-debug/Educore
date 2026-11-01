@@ -1,0 +1,53 @@
+name: Fee reminders behavior check
+
+# Runs supabase/tests/scheduled_fee_reminders.sql -- a behavioral test (synthetic fixtures, real role
+# impersonation via the request.jwt.claims GUC, the real deployed functions and policies) for the
+# scheduled fee reminders feature: finance.write gating, the feature flag, template validation,
+# opt-out at draft AND send time, send-time balance revalidation (unallocated payments, payments in
+# flight, changed amounts), failed-delivery retry cap, de-duplication and the fee_threshold_alert
+# preference. Same pattern, same secret and same safety model as scheme-of-work-rls-check.yml: the
+# script opens with `begin;`, ends with `rollback;`, and a final tripwire fails loudly if any fixture
+# row persisted. Nothing it does is ever kept.
+#
+# Triggered by changes that could affect this behavior (any migration, the test file, this workflow)
+# and on demand. Deliberately no nightly schedule: add one only if drift outside the migration flow
+# becomes a concern for this feature.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "supabase/migrations/**"
+      - "supabase/tests/scheduled_fee_reminders.sql"
+      - ".github/workflows/fee-reminders-behavior-check.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "supabase/migrations/**"
+      - "supabase/tests/scheduled_fee_reminders.sql"
+      - ".github/workflows/fee-reminders-behavior-check.yml"
+  workflow_dispatch: {}
+
+jobs:
+  fee-reminders-behavior-check:
+    # Same Dependabot carve-out as scheme-of-work-rls-check.yml: GitHub withholds secrets from
+    # dependabot[bot] runs, and the production DB credential is deliberately not exposed to them.
+    if: ${{ !(github.event_name == 'pull_request' && github.actor == 'dependabot[bot]') }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Check SUPABASE_DB_URL is set
+        run: |
+          if [ -z "${{ secrets.SUPABASE_DB_URL }}" ]; then
+            echo "SUPABASE_DB_URL repo secret is not set -- same secret scheme-of-work-rls-check.yml uses. Failing loudly instead of skipping silently."
+            exit 1
+          fi
+
+      - name: Install postgresql-client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+
+      - name: Run scheduled fee reminders behavioral test
+        run: psql "${{ secrets.SUPABASE_DB_URL }}" -v ON_ERROR_STOP=1 -f supabase/tests/scheduled_fee_reminders.sql
