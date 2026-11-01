@@ -11,6 +11,7 @@ import {
 
 const CATEGORIES: { value: PrefCategory; label: string }[] = [
   { value: "fee_reminder", label: "Fee reminders" },
+  { value: "fee_threshold_alert", label: "Automatic fee balance alerts" },
   { value: "absence_alert", label: "Absence alerts" },
   { value: "result_published", label: "Result publications" },
   { value: "announcement", label: "General announcements" },
@@ -62,6 +63,11 @@ export function NotificationPreferencesPanel({ initialRows }: { initialRows: Pre
       <p className="text-sm text-muted-foreground">
         Choose which messages reach you and on which channel. Unchecking a box turns that message off
         for you only — the school still sees it in their records.
+      </p>
+      <p className="text-xs text-muted-foreground">
+        &quot;Fee reminders&quot; and &quot;Automatic fee balance alerts&quot; are separate switches that only control those two kinds of
+        message. Turning them off does not stop other communication from the school, such as announcements
+        about your child, and you can switch them back on at any time.
       </p>
       {error && <p className="text-sm text-danger">{error}</p>}
       <div className="overflow-x-auto rounded-md border border-border">

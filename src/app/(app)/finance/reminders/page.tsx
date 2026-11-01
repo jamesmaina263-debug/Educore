@@ -3,8 +3,8 @@ import { createClient } from "@/lib/supabase/server";
 import { hasFeatureFlag } from "@/lib/feature-flags";
 import { loadFinanceContext } from "../_data";
 import { FinancePageShell } from "@/components/finance/finance-page-shell";
-import { FeeRemindersSection, type ReminderRow } from "@/components/finance/fee-reminders-section";
-import { DEFAULT_SCHEDULE, REMINDER_FLAG, type ReminderSchedule } from "@/lib/fee-reminders";
+import { FeeRemindersSection, type ReminderRow, type TemplateOption } from "@/components/finance/fee-reminders-section";
+import { DEFAULT_SCHEDULE, REMINDER_FLAG, templateProblem, type DeliveryStatus, type ReminderSchedule } from "@/lib/fee-reminders";
 
 export default async function FinanceRemindersPage() {
   const supabase = await createClient();
@@ -16,11 +16,12 @@ export default async function FinanceRemindersPage() {
 
   let schedule: ReminderSchedule = DEFAULT_SCHEDULE;
   let reminders: ReminderRow[] = [];
+  let templates: TemplateOption[] = [];
 
   if (ctx.canRead && ctx.canWrite) {
     const { data: s } = await supabase
       .from("fee_reminder_schedules")
-      .select("enabled, frequency, run_weekday, run_day_of_month, channel, min_balance, min_days_between")
+      .select("enabled, frequency, run_weekday, run_day_of_month, channel, min_balance, min_days_between, template_id")
       .maybeSingle();
     if (s) {
       schedule = {
@@ -31,13 +32,35 @@ export default async function FinanceRemindersPage() {
         channel: s.channel as ReminderSchedule["channel"],
         minBalance: Number(s.min_balance),
         minDaysBetween: Number(s.min_days_between),
+        templateId: (s.template_id as string | null) ?? null,
       };
     }
+
+    // The school's saved fee-reminder templates (Communication > Templates). Visible only to roles that
+    // can read communication; others simply see EduCore's default message.
+    const { data: tplRows } = await supabase
+      .from("communication_templates")
+      .select("id, name, channel, body")
+      .eq("category", "fee_reminder")
+      .order("name", { ascending: true });
+    templates = (tplRows ?? []).map((t) => ({
+      id: t.id as string,
+      name: t.name as string,
+      channel: (t.channel as string | null) ?? null,
+      body: t.body as string,
+      problem: templateProblem(t.body as string),
+    }));
+
+    // Delivery state of reminders that were queued (a failed delivery becomes eligible again at the next run).
+    const { data: deliveryRows } = await supabase.rpc("fee_reminder_delivery_statuses");
+    const delivery = new Map<string, DeliveryStatus>(
+      ((deliveryRows ?? []) as { reminder_id: string; delivery_status: string }[]).map((d) => [d.reminder_id, d.delivery_status as DeliveryStatus]),
+    );
 
     const { data: rows } = await supabase
       .from("fee_reminders")
       .select(
-        "id, balance_at_generation, draft_body, status, channel, run_on, generated_at, sent_at, dismiss_reason, students(first_name, last_name), school_users!fee_reminders_guardian_user_id_fkey(full_name, phone)",
+        "id, balance_at_generation, draft_body, status, channel, run_on, generated_at, sent_at, dismiss_reason, cancel_reason, edited, students(first_name, last_name), school_users!fee_reminders_guardian_user_id_fkey(full_name, phone)",
       )
       .order("generated_at", { ascending: false })
       .limit(300);
@@ -57,6 +80,9 @@ export default async function FinanceRemindersPage() {
         runOn: r.run_on as string,
         sentAt: (r.sent_at as string | null) ?? null,
         dismissReason: (r.dismiss_reason as string | null) ?? null,
+        cancelReason: (r.cancel_reason as string | null) ?? null,
+        edited: Boolean(r.edited),
+        delivery: delivery.get(r.id as string) ?? null,
       };
     });
   }
@@ -68,7 +94,7 @@ export default async function FinanceRemindersPage() {
       title="Fee Reminders"
       subtitle="Scheduled, draft-and-approve reminders for families with a fee balance"
     >
-      <FeeRemindersSection schedule={schedule} reminders={reminders} canWrite={ctx.canWrite} />
+      <FeeRemindersSection schedule={schedule} reminders={reminders} templates={templates} canWrite={ctx.canWrite} />
     </FinancePageShell>
   );
 }

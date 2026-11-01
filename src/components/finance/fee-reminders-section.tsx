@@ -12,6 +12,7 @@ import {
   WEEKDAYS,
   describeSchedule,
   reminderTone,
+  type DeliveryStatus,
   type ReminderChannel,
   type ReminderFrequency,
   type ReminderSchedule,
@@ -23,6 +24,7 @@ import {
   updateReminderDraftAction,
   dismissReminderAction,
   approveReminderAction,
+  refreshReminderAction,
 } from "@/app/(app)/finance/reminders/actions";
 
 export interface ReminderRow {
@@ -37,6 +39,18 @@ export interface ReminderRow {
   runOn: string;
   sentAt: string | null;
   dismissReason: string | null;
+  cancelReason: string | null;
+  edited: boolean;
+  delivery: DeliveryStatus | null;
+}
+
+export interface TemplateOption {
+  id: string;
+  name: string;
+  channel: string | null;
+  body: string;
+  /** Plain-language reason the template cannot be used, or null when it is fine. */
+  problem: string | null;
 }
 
 const selectClass =
@@ -49,10 +63,12 @@ function fmt(n: number) {
 export function FeeRemindersSection({
   schedule,
   reminders,
+  templates,
   canWrite,
 }: {
   schedule: ReminderSchedule;
   reminders: ReminderRow[];
+  templates: TemplateOption[];
   canWrite: boolean;
 }) {
   const toHref = useSchoolHref();
@@ -215,8 +231,42 @@ export function FeeRemindersSection({
               onChange={(e) => setGapText(e.target.value)}
             />
           </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="rem_tpl">Message</Label>
+            <select
+              id="rem_tpl"
+              className={selectClass}
+              disabled={!canWrite}
+              value={form.templateId ?? ""}
+              onChange={(e) => setForm((f) => ({ ...f, templateId: e.target.value || null }))}
+            >
+              <option value="">EduCore default message</option>
+              {templates.map((t) => {
+                const wrongChannel = t.channel !== null && t.channel !== form.channel;
+                return (
+                  <option key={t.id} value={t.id} disabled={Boolean(t.problem) || wrongChannel}>
+                    {t.name}
+                    {t.problem ? " (needs fixing)" : wrongChannel ? ` (${t.channel} only)` : ""}
+                  </option>
+                );
+              })}
+            </select>
+          </div>
         </div>
         <p className="mt-3 text-xs text-muted-foreground">{describeSchedule({ ...form, minBalance: Number(minBalanceText) || 0, minDaysBetween: Number(gapText) || 0 })}</p>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Write your own message in{" "}
+          <a href={toHref("/communication")} className="underline">
+            Communication &gt; Templates
+          </a>{" "}
+          (category &quot;Fee reminder&quot;). You can use {"{{guardian_name}}"}, {"{{student_name}}"}, {"{{school_name}}"} and {"{{balance}}"}; the balance is
+          always filled in from the live fee records at the time of sending.
+        </p>
+        {templates.some((t) => t.problem) && (
+          <p className="mt-1 text-xs text-destructive">
+            {templates.filter((t) => t.problem).map((t) => `${t.name}: ${t.problem}`).join(" ")}
+          </p>
+        )}
         {form.channel === "whatsapp" && (
           <p className="mt-1 text-xs text-muted-foreground">
             WhatsApp messages the school starts need a template approved by WhatsApp; if yours is not approved yet,
@@ -279,6 +329,23 @@ export function FeeRemindersSection({
                   >
                     Save edits
                   </Button>
+                  {r.edited && (
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      disabled={pending && busyId === r.id}
+                      onClick={() => {
+                        setDrafts((d) => {
+                          const next = { ...d };
+                          delete next[r.id];
+                          return next;
+                        });
+                        run(r.id, () => refreshReminderAction(r.id));
+                      }}
+                    >
+                      Refresh from template
+                    </Button>
+                  )}
                   <Button
                     size="sm"
                     disabled={pending && busyId === r.id}
@@ -319,8 +386,13 @@ export function FeeRemindersSection({
                 <span>
                   {r.studentName}: {fmt(r.balance)}
                   {r.dismissReason ? ` (${r.dismissReason})` : ""}
+                  {r.cancelReason ? ` (${r.cancelReason})` : ""}
+                  {r.delivery === "failed" ? " Delivery failed: eligible to be drafted again at the next run." : ""}
                 </span>
-                <StatusBadge tone={reminderTone(r.status)} label={r.status} />
+                <StatusBadge
+                  tone={r.delivery === "failed" ? "warning" : reminderTone(r.status)}
+                  label={r.delivery === "failed" ? "delivery failed" : r.status}
+                />
               </div>
             ))}
           </div>
