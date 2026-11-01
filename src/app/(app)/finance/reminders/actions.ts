@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { tagSentryRequestContext } from "@/lib/observability/sentry-context";
-import { validateSchedule, type ReminderSchedule } from "@/lib/fee-reminders";
+import { describeSendOutcome, validateSchedule, type ReminderSchedule } from "@/lib/fee-reminders";
 
 type ActionResult = { error: string } | { success: true };
 
@@ -25,6 +25,7 @@ export async function saveScheduleAction(input: ReminderSchedule): Promise<Actio
     p_channel: s.channel,
     p_min_balance: s.minBalance,
     p_min_days_between: s.minDaysBetween,
+    p_template_id: s.templateId,
   });
   if (error) return { error: error.message };
   revalidatePath("/finance/reminders");
@@ -64,10 +65,20 @@ export async function approveReminderAction(id: string): Promise<ActionResult> {
   const { data, error } = await supabase.rpc("send_fee_reminder", { p_id: id });
   if (error) return { error: error.message };
   revalidatePath("/finance/reminders");
-  // false = the database refused to queue it (guardian opted out, no phone, or the balance was
-  // cleared since the draft was made). The draft is dismissed with the reason; tell the person.
-  if (data === false) {
-    return { error: "Not sent: the guardian opted out, has no phone number, or the balance has been cleared. The draft was dismissed with the reason." };
-  }
+  // The database re-checks opt-out, phone, the live balance (including payments not yet allocated)
+  // and any payment in progress at the moment of sending. Anything other than "sent" means nothing
+  // went out; say exactly why.
+  const outcome = describeSendOutcome(String(data));
+  if (!outcome.ok) return { error: outcome.message };
+  return { success: true };
+}
+
+export async function refreshReminderAction(id: string): Promise<ActionResult> {
+  const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
+  const { data, error } = await supabase.rpc("refresh_fee_reminder", { p_id: id });
+  if (error) return { error: error.message };
+  revalidatePath("/finance/reminders");
+  if (data === "cancelled") return { error: "Nothing is owing any more, so this reminder was cancelled." };
   return { success: true };
 }
