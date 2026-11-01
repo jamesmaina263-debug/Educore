@@ -140,6 +140,32 @@ describe("buildStoredMessage", () => {
   });
 });
 
+describe("school type", () => {
+  it("is optional: absent, blank and unknown values never fail the request", () => {
+    for (const value of [undefined, "", "   ", "university", "PRIMARY-SCHOOLS", "primary-schools; drop table"]) {
+      const res = parseDemoRequest(form(value === undefined ? valid : { ...valid, school_category: value }), NOW);
+      expect(res.ok, String(value)).toBe(true);
+      expect(res.ok && res.value.schoolCategory, String(value)).toBeNull();
+    }
+  });
+
+  it("accepts exactly the five landing-page slugs", () => {
+    for (const slug of ["nursery-kindergarten", "primary-schools", "junior-schools", "secondary-schools", "integrated-schools"]) {
+      const res = parseDemoRequest(form({ ...valid, school_category: slug }), NOW);
+      expect(res.ok && res.value.schoolCategory).toBe(slug);
+    }
+  });
+
+  it("adds one readable line after the preferred time, and nothing when it isn't chosen", () => {
+    const withType = parseDemoRequest(form({ ...valid, school_category: "primary-schools", message: "Fees module" }), NOW);
+    expect(withType.ok && buildStoredMessage(withType.value)).toBe(
+      "Contact via: WhatsApp\nPreferred time: callback requested as soon as possible\nSchool type: Primary school\n\nFees module",
+    );
+    const without = parseDemoRequest(form(valid), NOW);
+    expect(without.ok && buildStoredMessage(without.value)).not.toContain("School type");
+  });
+});
+
 describe("WhatsApp agreement tick-box", () => {
   it("is false unless the box was ticked, and only the value \"yes\" counts", () => {
     for (const extra of [{}, { whatsapp_consent: "" }, { whatsapp_consent: "on" }, { whatsapp_consent: "true" }, { whatsapp_consent: "1" }, { whatsapp_consent: "YES" }] as Record<string, string>[]) {

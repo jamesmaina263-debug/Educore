@@ -8,6 +8,7 @@ import {
   setDemoPartialLeadContacted,
   deleteDemoPartialLead,
 } from "@/app/(admin)/admin/demo-requests/actions";
+import { schoolCategoryFromPath, schoolCategoryLabel } from "@/lib/marketing/school-category-options";
 
 export type IncompleteDemoLeadRow = {
   id: string;
@@ -18,6 +19,8 @@ export type IncompleteDemoLeadRow = {
   school_name: string;
   email: string;
   phone: string | null;
+  /** The page the form was on, or the /schools/<slug> landing page the visitor came from. */
+  source_page: string | null;
   utm_source: string | null;
   utm_medium: string | null;
 };
@@ -102,6 +105,10 @@ export function AdminIncompleteDemoLeads({ rows }: { rows: IncompleteDemoLeadRow
                   <td className="text-muted-foreground">
                     {row.utm_source ?? "direct"}
                     {row.utm_medium ? ` / ${row.utm_medium}` : ""}
+                    {(() => {
+                      const category = schoolCategoryFromPath(row.source_page);
+                      return category ? <div className="text-xs">{schoolCategoryLabel(category)}</div> : null;
+                    })()}
                   </td>
                   <td className="text-right">
                     <div className="flex justify-end gap-1.5">

@@ -2,6 +2,7 @@ import type { MetadataRoute } from "next";
 import { SITE_URL } from "@/lib/site";
 import { BLOG_POSTS } from "@/lib/blog-posts";
 import { PAGE_LAST_MODIFIED } from "@/lib/seo-dates";
+import { SCHOOL_CATEGORIES } from "@/lib/marketing/school-categories";
 
 // Lists every route that currently renders real marketing content.
 // /about and /contact were added here once Phase 8 landed (it shipped
@@ -34,6 +35,17 @@ const ROUTES: { path: string; priority: number; changeFrequency: MetadataRoute.S
   { path: "/terms", priority: 0.3, changeFrequency: "yearly" },
 ];
 
+// School-category landing pages come from the SCHOOL_CATEGORIES config the pages
+// themselves render from, so a category can't be added and left out of the sitemap.
+const SCHOOL_ROUTES: typeof ROUTES = [
+  { path: "/schools", priority: 0.8, changeFrequency: "monthly" },
+  ...SCHOOL_CATEGORIES.map((c) => ({
+    path: `/schools/${c.slug}`,
+    priority: 0.7,
+    changeFrequency: "monthly" as const,
+  })),
+];
+
 // Blog post URLs come from the BLOG_POSTS registry, not hardcoded entries
 // above: the registry is the file a new post already has to be added to for
 // the /blog index, so deriving from it means a post can't be published and
@@ -54,7 +66,7 @@ function lastModifiedFor(path: string): string | undefined {
 }
 
 export default function sitemap(): MetadataRoute.Sitemap {
-  return [...ROUTES, ...BLOG_ROUTES].map(({ path, priority, changeFrequency }) => ({
+  return [...ROUTES, ...SCHOOL_ROUTES, ...BLOG_ROUTES].map(({ path, priority, changeFrequency }) => ({
     url: `${SITE_URL}${path}`,
     lastModified: lastModifiedFor(path),
     priority,

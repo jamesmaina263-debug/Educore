@@ -29,6 +29,7 @@ export const NEVER_PREFIX = new Set([
   "student-management-system", "cbc-school-management",
   "school-attendance-management", "parent-communication",
   "student-performance-appraisal", "teacher-performance-management",
+  "schools",
   "unsubscribe",
 ]);
 

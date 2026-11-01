@@ -66,6 +66,6 @@ export const config = {
   // NEW api route stay behind the proxy by default. src/proxy.test.ts enforces both directions,
   // including that no excluded route imports the session client.
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|sw\\.js|offline\\.html|manifest\\.webmanifest|robots\\.txt|sitemap\\.xml|(?:about|ai-automation|blog|brochure|cbc-school-management|contact|faq|finance-fees|parent-communication|platform|pricing|privacy|school-attendance-management|security|solutions|student-management-system|student-performance-appraisal|teacher-performance-management|terms)(?:/|$)|api/(?:cron|webhooks|page-view|outreach-link|csp-report|unsubscribe)(?:/|$)|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|txt|xml|json|webmanifest|pdf|doc|docx|zip)$).*)",
+    "/((?!_next/static|_next/image|favicon.ico|sw\\.js|offline\\.html|manifest\\.webmanifest|robots\\.txt|sitemap\\.xml|(?:about|ai-automation|blog|brochure|cbc-school-management|contact|faq|finance-fees|parent-communication|platform|pricing|privacy|school-attendance-management|schools|security|solutions|student-management-system|student-performance-appraisal|teacher-performance-management|terms)(?:/|$)|api/(?:cron|webhooks|page-view|outreach-link|csp-report|unsubscribe)(?:/|$)|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|txt|xml|json|webmanifest|pdf|doc|docx|zip)$).*)",
   ],
 };
