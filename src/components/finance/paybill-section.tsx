@@ -13,6 +13,8 @@ import {
   outcomeMeta,
   type C2bMode,
 } from "@/lib/c2b-events";
+import { attentionLines } from "@/lib/c2b-attention";
+import type { C2bAttention } from "@/app/(app)/finance/paybill/attention";
 
 export interface PaybillModeInfo {
   exists: boolean;
@@ -43,11 +45,13 @@ export function PaybillSection({
   events,
   isOwner,
   isTill = false,
+  attention,
 }: {
   mode: PaybillModeInfo;
   events: PaybillEventRow[];
   isOwner: boolean;
   isTill?: boolean;
+  attention?: C2bAttention;
 }) {
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -69,8 +73,31 @@ export function PaybillSection({
 
   const offerLive = canOfferLive({ exists: mode.exists, mode: mode.mode, registered: mode.registered, isOwner, isTill });
 
+  const attentionText = attention ? attentionLines(attention) : [];
+
   return (
     <div className="flex flex-col gap-6">
+      {attentionText.length > 0 && attention && (
+        <div role="alert" className="panel flex flex-col gap-2 border-warning/40 bg-warning-subtle p-4 text-sm">
+          <p className="font-semibold">Needs attention</p>
+          {attentionText.map((line) => (
+            <p key={line}>{line}</p>
+          ))}
+          {attention.failed.length > 0 && (
+            <ul className="list-disc pl-5 font-mono text-xs">
+              {attention.failed.map((f) => (
+                <li key={f.id}>
+                  {f.externalId} · {fmtKes(f.amount)} · account {f.accountReference ?? "—"} ·{" "}
+                  {new Date(f.at).toLocaleString()}
+                </li>
+              ))}
+              {attention.failedCount > attention.failed.length && (
+                <li>…and {attention.failedCount - attention.failed.length} more in the list below</li>
+              )}
+            </ul>
+          )}
+        </div>
+      )}
       {isTill && (
         <div className="panel border-warning/40 bg-warning-subtle p-4 text-sm">
           The M-Pesa number for your school is a till (Buy Goods). A till payment carries no account number, so it cannot be
