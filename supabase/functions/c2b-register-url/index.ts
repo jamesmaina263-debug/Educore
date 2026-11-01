@@ -54,7 +54,7 @@ Deno.serve(async (req) => {
 
     const [{ data: flagEnabled }, { data: settings }, { data: credsRows, error: credsError }] = await Promise.all([
       admin.rpc("school_has_feature_flag", { p_school_id: schoolId, p_key: C2B_FLAG_KEY }),
-      admin.from("mpesa_settings").select("shortcode, is_active, environment").eq("school_id", schoolId).maybeSingle(),
+      admin.from("mpesa_settings").select("shortcode, is_active, environment, shortcode_type").eq("school_id", schoolId).maybeSingle(),
       admin.rpc("get_mpesa_credentials_decrypted", { p_school_id: schoolId }),
     ]);
     const credsRow = credsRows?.[0];

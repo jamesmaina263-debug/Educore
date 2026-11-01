@@ -59,7 +59,15 @@ export function isLiveConfirmationValid(text: string | null | undefined): boolea
 }
 
 /** Can the UI offer "go live"? (The database enforces the same rule; this only decides what to show.) */
-export function canOfferLive(input: { exists: boolean; mode: C2bMode | null; registered: boolean; isOwner: boolean }): boolean {
+export function canOfferLive(input: {
+  exists: boolean;
+  mode: C2bMode | null;
+  registered: boolean;
+  isOwner: boolean;
+  isTill?: boolean;
+}): boolean {
+  // A till carries no account number, so auto-capture can never match it: never offer going live.
+  if (input.isTill) return false;
   return input.isOwner && input.exists && input.registered && input.mode === "log_only";
 }
 

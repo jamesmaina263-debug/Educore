@@ -69,6 +69,8 @@ describe("canOfferLive", () => {
     expect(canOfferLive(ok)).toBe(true);
     expect(canOfferLive({ ...ok, isOwner: false })).toBe(false);
     expect(canOfferLive({ ...ok, exists: false })).toBe(false);
+    expect(canOfferLive({ ...ok, isTill: true })).toBe(false);
+    expect(canOfferLive({ ...ok, isTill: false })).toBe(true);
     expect(canOfferLive({ ...ok, registered: false })).toBe(false);
     expect(canOfferLive({ ...ok, mode: "live" })).toBe(false);
     expect(canOfferLive({ ...ok, mode: null })).toBe(false);
