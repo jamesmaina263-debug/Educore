@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { tagSentryRequestContext } from "@/lib/observability/sentry-context";
 import { selectInChunks, chunk } from "@/lib/academics/in-chunks";
 import { selectBulkApprovable } from "@/lib/academics/report-card-status";
+import { notifyReportCardEvent } from "@/lib/academics/report-card-notify";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -81,8 +82,28 @@ export async function approveStreamComments(input: {
 
     revalidatePath("/exams/report-cards");
     if (approved === 0) return { error: "You don't have permission to approve these report cards." };
+    // The stream's class teacher hears once that these were approved (unless they did it themselves).
+    await notifyReportCardEvent(supabase, { event: "approved", examId: input.exam_id, streamId: input.stream_id });
     return { approved, skipped: eligible.length - approved };
   } catch {
     return { error: "Couldn't approve the comments. Please try again." };
   }
+}
+
+/**
+ * Called once after a bulk "Draft AI comments" run (which skips the per-draft notification): tells the
+ * people who can approve this stream that drafts are waiting. Read-only apart from the notification,
+ * which notify_report_card_event derives from the real card states, so a call with nothing waiting
+ * sends nothing.
+ */
+export async function notifyStreamAwaitingApproval(input: { exam_id: string; stream_id: string }): Promise<{ success: true } | { error: string }> {
+  if (![input.exam_id, input.stream_id].every((v) => typeof v === "string" && UUID.test(v))) return { error: "Invalid request." };
+  const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "Your session has expired. Please sign in again." };
+  await notifyReportCardEvent(supabase, { event: "awaiting_approval", examId: input.exam_id, streamId: input.stream_id });
+  return { success: true };
 }

@@ -10,6 +10,7 @@ const h = vi.hoisted(() => ({
   allowedIds: null as Set<string> | null,
   updates: [] as Update[],
   cardFilters: [] as Record<string, unknown>[],
+  rpc: vi.fn(),
 }));
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
@@ -17,6 +18,7 @@ vi.mock("@/lib/observability/sentry-context", () => ({ tagSentryRequestContext: 
 vi.mock("@/lib/supabase/server", () => ({
   createClient: async () => ({
     auth: { getUser: async () => ({ data: { user: h.user } }) },
+    rpc: h.rpc,
     from(table: string) {
       const filters: Record<string, unknown> = {};
       let update: Record<string, unknown> | null = null;
@@ -47,7 +49,7 @@ vi.mock("@/lib/supabase/server", () => ({
   }),
 }));
 
-const { approveStreamComments } = await import("./bulk-actions");
+const { approveStreamComments, notifyStreamAwaitingApproval } = await import("./bulk-actions");
 
 const ids = {
   exam_id: "11111111-1111-4111-8111-111111111111",
@@ -62,6 +64,8 @@ beforeEach(() => {
   h.allowedIds = null;
   h.updates = [];
   h.cardFilters = [];
+  h.rpc.mockReset();
+  h.rpc.mockResolvedValue({ data: 0, error: null });
   h.roster = [{ id: "s1" }, { id: "s2" }, { id: "s3" }, { id: "s4" }, { id: "s5" }];
   h.cards = [card(1, "ai", "Good work."), card(2, "none", "Kept after a fix."), card(3, "none", null), card(4, "ai", "   "), card(5, "teacher_approved", "Out already.")];
 });
@@ -118,5 +122,35 @@ describe("approveStreamComments", () => {
     h.user = null;
     expect(await approveStreamComments(ids)).toEqual({ error: "Your session has expired. Please sign in again." });
     expect(h.updates).toHaveLength(0);
+  });
+});
+
+describe("staff notifications from bulk actions", () => {
+  it("tells the class teacher once that the stream's comments were approved", async () => {
+    await approveStreamComments(ids);
+    const calls = h.rpc.mock.calls.filter((c) => c[0] === "notify_report_card_event");
+    expect(calls).toHaveLength(1);
+    expect(calls[0][1]).toEqual({ p_event: "approved", p_exam_id: ids.exam_id, p_class_id: null, p_stream_id: ids.stream_id, p_student_id: null });
+  });
+
+  it("sends nothing when nothing was approved", async () => {
+    h.allowedIds = new Set();
+    await approveStreamComments(ids);
+    expect(h.rpc).not.toHaveBeenCalled();
+  });
+
+  it("a failing notification never fails the approval", async () => {
+    h.rpc.mockRejectedValue(new Error("notification service down"));
+    expect(await approveStreamComments(ids)).toEqual({ approved: 2, skipped: 0 });
+  });
+
+  it("notifyStreamAwaitingApproval asks for awaiting_approval on that stream, and validates input", async () => {
+    expect(await notifyStreamAwaitingApproval({ exam_id: ids.exam_id, stream_id: ids.stream_id })).toEqual({ success: true });
+    expect(h.rpc).toHaveBeenCalledWith("notify_report_card_event", { p_event: "awaiting_approval", p_exam_id: ids.exam_id, p_class_id: null, p_stream_id: ids.stream_id, p_student_id: null });
+    h.rpc.mockClear();
+    expect(await notifyStreamAwaitingApproval({ exam_id: "x", stream_id: ids.stream_id })).toEqual({ error: "Invalid request." });
+    h.user = null;
+    expect(await notifyStreamAwaitingApproval({ exam_id: ids.exam_id, stream_id: ids.stream_id })).toEqual({ error: "Your session has expired. Please sign in again." });
+    expect(h.rpc).not.toHaveBeenCalled();
   });
 });
