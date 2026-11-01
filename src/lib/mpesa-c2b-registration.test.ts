@@ -84,6 +84,14 @@ describe("checkRegistrationPreconditions", () => {
       checkRegistrationPreconditions({ ...good, settings: { ...good.settings, shortcode: null } }),
     ).toMatchObject({ code: "no_active_shortcode" });
   });
+  it("refuses a till: paybill auto-capture needs an account number", () => {
+    expect(
+      checkRegistrationPreconditions({ ...good, settings: { ...good.settings, shortcode_type: "till" } }),
+    ).toMatchObject({ ok: false, code: "till_not_supported" });
+    expect(
+      checkRegistrationPreconditions({ ...good, settings: { ...good.settings, shortcode_type: "paybill" } }),
+    ).toEqual({ ok: true });
+  });
   it("refuses without credentials", () => {
     expect(checkRegistrationPreconditions({ ...good, hasCredentials: false })).toMatchObject({ code: "no_credentials" });
   });

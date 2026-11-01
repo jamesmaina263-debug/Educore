@@ -42,10 +42,12 @@ export function PaybillSection({
   mode,
   events,
   isOwner,
+  isTill = false,
 }: {
   mode: PaybillModeInfo;
   events: PaybillEventRow[];
   isOwner: boolean;
+  isTill?: boolean;
 }) {
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -65,10 +67,17 @@ export function PaybillSection({
     });
   }
 
-  const offerLive = canOfferLive({ exists: mode.exists, mode: mode.mode, registered: mode.registered, isOwner });
+  const offerLive = canOfferLive({ exists: mode.exists, mode: mode.mode, registered: mode.registered, isOwner, isTill });
 
   return (
     <div className="flex flex-col gap-6">
+      {isTill && (
+        <div className="panel border-warning/40 bg-warning-subtle p-4 text-sm">
+          The M-Pesa number for your school is a till (Buy Goods). A till payment carries no account number, so it cannot be
+          matched to a learner automatically; paybill auto-capture needs a paybill. M-Pesa prompts and statement upload
+          keep working for your till.
+        </div>
+      )}
       <div className="panel flex flex-col gap-3 p-4">
         <div className="flex flex-wrap items-center gap-3">
           <p className="text-sm font-semibold">Mode</p>

@@ -19,6 +19,7 @@ export default async function FinancePaybillPage() {
   let mode: PaybillModeInfo = { exists: false, mode: null, registered: false };
   let events: PaybillEventRow[] = [];
   let isOwner = false;
+  let isTill = false;
 
   if (ctx.canRead && user) {
     const { data: me } = await supabase
@@ -32,6 +33,9 @@ export default async function FinancePaybillPage() {
     if (me?.school_id) {
       const { data: status } = await supabase.rpc("c2b_mode_status", { p_school_id: me.school_id });
       const s = (status as { cfg_exists: boolean; cfg_mode: string | null; cfg_registered: boolean }[] | null)?.[0];
+      const { data: mp } = await supabase.from("mpesa_settings").select("shortcode_type").eq("school_id", me.school_id).maybeSingle();
+      isTill = (mp as { shortcode_type?: string | null } | null)?.shortcode_type === "till";
+
       if (s) mode = { exists: s.cfg_exists, mode: (s.cfg_mode as C2bMode | null) ?? null, registered: s.cfg_registered };
     }
 
@@ -68,7 +72,7 @@ export default async function FinancePaybillPage() {
       title="Paybill auto-capture"
       subtitle="Payments received on your paybill, and whether they are recorded automatically"
     >
-      <PaybillSection mode={mode} events={events} isOwner={isOwner} />
+      <PaybillSection mode={mode} events={events} isOwner={isOwner} isTill={isTill} />
     </FinancePageShell>
   );
 }
