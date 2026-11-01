@@ -29,6 +29,13 @@ verify_jwt = false
 [functions.mpesa-stk-callback]
 verify_jwt = false
 
+# Public webhook Safaricom calls for Daraja C2B (paybill) confirmations -- no Supabase session, so
+# verify_jwt must stay false. Authenticated by the URL token in mpesa_c2b_config plus the Safaricom
+# source-IP allowlist. The name must not contain words Daraja rejects in URLs (mpesa, safaricom,
+# exe, exec, cme, cmd, sql, query). Nothing is registered with Safaricom for it yet.
+[functions.fees-c2b-confirmation]
+verify_jwt = false
+
 [functions.mpesa-stk-push]
 verify_jwt = true
 
