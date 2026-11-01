@@ -58,7 +58,7 @@ export function c2bRegisterEndpoint(environment: "sandbox" | "production"): stri
 
 export interface RegistrationInputs {
   flagEnabled: boolean;
-  settings: { shortcode: string | null; is_active: boolean | null; environment: string | null } | null;
+  settings: { shortcode: string | null; is_active: boolean | null; environment: string | null; shortcode_type?: string | null } | null;
   hasCredentials: boolean;
 }
 
@@ -71,6 +71,15 @@ export function checkRegistrationPreconditions(i: RegistrationInputs): Precondit
   }
   if (!i.settings || !i.settings.is_active || !i.settings.shortcode || !SHORTCODE_RE.test(String(i.settings.shortcode).trim())) {
     return { ok: false, code: "no_active_shortcode", message: "The school has no active M-Pesa shortcode." };
+  }
+  // Paybill auto-capture matches the account number to an admission number. A till (Buy Goods) payment
+  // carries no account number, so it could never be matched automatically: refuse rather than register.
+  if (i.settings.shortcode_type === "till") {
+    return {
+      ok: false,
+      code: "till_not_supported",
+      message: "Paybill auto-capture needs a paybill. This school uses a till, which carries no account number.",
+    };
   }
   if (!i.hasCredentials) {
     return { ok: false, code: "no_credentials", message: "The school has no saved Daraja credentials." };
