@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isValidCronRequest } from "@/lib/cron-auth";
 import { sendSecurityAlert } from "@/lib/security-alert";
+import { alertIfStale } from "@/lib/c2b-attention";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -46,5 +47,14 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  return NextResponse.json({ resolved: typeof data === "number" ? data : 0, ran_at: new Date().toISOString() });
+  // After resolving, flag anything still parked for over an hour (alerts at most hourly from this route; a
+  // daily Vercel Cron route, /api/cron/c2b-stale-check, is the independent backstop). Never fails the run.
+  const stale = await alertIfStale(adminClient, { throttleHourly: true });
+
+  return NextResponse.json({
+    resolved: typeof data === "number" ? data : 0,
+    stale_deferred: stale.staleCount,
+    stale_check: stale.checkFailed ? "failed" : "ok",
+    ran_at: new Date().toISOString(),
+  });
 }

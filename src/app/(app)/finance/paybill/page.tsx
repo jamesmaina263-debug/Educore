@@ -6,6 +6,7 @@ import { loadFinanceContext } from "../_data";
 import { FinancePageShell } from "@/components/finance/finance-page-shell";
 import { PaybillSection, type PaybillEventRow, type PaybillModeInfo } from "@/components/finance/paybill-section";
 import { parseWouldBe, type C2bMode } from "@/lib/c2b-events";
+import { loadC2bAttention, type C2bAttention } from "./attention";
 
 export default async function FinancePaybillPage() {
   const supabase = await createClient();
@@ -18,6 +19,7 @@ export default async function FinancePaybillPage() {
 
   let mode: PaybillModeInfo = { exists: false, mode: null, registered: false };
   let events: PaybillEventRow[] = [];
+  let attention: C2bAttention = { failedCount: 0, failed: [], staleDeferred: 0 };
   let isOwner = false;
   let isTill = false;
 
@@ -38,6 +40,8 @@ export default async function FinancePaybillPage() {
 
       if (s) mode = { exists: s.cfg_exists, mode: (s.cfg_mode as C2bMode | null) ?? null, registered: s.cfg_registered };
     }
+
+    attention = await loadC2bAttention(supabase);
 
     const { data: rows } = await supabase
       .from("inbound_payment_events")
@@ -72,7 +76,7 @@ export default async function FinancePaybillPage() {
       title="Paybill auto-capture"
       subtitle="Payments received on your paybill, and whether they are recorded automatically"
     >
-      <PaybillSection mode={mode} events={events} isOwner={isOwner} isTill={isTill} />
+      <PaybillSection mode={mode} events={events} isOwner={isOwner} isTill={isTill} attention={attention} />
     </FinancePageShell>
   );
 }
