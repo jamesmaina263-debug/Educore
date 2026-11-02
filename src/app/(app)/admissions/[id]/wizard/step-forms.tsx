@@ -9,6 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import Link from "next/link";
+import { canAttemptCompletion, readinessFrom, stepForChecklistItem, type ReadinessState } from "@/lib/admissions/completion-readiness";
 import {
   updateAdmissionDetails,
   updateApplicantIdentity,
@@ -1283,17 +1284,55 @@ export function FinanceStep({
 // Step 10 — Final Review (Brief 4.16.10, 4.16.13)
 // ============================================================================
 
-const CHECKLIST_STEP_BY_ITEM: Record<string, string> = {
-  student: "student",
-  // Task 2's confirmation checkbox lives on the Admission Details step (Step 1).
-  walk_in_screening: "admission_details",
-  guardian: "guardian",
-  documents: "documents",
-  academics: "academics",
-  finance: "finance",
-  boarding: "boarding",
-  transport: "transport",
-};
+
+// Runs the same server-side readiness check the Final Review always had, but automatically, so the
+// Review and Complete screens can tell the officer what is missing without being asked.
+function useCompletionReadiness(applicationId: string, enabled: boolean) {
+  const [state, setState] = useState<ReadinessState>({ kind: "checking" });
+  const [nonce, setNonce] = useState(0);
+
+  useEffect(() => {
+    if (!enabled) return;
+    let cancelled = false;
+    getAdmissionChecklist(applicationId)
+      .then((result) => {
+        if (!cancelled) setState(readinessFrom(result));
+      })
+      .catch(() => {
+        if (!cancelled) setState({ kind: "unknown", error: "Couldn't run the readiness check." });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [applicationId, enabled, nonce]);
+
+  return {
+    state,
+    recheck: () => {
+      setState({ kind: "checking" });
+      setNonce((n) => n + 1);
+    },
+  };
+}
+
+function MissingItemsPanel({ missing, onNavigateToStep, onRecheck }: { missing: ChecklistItem[]; onNavigateToStep: (stepId: string) => void; onRecheck: () => void }) {
+  return (
+    <div className="rounded-md border border-danger/25 bg-destructive-subtle p-3">
+      <p className="mb-1.5 text-sm font-medium text-danger">
+        Not ready to complete — {missing.length} {missing.length === 1 ? "thing" : "things"} to fix
+      </p>
+      <ul className="space-y-1">
+        {missing.map((m) => (
+          <li key={m.item} className="flex items-center justify-between gap-2 text-sm">
+            <span>{m.message}</span>
+            <Button size="sm" variant="ghost" onClick={() => onNavigateToStep(stepForChecklistItem(m.item))}>Fix</Button>
+          </li>
+        ))}
+      </ul>
+      <Button size="sm" variant="outline" className="mt-2" onClick={onRecheck}>Re-check</Button>
+    </div>
+  );
+}
 
 export interface ReviewSummary {
   admissionType: string;
@@ -1318,18 +1357,7 @@ export interface ReviewSummary {
 // its own step — which already has the full, live form — rather than re-implementing every field
 // a third time on this screen; fixing something here means one click, not a re-typed duplicate.
 export function ReviewStep({ applicationId, summary, onNavigateToStep }: { applicationId: string; summary: ReviewSummary; onNavigateToStep: (stepId: string) => void }) {
-  const [missing, setMissing] = useState<ChecklistItem[] | null>(null);
-  const [pending, startTransition] = useTransition();
-  const [error, setError] = useState<string | null>(null);
-
-  function loadChecklist() {
-    setError(null);
-    startTransition(async () => {
-      const result = await getAdmissionChecklist(applicationId);
-      if ("error" in result) { setError(result.error); return; }
-      setMissing(result.missing);
-    });
-  }
+  const { state: readiness, recheck } = useCompletionReadiness(applicationId, true);
 
   // Task 15: the Boarding/Transport steps in the wizard auto-skip based on the applicant's
   // original preference, so an officer reviewing this screen never sees that preference when
@@ -1374,24 +1402,18 @@ export function ReviewStep({ applicationId, summary, onNavigateToStep }: { appli
         ))}
       </ul>
 
-      {missing === null ? (
-        <Button size="sm" variant="outline" onClick={loadChecklist} disabled={pending}>{pending ? "Checking…" : "Run readiness check"}</Button>
-      ) : missing.length === 0 ? (
+      {readiness.kind === "checking" ? (
+        <p className="text-sm text-muted-foreground">Checking that everything required is in place…</p>
+      ) : readiness.kind === "ready" ? (
         <p className="flex items-center gap-1.5 text-sm text-success"><SuccessDot />Everything required is in place — ready to complete enrollment.</p>
+      ) : readiness.kind === "blocked" ? (
+        <MissingItemsPanel missing={readiness.missing} onNavigateToStep={onNavigateToStep} onRecheck={recheck} />
       ) : (
-        <div className="rounded-md border border-danger/25 bg-destructive-subtle p-3">
-          <p className="mb-1.5 text-sm font-medium text-danger">Not ready to complete</p>
-          <ul className="space-y-1">
-            {missing.map((m) => (
-              <li key={m.item} className="flex items-center justify-between text-sm">
-                <span>{m.message}</span>
-                <Button size="sm" variant="ghost" onClick={() => onNavigateToStep(CHECKLIST_STEP_BY_ITEM[m.item] ?? "student")}>Fix</Button>
-              </li>
-            ))}
-          </ul>
+        <div className="flex items-center gap-2 text-sm">
+          <span className="text-danger">{readiness.error}</span>
+          <Button size="sm" variant="outline" onClick={recheck}>Re-check</Button>
         </div>
       )}
-      <ErrorText error={error} />
     </StepPanel>
   );
 }
@@ -1405,13 +1427,18 @@ export function CompleteStep({
   applicantName,
   alreadyEnrolled,
   onCompleted,
+  onNavigateToStep,
 }: {
   applicationId: string;
   applicantName: string;
   alreadyEnrolled: EnrollmentResult | null;
   onCompleted: (result: EnrollmentResult) => void;
+  onNavigateToStep: (stepId: string) => void;
 }) {
   const [result, setResult] = useState<EnrollmentResult | null>(alreadyEnrolled);
+  // Tell the officer what is missing BEFORE they press the button (the server still enforces the same
+  // checklist inside complete_enrollment(); this just stops it being discovered one message at a time).
+  const { state: readiness, recheck } = useCompletionReadiness(applicationId, alreadyEnrolled === null);
   const toHref = useSchoolHref();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -1421,7 +1448,7 @@ export function CompleteStep({
     setError(null);
     startTransition(async () => {
       const outcome = await completeEnrollmentAction(applicationId);
-      if ("error" in outcome) { setError(outcome.error); return; }
+      if ("error" in outcome) { setError(outcome.error); recheck(); return; }
       setResult(outcome.result);
       onCompleted(outcome.result);
     });
@@ -1437,9 +1464,22 @@ export function CompleteStep({
   if (!result) {
     return (
       <StepPanel title="Complete Enrollment" hint="This creates the enrollment record in a single, safe step — clicking twice never creates duplicates.">
-        <p className="text-sm">Ready to enroll <span className="font-medium">{applicantName}</span>.</p>
+        {readiness.kind === "checking" && <p className="text-sm text-muted-foreground">Checking that everything required is in place…</p>}
+        {readiness.kind === "blocked" && (
+          <>
+            <p className="text-sm">
+              <span className="font-medium">{applicantName}</span> can&apos;t be enrolled yet. Fix the items below, then come back.
+            </p>
+            <MissingItemsPanel missing={readiness.missing} onNavigateToStep={onNavigateToStep} onRecheck={recheck} />
+          </>
+        )}
+        {(readiness.kind === "ready" || readiness.kind === "unknown") && (
+          <p className="text-sm">
+            {readiness.kind === "ready" ? "Everything required is in place. " : ""}Ready to enroll <span className="font-medium">{applicantName}</span>.
+          </p>
+        )}
         <ErrorText error={error} />
-        <Button onClick={complete} disabled={pending}>{pending ? "Completing…" : "Complete Enrollment"}</Button>
+        <Button onClick={complete} disabled={pending || !canAttemptCompletion(readiness)}>{pending ? "Completing…" : "Complete Enrollment"}</Button>
       </StepPanel>
     );
   }
