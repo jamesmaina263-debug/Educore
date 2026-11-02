@@ -42,6 +42,12 @@ verify_jwt = false
 [functions.c2b-register-url]
 verify_jwt = true
 
+# Production twin of c2b-register-url. Dry run by default, typed shortcode confirmation to register for real.
+# Safe to leave deployed: it refuses unless the flag is on, the school is production + paybill + log_only, and the
+# URL has never been registered.
+[functions.c2b-register-url-prod]
+verify_jwt = true
+
 [functions.mpesa-stk-push]
 verify_jwt = true
 
