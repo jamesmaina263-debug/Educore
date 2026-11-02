@@ -50,4 +50,15 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y postgresql-client
 
       - name: Run scheduled fee reminders behavioral test
-        run: psql "${{ secrets.SUPABASE_DB_URL }}" -v ON_ERROR_STOP=1 -f supabase/tests/scheduled_fee_reminders.sql
+        env:
+          DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          set +e
+          out=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -f supabase/tests/scheduled_fee_reminders.sql 2>&1)
+          code=$?
+          echo "$out"
+          if [ "$code" -ne 0 ]; then
+            # Surface the failing assertion as annotations so it is visible without opening the raw log.
+            echo "$out" | grep -E "ERROR|CONTEXT|DETAIL|HINT|LEAK" | head -10 | while IFS= read -r line; do echo "::error::${line}"; done
+            exit "$code"
+          fi
