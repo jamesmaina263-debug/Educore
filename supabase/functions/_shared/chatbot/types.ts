@@ -13,6 +13,8 @@ export interface ChatContext {
   guardianUserId: string;
   currentStudentId: string | null;
   messageText: string;
+  // Set only when the school has feature.bot.menu on (see menu.ts). Undefined means English, as before.
+  language?: "en" | "sw";
 }
 
 export type EscalationReason =
