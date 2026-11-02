@@ -1,5 +1,6 @@
 import type { ChatContext, ToolDefinition, ToolResult } from "../types.ts";
 import { getStudentFirstName } from "../childContext.ts";
+import { attendanceText, noAttendanceText } from "../menu.ts";
 
 export const attendanceTool: ToolDefinition = {
   key: "attendance",
@@ -15,7 +16,7 @@ export const attendanceTool: ToolDefinition = {
       .maybeSingle();
 
     if (!latest) {
-      return { replyText: `I don't have any attendance records for ${childName} yet.` };
+      return { replyText: noAttendanceText(ctx.language ?? "en", childName) };
     }
 
     const thirtyDaysAgo = new Date();
@@ -27,10 +28,12 @@ export const attendanceTool: ToolDefinition = {
       .eq("status", "absent")
       .gte("attendance_date", thirtyDaysAgo.toISOString().slice(0, 10));
 
-    const statusLabel = latest.status === "present" ? "present" : latest.status === "late" ? "late" : "absent";
-    const text =
-      `${childName} was marked ${statusLabel} on ${latest.attendance_date}. ` +
-      `${absences ?? 0} absence(s) recorded in the last 30 days.`;
+    const text = attendanceText(ctx.language ?? "en", {
+      name: childName,
+      status: latest.status,
+      date: latest.attendance_date,
+      absences: absences ?? 0,
+    });
 
     return { replyText: text };
   },

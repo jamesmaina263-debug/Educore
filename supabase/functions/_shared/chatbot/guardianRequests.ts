@@ -181,10 +181,14 @@ export function classifyGuardianRequest(rawText: string, today: string): Guardia
 }
 
 /** "Wed 4 Nov 2026" style label for replies (date is YYYY-MM-DD). */
-export function describeDate(iso: string): string {
+export function describeDate(iso: string, lang: "en" | "sw" = "en"): string {
   const d = new Date(iso + "T00:00:00Z");
-  const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const days = lang === "sw"
+    ? ["Jumapili", "Jumatatu", "Jumanne", "Jumatano", "Alhamisi", "Ijumaa", "Jumamosi"]
+    : ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  const months = lang === "sw"
+    ? ["Jan", "Feb", "Mac", "Apr", "Mei", "Jun", "Jul", "Ago", "Sep", "Okt", "Nov", "Des"]
+    : ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
   return `${days[d.getUTCDay()]} ${d.getUTCDate()} ${months[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
 }
 
@@ -221,6 +225,8 @@ export interface GuardianRequestContext {
   conversationId: string;
   guardianUserId: string;
   messageText: string;
+  /** "sw" when the school has the menu flag and the guardian chose Kiswahili; otherwise English. */
+  language?: "en" | "sw";
 }
 
 export interface GuardianRequestResult {
@@ -247,6 +253,7 @@ export async function tryHandleGuardianRequest(
   now: Date = new Date(),
 ): Promise<GuardianRequestResult | null> {
   const { escalationAck } = deps;
+  const L = (en: string, swText: string) => (ctx.language === "sw" ? swText : en);
   const handOff = (): GuardianRequestResult => ({ replyText: escalationAck, escalate: true, escalationReason: "tool_error" });
 
   // Fail closed: any problem asking about the flag means "feature off".
@@ -269,7 +276,7 @@ export async function tryHandleGuardianRequest(
   try {
     if (request.kind === "contact_update") {
       if (!request.phone) {
-        return say("Please send the new number in one message, like: change my number to 0712345678");
+        return say(L("Please send the new number in one message, like: change my number to 0712345678", "Tafadhali tuma namba mpya kwa ujumbe mmoja, kama hivi: badilisha namba yangu mpya 0712345678"));
       }
       const { data, error } = await ctx.supabase.rpc("bot_submit_contact_update", {
         p_school_id: ctx.schoolId,
@@ -281,17 +288,21 @@ export async function tryHandleGuardianRequest(
       if (error || !data) return handOff();
       if (data.ok) {
         return say(
-          `Thank you. I've asked the school office to change your number to ${extractPhone(ctx.messageText)}. ` +
-            "Nothing changes until the office confirms it, and until then we will keep using your current number.",
+          L(
+            `Thank you. I've asked the school office to change your number to ${extractPhone(ctx.messageText)}. ` +
+              "Nothing changes until the office confirms it, and until then we will keep using your current number.",
+            `Asante. Nimeomba ofisi ya shule ibadilishe namba yako kuwa ${extractPhone(ctx.messageText)}. ` +
+              "Hakuna kitakachobadilika hadi ofisi ithibitishe, na hadi wakati huo tutaendelea kutumia namba yako ya sasa.",
+          ),
         );
       }
       switch (data.code) {
         case "bad_phone":
-          return say("I couldn't read that as a Kenyan mobile number. Please send it like: change my number to 0712345678");
+          return say(L("I couldn't read that as a Kenyan mobile number. Please send it like: change my number to 0712345678", "Sikuweza kusoma hiyo kama namba ya simu ya Kenya. Tafadhali tuma hivi: badilisha namba yangu mpya 0712345678"));
         case "same_number":
-          return say("That is already the number we have for you, so nothing needs to change.");
+          return say(L("That is already the number we have for you, so nothing needs to change.", "Hiyo tayari ndiyo namba tuliyo nayo kwako, kwa hivyo hakuna cha kubadilisha."));
         case "rate_limited":
-          return say("You have sent several requests today. Please type 'agent' to talk to the school office directly.");
+          return say(L("You have sent several requests today. Please type 'agent' to talk to the school office directly.", "Umetuma maombi kadhaa leo. Tafadhali andika 'agent' kuongea moja kwa moja na ofisi ya shule."));
         default:
           return handOff();
       }
@@ -303,10 +314,20 @@ export async function tryHandleGuardianRequest(
     const child = pickChildByName(children, ctx.messageText);
     if (!child) {
       const names = children.map((c) => c.first_name).join(", ");
-      return say(`You have more than one child with us (${names}). Please include the child's first name, like: ${children[0].first_name} will be absent tomorrow`);
+      return say(
+        L(
+          `You have more than one child with us (${names}). Please include the child's first name, like: ${children[0].first_name} will be absent tomorrow`,
+          `Una zaidi ya mtoto mmoja shuleni (${names}). Tafadhali weka jina la kwanza la mtoto, kama hivi: ${children[0].first_name} hatakuja kesho`,
+        ),
+      );
     }
     if (!request.date) {
-      return say(`Which day will ${child.first_name} be absent? Please send it like: ${child.first_name} will be absent tomorrow, fever`);
+      return say(
+        L(
+          `Which day will ${child.first_name} be absent? Please send it like: ${child.first_name} will be absent tomorrow, fever`,
+          `${child.first_name} hatakuja siku gani? Tafadhali tuma hivi: ${child.first_name} hatakuja kesho, homa`,
+        ),
+      );
     }
     // Same gate every student-scoped tool goes through, right before the data is written.
     const authorized = await deps.canAccessStudent(ctx.guardianUserId, child.student_id, ctx.schoolId);
@@ -322,21 +343,26 @@ export async function tryHandleGuardianRequest(
       p_raw_text: ctx.messageText,
     });
     if (error || !data) return handOff();
-    const when = describeDate(request.date);
+    const when = describeDate(request.date, ctx.language === "sw" ? "sw" : "en");
     if (data.ok) {
       const prefix = data.duplicate
-        ? `I already have a note that ${child.first_name} will be absent on ${when}.`
-        : `Thank you. I've noted that ${child.first_name} will be absent on ${when}.`;
+        ? L(`I already have a note that ${child.first_name} will be absent on ${when}.`, `Tayari nina ujumbe kuwa ${child.first_name} hatakuja tarehe ${when}.`)
+        : L(`Thank you. I've noted that ${child.first_name} will be absent on ${when}.`, `Asante. Nimeandika kuwa ${child.first_name} hatakuja tarehe ${when}.`);
       return {
-        ...say(`${prefix} This is a message to the school office; it does not change the attendance register.`),
+        ...say(
+          `${prefix} ${L(
+            "This is a message to the school office; it does not change the attendance register.",
+            "Huu ni ujumbe kwa ofisi ya shule; haubadilishi rejista ya mahudhurio.",
+          )}`,
+        ),
         studentId: child.student_id,
       };
     }
     switch (data.code) {
       case "bad_date":
-        return say("I can only note an absence from yesterday up to 30 days ahead. Please send the day again, or type 'agent' to talk to the school office.");
+        return say(L("I can only note an absence from yesterday up to 30 days ahead. Please send the day again, or type 'agent' to talk to the school office.", "Naweza kuandika kutokuwepo kuanzia jana hadi siku 30 zijazo tu. Tafadhali tuma siku tena, au andika 'agent' kuongea na ofisi ya shule."));
       case "rate_limited":
-        return say("You have sent several requests today. Please type 'agent' to talk to the school office directly.");
+        return say(L("You have sent several requests today. Please type 'agent' to talk to the school office directly.", "Umetuma maombi kadhaa leo. Tafadhali andika 'agent' kuongea moja kwa moja na ofisi ya shule."));
       default:
         return handOff();
     }
