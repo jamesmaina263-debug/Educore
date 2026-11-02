@@ -24,7 +24,7 @@ export const RESET_GROUPS: ResetGroup[] = [
     key: "fees",
     label: "Fees, invoices and payments",
     description:
-      "Invoices, payments, receipts, M-Pesa payment requests, fee waivers and discounts, and admission enrolment records.",
+      "Invoices, payments, receipts, M-Pesa payment requests, paybill (C2B) payment records, fee waivers and discounts, and admission enrolment records.",
     requires: [],
     buckets: [],
   },
