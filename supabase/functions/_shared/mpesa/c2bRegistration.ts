@@ -1,4 +1,4 @@
-// Pure helpers for registering a school's C2B confirmation URL with Daraja (sandbox only for now).
+// Pure helpers for registering a school's C2B confirmation URL with Daraja (sandbox and production).
 //
 // Kept free of Deno/Supabase imports so it can be unit-tested with vitest (see
 // src/lib/mpesa-c2b-registration.test.ts).
@@ -65,7 +65,10 @@ export interface RegistrationInputs {
 export type PreconditionResult = { ok: true } | { ok: false; code: string; message: string };
 
 // Order matters only for which message the admin sees first.
-export function checkRegistrationPreconditions(i: RegistrationInputs): PreconditionResult {
+export function checkRegistrationPreconditions(
+  i: RegistrationInputs,
+  environment: "sandbox" | "production" = "sandbox",
+): PreconditionResult {
   if (!i.flagEnabled) {
     return { ok: false, code: "flag_off", message: `Feature flag ${C2B_FLAG_KEY} is not enabled for this school.` };
   }
@@ -84,14 +87,87 @@ export function checkRegistrationPreconditions(i: RegistrationInputs): Precondit
   if (!i.hasCredentials) {
     return { ok: false, code: "no_credentials", message: "The school has no saved Daraja credentials." };
   }
-  if (i.settings.environment !== "sandbox") {
+  if (i.settings.environment !== environment) {
+    return environment === "sandbox"
+      ? {
+          ok: false,
+          code: "not_sandbox",
+          message: "Only sandbox registration is supported here. Production registration is a separate, once-only step.",
+        }
+      : {
+          ok: false,
+          code: "not_production",
+          message: "Production registration needs the school's M-Pesa setup to be on the production environment.",
+        };
+  }
+  return { ok: true };
+}
+
+// ---- Production-only helpers (used by c2b-register-url-prod) ----------------------------------------
+
+// Production Register URL is effectively one-time: Safaricom has no unregister API, so a second attempt
+// fails and changing the URL means deleting it on the Daraja portal (or asking Safaricom). Refuse
+// up front rather than send a call that cannot succeed.
+export function checkProductionRegistrationState(i: {
+  registeredAt: string | null;
+  mode: string | null;
+}): PreconditionResult {
+  if (i.registeredAt) {
     return {
       ok: false,
-      code: "not_sandbox",
-      message: "Only sandbox registration is supported here. Production registration is a separate, once-only step.",
+      code: "already_registered",
+      message:
+        "This school's URL is already registered. Production registration is one-time; changing it means deleting it on the Daraja portal first (see the runbook).",
+    };
+  }
+  if (i.mode && i.mode !== "log_only") {
+    return {
+      ok: false,
+      code: "mode_not_log_only",
+      message: "Register while the school is still in log-only mode.",
     };
   }
   return { ok: true };
+}
+
+const BLOCKED_HOSTS = ["localhost", "127.0.0.1", "0.0.0.0", "ngrok", "mockbin", "requestbin", "webhook.site", "loca.lt"];
+
+// Safaricom's production rules: HTTPS, publicly reachable, no forbidden words anywhere in the URL, no tunnel
+// or request-bin services. Unlike the sandbox builder this checks the WHOLE URL, host included.
+export function checkProductionUrl(url: string): { ok: true } | { ok: false; reason: string } {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return { ok: false, reason: "The URL is not valid." };
+  }
+  if (parsed.protocol !== "https:") return { ok: false, reason: "Production URLs must be HTTPS." };
+  const lower = url.toLowerCase();
+  for (const word of DARAJA_FORBIDDEN_URL_WORDS) {
+    if (lower.includes(word)) return { ok: false, reason: `The URL must not contain "${word}".` };
+  }
+  for (const host of BLOCKED_HOSTS) {
+    if (parsed.hostname.toLowerCase().includes(host)) {
+      return { ok: false, reason: "Tunnel, request-bin and local hosts are not allowed in production." };
+    }
+  }
+  return { ok: true };
+}
+
+// What an admin may see of the address: everything except the secret.
+export function redactedUrl(url: string, token: string): string {
+  return token ? url.split(token).join("<token>") : url;
+}
+
+// The typed confirmation must be the school's shortcode, exactly, as a string.
+export function confirmationMatches(confirm: unknown, shortcode: string): boolean {
+  return typeof confirm === "string" && confirm.trim() !== "" && confirm.trim() === String(shortcode).trim();
+}
+
+// Safaricom's wording for "these URLs are already registered" varies; match loosely and only use it to
+// choose which help text to show. It never changes what the function does (it never retries).
+export function looksLikeAlreadyRegistered(reason: string): boolean {
+  return /already|duplicate|exist/i.test(reason);
 }
 
 export type RegisterOutcome = { ok: true; description: string } | { ok: false; reason: string };
