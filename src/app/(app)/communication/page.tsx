@@ -8,6 +8,9 @@ import { ComposeSection, type TemplateOption, type RosterEntry } from "@/compone
 import { TemplatesSection, type TemplateRow } from "@/components/communication/templates-section";
 import { HistorySection, type LogRow } from "@/components/communication/history-section";
 import { SupplierComposeSection, type SupplierOption, type SupplierPoOption } from "@/components/communication/supplier-compose-section";
+import { BotRequestsLink } from "@/components/communication/bot-requests-link";
+import { hasFeatureFlag } from "@/lib/feature-flags";
+import { BOT_REQUESTS_FLAG } from "@/lib/bot-requests";
 import { WhatsAppInboxSection, type ConversationRow } from "@/components/communication/whatsapp-inbox-section";
 import { DeliveryHealthSection, type ChannelStat, type QueuedItem, type FailedItem } from "@/components/communication/delivery-health-section";
 
@@ -94,6 +97,9 @@ export default async function CommunicationPage() {
       </AppShell>
     );
   }
+
+  // Link to the guardian-requests queue; renders only for schools with the flag (fails closed).
+  const showBotRequestsLink = await hasFeatureFlag(supabase, BOT_REQUESTS_FLAG);
 
   const [{ data: templates }, { data: logs }, { data: students }, { data: classes }, { data: suppliers }, { data: purchaseOrders }, { data: conversations }, { data: archivedConversationsData }] =
     await Promise.all([
@@ -259,6 +265,7 @@ export default async function CommunicationPage() {
           </TabsContent>
 
           <TabsContent value="whatsapp">
+            {showBotRequestsLink && <BotRequestsLink />}
             <WhatsAppInboxSection conversations={conversationRows} archivedConversations={archivedConversationRows} canDelete={canDelete ?? false} />
           </TabsContent>
 
