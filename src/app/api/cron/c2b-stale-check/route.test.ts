@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const alertIfStale = vi.fn();
-vi.mock("@/lib/c2b-attention", () => ({ alertIfStale: (...a: unknown[]) => alertIfStale(...a) }));
+vi.mock("@/lib/c2b-stale-alert", () => ({ alertIfStale: (...a: unknown[]) => alertIfStale(...a) }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({}) }));
 
 import { GET } from "./route";

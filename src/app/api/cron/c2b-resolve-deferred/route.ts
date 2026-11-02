@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isValidCronRequest } from "@/lib/cron-auth";
 import { sendSecurityAlert } from "@/lib/security-alert";
-import { alertIfStale } from "@/lib/c2b-attention";
+import { alertIfStale } from "@/lib/c2b-stale-alert";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;

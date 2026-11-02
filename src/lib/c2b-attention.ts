@@ -1,13 +1,12 @@
-// Paybill (C2B) events that need a person. Pure helpers plus one small I/O function used by the cron
-// routes; no UI, no secrets, no PII in alerts (counts and ages only).
-import type { SupabaseClient } from "@supabase/supabase-js";
-import { sendSecurityAlert } from "@/lib/security-alert";
+// Paybill (C2B) events that need a person: PURE helpers only (no I/O, no imports). This file is imported by
+// a client component (the Paybill screen), so it must never import anything that only runs on the server. The alerting
+// function lives in c2b-stale-alert.ts for that reason; a test below guards the rule.
 
 /** A parked (`deferred_to_stk`) event older than this has missed its normal 20-35 minute resolution. */
 export const STALE_DEFERRED_AFTER_MINUTES = 60;
 /** How far back the bursar-facing "failed" count looks. A failed event has no resolved state yet. */
 export const FAILED_LOOKBACK_DAYS = 30;
-const MAX_ROWS = 500;
+export const MAX_STALE_ROWS = 500;
 
 export interface StaleRow {
   school_id: string;
@@ -36,7 +35,7 @@ export function summariseStale(rows: StaleRow[], now: Date): StaleSummary | null
   const oldest = Math.min(...usable.map((r) => Date.parse(r.created_at)));
   return {
     count: usable.length,
-    capped: rows.length >= MAX_ROWS,
+    capped: rows.length >= MAX_STALE_ROWS,
     schools: new Set(usable.map((r) => r.school_id)).size,
     oldestMinutes: Math.max(0, Math.round((now.getTime() - oldest) / 60_000)),
   };
@@ -66,45 +65,4 @@ export function attentionLines({ failedCount, staleDeferred }: AttentionInput): 
     );
   }
   return lines;
-}
-
-export interface StaleCheckResult {
-  staleCount: number;
-  alerted: boolean;
-  checkFailed: boolean;
-}
-
-/**
- * Looks for events parked as `deferred_to_stk` for over an hour and raises one alert (Slack + the
- * platform_alerts digest) when any exist. Never throws: a failing check is reported, not fatal.
- * `throttleHourly` is for the every-15-minutes caller; the daily backstop passes false.
- */
-export async function alertIfStale(
-  admin: SupabaseClient,
-  opts: { throttleHourly: boolean; now?: Date },
-): Promise<StaleCheckResult> {
-  const now = opts.now ?? new Date();
-  const { data, error } = await admin
-    .from("inbound_payment_events")
-    .select("school_id, created_at")
-    .eq("outcome", "deferred_to_stk")
-    .lt("created_at", staleCutoffIso(now))
-    .order("created_at", { ascending: true })
-    .limit(MAX_ROWS);
-  if (error) return { staleCount: 0, alerted: false, checkFailed: true };
-
-  const summary = summariseStale((data ?? []) as StaleRow[], now);
-  if (!summary) return { staleCount: 0, alerted: false, checkFailed: false };
-  if (opts.throttleHourly && !isFirstRunOfHour(now)) {
-    return { staleCount: summary.count, alerted: false, checkFailed: false };
-  }
-
-  await sendSecurityAlert("C2B payments stuck waiting for STK confirmation", {
-    events: summary.capped ? `${summary.count}+` : String(summary.count),
-    schools: String(summary.schools),
-    oldest_minutes: String(summary.oldestMinutes),
-    action:
-      "Check the c2b-resolve-deferred-cron workflow in GitHub Actions and Finance > Paybill for the school. Money may be received but not recorded.",
-  });
-  return { staleCount: summary.count, alerted: true, checkFailed: false };
 }

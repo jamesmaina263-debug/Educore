@@ -4,7 +4,7 @@ const sendSecurityAlert = vi.fn();
 vi.mock("@/lib/security-alert", () => ({ sendSecurityAlert: (...a: unknown[]) => sendSecurityAlert(...a) }));
 
 const alertIfStale = vi.fn();
-vi.mock("@/lib/c2b-attention", () => ({ alertIfStale: (...a: unknown[]) => alertIfStale(...a) }));
+vi.mock("@/lib/c2b-stale-alert", () => ({ alertIfStale: (...a: unknown[]) => alertIfStale(...a) }));
 
 const rpc = vi.fn();
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ rpc: (...a: unknown[]) => rpc(...a) }) }));
