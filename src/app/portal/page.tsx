@@ -11,6 +11,8 @@ import { PortalHomeworkSection, type PortalAssignmentRow } from "@/components/po
 import { PortalPtMeetingsSection, type PortalSlotRow } from "@/components/portal/portal-pt-meetings";
 import { PortalConnectSection, type PortalConnectItemRow } from "@/components/portal/portal-connect";
 import { PortalAnnouncementsSection, type PortalAnnouncementRow } from "@/components/portal/portal-announcements";
+import { PortalCalendarSection } from "@/components/portal/portal-calendar";
+import { CALENDAR_FLAG, portalUpcoming, type CalendarEvent, type EventCategory, type EventStatus } from "@/lib/school-calendar";
 import { ReportCardInsightsPanel } from "@/components/exams/report-card-insights-panel";
 import { buildReportCardInsights } from "@/lib/academics/report-card-insights";
 import { getStudentGrowth } from "@/app/(app)/students/[id]/growth-actions";
@@ -43,6 +45,44 @@ export default async function PortalPage({ searchParams }: { searchParams: Promi
 
   // WhatsApp bot documents: the PIN link only appears for parents at schools that switched it on.
   const whatsappDocumentsOn = roleName === "parent" && (await hasFeatureFlag(supabase, "feature.bot.documents"));
+
+  // School calendar: parents at schools that switched the events calendar on see upcoming events.
+  // The database policy already hides staff-only events from parents; the query repeats the filter.
+  const calendarOn = roleName === "parent" && (await hasFeatureFlag(supabase, CALENDAR_FLAG));
+  let calendarEvents: CalendarEvent[] = [];
+  let calendarHouses: { id: string; name: string; colour: string }[] = [];
+  if (calendarOn) {
+    const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Africa/Nairobi" }).format(new Date());
+    const [{ data: evRows }, { data: houseRows }] = await Promise.all([
+      supabase
+        .from("school_events")
+        .select("id, title, description, category, starts_on, ends_on, start_time, end_time, location, house_id, audience, status, cancel_reason")
+        .eq("audience", "everyone")
+        .gte("ends_on", today)
+        .order("starts_on", { ascending: true })
+        .limit(40),
+      supabase.from("school_houses").select("id, name, colour").eq("status", "active"),
+    ]);
+    calendarEvents = portalUpcoming(
+      (evRows ?? []).map((e) => ({
+        id: e.id as string,
+        title: e.title as string,
+        description: (e.description as string | null) ?? null,
+        category: e.category as EventCategory,
+        startsOn: e.starts_on as string,
+        endsOn: e.ends_on as string,
+        startTime: (e.start_time as string | null) ?? null,
+        endTime: (e.end_time as string | null) ?? null,
+        location: (e.location as string | null) ?? null,
+        houseId: (e.house_id as string | null) ?? null,
+        audience: "everyone" as const,
+        status: e.status as EventStatus,
+        cancelReason: (e.cancel_reason as string | null) ?? null,
+      })),
+      today,
+    );
+    calendarHouses = (houseRows ?? []).map((h) => ({ id: h.id as string, name: h.name as string, colour: h.colour as string }));
+  }
 
   let students: { id: string; name: string; current_class_id: string }[] = [];
 
@@ -578,6 +618,13 @@ export default async function PortalPage({ searchParams }: { searchParams: Promi
         <div className="panel p-4">
           <p className="label-eyebrow mb-2">Announcements</p>
           <PortalAnnouncementsSection items={announcementItems} />
+        </div>
+      )}
+
+      {calendarOn && (
+        <div className="panel p-4">
+          <p className="label-eyebrow mb-2">Upcoming events</p>
+          <PortalCalendarSection events={calendarEvents} houses={calendarHouses} />
         </div>
       )}
 
