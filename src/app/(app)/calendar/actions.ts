@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { tagSentryRequestContext } from "@/lib/observability/sentry-context";
-import { validateEvent, validateHouse, type EventInput, type HouseInput } from "@/lib/school-calendar";
+import { validateAssignment, validateEvent, validateHouse, type EventInput, type HouseInput } from "@/lib/school-calendar";
 
 type ActionResult = { error: string } | { success: true };
 
@@ -64,4 +64,31 @@ export async function saveHouseAction(input: HouseInput): Promise<ActionResult> 
   }
   revalidatePath("/calendar");
   return { success: true };
+}
+
+export async function assignLearnersAction(
+  studentIds: string[],
+  houseId: string | null,
+): Promise<{ error: string } | { success: true; done: number; failed: number }> {
+  const checked = validateAssignment(studentIds, houseId);
+  if ("error" in checked) return { error: checked.error };
+  const { studentIds: ids, houseId: house } = checked.value;
+  const supabase = await createClient();
+  await tagSentryRequestContext(supabase);
+  // One database call per learner so each is checked (permission, flag, same school, house active) on its own.
+  let done = 0;
+  let failed = 0;
+  let firstError: string | null = null;
+  for (const id of ids) {
+    const { error } = await supabase.rpc("assign_student_house", { p_student_id: id, p_house_id: house });
+    if (error) {
+      failed += 1;
+      firstError ??= error.message;
+    } else {
+      done += 1;
+    }
+  }
+  revalidatePath("/calendar/houses");
+  if (done === 0 && firstError) return { error: firstError };
+  return { success: true, done, failed };
 }
