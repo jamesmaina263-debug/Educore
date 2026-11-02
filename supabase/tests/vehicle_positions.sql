@@ -149,6 +149,9 @@ begin
 end
 $$;
 
+rollback;
+
+-- Tripwire: runs AFTER the rollback, so any surviving fixture row is a real leak.
 do $$
 begin
   if exists (select 1 from schools where slug in ('vpos-a', 'vpos-b'))
@@ -157,4 +160,3 @@ begin
   end if;
 end
 $$;
-rollback;
