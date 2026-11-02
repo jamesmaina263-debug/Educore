@@ -40,7 +40,7 @@ begin
     (st1, sa, 'Sam', 'One', date '2012-01-01', 'male', 'approved'),
     (st_other, sa, 'Olu', 'Other', date '2012-01-02', 'male', 'approved');
   insert into student_guardians (student_id, guardian_user_id, relationship, primary_contact) values
-    (st1, su_parent, 'parent', true), (st_other, su_parent2, 'parent', true);
+    (st1, su_parent, 'guardian', true), (st_other, su_parent2, 'guardian', true);
 
   insert into whatsapp_conversations (school_id, phone_number, guardian_user_id, status)
     values (sa, '+254700100001', su_parent, 'bot') returning id into conv1;
