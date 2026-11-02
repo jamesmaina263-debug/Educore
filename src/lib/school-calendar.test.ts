@@ -1,14 +1,20 @@
 import { describe, expect, it } from "vitest";
 import {
   formatDateRange,
+  filterLearners,
   formatTimeRange,
   groupByMonth,
+  houseCounts,
+  MAX_ASSIGN_BATCH,
+  NO_HOUSE,
   monthLabel,
   portalUpcoming,
   splitUpcoming,
+  validateAssignment,
   validateEvent,
   validateHouse,
   type CalendarEvent,
+  type LearnerRow,
   type EventInput,
 } from "./school-calendar";
 
@@ -123,5 +129,41 @@ describe("portalUpcoming", () => {
   });
   it("returns nothing when there is nothing upcoming", () => {
     expect(portalUpcoming([ev("old", "2026-10-01")], "2026-11-02")).toEqual([]);
+  });
+});
+
+describe("house assignment helpers", () => {
+  const L = (id: string, name: string, classKey: string, houseId: string | null, adm: string | null = null): LearnerRow => ({
+    id, name, admissionNumber: adm, classLabel: classKey, classKey, houseId,
+  });
+  const rows = [L("1", "Ann Wanjiru", "c1", "red", "A001"), L("2", "Bob Otieno", "c1", null, "A002"), L("3", "Cy Kamau", "c2", "blue", "B100")];
+
+  it("filters by search on name and admission number, case-insensitively", () => {
+    expect(filterLearners(rows, { search: "WANJ", classKey: "", house: "" }).map((r) => r.id)).toEqual(["1"]);
+    expect(filterLearners(rows, { search: "b100", classKey: "", house: "" }).map((r) => r.id)).toEqual(["3"]);
+  });
+  it("filters by class, by house and by no house", () => {
+    expect(filterLearners(rows, { search: "", classKey: "c1", house: "" }).map((r) => r.id)).toEqual(["1", "2"]);
+    expect(filterLearners(rows, { search: "", classKey: "", house: "blue" }).map((r) => r.id)).toEqual(["3"]);
+    expect(filterLearners(rows, { search: "", classKey: "", house: NO_HOUSE }).map((r) => r.id)).toEqual(["2"]);
+  });
+  it("combines filters", () => {
+    expect(filterLearners(rows, { search: "a", classKey: "c1", house: NO_HOUSE }).map((r) => r.id)).toEqual(["2"]);
+  });
+  it("counts learners per house with unassigned under NO_HOUSE", () => {
+    const m = houseCounts(rows);
+    expect(m.get("red")).toBe(1);
+    expect(m.get("blue")).toBe(1);
+    expect(m.get(NO_HOUSE)).toBe(1);
+  });
+  it("validates an assignment: dedupes, requires someone, caps the batch", () => {
+    expect(validateAssignment([], "red")).toHaveProperty("error");
+    expect(validateAssignment(["", ""], "red")).toHaveProperty("error");
+    const ok = validateAssignment(["a", "a", "b"], "red");
+    expect("value" in ok && ok.value.studentIds).toEqual(["a", "b"]);
+    expect(validateAssignment(["a"], null)).toHaveProperty("value");
+    expect(validateAssignment(["a"], "")).toHaveProperty("error");
+    const many = Array.from({ length: MAX_ASSIGN_BATCH + 1 }, (_, i) => `s${i}`);
+    expect(validateAssignment(many, "red")).toHaveProperty("error");
   });
 });
