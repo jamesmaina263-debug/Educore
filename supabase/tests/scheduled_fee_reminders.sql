@@ -16,6 +16,7 @@ begin
   insert into students (id, school_id, first_name, last_name, date_of_birth, gender, status)
     values (s, p_school, p_first, 'Fx', date '2012-02-02', 'male', 'approved');
   insert into student_guardians (student_id, guardian_user_id, relationship, primary_contact) values (s, g, 'guardian', true);
+  update students set status = 'enrolled' where id = s;
   update students set status = 'active' where id = s;
   insert into invoices (school_id, student_id, term_id, total_amount) values (p_school, s, p_term, p_amount);
   return s;
@@ -66,6 +67,7 @@ begin
     (st3, sa, 'Sid', 'Three', date '2012-01-03', 'male', 'approved');
   insert into student_guardians (student_id, guardian_user_id, relationship, primary_contact) values
     (st1, su_g1, 'guardian', true), (st2, su_g2, 'guardian', true), (st3, su_g3, 'guardian', true);
+  update students set status = 'enrolled' where id in (st1, st2, st3);   -- enforce_student_status_transition: approved -> enrolled -> active
   update students set status = 'active' where id in (st1, st2, st3);
   insert into invoices (school_id, student_id, term_id, total_amount) values
     (sa, st1, tm, 5000), (sa, st2, tm, 6000), (sa, st3, tm, 7000);
