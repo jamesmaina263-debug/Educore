@@ -2,6 +2,20 @@ import { createClient } from "jsr:@supabase/supabase-js@2.112.4";
 import { verifyCallbackSource } from "../_shared/mpesa/verifyCallbackSource.ts";
 import { sendSecurityAlert } from "../_shared/securityAlert.ts";
 import {
+  REJECT_ALERT_MAX,
+  REJECT_WINDOW_SECONDS,
+  SUPPRESSED_NOTICE_MAX,
+  VOLUME_ALERT_MAX,
+  VOLUME_ALERT_WINDOW_SECONDS,
+  VOLUME_MAX,
+  VOLUME_WINDOW_SECONDS,
+  isWithinLimit,
+  rejectBucket,
+  suppressedNoticeBucket,
+  volumeAlertBucket,
+  volumeBucket,
+} from "../_shared/mpesa/c2bRateLimit.ts";
+import {
   MAX_C2B_BODY_BYTES,
   parseC2bConfirmation,
   parseC2bPath,
@@ -24,6 +38,50 @@ import {
 // Nothing is recorded as money unless the school has feature.finance.c2b_capture on AND its mode
 // is 'live'; otherwise c2b_ingest_payment() only logs the event and what it would have done.
 // This function has no URL registered with Safaricom until a later, separate step.
+//
+// Rate limiting (increment_and_check_rate_limit, fails open): requests that fail BEFORE the school
+// token is validated (IP outside the allowlist, malformed path, token mismatch) can only be probing,
+// so their security alerts are capped per source IP (one "suppressed" notice per window after the
+// cap). A request with a VALID token is never dropped by a limiter -- the endpoint always answers 200
+// and Safaricom does not resend, so dropping could lose a real payment. Valid traffic only gets a
+// volume tripwire per school that alerts once an hour and still processes the event.
+
+let limiterClient: ReturnType<typeof createClient> | null = null;
+function getLimiterClient() {
+  limiterClient ??= createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+  return limiterClient;
+}
+
+// true = within the limit (or the check itself failed: fail open).
+async function withinLimit(bucket: string, max: number, windowSeconds: number): Promise<boolean> {
+  try {
+    const { data, error } = await getLimiterClient().rpc("increment_and_check_rate_limit", {
+      p_bucket: bucket,
+      p_max_events: max,
+      p_window_seconds: windowSeconds,
+    });
+    if (error) console.error("fees-c2b-confirmation: rate limit check failed (failing open)", error.message);
+    return isWithinLimit(data, error);
+  } catch (err) {
+    console.error("fees-c2b-confirmation: rate limit check threw (failing open)", err);
+    return true;
+  }
+}
+
+// For rejections of unauthenticated requests only (see header comment).
+async function alertProbe(ip: string | null, event: string, detail: Record<string, string>) {
+  if (await withinLimit(rejectBucket(ip), REJECT_ALERT_MAX, REJECT_WINDOW_SECONDS)) {
+    void sendSecurityAlert(event, detail);
+    return;
+  }
+  if (await withinLimit(suppressedNoticeBucket(ip), SUPPRESSED_NOTICE_MAX, REJECT_WINDOW_SECONDS)) {
+    void sendSecurityAlert("C2B confirmation: rejection alerts suppressed for this source IP (rate limited)", {
+      source_ip: ip ?? "unknown",
+      window_minutes: String(REJECT_WINDOW_SECONDS / 60),
+      alerts_allowed_per_window: String(REJECT_ALERT_MAX),
+    });
+  }
+}
 
 Deno.serve(async (req) => {
   const alwaysOk = () =>
@@ -41,7 +99,7 @@ Deno.serve(async (req) => {
       );
     } else if (!sourceCheck.allowed) {
       console.error("fees-c2b-confirmation: rejected request from IP outside Safaricom's allowlist", sourceCheck.sourceIp);
-      void sendSecurityAlert("C2B confirmation rejected: IP outside Safaricom allowlist", {
+      await alertProbe(sourceCheck.sourceIp ?? null, "C2B confirmation rejected: IP outside Safaricom allowlist", {
         ip: sourceCheck.sourceIp ?? "unknown",
       });
       return alwaysOk();
@@ -51,6 +109,9 @@ Deno.serve(async (req) => {
     if (!path.ok) {
       // Deliberately do NOT log the path: it ends in <school_id>/<token>.
       console.error("fees-c2b-confirmation: malformed path, no valid school_id/token");
+      await alertProbe(sourceCheck.sourceIp ?? null, "C2B confirmation rejected: malformed path", {
+        source_ip: sourceCheck.sourceIp ?? "unknown",
+      });
       return alwaysOk();
     }
     const { schoolId, token } = path;
@@ -69,7 +130,7 @@ Deno.serve(async (req) => {
 
     if (!config) {
       console.error("fees-c2b-confirmation: school_id/token mismatch -- possible spoofed request", schoolId);
-      void sendSecurityAlert("C2B confirmation rejected: school_id/token mismatch", {
+      await alertProbe(sourceCheck.sourceIp ?? null, "C2B confirmation rejected: school_id/token mismatch", {
         school_id: schoolId,
         source_ip: sourceCheck.sourceIp ?? "unknown",
       });
@@ -150,6 +211,17 @@ Deno.serve(async (req) => {
         source_ip: sourceCheck.sourceIp ?? "unknown",
       });
       return alwaysOk();
+    }
+
+    // Volume tripwire for a VALID token: alert (at most hourly), never drop -- the event is still processed.
+    if (!(await withinLimit(volumeBucket(schoolId), VOLUME_MAX, VOLUME_WINDOW_SECONDS))) {
+      if (await withinLimit(volumeAlertBucket(schoolId), VOLUME_ALERT_MAX, VOLUME_ALERT_WINDOW_SECONDS)) {
+        void sendSecurityAlert("C2B confirmation: unusually high volume for one school (still processing)", {
+          school_id: schoolId,
+          limit: `${VOLUME_MAX} per ${VOLUME_WINDOW_SECONDS / 60} minutes`,
+          source_ip: sourceCheck.sourceIp ?? "unknown",
+        });
+      }
     }
 
     const { data, error } = await serviceClient.rpc("c2b_ingest_payment", {
