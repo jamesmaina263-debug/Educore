@@ -45,6 +45,7 @@ const AUTHENTICATED_APP_PATHS = [
   "/finance/",
   "/finance$",
   "/health",
+  "/calendar",
   "/homework",
   "/integrations",
   "/inventory",
