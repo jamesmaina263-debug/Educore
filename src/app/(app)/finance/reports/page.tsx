@@ -1,12 +1,18 @@
+import { createClient } from "@/lib/supabase/server";
+import { hasFeatureFlag } from "@/lib/feature-flags";
+import { VOTE_HEAD_FLAG } from "@/lib/vote-heads";
+import { VoteHeadsLink } from "@/components/finance/vote-heads-link";
 import { loadFinanceContext, kes } from "../_data";
 import { FinancePageShell } from "@/components/finance/finance-page-shell";
 import { FinanceReportExports } from "@/components/finance/finance-report-exports";
 
 export default async function FinanceReportsPage() {
   const ctx = await loadFinanceContext();
+  const showVoteHeadsLink = ctx.canRead && (await hasFeatureFlag(await createClient(), VOTE_HEAD_FLAG));
 
   return (
     <FinancePageShell ctx={ctx} section="Finance Reports" title="Finance Reports">
+      {showVoteHeadsLink && <VoteHeadsLink />}
       <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
         <div className="panel px-4 py-3">
           <p className="label-eyebrow">Invoiced this term</p>
