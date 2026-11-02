@@ -1,5 +1,6 @@
 import type { ChatContext, ToolDefinition, ToolResult } from "../types.ts";
 import { getStudentFirstName } from "../childContext.ts";
+import { feeBalanceText } from "../menu.ts";
 
 // run() only ever returns text built from a query result -- there is no code path here that lets
 // the reply contain a number that didn't come straight out of v_student_balances.
@@ -14,10 +15,8 @@ export const feeBalanceTool: ToolDefinition = {
 
     const balance = Number(data.balance ?? 0);
     const childName = await getStudentFirstName(ctx.supabase, studentId);
-    const text =
-      balance <= 0
-        ? `${childName}'s fee account is fully paid up${balance < 0 ? ` (a credit of KES ${Math.abs(balance).toLocaleString()})` : ""}. No outstanding balance.`
-        : `${childName}'s outstanding fee balance is KES ${balance.toLocaleString()}.`;
+    // English output is byte-for-byte what this tool always said; Kiswahili only when the school has the menu flag.
+    const text = feeBalanceText(ctx.language ?? "en", { name: childName, balance });
 
     return { replyText: text };
   },

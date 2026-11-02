@@ -4,6 +4,7 @@ import { getGuardianChildren, resolveChildContext, disambiguationPrompt } from "
 import { guardianCanAccessStudent } from "./authorize.ts";
 import { TOOL_REGISTRY } from "./registry.ts";
 import { tryHandleGuardianRequest } from "./guardianRequests.ts";
+import { chatText, menuText, prepareMenuTurn } from "./menu.ts";
 import { beginDocumentRequest, documentsEnabled, looksLikePin, pendingPinRequest, submitPinAndDeliver } from "./documents.ts";
 
 export const GREETING_REPLY =
@@ -17,7 +18,8 @@ export const ESCALATION_ACK =
 // channel-neutral DispatchResult out; the caller (a Twilio webhook today, potentially an SMS or
 // web-chat adapter later) is responsible for actually delivering replyText and persisting the
 // result, not this function.
-export async function handleInboundMessage(ctx: ChatContext): Promise<DispatchResult> {
+export async function handleInboundMessage(inputCtx: ChatContext): Promise<DispatchResult> {
+  let ctx = inputCtx;
   // WhatsApp bot documents are strictly opt-in per school (feature.bot.documents). With the flag
   // off nothing below changes: no PIN handling, and "report"/"statement" classify as before.
   const documents = await documentsEnabled(ctx.supabase, ctx.schoolId);
@@ -33,11 +35,28 @@ export async function handleInboundMessage(ctx: ChatContext): Promise<DispatchRe
     if (pinResult) return pinResult;
   }
 
+  // Phase 2.7+2.8: menu, numbered replies and Kiswahili. prepareMenuTurn returns null (after one flag lookup,
+  // failing closed) unless the school has feature.bot.menu on, in which case everything below behaves exactly
+  // as before: English text, no menu.
+  const menu = await prepareMenuTurn({
+    supabase: ctx.supabase,
+    schoolId: ctx.schoolId,
+    conversationId: ctx.conversationId,
+    messageText: ctx.messageText,
+    documents,
+    getChildren: () => getGuardianChildren(ctx.supabase, ctx.guardianUserId, ctx.schoolId),
+  });
+  if (menu?.reply) {
+    return { replyText: menu.reply.text, escalate: false, escalationReason: null, studentId: menu.reply.studentId };
+  }
+  if (menu) ctx = { ...ctx, language: menu.language, messageText: menu.text };
+  const ack = menu ? chatText(menu.language, "ack") : ESCALATION_ACK;
+
   // Phase 2.4+2.5: absence notes and phone-number change requests. Returns null (and costs one flag
   // lookup) unless the school has feature.bot.guardian_requests on AND the message clearly is one of
   // those two requests, so every other message takes exactly the path below as before.
   const guardianRequest = await tryHandleGuardianRequest(ctx, {
-    escalationAck: ESCALATION_ACK,
+    escalationAck: ack,
     wantsHuman: (text) => classifyIntent(text) === "escalate",
     getChildren: (guardianUserId, schoolId) => getGuardianChildren(ctx.supabase, guardianUserId, schoolId),
     canAccessStudent: (guardianUserId, studentId, schoolId) => guardianCanAccessStudent(ctx.supabase, guardianUserId, studentId, schoolId),
@@ -47,20 +66,20 @@ export async function handleInboundMessage(ctx: ChatContext): Promise<DispatchRe
   const intent = classifyIntent(ctx.messageText, { documents });
 
   if (intent === "greeting") {
-    return { replyText: GREETING_REPLY, escalate: false, escalationReason: null };
+    return { replyText: menu ? menuText(menu.language, menu.features) : GREETING_REPLY, escalate: false, escalationReason: null };
   }
   if (intent === "escalate") {
-    return { replyText: ESCALATION_ACK, escalate: true, escalationReason: "explicit_request" };
+    return { replyText: ack, escalate: true, escalationReason: "explicit_request" };
   }
   if (intent === "unknown") {
-    return { replyText: ESCALATION_ACK, escalate: true, escalationReason: "unrecognized_intent" };
+    return { replyText: ack, escalate: true, escalationReason: "unrecognized_intent" };
   }
 
   if (!STUDENT_SCOPED_INTENTS.has(intent)) {
     // Defensive: every intent besides greeting/escalate/unknown should be student-scoped today.
     // If a future intent is added to classifyIntent without also being added to
     // STUDENT_SCOPED_INTENTS or handled above, fail safe to a human rather than silently no-op.
-    return { replyText: ESCALATION_ACK, escalate: true, escalationReason: "unrecognized_intent" };
+    return { replyText: ack, escalate: true, escalationReason: "unrecognized_intent" };
   }
 
   // Every student-scoped intent (today's two, and every one added later) goes through the same
@@ -68,17 +87,25 @@ export async function handleInboundMessage(ctx: ChatContext): Promise<DispatchRe
   // duplicated per tool.
   const children = await getGuardianChildren(ctx.supabase, ctx.guardianUserId, ctx.schoolId);
   if (children.length === 0) {
-    return { replyText: ESCALATION_ACK, escalate: true, escalationReason: "tool_error" };
+    return { replyText: ack, escalate: true, escalationReason: "tool_error" };
   }
 
   const { student, needsDisambiguation } = resolveChildContext(children, ctx.currentStudentId, ctx.messageText);
   if (needsDisambiguation || !student) {
-    return { replyText: disambiguationPrompt(children), escalate: false, escalationReason: null };
+    return {
+      replyText: menu
+        ? chatText(menu.language, "disambiguate", { names: children.map((c) => c.first_name).join(", ") })
+        : disambiguationPrompt(children),
+      escalate: false,
+      escalationReason: null,
+    };
   }
 
   if (intent === "switch_child") {
     return {
-      replyText: `Switched -- I'll answer about ${student.first_name} from here. Ask me about fee balance or attendance.`,
+      replyText: menu
+        ? chatText(menu.language, "switched", { name: student.first_name })
+        : `Switched -- I'll answer about ${student.first_name} from here. Ask me about fee balance or attendance.`,
       escalate: false,
       escalationReason: null,
       studentId: student.student_id,
@@ -89,23 +116,23 @@ export async function handleInboundMessage(ctx: ChatContext): Promise<DispatchRe
   // why this is a real check and not just re-deriving what resolveChildContext already implied.
   const authorized = await guardianCanAccessStudent(ctx.supabase, ctx.guardianUserId, student.student_id, ctx.schoolId);
   if (!authorized) {
-    return { replyText: ESCALATION_ACK, escalate: true, escalationReason: "authorization_denied" };
+    return { replyText: ack, escalate: true, escalationReason: "authorization_denied" };
   }
 
   // Documents are not a one-shot tool: they need the PIN round trip first (see documents.ts).
   // These intents are only ever produced when the school has the feature on.
   if (intent === "report_card" || intent === "statement") {
     try {
-      return await beginDocumentRequest(ctx, intent, student, ESCALATION_ACK);
+      return await beginDocumentRequest(ctx, intent, student, ack);
     } catch (err) {
       console.error(`[chatbot] Document request "${intent}" failed:`, err);
-      return { replyText: ESCALATION_ACK, escalate: true, escalationReason: "tool_error" };
+      return { replyText: ack, escalate: true, escalationReason: "tool_error" };
     }
   }
 
   const tool = TOOL_REGISTRY[intent];
   if (!tool) {
-    return { replyText: ESCALATION_ACK, escalate: true, escalationReason: "unrecognized_intent" };
+    return { replyText: ack, escalate: true, escalationReason: "unrecognized_intent" };
   }
 
   try {
@@ -118,6 +145,6 @@ export async function handleInboundMessage(ctx: ChatContext): Promise<DispatchRe
     };
   } catch (err) {
     console.error(`[chatbot] Tool "${tool.key}" failed:`, err);
-    return { replyText: ESCALATION_ACK, escalate: true, escalationReason: "tool_error" };
+    return { replyText: ack, escalate: true, escalationReason: "tool_error" };
   }
 }
