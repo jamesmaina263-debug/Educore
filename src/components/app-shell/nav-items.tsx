@@ -213,6 +213,7 @@ export const navGroups: NavGroup[] = [
     label: "Main",
     items: [
       { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
+      { label: "Approvals", href: "/approvals", icon: ClipboardCheck },
       { label: "Admissions", href: "/admissions", icon: ClipboardList },
       { label: "Academics", href: "/academics", icon: BookOpen, children: academicsChildren },
       { label: "Students", href: "/students", icon: GraduationCap },
