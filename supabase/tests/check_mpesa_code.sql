@@ -1,6 +1,9 @@
 -- Behavioral test for Phase 1.2 (migration *_check_mpesa_code). Rollback-only, synthetic fixtures.
 --   psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -f supabase/tests/check_mpesa_code.sql
 -- Needs the migration already deployed. Callers are simulated with request.jwt.claims + role authenticated.
+-- Runs in CI via .github/workflows/check-mpesa-code-behavior-check.yml. SAFETY: one transaction that ends
+-- in `rollback;`; a failed assertion aborts and rolls back too; a final tripwire fails loudly if any
+-- fixture row is ever found to have persisted.
 begin;
 
 do $$
@@ -91,3 +94,14 @@ end
 $$;
 
 rollback;
+
+-- Independent tripwire, in its own implicit transaction after the explicit rollback above: if it ever
+-- finds fixture rows, the rollback did not happen, which is a bug in this file, not in the feature.
+do $$
+begin
+  if exists (select 1 from schools where slug in ('chk-code-a', 'chk-code-b'))
+     or exists (select 1 from auth.users where email like 'chkcode-%@example.invalid') then
+    raise exception 'LEAK DETECTED: check_mpesa_code test fixtures were not rolled back -- fix this test file before trusting it again';
+  end if;
+end
+$$;
