@@ -8,4 +8,9 @@ export class ConsoleWhatsAppProvider implements WhatsAppProvider {
     assertDevFallbackAllowed("WhatsApp");
     console.log(`[dev-whatsapp] would send to ${phone}: ${message}`);
   }
+
+  async sendMedia(phone: string, caption: string, _mediaUrl: string): Promise<void> {
+    assertDevFallbackAllowed("WhatsApp");
+    console.log(`[dev-whatsapp] would send a document to ${phone}: ${caption}`);
+  }
 }

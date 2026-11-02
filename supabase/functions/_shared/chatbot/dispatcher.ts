@@ -4,6 +4,7 @@ import { getGuardianChildren, resolveChildContext, disambiguationPrompt } from "
 import { guardianCanAccessStudent } from "./authorize.ts";
 import { TOOL_REGISTRY } from "./registry.ts";
 import { tryHandleGuardianRequest } from "./guardianRequests.ts";
+import { beginDocumentRequest, documentsEnabled, looksLikePin, pendingPinRequest, submitPinAndDeliver } from "./documents.ts";
 
 export const GREETING_REPLY =
   "Hi! You can ask me about your child's fee balance or attendance. Type 'agent' any time to talk to the school office directly.";
@@ -17,6 +18,21 @@ export const ESCALATION_ACK =
 // web-chat adapter later) is responsible for actually delivering replyText and persisting the
 // result, not this function.
 export async function handleInboundMessage(ctx: ChatContext): Promise<DispatchResult> {
+  // WhatsApp bot documents are strictly opt-in per school (feature.bot.documents). With the flag
+  // off nothing below changes: no PIN handling, and "report"/"statement" classify as before.
+  const documents = await documentsEnabled(ctx.supabase, ctx.schoolId);
+
+  // A guardian who was just asked for their PIN: a 4-6 digit reply IS the PIN. Handled before anything
+  // else because it answers the bot's own question. Any other message leaves the request to expire
+  // (5 minutes) and is handled normally below.
+  if (documents && looksLikePin(ctx.messageText) && (await pendingPinRequest(ctx.supabase, ctx.conversationId))) {
+    const pinResult = await submitPinAndDeliver(ctx, ESCALATION_ACK, {
+      url: Deno.env.get("BOT_DOCUMENTS_URL"),
+      secret: Deno.env.get("BOT_DOCUMENTS_SECRET"),
+    });
+    if (pinResult) return pinResult;
+  }
+
   // Phase 2.4+2.5: absence notes and phone-number change requests. Returns null (and costs one flag
   // lookup) unless the school has feature.bot.guardian_requests on AND the message clearly is one of
   // those two requests, so every other message takes exactly the path below as before.
@@ -28,7 +44,7 @@ export async function handleInboundMessage(ctx: ChatContext): Promise<DispatchRe
   });
   if (guardianRequest) return guardianRequest;
 
-  const intent = classifyIntent(ctx.messageText);
+  const intent = classifyIntent(ctx.messageText, { documents });
 
   if (intent === "greeting") {
     return { replyText: GREETING_REPLY, escalate: false, escalationReason: null };
@@ -74,6 +90,17 @@ export async function handleInboundMessage(ctx: ChatContext): Promise<DispatchRe
   const authorized = await guardianCanAccessStudent(ctx.supabase, ctx.guardianUserId, student.student_id, ctx.schoolId);
   if (!authorized) {
     return { replyText: ESCALATION_ACK, escalate: true, escalationReason: "authorization_denied" };
+  }
+
+  // Documents are not a one-shot tool: they need the PIN round trip first (see documents.ts).
+  // These intents are only ever produced when the school has the feature on.
+  if (intent === "report_card" || intent === "statement") {
+    try {
+      return await beginDocumentRequest(ctx, intent, student, ESCALATION_ACK);
+    } catch (err) {
+      console.error(`[chatbot] Document request "${intent}" failed:`, err);
+      return { replyText: ESCALATION_ACK, escalate: true, escalationReason: "tool_error" };
+    }
   }
 
   const tool = TOOL_REGISTRY[intent];

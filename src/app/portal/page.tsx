@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { DEFAULT_REPORT_SETTINGS, loadReportSettings } from "@/lib/academics/report-settings";
 import { createClient } from "@/lib/supabase/server";
+import { hasFeatureFlag } from "@/lib/feature-flags";
 import { portalLogout } from "@/app/portal/actions";
 import { ChildSwitcher } from "@/components/portal/child-switcher";
 import { NotificationPreferencesPanel } from "@/components/notifications/preferences-panel";
@@ -39,6 +40,9 @@ export default async function PortalPage({ searchParams }: { searchParams: Promi
   if (roleName !== "parent" && roleName !== "student") {
     redirect("/dashboard");
   }
+
+  // WhatsApp bot documents: the PIN link only appears for parents at schools that switched it on.
+  const whatsappDocumentsOn = roleName === "parent" && (await hasFeatureFlag(supabase, "feature.bot.documents"));
 
   let students: { id: string; name: string; current_class_id: string }[] = [];
 
@@ -582,6 +586,15 @@ export default async function PortalPage({ searchParams }: { searchParams: Promi
         <PortalConnectSection items={connectItems} />
       </div>
 
+      {whatsappDocumentsOn && (
+        <div className="panel p-4">
+          <p className="label-eyebrow mb-2">WhatsApp documents</p>
+          <p className="text-sm text-muted-foreground">Get your child&apos;s report card and fee statement on WhatsApp, protected by a PIN you choose.</p>
+          <Link href="/portal/whatsapp-pin" className="mt-2 inline-block text-sm font-medium underline underline-offset-2">
+            Set or change your PIN
+          </Link>
+        </div>
+      )}
       <div className="panel p-4">
         <p className="label-eyebrow mb-2">Notification preferences</p>
         <NotificationPreferencesPanel initialRows={preferenceRows} />
