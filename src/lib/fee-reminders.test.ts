@@ -3,7 +3,9 @@ import {
   DEFAULT_SCHEDULE,
   chunkSlips,
   describeSchedule,
+  describeSendOutcome,
   reminderTone,
+  templateProblem,
   validateSchedule,
   type ReminderSchedule,
 } from "./fee-reminders";
@@ -44,6 +46,7 @@ describe("reminderTone", () => {
     expect(reminderTone("draft")).toBe("warning");
     expect(reminderTone("sent")).toBe("success");
     expect(reminderTone("dismissed")).toBe("neutral");
+    expect(reminderTone("cancelled")).toBe("neutral");
   });
 });
 
@@ -54,5 +57,34 @@ describe("chunkSlips", () => {
   it("handles empty input and invalid page size", () => {
     expect(chunkSlips([])).toEqual([]);
     expect(chunkSlips([1, 2], 0)).toEqual([[1], [2]]);
+  });
+});
+
+describe("templateProblem", () => {
+  it("accepts supported placeholders and plain text", () => {
+    expect(templateProblem("Dear {{guardian_name}}, {{student_name}} owes KES {{balance}} at {{school_name}}.")).toBeNull();
+    expect(templateProblem("Please check the fee statement.")).toBeNull();
+  });
+  it("rejects empty, over-long and unknown placeholders (including spaced ones)", () => {
+    expect(templateProblem("   ")).toMatch(/empty/);
+    expect(templateProblem(null)).toMatch(/empty/);
+    expect(templateProblem("x".repeat(1001))).toMatch(/1000/);
+    expect(templateProblem("Hi {{nope}}")).toMatch(/\{\{nope\}\}/);
+    expect(templateProblem("Owes {{ balance }}")).toMatch(/not supported/);
+  });
+});
+
+describe("describeSendOutcome", () => {
+  it("only 'sent' counts as ok", () => {
+    expect(describeSendOutcome("sent").ok).toBe(true);
+    for (const o of ["cancelled", "refreshed", "stale", "hold", "weird"]) {
+      expect(describeSendOutcome(o).ok).toBe(false);
+    }
+  });
+  it("explains each non-sending outcome", () => {
+    expect(describeSendOutcome("refreshed").message).toMatch(/approve again/);
+    expect(describeSendOutcome("stale").message).toMatch(/Refresh from template/);
+    expect(describeSendOutcome("hold").message).toMatch(/payment/);
+    expect(describeSendOutcome("cancelled").message).toMatch(/cancelled/);
   });
 });

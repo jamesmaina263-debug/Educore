@@ -3,7 +3,13 @@
 import { createClient } from "@/lib/supabase/server";
 import { tagSentryRequestContext } from "@/lib/observability/sentry-context";
 
-export type PrefCategory = "fee_reminder" | "absence_alert" | "result_published" | "announcement" | "other";
+export type PrefCategory =
+  | "fee_reminder"
+  | "fee_threshold_alert"
+  | "absence_alert"
+  | "result_published"
+  | "announcement"
+  | "other";
 export type PrefChannel = "sms" | "email" | "whatsapp";
 
 export interface PreferenceRow {
