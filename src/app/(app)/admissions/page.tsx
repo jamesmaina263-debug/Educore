@@ -7,8 +7,8 @@ import { withSchoolSlug } from "@/lib/school-slug-href";
 import { logout } from "@/app/login/actions";
 import { AppShell } from "@/components/app-shell/app-shell";
 import { StatusBadge } from "@/components/status-badge";
-import { Button } from "@/components/ui/button";
 import { CopyApplicationLink } from "@/components/admissions/copy-application-link";
+import { NewWalkInButton } from "@/components/admissions/new-walk-in-button";
 import { DeleteApplicationButton } from "@/components/admissions/delete-application-button";
 import { ApplicationsTable, type ApplicationRow } from "@/components/admissions/applications-table";
 import { escapePostgrestOrValue } from "@/lib/postgrest-filter";
@@ -258,9 +258,7 @@ export default async function AdmissionsPage({
           </div>
           {canWrite && (
             <form action={createWalkInApplication}>
-              <Button type="submit" variant="outline">
-                + New Walk-In Admission
-              </Button>
+              <NewWalkInButton />
             </form>
           )}
         </div>
