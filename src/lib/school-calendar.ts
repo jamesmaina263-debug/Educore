@@ -154,3 +154,53 @@ export function portalUpcoming(events: CalendarEvent[], today: string, limit = 8
     .sort((a, b) => a.startsOn.localeCompare(b.startsOn) || a.title.localeCompare(b.title))
     .slice(0, limit);
 }
+
+// ---- House assignment (staff) ----
+
+export const MAX_ASSIGN_BATCH = 200;
+/** Filter value meaning "learners who are in no house". */
+export const NO_HOUSE = "__none__";
+
+export interface LearnerRow {
+  id: string;
+  name: string;
+  admissionNumber: string | null;
+  classLabel: string;
+  classKey: string; // stream id, "" when the learner has no class
+  houseId: string | null;
+}
+
+export interface LearnerFilter {
+  search: string;
+  classKey: string; // "" = all classes
+  house: string; // "" = any, NO_HOUSE = unassigned, otherwise a house id
+}
+
+export function filterLearners(rows: LearnerRow[], f: LearnerFilter): LearnerRow[] {
+  const q = f.search.trim().toLowerCase();
+  return rows.filter((r) => {
+    if (f.classKey && r.classKey !== f.classKey) return false;
+    if (f.house === NO_HOUSE && r.houseId !== null) return false;
+    if (f.house && f.house !== NO_HOUSE && r.houseId !== f.house) return false;
+    if (q && !r.name.toLowerCase().includes(q) && !(r.admissionNumber ?? "").toLowerCase().includes(q)) return false;
+    return true;
+  });
+}
+
+/** Learners per house id, plus the count in no house under NO_HOUSE. */
+export function houseCounts(rows: LearnerRow[]): Map<string, number> {
+  const m = new Map<string, number>();
+  for (const r of rows) {
+    const k = r.houseId ?? NO_HOUSE;
+    m.set(k, (m.get(k) ?? 0) + 1);
+  }
+  return m;
+}
+
+export function validateAssignment(studentIds: string[], houseId: string | null): { error: string } | { value: { studentIds: string[]; houseId: string | null } } {
+  const ids = Array.from(new Set(studentIds.filter((s) => typeof s === "string" && s.length > 0)));
+  if (ids.length === 0) return { error: "Select at least one learner." };
+  if (ids.length > MAX_ASSIGN_BATCH) return { error: `Select at most ${MAX_ASSIGN_BATCH} learners at a time.` };
+  if (houseId !== null && houseId.length === 0) return { error: "Choose a house." };
+  return { value: { studentIds: ids, houseId } };
+}
