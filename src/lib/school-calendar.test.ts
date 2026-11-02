@@ -4,6 +4,7 @@ import {
   formatTimeRange,
   groupByMonth,
   monthLabel,
+  portalUpcoming,
   splitUpcoming,
   validateEvent,
   validateHouse,
@@ -105,5 +106,22 @@ describe("formatting and grouping", () => {
   it("groups by month in order", () => {
     const g = groupByMonth([ev("a", "2026-11-05"), ev("b", "2026-11-20"), ev("c", "2026-12-01")]);
     expect(g.map((x) => [x.month, x.events.length])).toEqual([["November 2026", 2], ["December 2026", 1]]);
+  });
+});
+
+describe("portalUpcoming", () => {
+  const staff: CalendarEvent = { ...ev("staff", "2026-11-05"), audience: "staff_only" };
+  const cancelled: CalendarEvent = { ...ev("called-off", "2026-11-06"), status: "cancelled" };
+
+  it("drops staff-only and finished events, keeps cancelled ones, soonest first", () => {
+    const r = portalUpcoming([ev("old", "2026-10-01"), staff, cancelled, ev("running", "2026-10-30", "2026-11-03"), ev("later", "2026-12-01")], "2026-11-02");
+    expect(r.map((e) => e.id)).toEqual(["running", "called-off", "later"]);
+  });
+  it("caps the list", () => {
+    const many = Array.from({ length: 12 }, (_, i) => ev(`e${String(i).padStart(2, "0")}`, `2026-11-${String(i + 3).padStart(2, "0")}`));
+    expect(portalUpcoming(many, "2026-11-02", 5)).toHaveLength(5);
+  });
+  it("returns nothing when there is nothing upcoming", () => {
+    expect(portalUpcoming([ev("old", "2026-10-01")], "2026-11-02")).toEqual([]);
   });
 });
