@@ -3,7 +3,7 @@ name: Vote heads ledger behavior check
 # Runs supabase/tests/vote_heads_ledger.sql -- a behavioral test (synthetic fixtures, real role
 # impersonation via the request.jwt.claims GUC, the real deployed functions and policies) for the
 # vote heads ledger (Phase 6.2): finance gating, the feature flag, mappings, ledger totals, tenant isolation.
-# script opens with `begin;`, ends with `rollback;`, and a final tripwire fails loudly if any fixture
+# The script opens with `begin;`, ends with `rollback;`, and a final tripwire fails loudly if any fixture
 # row persisted. Nothing it does is ever kept.
 #
 # Triggered by changes that could affect this behavior (any migration, the test file, this workflow)
