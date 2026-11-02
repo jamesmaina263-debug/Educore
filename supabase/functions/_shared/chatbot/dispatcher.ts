@@ -3,6 +3,7 @@ import { classifyIntent, STUDENT_SCOPED_INTENTS } from "./intents.ts";
 import { getGuardianChildren, resolveChildContext, disambiguationPrompt } from "./childContext.ts";
 import { guardianCanAccessStudent } from "./authorize.ts";
 import { TOOL_REGISTRY } from "./registry.ts";
+import { tryHandleGuardianRequest } from "./guardianRequests.ts";
 
 export const GREETING_REPLY =
   "Hi! You can ask me about your child's fee balance or attendance. Type 'agent' any time to talk to the school office directly.";
@@ -16,6 +17,17 @@ export const ESCALATION_ACK =
 // web-chat adapter later) is responsible for actually delivering replyText and persisting the
 // result, not this function.
 export async function handleInboundMessage(ctx: ChatContext): Promise<DispatchResult> {
+  // Phase 2.4+2.5: absence notes and phone-number change requests. Returns null (and costs one flag
+  // lookup) unless the school has feature.bot.guardian_requests on AND the message clearly is one of
+  // those two requests, so every other message takes exactly the path below as before.
+  const guardianRequest = await tryHandleGuardianRequest(ctx, {
+    escalationAck: ESCALATION_ACK,
+    wantsHuman: (text) => classifyIntent(text) === "escalate",
+    getChildren: (guardianUserId, schoolId) => getGuardianChildren(ctx.supabase, guardianUserId, schoolId),
+    canAccessStudent: (guardianUserId, studentId, schoolId) => guardianCanAccessStudent(ctx.supabase, guardianUserId, studentId, schoolId),
+  });
+  if (guardianRequest) return guardianRequest;
+
   const intent = classifyIntent(ctx.messageText);
 
   if (intent === "greeting") {
