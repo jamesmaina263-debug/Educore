@@ -30,6 +30,10 @@ export interface DispatchResult {
   // "not provided" (leave the cursor alone) by using undefined vs null/string, same convention as
   // the whatsapp_conversations update elsewhere.
   studentId?: string | null;
+  // WhatsApp bot documents: a short-lived signed link to a PDF the caller should send as an
+  // attachment (replyText is then the caption). The link is never stored; requestId lets the
+  // caller record whether delivery worked (bot_complete_document_request).
+  document?: { url: string; filename: string; requestId: string };
 }
 
 export interface ToolResult {

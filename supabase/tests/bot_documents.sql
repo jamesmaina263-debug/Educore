@@ -1,7 +1,10 @@
 -- Behavioural test for Phase 2.1+2.2 (migration *_bot_documents). Rollback-only, synthetic fixtures.
 --   psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -f supabase/tests/bot_documents.sql
--- Needs the migration already deployed. A passing run ends with the error MY_TEST_PASSED (and rolls back).
--- Callers are simulated with request.jwt.claims + role authenticated / service_role.
+-- Needs the migration already deployed. Callers are simulated with request.jwt.claims + role
+-- authenticated / service_role.
+-- SAFETY: everything runs inside one transaction that ends in `rollback;` (same shape as
+-- scheduled_fee_reminders.sql); a failed assertion aborts and rolls back too. A final tripwire fails
+-- loudly if any fixture row is ever found to have persisted.
 begin;
 
 do $$
@@ -205,7 +208,18 @@ begin
   assert (select public from storage.buckets where id = 'bot-documents') = false, '14: bucket private';
   assert (select allowed_mime_types from storage.buckets where id = 'bot-documents') = array['application/pdf'], '14: PDF only';
 
-  raise exception 'MY_TEST_PASSED';
+  raise notice 'bot documents behavioural checks: all passed';
 end
 $$;
 rollback;
+
+-- Independent tripwire, in its own implicit transaction after the explicit rollback above: if it ever
+-- finds fixture rows, the rollback did not happen, which is a bug in this file, not in the feature.
+do $$
+begin
+  if exists (select 1 from schools where slug = 'bot-doc-a')
+     or exists (select 1 from auth.users where email like 'botdoc-%@example.invalid') then
+    raise exception 'LEAK DETECTED: bot-documents test fixtures were not rolled back -- fix this test file before trusting it again';
+  end if;
+end
+$$;
