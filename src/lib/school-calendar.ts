@@ -142,3 +142,15 @@ export function formatTimeRange(start: string | null, end: string | null): strin
   const s = start.slice(0, 5);
   return end ? `${s} to ${end.slice(0, 5)}` : s;
 }
+
+/**
+ * What a parent sees: events that are still running on or after `today`, soonest first, capped at `limit`.
+ * Staff-only events are dropped here as well as by the database policy. Cancelled events stay in the list
+ * (marked as cancelled by the caller) so families do not turn up to something that was called off.
+ */
+export function portalUpcoming(events: CalendarEvent[], today: string, limit = 8): CalendarEvent[] {
+  return events
+    .filter((e) => e.audience === "everyone" && e.endsOn >= today)
+    .sort((a, b) => a.startsOn.localeCompare(b.startsOn) || a.title.localeCompare(b.title))
+    .slice(0, limit);
+}
