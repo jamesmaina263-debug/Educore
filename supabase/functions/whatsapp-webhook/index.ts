@@ -92,6 +92,18 @@ Deno.serve(async (req) => {
     }
   };
 
+  // Same contract as sendReply, for a document (PDF) with a caption. WhatsApp bot documents only.
+  const sendDocument = async (phone: string, caption: string, mediaUrl: string): Promise<{ ok: boolean; error: string | null }> => {
+    try {
+      await getWhatsAppProvider().sendMedia(phone, caption, mediaUrl);
+      return { ok: true, error: null };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.error("[whatsapp-webhook] Failed to send document:", message);
+      return { ok: false, error: message };
+    }
+  };
+
   try {
     // Rate limiting, before any other work: caps abuse (a compromised/malicious sender hammering
     // the bot, or a script probing many numbers) and, once tools call paid/costed operations
@@ -218,12 +230,21 @@ Deno.serve(async (req) => {
     // If this is a Twilio retry of a delivery we already processed, the unique index on
     // (direction='inbound', twilio_message_sid) rejects the insert and we stop here -- no double
     // unread_count bump, no double bot reply.
+    // A guardian replying with their document PIN must not leave the PIN in the message log or the
+    // conversation preview (staff can read both). Only a bare 4-6 digit message while this
+    // conversation is waiting for a PIN is redacted; every other message is stored as before.
+    let storedBody = body;
+    if (/^[0-9]{4,6}$/.test(body)) {
+      const { data: pendingPinId } = await supabase.rpc("bot_pending_pin_request", { p_conversation_id: conversationId });
+      if (pendingPinId) storedBody = "[PIN hidden]";
+    }
+
     const { error: insertMsgError } = await supabase.from("whatsapp_messages").insert({
       conversation_id: conversationId,
       school_id: schoolId,
       direction: "inbound",
       sender_type: "guardian",
-      body,
+      body: storedBody,
       twilio_message_sid: messageSid,
       status: "received",
     });
@@ -242,7 +263,7 @@ Deno.serve(async (req) => {
         guardian_user_id: guardianUserId,
         unread_count: (existingConvo?.unread_count ?? 0) + 1,
         last_message_at: new Date().toISOString(),
-        last_message_preview: body.slice(0, 140),
+        last_message_preview: storedBody.slice(0, 140),
       })
       .eq("id", conversationId);
 
@@ -262,7 +283,21 @@ Deno.serve(async (req) => {
       messageText: body,
     });
 
-    const replyOutcome = await sendReply(phoneNumber, result.replyText);
+    const replyOutcome = result.document
+      ? await sendDocument(phoneNumber, result.replyText, result.document.url)
+      : await sendReply(phoneNumber, result.replyText);
+    if (result.document) {
+      // Record whether the PDF actually reached WhatsApp. The signed link itself is never stored.
+      const { error: completeError } = await supabase.rpc("bot_complete_document_request", {
+        p_request_id: result.document.requestId,
+        p_status: replyOutcome.ok ? "delivered" : "failed",
+        p_reason: replyOutcome.ok ? null : replyOutcome.error,
+      });
+      if (completeError) console.error("[whatsapp-webhook] Could not record document outcome:", completeError.message);
+      if (!replyOutcome.ok) {
+        await sendReply(phoneNumber, "I couldn't send the document just now. Please try again in a few minutes, or type 'agent' to reach the school office.");
+      }
+    }
     await supabase.from("whatsapp_messages").insert({
       conversation_id: conversationId,
       school_id: schoolId,

@@ -11,12 +11,32 @@ export class TwilioWhatsAppProvider implements WhatsAppProvider {
   ) {}
 
   async send(phone: string, message: string): Promise<void> {
-    const body = new URLSearchParams({
-      From: `whatsapp:${this.fromNumber}`,
-      To: `whatsapp:${phone}`,
-      Body: message,
-    });
+    await this.post(
+      new URLSearchParams({
+        From: `whatsapp:${this.fromNumber}`,
+        To: `whatsapp:${phone}`,
+        Body: message,
+      }),
+      10000,
+    );
+  }
 
+  // A document message: Twilio downloads mediaUrl itself, so it must be reachable from the public
+  // internet for a few minutes (the bot passes a 10-minute signed URL). Longer timeout than a
+  // text because Twilio fetches the file before it accepts the message.
+  async sendMedia(phone: string, caption: string, mediaUrl: string): Promise<void> {
+    await this.post(
+      new URLSearchParams({
+        From: `whatsapp:${this.fromNumber}`,
+        To: `whatsapp:${phone}`,
+        Body: caption,
+        MediaUrl: mediaUrl,
+      }),
+      15000,
+    );
+  }
+
+  private async post(body: URLSearchParams, timeoutMs: number): Promise<void> {
     // send-communication processes up to 100 queued messages per invocation in a sequential
     // loop (see its own comment on why) -- a single hung Twilio request with no timeout would
     // block every message behind it in that batch, not just this one, and risks the whole
@@ -30,11 +50,11 @@ export class TwilioWhatsAppProvider implements WhatsAppProvider {
           "Content-Type": "application/x-www-form-urlencoded",
         },
         body,
-        signal: AbortSignal.timeout(10000),
+        signal: AbortSignal.timeout(timeoutMs),
       });
     } catch (e) {
       if (e instanceof DOMException && e.name === "TimeoutError") {
-        throw new Error("Twilio WhatsApp send timed out after 10s -- Twilio's API may be slow or unreachable.");
+        throw new Error(`Twilio WhatsApp send timed out after ${timeoutMs / 1000}s -- Twilio's API may be slow or unreachable.`);
       }
       throw e;
     }

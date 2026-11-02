@@ -82,9 +82,10 @@ export function AuditLogTable({ rows }: { rows: AuditLogRow[] }) {
       )}
       <p className="px-4 py-2 text-xs text-muted-foreground">
         Covers student records, fees/invoices, payments, boarding allocations, medical records,
-        discipline records/cases, staff accounts, role permissions, and the full admission
-        lifecycle (application status changes through enrollment) — every write to any of those
-        tables, however it was made, not only actions taken through a specific button.
+        discipline records/cases, staff accounts, role permissions, feature switches, API keys
+        (the key itself is never recorded), and the full admission lifecycle (application status
+        changes through enrollment) — every write to any of those tables, however it was made, not
+        only actions taken through a specific button. Entries cannot be edited or deleted.
       </p>
     </div>
   );

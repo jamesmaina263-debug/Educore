@@ -196,6 +196,7 @@ export function WizardShell({
               applicantName={`${data.application.first_name} ${data.application.last_name}`}
               alreadyEnrolled={enrolled}
               onCompleted={setEnrolled}
+              onNavigateToStep={navigateToStepId}
             />
           )}
         </div>
