@@ -24,7 +24,7 @@ begin
   -- 1. flag catalog entry exists and is on for nobody
   select id into v_flag from platform_feature_flags where key = 'feature.bot.menu';
   assert v_flag is not null, '1: flag catalog entry exists';
-  assert not exists (select 1 from school_feature_flags where flag_id = v_flag and enabled), '1: flag enabled for nobody';
+  assert not exists (select 1 from school_feature_flags where flag_id = v_flag and enabled and school_id in (sa, sb)), '1: flag enabled for the fixture schools (a real school may have it on)';
 
   -- 2. flag OFF: enabled() false, get returns en, set refused and writes nothing
   execute 'set local role service_role';
