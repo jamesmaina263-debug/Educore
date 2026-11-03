@@ -11,6 +11,10 @@ import {
   type QuizRow,
   type ResourceRow,
 } from "@/components/learning/learning-section";
+import Link from "next/link";
+import { getSchoolSlug } from "@/lib/school-slug-server";
+import { withSchoolSlug } from "@/lib/school-slug-href";
+import { TUTOR_FLAG } from "@/lib/ai/tutor";
 import { LEARNING_FLAG, type QuestionDraft, type QuizStatus, type ResourceKind } from "@/lib/learning-portal";
 
 export default async function LearningPage() {
@@ -53,6 +57,9 @@ export default async function LearningPage() {
     return { id: s.id as string, label: `${cls?.name ?? ""} ${s.name}`.trim() };
   });
   const subjectOptions: OptionRow[] = (subjects ?? []).map((s) => ({ id: s.id as string, label: s.name as string }));
+
+  const showTutor = await hasFeatureFlag(supabase, TUTOR_FLAG);
+  const tutorHref = showTutor ? withSchoolSlug(await getSchoolSlug(), "/academics/learning/tutor") : null;
 
   const me = (schoolUser?.id as string | undefined) ?? null;
   const canWrite = canWriteAny === true;
@@ -113,6 +120,11 @@ export default async function LearningPage() {
       userRole={roleName}
       onSignOut={logout}
     >
+      {tutorHref && (
+        <p className="mb-3 text-sm">
+          <Link className="text-primary hover:underline" href={tutorHref}>AI study guides (draft, review and approve)</Link>
+        </p>
+      )}
       <LearningSection
         streams={streamOptions}
         subjects={subjectOptions}

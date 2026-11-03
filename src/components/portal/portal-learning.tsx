@@ -16,6 +16,7 @@ export interface LearnerResource {
   startsAt: string | null;
   paperYear: number | null;
 }
+export interface LearnerGuide { id: string; subject: string; title: string; body: string; sources: string[] }
 export interface LearnerQuestion { prompt: string; options: string[]; marks: number }
 export interface LearnerQuiz {
   id: string;
@@ -127,10 +128,25 @@ function QuizTaker({ quiz, studentId }: { quiz: LearnerQuiz; studentId: string }
   );
 }
 
-export function PortalLearning({ studentId, resources, quizzes }: { studentId: string; resources: LearnerResource[]; quizzes: LearnerQuiz[] }) {
+export function PortalLearning({ studentId, resources, quizzes, guides = [] }: { studentId: string; resources: LearnerResource[]; quizzes: LearnerQuiz[]; guides?: LearnerGuide[] }) {
   const grouped = KIND_ORDER.map((k) => ({ kind: k, items: resources.filter((r) => r.kind === k) })).filter((g) => g.items.length > 0);
   return (
     <div className="space-y-5">
+      {guides.length > 0 && (
+        <section className="space-y-2">
+          <h2 className="text-sm font-semibold">Study guides</h2>
+          <ul className="space-y-2">
+            {guides.map((g) => (
+              <li key={g.id} className="rounded border p-3 text-sm">
+                <p className="font-medium">{g.title}</p>
+                <p className="text-xs text-muted-foreground">{g.subject} · Written with AI from your teacher&apos;s notes and approved by your teacher</p>
+                <p className="mt-2 whitespace-pre-wrap">{g.body}</p>
+                {g.sources.length > 0 && <p className="mt-2 text-xs text-muted-foreground">Based on: {g.sources.join(", ")}</p>}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
       {quizzes.length > 0 && (
         <section className="space-y-2">
           <h2 className="text-sm font-semibold">Quizzes</h2>
@@ -143,7 +159,7 @@ export function PortalLearning({ studentId, resources, quizzes }: { studentId: s
           <ul className="space-y-2">{g.items.map((r) => <ResourceItem key={r.id} r={r} />)}</ul>
         </section>
       ))}
-      {quizzes.length === 0 && grouped.length === 0 && <p className="text-sm text-muted-foreground">Nothing has been shared for this class yet.</p>}
+      {quizzes.length === 0 && grouped.length === 0 && guides.length === 0 && <p className="text-sm text-muted-foreground">Nothing has been shared for this class yet.</p>}
     </div>
   );
 }
