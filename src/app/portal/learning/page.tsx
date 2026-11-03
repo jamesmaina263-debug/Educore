@@ -4,7 +4,8 @@ import { createClient } from "@/lib/supabase/server";
 import { hasFeatureFlag } from "@/lib/feature-flags";
 import { isUuid } from "@/lib/bus-live";
 import { LEARNING_FLAG, type ResourceKind } from "@/lib/learning-portal";
-import { PortalLearning, type LearnerQuestion, type LearnerQuiz, type LearnerResource } from "@/components/portal/portal-learning";
+import { TUTOR_FLAG } from "@/lib/ai/tutor";
+import { PortalLearning, type LearnerGuide, type LearnerQuestion, type LearnerQuiz, type LearnerResource } from "@/components/portal/portal-learning";
 
 // WP 8.1 (3/3): where a learner, or a parent for their child, reads shared material and takes quizzes. Hidden (404)
 // unless the signed-in account is a parent or student AND the school has the learning portal on. The database repeats
@@ -33,6 +34,7 @@ export default async function PortalLearningPage({ searchParams }: { searchParam
 
   let resources: LearnerResource[] = [];
   let quizzes: LearnerQuiz[] = [];
+  let guides: LearnerGuide[] = [];
   if (current?.current_class_id) {
     const stream = current.current_class_id;
     const [{ data: subjects }, { data: resRows }, { data: quizRows }, { data: attemptRows }] = await Promise.all([
@@ -46,6 +48,19 @@ export default async function PortalLearningPage({ searchParams }: { searchParam
     const { data: questionRows } = quizIds.length
       ? await supabase.from("learning_quiz_questions").select("quiz_id, position, prompt, options, marks").in("quiz_id", quizIds).order("position").limit(5000)
       : { data: [] as { quiz_id: string; position: number; prompt: string; options: string[]; marks: number }[] };
+
+    // Teacher-approved AI study guides. The database only returns approved guides whose source notes are all still
+    // published and unchanged; the status filter repeats that rule here.
+    if (await hasFeatureFlag(supabase, TUTOR_FLAG)) {
+      const { data: guideRows } = await supabase.from("tutor_drafts").select("id, subject_id, title, body, source_snapshot").eq("stream_id", stream).eq("status", "approved").order("created_at", { ascending: false }).limit(100);
+      guides = (guideRows ?? []).map((g) => ({
+        id: g.id as string,
+        subject: subjectName.get(g.subject_id as string) ?? "Subject",
+        title: g.title as string,
+        body: g.body as string,
+        sources: ((g.source_snapshot as { title?: string }[] | null) ?? []).map((s) => s.title ?? "").filter(Boolean),
+      }));
+    }
 
     resources = (resRows ?? []).map((r) => ({
       id: r.id as string,
@@ -91,7 +106,7 @@ export default async function PortalLearningPage({ searchParams }: { searchParam
         ) : !current.current_class_id ? (
           <p className="text-sm text-muted-foreground">{current.first_name} has not been placed in a class yet.</p>
         ) : (
-          <PortalLearning studentId={current.id} resources={resources} quizzes={quizzes} />
+          <PortalLearning studentId={current.id} resources={resources} quizzes={quizzes} guides={guides} />
         )}
       </div>
     </div>
