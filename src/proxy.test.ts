@@ -112,6 +112,7 @@ describe("proxy matcher: everything that needs the proxy is still matched", () =
       "/_next/image",
       "/favicon.ico",
       "/sw.js",
+      "/push-sw.js",
       "/offline.html",
       "/manifest.webmanifest",
       "/robots.txt",

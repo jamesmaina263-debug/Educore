@@ -12,6 +12,8 @@ import { PortalPtMeetingsSection, type PortalSlotRow } from "@/components/portal
 import { PortalConnectSection, type PortalConnectItemRow } from "@/components/portal/portal-connect";
 import { PortalAnnouncementsSection, type PortalAnnouncementRow } from "@/components/portal/portal-announcements";
 import { PortalCalendarSection } from "@/components/portal/portal-calendar";
+import { PushNotificationsToggle } from "@/components/pwa/push-notifications-toggle";
+import { PUSH_FLAG, looksLikeVapidPublicKey } from "@/lib/push/payload";
 import { CALENDAR_FLAG, portalUpcoming, type CalendarEvent, type EventCategory, type EventStatus } from "@/lib/school-calendar";
 import { ReportCardInsightsPanel } from "@/components/exams/report-card-insights-panel";
 import { buildReportCardInsights } from "@/lib/academics/report-card-insights";
@@ -49,6 +51,10 @@ export default async function PortalPage({ searchParams }: { searchParams: Promi
   // School calendar: parents at schools that switched the events calendar on see upcoming events.
   // The database policy already hides staff-only events from parents; the query repeats the filter.
   const calendarOn = roleName === "parent" && (await hasFeatureFlag(supabase, CALENDAR_FLAG));
+
+  // Push notifications toggle: only where the school has the flag on (fails closed).
+  const pushOn = await hasFeatureFlag(supabase, PUSH_FLAG);
+  const pushKey = looksLikeVapidPublicKey(process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY) ? process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY : null;
   let calendarEvents: CalendarEvent[] = [];
   let calendarHouses: { id: string; name: string; colour: string }[] = [];
   if (calendarOn) {
@@ -646,6 +652,12 @@ export default async function PortalPage({ searchParams }: { searchParams: Promi
         <p className="label-eyebrow mb-2">Notification preferences</p>
         <NotificationPreferencesPanel initialRows={preferenceRows} />
       </div>
+      {pushOn && (
+        <div className="panel p-4">
+          <p className="label-eyebrow mb-2">Phone notifications</p>
+          <PushNotificationsToggle publicKey={pushKey} />
+        </div>
+      )}
     </PortalShell>
   );
 }
