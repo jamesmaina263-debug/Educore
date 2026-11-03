@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
+import { useSchoolHref } from "@/components/app-shell/school-slug-context";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -55,6 +57,7 @@ export function CalendarSection({
   canWrite: boolean;
   today: string;
 }) {
+  const toHref = useSchoolHref();
   const [form, setForm] = useState<EventInput | null>(null);
   const [houseName, setHouseName] = useState("");
   const [houseColour, setHouseColour] = useState("#2563eb");
@@ -272,6 +275,11 @@ export function CalendarSection({
       <div className="panel p-4">
         <p className="mb-1 text-sm font-semibold">Houses</p>
         <p className="mb-3 text-sm text-muted-foreground">Competition houses (for example Red House). These are separate from boarding houses.</p>
+        {houses.length > 0 && (
+          <Link href={toHref("/calendar/houses")} className="mb-3 inline-block text-sm font-medium underline underline-offset-2">
+            {canWrite ? "Assign learners to houses" : "See which learners are in each house"}
+          </Link>
+        )}
         {houses.length === 0 ? (
           <p className="mb-3 text-sm text-muted-foreground">No houses yet.</p>
         ) : (
