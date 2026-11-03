@@ -62,7 +62,7 @@ begin
   execute 'reset role';
   select id into v_flag from platform_feature_flags where key = 'feature.bot.documents';
   assert v_flag is not null, '1: flag catalog entry exists';
-  assert not exists (select 1 from school_feature_flags where flag_id = v_flag), '1: flag enabled for nobody';
+  assert not exists (select 1 from school_feature_flags where flag_id = v_flag and enabled and school_id = sa), '1: flag enabled for the fixture school (a real school may have it on)';
 
   -- turn the flag on for school A (as superuser)
   insert into school_feature_flags (school_id, flag_id, enabled) values (sa, v_flag, true);
