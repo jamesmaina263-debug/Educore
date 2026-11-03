@@ -71,7 +71,7 @@ begin
   -- 2. flag OFF: everything refuses or returns nothing; the catalog entry exists and is on for nobody
   select id into v_flag from platform_feature_flags where key = 'feature.bot.guardian_requests';
   assert v_flag is not null, '2: flag catalog entry exists';
-  assert not exists (select 1 from school_feature_flags where flag_id = v_flag and enabled), '2: flag enabled for nobody';
+  assert not exists (select 1 from school_feature_flags where flag_id = v_flag and enabled and school_id in (sa, sb)), '2: flag enabled for the fixture schools (a real school may have it on)';
   execute 'set local role service_role';
   assert bot_guardian_requests_enabled(sa) = false, '2: enabled() false while off';
   v_res := bot_submit_absence_report(sa, conv1, su_g1, st1, v_today + 1, 'fever', 'raw');
