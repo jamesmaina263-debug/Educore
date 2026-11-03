@@ -101,6 +101,12 @@ const nextConfig: NextConfig = {
           { key: "Content-Security-Policy", value: csp },
         ],
       },
+      // The driver phone app (WP 5.2) is the one page that may use the device location, and only its own origin may.
+      // Every other page keeps geolocation denied by the rule above.
+      {
+        source: "/portal/driver",
+        headers: [{ key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=(self), interest-cohort=()" }],
+      },
       // Later rules override earlier ones for the same header key, so these
       // replace only the CSP on the marketing pages and /signup.
       ...marketingHeaderSources(path.join(process.cwd(), "src/app/(marketing)")).map((source) => ({
