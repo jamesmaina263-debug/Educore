@@ -17,6 +17,7 @@ import { ReportCardInsightsPanel } from "@/components/exams/report-card-insights
 import { buildReportCardInsights } from "@/lib/academics/report-card-insights";
 import { getStudentGrowth } from "@/app/(app)/students/[id]/growth-actions";
 
+const LEARNING_PORTAL_FLAG = "feature.learning.portal";
 const WEEKDAY_NAMES = ["", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 
 export default async function PortalPage({ searchParams }: { searchParams: Promise<{ child?: string }> }) {
@@ -45,6 +46,9 @@ export default async function PortalPage({ searchParams }: { searchParams: Promi
 
   // WhatsApp bot documents: the PIN link only appears for parents at schools that switched it on.
   const whatsappDocumentsOn = roleName === "parent" && (await hasFeatureFlag(supabase, "feature.bot.documents"));
+
+  // Learning portal: parents and students at schools that switched it on get a link (the page and database re-check).
+  const learningOn = await hasFeatureFlag(supabase, LEARNING_PORTAL_FLAG);
 
   // School bus: the link only appears for parents at schools that switched on BOTH live tracking and parent bus view.
   const busViewOn =
@@ -643,6 +647,15 @@ export default async function PortalPage({ searchParams }: { searchParams: Promi
           <p className="text-sm text-muted-foreground">Get your child&apos;s report card and fee statement on WhatsApp, protected by a PIN you choose.</p>
           <Link href="/portal/whatsapp-pin" className="mt-2 inline-block text-sm font-medium underline underline-offset-2">
             Set or change your PIN
+          </Link>
+        </div>
+      )}
+      {learningOn && (
+        <div className="panel p-4">
+          <p className="label-eyebrow mb-2">Learning</p>
+          <p className="text-sm text-muted-foreground">Notes, videos, past papers, live lesson links and quizzes shared by teachers.</p>
+          <Link href="/portal/learning" className="mt-2 inline-block text-sm font-medium underline underline-offset-2">
+            Open learning
           </Link>
         </div>
       )}
