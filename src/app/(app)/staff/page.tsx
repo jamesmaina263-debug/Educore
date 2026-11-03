@@ -7,6 +7,8 @@ import { AppShell } from "@/components/app-shell/app-shell";
 import { Button } from "@/components/ui/button";
 import { StaffTable, type StaffRow } from "@/components/staff/staff-table";
 import { getSchoolSlug } from "@/lib/school-slug-server";
+import { hasFeatureFlag } from "@/lib/feature-flags";
+import { TRAINING_FLAG } from "@/lib/staff/training";
 import { withSchoolSlug } from "@/lib/school-slug-href";
 
 const PAGE_SIZE = 20;
@@ -43,7 +45,7 @@ export default async function StaffDirectoryPage({
   const from = (page - 1) * PAGE_SIZE;
   // Header lookup, permission check and roster query are independent -- one batch, not three
   // sequential round trips.
-  const [{ data: schoolUser }, { data: canManage }, { data: staffRows, count }] = await Promise.all([
+  const [{ data: schoolUser }, { data: canManage }, { data: staffRows, count }, trainingOn] = await Promise.all([
     supabase
       .from("school_users")
       .select("full_name, roles(display_name), schools(name)")
@@ -51,6 +53,8 @@ export default async function StaffDirectoryPage({
       .maybeSingle(),
     supabase.rpc("auth_has_permission", { p_permission_key: "staff.manage" }),
     query.order("full_name").range(from, from + PAGE_SIZE - 1),
+    // Training and expiry page: only linked when the school has the flag on (fails closed).
+    hasFeatureFlag(supabase, TRAINING_FLAG),
   ]);
 
   const rows: StaffRow[] = (staffRows ?? []).map((s) => ({
@@ -84,6 +88,11 @@ export default async function StaffDirectoryPage({
             <Button variant="outline" asChild>
               <Link href={withSchoolSlug(schoolSlug, "/staff/attendance")}>Attendance register</Link>
             </Button>
+            {trainingOn && (
+              <Button variant="outline" asChild>
+                <Link href={withSchoolSlug(schoolSlug, "/staff/training")}>Training and expiry</Link>
+              </Button>
+            )}
             {canManage === true && (
               <Button asChild>
                 <Link href={withSchoolSlug(schoolSlug, "/settings/staff")}>Add staff member</Link>
