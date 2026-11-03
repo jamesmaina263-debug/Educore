@@ -1,0 +1,59 @@
+name: Audit hardening behavior check
+
+# Runs supabase/tests/audit_hardening.sql: a behavioral test (synthetic fixtures, real role
+# impersonation via the request.jwt.claims GUC, the real deployed functions and policies) for the
+# audit log hardening (WP 4.1): append-only audit_log (update, delete and truncate refused, purge and
+# maintenance bypass kept, API roles cannot bypass), feature-flag and API-key auditing, key hash never stored, attribution,
+# grants. Same pattern, same secret and same safety model as scheme-of-work-rls-check.yml:
+# the script opens with `begin;`, ends with `rollback;`, and a final tripwire fails loudly if any
+# fixture row persisted. Nothing it does is ever kept. No nightly schedule.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "supabase/migrations/**"
+      - "supabase/tests/audit_hardening.sql"
+      - ".github/workflows/audit-hardening-check.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "supabase/migrations/**"
+      - "supabase/tests/audit_hardening.sql"
+      - ".github/workflows/audit-hardening-check.yml"
+  workflow_dispatch: {}
+
+jobs:
+  audit-hardening-check:
+    # Same Dependabot carve-out as scheme-of-work-rls-check.yml: GitHub withholds secrets from
+    # dependabot[bot] runs, and the production DB credential is deliberately not exposed to them.
+    if: ${{ !(github.event_name == 'pull_request' && github.actor == 'dependabot[bot]') }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Check SUPABASE_DB_URL is set
+        run: |
+          if [ -z "${{ secrets.SUPABASE_DB_URL }}" ]; then
+            echo "SUPABASE_DB_URL repo secret is not set -- same secret scheme-of-work-rls-check.yml uses. Failing loudly instead of skipping silently."
+            exit 1
+          fi
+
+      - name: Install postgresql-client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+
+      - name: Run audit hardening behavioral test
+        env:
+          DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          set +e
+          out=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -f supabase/tests/audit_hardening.sql 2>&1)
+          code=$?
+          echo "$out"
+          if [ "$code" -ne 0 ]; then
+            # Surface the failing assertion as annotations so it is visible without opening the raw log.
+            echo "$out" | grep -E "ERROR|CONTEXT|DETAIL|HINT|LEAK" | head -10 | while IFS= read -r line; do echo "::error::${line}"; done
+            exit "$code"
+          fi
