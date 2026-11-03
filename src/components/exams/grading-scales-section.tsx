@@ -12,6 +12,7 @@ import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { createGradingScale, setClassGradingScale } from "@/app/(app)/exams/actions";
+import { GRADE_SCALE_PRESETS, checkBands, describeIssue } from "@/lib/academics/grade-scale-presets";
 
 export interface GradingScaleRow {
   id: string;
@@ -63,6 +64,9 @@ export function GradingScalesSection({
   const [modelType, setModelType] = useState<"numeric" | "cbc">("numeric");
   const [isDefault, setIsDefault] = useState(false);
   const [bands, setBands] = useState<BandDraft[]>([emptyBand, { ...emptyBand }]);
+
+  // Advisory only (never blocks saving): bands that would leave a mark with no grade, or two grades.
+  const scaleIssues = checkBands(bands);
 
   function updateBand(index: number, patch: Partial<BandDraft>) {
     setBands((prev) => prev.map((b, i) => (i === index ? { ...b, ...patch } : b)));
@@ -195,6 +199,34 @@ export function GradingScalesSection({
                       >
                         Use KJSEA 8-level preset
                       </Button>
+                    )}
+                    {modelType === "numeric" &&
+                      GRADE_SCALE_PRESETS.map((preset) => (
+                        <Button
+                          key={preset.id}
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          title={preset.description}
+                          onClick={() => {
+                            setName((n) => (n.trim() === "" ? preset.name : n));
+                            setBands(preset.bands.map((b) => ({ ...b })));
+                          }}
+                        >
+                          Use {preset.name} preset
+                        </Button>
+                      ))}
+                    {modelType === "numeric" && (
+                      <p className="text-xs text-muted-foreground">
+                        Presets are indicative: exam boards set their own grade boundaries each series, so edit the bands to match yours before saving.
+                      </p>
+                    )}
+                    {modelType === "numeric" && scaleIssues.length > 0 && (
+                      <ul className="list-disc space-y-0.5 pl-5 text-xs text-amber-700 dark:text-amber-400" aria-label="Band warnings">
+                        {scaleIssues.slice(0, 4).map((issue, i) => (
+                          <li key={i}>{describeIssue(issue)}</li>
+                        ))}
+                      </ul>
                     )}
                   </div>
 

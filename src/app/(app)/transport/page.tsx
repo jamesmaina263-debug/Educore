@@ -1,6 +1,8 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getCachedUser } from "@/lib/supabase/get-user";
+import { hasFeatureFlag } from "@/lib/feature-flags";
+import { DriverCodesLink } from "@/components/transport/driver-codes-link";
 import { logout } from "@/app/login/actions";
 import { AppShell } from "@/components/app-shell/app-shell";
 import {
@@ -52,6 +54,9 @@ export default async function TransportPage() {
     const { data: students } = await supabase.from("students").select("id, first_name, last_name, admission_number").eq("status", "active").order("first_name");
     studentOptions = (students ?? []).map((s) => ({ id: s.id, name: `${s.first_name} ${s.last_name} (${s.admission_number})` }));
   }
+
+  // Only staff who can manage transport, and only when live tracking is on for the school (fails closed).
+  const showDriverCodesLink = canWrite === true && (await hasFeatureFlag(supabase, "feature.transport.live_tracking"));
 
   const capacityByRoute = new Map((routeCapacity ?? []).map((c) => [c.route_id, c]));
   const capacityByStop = new Map((stopCapacity ?? []).map((c) => [c.stop_id, c]));
@@ -127,6 +132,7 @@ export default async function TransportPage() {
             {canReadAny ? "Vehicles, drivers, routes, stops and student allocation." : "Your child's transport assignment."}
           </p>
         </div>
+        {showDriverCodesLink && <DriverCodesLink />}
         <TransportSection routes={routes} vehicles={vehicles} stops={stops} assignments={assignments} studentOptions={studentOptions} canWrite={canWrite === true} />
       </div>
     </AppShell>

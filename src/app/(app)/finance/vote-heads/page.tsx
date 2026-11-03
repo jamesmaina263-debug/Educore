@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { hasFeatureFlag } from "@/lib/feature-flags";
 import { loadFinanceContext } from "../_data";
 import { FinancePageShell } from "@/components/finance/finance-page-shell";
+import { AccountingExportPanel } from "@/components/finance/accounting-export-panel";
 import {
   VoteHeadsSection,
   type MappingRow,
@@ -91,6 +92,13 @@ export default async function VoteHeadsPage({ searchParams }: { searchParams: Pr
         unmappedItems={unmappedItems}
         unmappedCategories={unmappedCategories}
       />
+      {ctx.canRead && (
+        <AccountingExportPanel
+          ledger={ledger}
+          periodLabel={termId ? (ctx.terms.find((t) => t.id === termId)?.name ?? "selected term") : "all time"}
+          reconciled={reconciliation ? reconciles(reconciliation) : true}
+        />
+      )}
     </FinancePageShell>
   );
 }
