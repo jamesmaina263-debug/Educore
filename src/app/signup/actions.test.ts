@@ -245,6 +245,76 @@ describe("signUpSchool", () => {
     logged.mockRestore();
   });
 
+  describe("finishing a rollback with rollback_unfinished_signup", () => {
+    const phoneTaken = () => {
+      h.results["school_users.insert"] = { error: { code: "23505", message: "uq_school_users_active_phone" } };
+    };
+    const refuseSchoolDelete = () => {
+      h.results["schools.delete"] = { error: { message: "violates foreign key constraint audit_log_school_id_fkey" } };
+    };
+    const rollbackCalls = () => h.rpc.mock.calls.filter((c) => c[0] === "rollback_unfinished_signup");
+
+    it("does not call it when the plain school delete works", async () => {
+      phoneTaken();
+      await signUpSchool({ error: null }, form());
+      expect(rollbackCalls()).toHaveLength(0);
+    });
+
+    it("calls it for this school only when the plain delete is refused, and stays quiet when it removes the school", async () => {
+      const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+      phoneTaken();
+      refuseSchoolDelete();
+      h.rpc.mockImplementation(async (name: string) =>
+        name === "rollback_unfinished_signup" ? { data: { deleted: true }, error: null } : { data: true },
+      );
+      const res = await signUpSchool({ error: null }, form());
+      expect(res.error).toMatch(/phone number is already registered/i);
+      expect(rollbackCalls()).toEqual([["rollback_unfinished_signup", { p_school_id: "s1" }]]);
+      expect(h.deleteUser).toHaveBeenCalledWith("abcdef123456");
+      expect(logged).not.toHaveBeenCalledWith("signup rollback incomplete", expect.anything());
+      logged.mockRestore();
+    });
+
+    it("logs the reason when the database function refuses", async () => {
+      const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+      phoneTaken();
+      refuseSchoolDelete();
+      h.rpc.mockImplementation(async (name: string) =>
+        name === "rollback_unfinished_signup" ? { data: { deleted: false, reason: "has_users" }, error: null } : { data: true },
+      );
+      await signUpSchool({ error: null }, form());
+      expect(h.deleteUser).toHaveBeenCalledWith("abcdef123456");
+      expect(logged).toHaveBeenCalledWith(
+        "signup rollback incomplete",
+        expect.objectContaining({ failed: [expect.stringContaining("has_users")] }),
+      );
+      logged.mockRestore();
+    });
+
+    it("logs and still removes the auth user when the database function errors or throws", async () => {
+      const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+      phoneTaken();
+      refuseSchoolDelete();
+      h.rpc.mockImplementation(async (name: string) =>
+        name === "rollback_unfinished_signup" ? { error: { message: "permission denied" } } : { data: true },
+      );
+      await signUpSchool({ error: null }, form());
+      expect(logged).toHaveBeenCalledWith("signup rollback incomplete", expect.objectContaining({ failed: [expect.stringContaining("permission denied")] }));
+
+      logged.mockClear();
+      h.deleteUser.mockClear();
+      h.calls.length = 0;
+      h.rpc.mockImplementation(async (name: string) => {
+        if (name === "rollback_unfinished_signup") throw new Error("network down");
+        return { data: true };
+      });
+      await signUpSchool({ error: null }, form());
+      expect(h.deleteUser).toHaveBeenCalledWith("abcdef123456");
+      expect(logged).toHaveBeenCalledWith("signup rollback incomplete", expect.objectContaining({ failed: [expect.stringContaining("network down")] }));
+      logged.mockRestore();
+    });
+  });
+
   it("fakes success for a honeypot hit without creating anything", async () => {
     const res = await signUpSchool({ error: null }, form({ company_website: "spam.com" }));
     expect(res).toMatchObject({ success: true, honeypot: true });
