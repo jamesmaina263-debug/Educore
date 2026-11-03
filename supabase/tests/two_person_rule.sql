@@ -1,4 +1,6 @@
 -- Behavioural test for WP 4.2 (migration *_two_person_rule). Rollback-only, synthetic fixtures, real role
+-- The functions are SECURITY DEFINER and read auth.uid() from request.jwt.claims, so the test impersonates by claims only
+-- (no role switch), which also lets it read the tables without RLS hiding rows.
 -- impersonation (request.jwt.claims). Needs the migration already deployed.
 --   psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -f supabase/tests/two_person_rule.sql
 begin;
@@ -35,21 +37,16 @@ begin
   assert not has_function_privilege('anon', 'public.two_person_other_approver_exists(uuid,uuid,text)', 'execute'), '1: helper not callable by anon';
 
   -- 2. FLAG OFF: behaviour as before: an approver's own expense auto-approves; self-approval of a pending one works.
-  set local role authenticated;
   perform set_config('request.jwt.claims', json_build_object('sub', a1, 'role', 'authenticated')::text, true);
   e1 := raise_expense('general', 'Vendor', 100, null, null);
   assert (select status from expenses where id = e1) = 'approved', '2: flag off, approver own expense auto-approves';
-  reset role;
   insert into expenses (school_id, category, vendor, amount, status, requested_by) values (sa, 'general', 'V', 50, 'pending', su1) returning id into e2;
-  set local role authenticated;
   perform set_config('request.jwt.claims', json_build_object('sub', a1, 'role', 'authenticated')::text, true);
   perform approve_expense(e2);
   assert (select status from expenses where id = e2) = 'approved', '2: flag off, self-approval allowed';
-  reset role;
 
   -- 3. FLAG ON.
   insert into school_feature_flags (school_id, flag_id, enabled) values (sa, v_flag, true);
-  set local role authenticated;
   perform set_config('request.jwt.claims', json_build_object('sub', a1, 'role', 'authenticated')::text, true);
   e1 := raise_expense('general', 'Vendor', 100, null, null);
   assert (select status from expenses where id = e1) = 'pending', '3: approver own expense stays pending when another approver exists';
@@ -59,39 +56,31 @@ begin
   perform set_config('request.jwt.claims', json_build_object('sub', a2, 'role', 'authenticated')::text, true);
   perform approve_expense(e1);
   assert (select status from expenses where id = e1) = 'approved' and (select approved_by from expenses where id = e1) = su2, '3: another approver can approve';
-  reset role;
   select (new_data->>'self_approved')::boolean into v_self from audit_log where record_id = e1 and action = 'approve' order by created_at desc limit 1;
   assert v_self = false, '3: audit shows two-person approval';
 
   -- 4. FLAG ON, expense raised by a non-approver is pending and any approver can approve.
-  set local role authenticated;
   perform set_config('request.jwt.claims', json_build_object('sub', a3, 'role', 'authenticated')::text, true);
   e3 := raise_expense('general', 'Vendor', 70, null, null);
   assert (select status from expenses where id = e3) = 'pending', '4: non-approver expense pending';
   perform set_config('request.jwt.claims', json_build_object('sub', a1, 'role', 'authenticated')::text, true);
   perform approve_expense(e3);
   assert (select status from expenses where id = e3) = 'approved', '4: approver approves it';
-  reset role;
 
   -- 5. FLAG ON but the requester is the ONLY approver: still allowed, flagged in the audit log.
   delete from user_permission_overrides where school_user_id = su2 and permission_key in ('expenses.approve', 'payroll.approve');
-  set local role authenticated;
   perform set_config('request.jwt.claims', json_build_object('sub', a1, 'role', 'authenticated')::text, true);
   e1 := raise_expense('general', 'Solo', 20, null, null);
   assert (select status from expenses where id = e1) = 'approved', '5: sole approver keeps working';
-  reset role;
   insert into expenses (school_id, category, vendor, amount, status, requested_by) values (sa, 'general', 'V', 30, 'pending', su1) returning id into e2;
-  set local role authenticated;
   perform set_config('request.jwt.claims', json_build_object('sub', a1, 'role', 'authenticated')::text, true);
   perform approve_expense(e2);
-  reset role;
   select (new_data->>'self_approved')::boolean into v_self from audit_log where record_id = e2 and action = 'approve' order by created_at desc limit 1;
   assert v_self = true, '5: sole-approver self approval is flagged in the audit log';
   insert into user_permission_overrides (school_id, school_user_id, permission_key, allowed)
   values (sa, su2, 'expenses.approve', true), (sa, su2, 'payroll.approve', true);
 
   -- 6. Payroll: generator cannot approve own record when another payroll approver exists (flag on).
-  set local role authenticated;
   perform set_config('request.jwt.claims', json_build_object('sub', a1, 'role', 'authenticated')::text, true);
   p1 := (generate_payroll_record(su3, 2026::smallint, 10::smallint, 50000)).id;
   v_failed := false;
@@ -100,16 +89,13 @@ begin
   perform set_config('request.jwt.claims', json_build_object('sub', a2, 'role', 'authenticated')::text, true);
   perform approve_payroll_record(p1);
   assert (select status from payroll_records where id = p1) = 'approved', '6: another approver approves payroll';
-  reset role;
 
   -- 7. Payroll with the flag off: generator can approve.
   update school_feature_flags set enabled = false where school_id = sa and flag_id = v_flag;
-  set local role authenticated;
   perform set_config('request.jwt.claims', json_build_object('sub', a1, 'role', 'authenticated')::text, true);
   p1 := (generate_payroll_record(su2, 2026::smallint, 10::smallint, 40000)).id;
   perform approve_payroll_record(p1);
   assert (select status from payroll_records where id = p1) = 'approved', '7: flag off, payroll self-approval allowed';
-  reset role;
 
   raise notice 'two_person_rule behavioral checks: all passed';
 end $$;
