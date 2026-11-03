@@ -124,3 +124,9 @@ verify_jwt = false
 # DISPATCH_SECRET and constant-time compare as send-prospect-sequence).
 [functions.send-followup-digest]
 verify_jwt = false
+
+# vehicle-position-ingest is called by a tracker device (driver phone app) with a per-device bearer
+# token, not a Supabase session -- verify_jwt must stay false. The token is checked (hash lookup)
+# inside ingest_vehicle_positions(), which is service-role only.
+[functions.vehicle-position-ingest]
+verify_jwt = false
