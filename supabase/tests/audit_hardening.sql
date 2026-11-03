@@ -15,7 +15,7 @@ declare
   v_flag uuid := gen_random_uuid();
   v_sf uuid;
   v_key uuid := gen_random_uuid();
-  v_n integer; v_n2 integer; v_row audit_log%rowtype; v_failed boolean;
+  v_n integer; v_n2 integer; v_row audit_log%rowtype; v_failed boolean; v_state text;
   c_api constant text[] := array['anon', 'authenticated', 'authenticator', 'service_role'];
 begin
   select id into r_owner from roles where name = 'school_owner';
@@ -103,14 +103,31 @@ begin
     assert not exists (select 1 from audit_log where record_id = v_sf and reason = 'scrubbed'), '7: purge bypass';
   end if;
 
-  -- 8. an API role cannot use the bypass even with the flag set
+  -- 8. API roles cannot use the bypass even with the switch set.
+  --    authenticated: row-level security hides every audit_log row from an UPDATE, so it changes
+  --    nothing (zero rows, no error). Either way the row must be unchanged.
   perform set_config('educore.audit_log_maintenance', 'on', true);
   set local role authenticated;
+  begin
+    update audit_log set reason = 'tamper' where record_id = v_sf;
+  exception when others then
+    null;
+  end;
+  reset role;
+  assert not exists (select 1 from audit_log where reason = 'tamper'), '8: authenticated could not rewrite audit_log';
+  --    service_role bypasses row-level security, so it reaches the trigger, which must refuse (42501).
   v_failed := false;
-  begin update audit_log set reason = 'tamper' where record_id = v_sf; exception when others then v_failed := true; end;
+  set local role service_role;
+  begin
+    update audit_log set reason = 'tamper' where record_id = v_sf;
+  exception when others then
+    get stacked diagnostics v_state = returned_sqlstate;
+    v_failed := (v_state = '42501');
+  end;
   reset role;
   perform set_config('educore.audit_log_maintenance', 'off', true);
-  assert v_failed, '8: API role cannot bypass';
+  assert v_failed, '8: service_role refused with 42501 even with the maintenance switch set';
+  assert not exists (select 1 from audit_log where reason = 'tamper'), '8: service_role could not rewrite audit_log';
 
   -- 9. internal functions not callable by clients
   assert not has_function_privilege('anon', 'public.audit_privileged_change()', 'execute'), '9: anon';
