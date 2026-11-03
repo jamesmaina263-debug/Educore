@@ -1,6 +1,7 @@
 import { selectInChunks } from "@/lib/academics/in-chunks";
 import type { createClient } from "@/lib/supabase/server";
 import { loadReportSettings } from "@/lib/academics/report-settings";
+import { loadReportFormLayout, type ReportFormLayout } from "@/lib/academics/report-form-layout";
 import { assessmentKindOf, assessmentTitle, gradingLabel, MISSING } from "@/lib/academics/mark-sheet-model";
 
 // Loader + pure rules for the printable report card (staff print route and the parent portal
@@ -60,6 +61,8 @@ export interface ReportCardDocumentData {
   headTeacherComment: string | null;
   /** The school's report options (report-settings.ts). */
   options: { showRank: boolean; showCompetencies: boolean; showSignatures: boolean; showAcknowledgement: boolean };
+  /** The school's custom wording (WP 7.7). Absent or null = default wording, exactly as before. */
+  layout?: ReportFormLayout | null;
 }
 
 export interface AttendanceSummary {
@@ -145,9 +148,10 @@ export async function loadReportCardDocuments(
   if (!exam || !students || students.length === 0) return [];
 
   const schoolId = (students[0] as { school_id: string }).school_id;
-  const [{ data: school }, settings] = await Promise.all([
+  const [{ data: school }, settings, layout] = await Promise.all([
     supabase.from("schools").select("name, logo_url, primary_color, address, phone").eq("id", schoolId).maybeSingle(),
     loadReportSettings(supabase, schoolId),
+    loadReportFormLayout(supabase, schoolId),
   ]);
 
   // Class size is a class-wide statistic, so it is only read where the caller can see the whole
@@ -259,6 +263,7 @@ export async function loadReportCardDocuments(
         showSignatures: settings.showSignatures,
         showAcknowledgement: settings.showParentAcknowledgement,
       },
+      layout,
     };
   });
 

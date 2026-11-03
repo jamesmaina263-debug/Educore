@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { PrintReportCardsButton } from "@/components/exams/print-report-cards-button";
 import type { ReportCardDocumentData } from "@/lib/academics/report-card-document";
+import { DEFAULT_WORDING } from "@/lib/academics/report-form-layout";
 
 // Pure presentational, no hooks: shared by the staff print route and the parent-portal route so
 // the two never drift apart (same approach as ReceiptDocument). One A4 page per student.
@@ -38,6 +39,12 @@ function formatDate(iso: string): string {
 
 function ReportCardPage({ data }: { data: ReportCardDocumentData }) {
   const accent = data.school.primaryColor || "#1e40af";
+  // School wording (WP 7.7). Every field falls back to the original text, so a card with no layout is unchanged.
+  const layout = data.layout ?? null;
+  const title = layout?.title ?? DEFAULT_WORDING.title;
+  const classTeacherLabel = layout?.classTeacherLabel ?? DEFAULT_WORDING.classTeacherLabel;
+  const headTeacherLabel = layout?.headTeacherLabel ?? DEFAULT_WORDING.headTeacherLabel;
+  const parentLabel = layout?.parentLabel ?? DEFAULT_WORDING.parentLabel;
   const cell = { padding: "6px 8px", border: "1px solid #e4e4e7", fontSize: 12 } as const;
   const head = { ...cell, background: "#f4f4f5", textAlign: "left", fontWeight: 600 } as const;
   return (
@@ -52,8 +59,9 @@ function ReportCardPage({ data }: { data: ReportCardDocumentData }) {
         ) : null}
         <div>
           <p style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>{data.school.name}</p>
+          {layout?.subtitle && <p style={{ margin: 0, fontSize: 12, opacity: 0.9, fontStyle: "italic" }}>{layout.subtitle}</p>}
           <p style={{ margin: 0, fontSize: 12, opacity: 0.9 }}>
-            Report Card · {data.exam.name}
+            {title} · {data.exam.name}
             {data.exam.termName ? ` · ${data.exam.termName}` : ""}
           </p>
         </div>
@@ -148,20 +156,20 @@ function ReportCardPage({ data }: { data: ReportCardDocumentData }) {
         )}
 
         <div style={{ border: "1px solid #e4e4e7", borderRadius: 6, padding: 12, marginBottom: data.headTeacherComment ? 12 : 24, minHeight: 56 }}>
-          <p style={{ margin: "0 0 4px", fontSize: 12, fontWeight: 600 }}>Class teacher&apos;s comment</p>
+          <p style={{ margin: "0 0 4px", fontSize: 12, fontWeight: 600 }}>{layout?.classTeacherLabel ? `${layout.classTeacherLabel}'s comment` : "Class teacher's comment"}</p>
           <p style={{ margin: 0, fontSize: 12, whiteSpace: "pre-wrap" }}>{data.comment ?? (data.released ? "—" : "Pending approval.")}</p>
         </div>
 
         {data.headTeacherComment && (
           <div style={{ border: "1px solid #e4e4e7", borderRadius: 6, padding: 12, marginBottom: 24, minHeight: 56 }}>
-            <p style={{ margin: "0 0 4px", fontSize: 12, fontWeight: 600 }}>Head teacher&apos;s comment</p>
+            <p style={{ margin: "0 0 4px", fontSize: 12, fontWeight: 600 }}>{layout?.headTeacherLabel ? `${layout.headTeacherLabel}'s comment` : "Head teacher's comment"}</p>
             <p style={{ margin: 0, fontSize: 12, whiteSpace: "pre-wrap" }}>{data.headTeacherComment}</p>
           </div>
         )}
 
         {data.options.showAcknowledgement && (
           <div style={{ border: "1px solid #e4e4e7", borderRadius: 6, padding: 12, marginBottom: 24, fontSize: 11, color: "#3f3f46" }}>
-            <p style={{ margin: "0 0 14px", fontWeight: 600, fontSize: 12 }}>Parent / Guardian acknowledgement</p>
+            <p style={{ margin: "0 0 14px", fontWeight: 600, fontSize: 12 }}>{parentLabel} acknowledgement</p>
             <p style={{ margin: "0 0 14px" }}>I confirm that I have received and read this report.</p>
             <div style={{ display: "flex", gap: 24 }}>
               {["Name", "Signature", "Date"].map((label) => (
@@ -176,7 +184,7 @@ function ReportCardPage({ data }: { data: ReportCardDocumentData }) {
 
         {data.options.showSignatures && (
           <div style={{ display: "flex", gap: 24, fontSize: 11, color: "#52525b", marginTop: 28 }}>
-            {["Class teacher", "Principal", "Parent / Guardian"].map((who) => (
+            {[classTeacherLabel, headTeacherLabel, parentLabel].map((who) => (
               <div key={who} style={{ flex: 1 }}>
                 <div style={{ borderBottom: "1px solid #71717a", height: 20 }} />
                 <p style={{ margin: "4px 0 0" }}>{who} (signature &amp; date)</p>
@@ -190,6 +198,11 @@ function ReportCardPage({ data }: { data: ReportCardDocumentData }) {
         <div style={{ borderTop: "1px solid #e4e4e7", padding: "10px 24px", fontSize: 11, color: "#71717a" }}>
           {data.school.address && <p style={{ margin: 0 }}>{data.school.address}</p>}
           {data.school.phone && <p style={{ margin: 0 }}>{data.school.phone}</p>}
+        </div>
+      )}
+      {layout?.footerNote && (
+        <div style={{ borderTop: "1px solid #e4e4e7", padding: "10px 24px", fontSize: 11, color: "#52525b" }}>
+          <p style={{ margin: 0 }}>{layout.footerNote}</p>
         </div>
       )}
     </div>
