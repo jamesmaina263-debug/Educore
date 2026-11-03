@@ -1,0 +1,123 @@
+name: DB behavior checks
+
+# Runs every rollback-only SQL behavior test in supabase/tests/ against the production database,
+# one at a time, AFTER migrations are deployed. Replaces one workflow per feature.
+#
+# Why post-deploy: these tests exercise the deployed database. Run on a PR (or in parallel with
+# "Deploy migrations") they fail whenever a PR ships a migration together with its test, because
+# the migration is not applied yet. workflow_run makes the ordering real instead of assumed.
+#
+# Triggers
+#   workflow_run  - after "Deploy migrations" succeeds on main (the normal path)
+#   push          - test-only or runner-only changes, where no deploy happens
+#   schedule      - nightly, so drift in production data (a flag turned on for a real school, live
+#                   tracker rows) is caught when it happens, not on the next migration push
+#   dispatch      - manual
+#
+# Safety: a file with no `rollback;` is refused, so a future test can never commit to production.
+# Tests listed in .github/db-checks-advisory.txt report warnings instead of failing the run.
+
+on:
+  workflow_run:
+    workflows: ["Deploy migrations"]
+    types: [completed]
+    branches: [main]
+  push:
+    branches: [main]
+    paths:
+      - "supabase/tests/**"
+      - ".github/workflows/db-behavior-checks.yml"
+      - ".github/db-checks-advisory.txt"
+  schedule:
+    - cron: "0 3 * * *"
+  workflow_dispatch: {}
+
+# One suite at a time against production. A newer pending run replaces an older pending one,
+# which is fine: every run tests the whole suite against current production.
+concurrency:
+  group: db-behavior-checks
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  run:
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - name: Check SUPABASE_DB_URL is set
+        run: |
+          if [ -z "${{ secrets.SUPABASE_DB_URL }}" ]; then
+            echo "SUPABASE_DB_URL repo secret is not set. Failing loudly instead of skipping silently."
+            exit 1
+          fi
+
+      - name: Install postgresql-client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+
+      - name: Run behavior tests sequentially
+        env:
+          DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          set +e
+          advisory=".github/db-checks-advisory.txt"
+          blocking_failed=0
+          advisory_failed=0
+          passed=0
+          { echo "| Test | Mode | Result |"; echo "|---|---|---|"; } > /tmp/summary.md
+
+          for f in supabase/tests/*.sql; do
+            name=$(basename "$f")
+            mode=blocking
+            grep -qxF "$name" "$advisory" && mode=advisory
+
+            echo "::group::$name ($mode)"
+            if ! grep -qiE '^\s*rollback\s*;' "$f"; then
+              out="refusing to run $name: no rollback; statement, it could write to production"
+              code=1
+              echo "$out"
+            else
+              out=$(timeout 300 psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$f" 2>&1)
+              code=$?
+              echo "$out"
+            fi
+            echo "::endgroup::"
+
+            if [ "$code" -eq 0 ]; then
+              passed=$((passed + 1))
+              echo "| $name | $mode | pass |" >> /tmp/summary.md
+              continue
+            fi
+
+            echo "$out" | grep -E "ERROR|CONTEXT|DETAIL|HINT|LEAK|refusing" | head -10 | while IFS= read -r line; do
+              if [ "$mode" = advisory ]; then
+                echo "::warning title=$name (advisory)::${line}"
+              else
+                echo "::error title=$name::${line}"
+              fi
+            done
+            first=$(echo "$out" | grep -m1 -E "ERROR|refusing" | cut -c1-150 | tr '|' '/')
+            if [ "$mode" = advisory ]; then
+              advisory_failed=$((advisory_failed + 1))
+              echo "| $name | advisory | FAIL (not blocking): $first |" >> /tmp/summary.md
+            else
+              blocking_failed=$((blocking_failed + 1))
+              echo "| $name | blocking | **FAIL**: $first |" >> /tmp/summary.md
+            fi
+          done
+
+          {
+            echo "### DB behavior checks"
+            echo "passed: $passed, blocking failures: $blocking_failed, advisory failures: $advisory_failed"
+            echo
+            cat /tmp/summary.md
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          echo "passed=$passed blocking_failed=$blocking_failed advisory_failed=$advisory_failed"
+          [ "$blocking_failed" -eq 0 ]

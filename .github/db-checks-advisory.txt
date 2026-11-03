@@ -1,0 +1,23 @@
+# Tests that exist in supabase/tests/ but were not wired into any workflow when the
+# post-deploy runner (db-behavior-checks.yml) was introduced. Their failures are reported as
+# warnings, not blocking, until each has been run against production and fixed if it assumed
+# a state production no longer has. Remove a line here to make that test blocking.
+admin_mfa_enforcement.sql
+c2b_ingest_payment.sql
+c2b_mode_switch.sql
+canteen_stores.sql
+demo_request_to_lead.sql
+email_event_suppression.sql
+growth_report.sql
+manual_admission_numbers.sql
+outbound_contact_log.sql
+platform_invoice_permanent_delete.sql
+platform_invoicing.sql
+sales_lead_demos.sql
+sales_whatsapp.sql
+school_users_tenant_move_rls.sql
+set_mpesa_credentials_update.sql
+stk_callback_link_c2b_payment.sql
+student_same_school_guard.sql
+trial_checkins.sql
+trial_nudges.sql
