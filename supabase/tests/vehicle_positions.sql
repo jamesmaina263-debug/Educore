@@ -143,9 +143,13 @@ begin
   v_failed := false;
   begin perform purge_vehicle_positions(3); exception when sqlstate '22023' then v_failed := true; end;
   assert v_failed, '10: retention below 7 days refused';
-  update vehicle_positions set recorded_at = now() - interval '40 days' where id = (select min(id) from vehicle_positions);
-  assert purge_vehicle_positions(30) = 1, '10: purged exactly the old row';
-  assert (select count(*) from vehicle_positions) = 1, '10: recent row kept';
+  -- Scoped to the fixture school: real schools now have live tracker data in this table, so the
+  -- test must not assume it is empty. purge_vehicle_positions() is global, so it may also purge
+  -- real rows older than the retention window; only the fixture rows are asserted on.
+  update vehicle_positions set recorded_at = now() - interval '40 days' where id = (select min(id) from vehicle_positions where school_id = sa);
+  assert purge_vehicle_positions(30) >= 1, '10: purged at least the old row';
+  assert not exists (select 1 from vehicle_positions where school_id = sa and recorded_at < now() - interval '30 days'), '10: old fixture row purged';
+  assert (select count(*) from vehicle_positions where school_id = sa) = 1, '10: recent row kept';
 end
 $$;
 
