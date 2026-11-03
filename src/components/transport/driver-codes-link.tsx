@@ -11,7 +11,11 @@ export function DriverCodesLink() {
       <a href={toHref("/transport/devices")} className="underline">
         Manage driver codes
       </a>{" "}
-      to let a driver&apos;s phone share a vehicle&apos;s location.
+      to let a driver&apos;s phone share a vehicle&apos;s location, or{" "}
+      <a href={toHref("/transport/live")} className="underline">
+        see live buses
+      </a>
+      .
     </div>
   );
 }
