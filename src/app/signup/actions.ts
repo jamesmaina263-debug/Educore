@@ -113,7 +113,8 @@ function trimmed(formData: FormData, key: string): string {
  * items, leave types, ...) and several of those foreign keys are NO ACTION, so deleting the
  * school row alone fails and used to leave an orphaned school behind with nobody noticing.
  * Children go first, every step is checked and logged, and the auth user is always removed so
- * the visitor can retry with the same email.
+ * the visitor can retry with the same email. If the plain school delete is still refused (the owner's audit
+ * and biometric rows), the database function rollback_unfinished_signup() finishes the removal.
  */
 async function rollbackSignup(
   adminClient: ReturnType<typeof createAdminClient>,
@@ -135,7 +136,28 @@ async function rollbackSignup(
     for (const table of ["school_subscriptions", "inventory_items", "inventory_categories"] as const) {
       await attempt(table, () => adminClient.from(table).delete().eq("school_id", schoolId));
     }
-    await attempt("schools", () => adminClient.from("schools").delete().eq("id", schoolId));
+    // The plain delete is refused once the owner row exists: the owner's audit_log row and biometric profile row
+    // both point at the school with plain foreign keys. rollback_unfinished_signup() is the narrow, service-role-only
+    // way to finish the job (it refuses anything but a brand-new trial school with no users and no students).
+    let schoolRemoved = false;
+    let deleteFailure = "";
+    try {
+      const result = await adminClient.from("schools").delete().eq("id", schoolId);
+      if (result?.error) deleteFailure = result.error.message ?? "error";
+      else schoolRemoved = true;
+    } catch (e) {
+      deleteFailure = e instanceof Error ? e.message : "threw";
+    }
+    if (!schoolRemoved) {
+      try {
+        const { data, error } = await adminClient.rpc("rollback_unfinished_signup", { p_school_id: schoolId });
+        const outcome = (data ?? null) as { deleted?: boolean; reason?: string } | null;
+        if (error) failed.push(`schools: ${deleteFailure}; fallback: ${error.message ?? "error"}`);
+        else if (outcome?.deleted !== true) failed.push(`schools: ${deleteFailure}; fallback refused: ${outcome?.reason ?? "unknown"}`);
+      } catch (e) {
+        failed.push(`schools: ${deleteFailure}; fallback: ${e instanceof Error ? e.message : "threw"}`);
+      }
+    }
   }
   await attempt("auth user", () => adminClient.auth.admin.deleteUser(userId));
 
