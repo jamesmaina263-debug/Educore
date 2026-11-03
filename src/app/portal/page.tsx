@@ -46,6 +46,10 @@ export default async function PortalPage({ searchParams }: { searchParams: Promi
   // WhatsApp bot documents: the PIN link only appears for parents at schools that switched it on.
   const whatsappDocumentsOn = roleName === "parent" && (await hasFeatureFlag(supabase, "feature.bot.documents"));
 
+  // School bus: the link only appears for parents at schools that switched on BOTH live tracking and parent bus view.
+  const busViewOn =
+    roleName === "parent" && (await hasFeatureFlag(supabase, "feature.transport.live_tracking")) && (await hasFeatureFlag(supabase, "feature.transport.parent_bus_view"));
+
   // School calendar: parents at schools that switched the events calendar on see upcoming events.
   // The database policy already hides staff-only events from parents; the query repeats the filter.
   const calendarOn = roleName === "parent" && (await hasFeatureFlag(supabase, CALENDAR_FLAG));
@@ -639,6 +643,15 @@ export default async function PortalPage({ searchParams }: { searchParams: Promi
           <p className="text-sm text-muted-foreground">Get your child&apos;s report card and fee statement on WhatsApp, protected by a PIN you choose.</p>
           <Link href="/portal/whatsapp-pin" className="mt-2 inline-block text-sm font-medium underline underline-offset-2">
             Set or change your PIN
+          </Link>
+        </div>
+      )}
+      {busViewOn && (
+        <div className="panel p-4">
+          <p className="label-eyebrow mb-2">School bus</p>
+          <p className="text-sm text-muted-foreground">See where the school bus is while it is on its route.</p>
+          <Link href="/portal/bus" className="mt-2 inline-block text-sm font-medium underline underline-offset-2">
+            Where is the bus?
           </Link>
         </div>
       )}

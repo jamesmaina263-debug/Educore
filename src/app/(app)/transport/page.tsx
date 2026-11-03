@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getCachedUser } from "@/lib/supabase/get-user";
 import { hasFeatureFlag } from "@/lib/feature-flags";
 import { DriverCodesLink } from "@/components/transport/driver-codes-link";
+import { FleetLiveLink } from "@/components/transport/fleet-live-link";
 import { logout } from "@/app/login/actions";
 import { AppShell } from "@/components/app-shell/app-shell";
 import {
@@ -56,7 +57,10 @@ export default async function TransportPage() {
   }
 
   // Only staff who can manage transport, and only when live tracking is on for the school (fails closed).
-  const showDriverCodesLink = canWrite === true && (await hasFeatureFlag(supabase, "feature.transport.live_tracking"));
+  const liveTrackingOn = (canWrite === true || canReadAny === true) && (await hasFeatureFlag(supabase, "feature.transport.live_tracking"));
+  const showDriverCodesLink = canWrite === true && liveTrackingOn;
+  // WP 5.3: staff who can read transport data get a link to the live vehicle view (same flag, fails closed).
+  const showFleetLiveLink = canReadAny === true && liveTrackingOn;
 
   const capacityByRoute = new Map((routeCapacity ?? []).map((c) => [c.route_id, c]));
   const capacityByStop = new Map((stopCapacity ?? []).map((c) => [c.stop_id, c]));
@@ -133,6 +137,7 @@ export default async function TransportPage() {
           </p>
         </div>
         {showDriverCodesLink && <DriverCodesLink />}
+        {showFleetLiveLink && <FleetLiveLink />}
         <TransportSection routes={routes} vehicles={vehicles} stops={stops} assignments={assignments} studentOptions={studentOptions} canWrite={canWrite === true} />
       </div>
     </AppShell>
