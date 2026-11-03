@@ -10,6 +10,7 @@ import { getSchoolSlug } from "@/lib/school-slug-server";
 import { hasFeatureFlag } from "@/lib/feature-flags";
 import { TRAINING_FLAG } from "@/lib/staff/training";
 import { withSchoolSlug } from "@/lib/school-slug-href";
+import { RECRUITMENT_FLAG } from "@/lib/recruitment";
 
 const PAGE_SIZE = 20;
 
@@ -71,6 +72,9 @@ export default async function StaffDirectoryPage({
   const schoolName = (schoolUser?.schools as unknown as { name: string } | null)?.name;
   const totalCount = count ?? 0;
 
+  // Link appears only for people who manage staff in a school with recruitment switched on (fails closed).
+  const showRecruitment = canManage === true && (await hasFeatureFlag(supabase, RECRUITMENT_FLAG));
+
   return (
     <AppShell
       breadcrumbs={[{ label: schoolName ?? "EduCore", href: "/dashboard" }, { label: "Staff" }]}
@@ -91,6 +95,11 @@ export default async function StaffDirectoryPage({
             {trainingOn && (
               <Button variant="outline" asChild>
                 <Link href={withSchoolSlug(schoolSlug, "/staff/training")}>Training and expiry</Link>
+              </Button>
+            )}
+            {showRecruitment && (
+              <Button variant="outline" asChild>
+                <Link href={withSchoolSlug(schoolSlug, "/staff/recruitment")}>Recruitment</Link>
               </Button>
             )}
             {canManage === true && (
