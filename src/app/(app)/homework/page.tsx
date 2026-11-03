@@ -3,6 +3,11 @@ import { createClient } from "@/lib/supabase/server";
 import { getCachedUser } from "@/lib/supabase/get-user";
 import { logout } from "@/app/login/actions";
 import { AppShell } from "@/components/app-shell/app-shell";
+import Link from "next/link";
+import { hasFeatureFlag } from "@/lib/feature-flags";
+import { getSchoolSlug } from "@/lib/school-slug-server";
+import { withSchoolSlug } from "@/lib/school-slug-href";
+import { LEARNING_FLAG } from "@/lib/learning-portal";
 import { HomeworkSection, type AssignmentRow, type StreamOption, type SubjectOption } from "@/components/homework/homework-section";
 
 export default async function HomeworkPage() {
@@ -60,6 +65,10 @@ export default async function HomeworkPage() {
     };
   });
 
+  // Link appears only in schools with the learning portal switched on (fails closed).
+  const showLearning = await hasFeatureFlag(supabase, LEARNING_FLAG);
+  const schoolSlug = showLearning ? await getSchoolSlug() : undefined;
+
   return (
     <AppShell
       breadcrumbs={[{ label: schoolName ?? "EduCore", href: "/dashboard" }, { label: "Homework" }]}
@@ -73,6 +82,13 @@ export default async function HomeworkPage() {
           <p className="text-sm text-muted-foreground">
             {canWriteAny ? "Assignments across the school." : "Assignments you've set and their submissions."}
           </p>
+          {showLearning && (
+            <p className="text-sm">
+              <Link className="text-primary hover:underline" href={withSchoolSlug(schoolSlug, "/academics/learning")}>
+                Learning material and quizzes
+              </Link>
+            </p>
+          )}
         </div>
         <HomeworkSection
           assignments={assignments}
