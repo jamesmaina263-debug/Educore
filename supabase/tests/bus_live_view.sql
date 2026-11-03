@@ -43,9 +43,9 @@ begin
 
   insert into transport_routes (id, school_id, name) values (rt_n, sa, 'North Route'), (rt_s, sa, 'South Route'), (rt_b, sb, 'B Route');
   -- North has exactly one vehicle; South has two (ambiguous); v_x has no route.
-  insert into transport_vehicles (id, school_id, registration_number, route_id, driver_name, driver_phone) values
-    (v_n, sa, 'KAA 100A', rt_n, 'Driver Njoroge', '0700000001'), (v_s1, sa, 'KAA 200B', rt_s, null, null), (v_s2, sa, 'KAA 300C', rt_s, null, null),
-    (v_x, sa, 'KAA 400D', null, null, null), (v_b, sb, 'KBB 900Z', rt_b, null, null);
+  insert into transport_vehicles (id, school_id, registration_number, capacity, route_id, driver_name, driver_phone) values
+    (v_n, sa, 'KAA 100A', 40, rt_n, 'Driver Njoroge', '0700000001'), (v_s1, sa, 'KAA 200B', 40, rt_s, null, null), (v_s2, sa, 'KAA 300C', 40, rt_s, null, null),
+    (v_x, sa, 'KAA 400D', 40, null, null, null), (v_b, sb, 'KBB 900Z', 40, rt_b, null, null);
   insert into transport_stops (id, school_id, route_id, name, sequence) values (stp, sa, rt_n, 'Gate Stop', 1);
   insert into vehicle_tracker_devices (id, school_id, vehicle_id, label, token_hash) values
     (dev_n, sa, v_n, 'North phone', repeat('c', 64)), (dev_b, sb, v_b, 'B phone', repeat('d', 64));
