@@ -13,3 +13,5 @@ sales_lead_demos.sql
 sales_whatsapp.sql
 trial_checkins.sql
 trial_nudges.sql
+# WP 5.4+5.5: new test, not yet run against production. Remove this line (make it blocking) once it has passed once.
+bus_guardian_alerts.sql
