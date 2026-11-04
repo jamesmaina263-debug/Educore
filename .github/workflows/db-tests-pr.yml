@@ -1,0 +1,63 @@
+name: DB tests (PR)
+
+# Pre-merge DB coverage. Builds a throwaway Supabase Postgres from supabase/migrations/ and runs
+# every rollback-only SQL test against it, so a PR that ships a migration together with its test
+# is verified before merge, without touching production.
+#
+# Complements db-behavior-checks.yml, which runs the same tests against production after deploy
+# (catches drift in production data, which a fresh database cannot).
+#
+# Only the database container is started. The Supabase image brings the roles (anon,
+# authenticated, service_role), the auth/storage schemas and the pg_net / vault extensions that
+# the migrations expect; a bare postgres image does not.
+
+on:
+  pull_request:
+    paths:
+      - "supabase/migrations/**"
+      - "supabase/tests/**"
+      - "scripts/run-db-tests.sh"
+      - ".github/workflows/db-tests-pr.yml"
+      - ".github/db-checks-advisory-pr.txt"
+  workflow_dispatch: {}
+
+concurrency:
+  group: db-tests-pr-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  db-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: supabase/setup-cli@v3
+        with:
+          version: "2.116.0"   # same pin as deploy-migrations.yml
+
+      - name: Start throwaway Postgres and replay every migration
+        run: |
+          # Production runs Postgres 17 (config.toml does not pin it, so set it for this job only).
+          grep -q '^\[db\]' supabase/config.toml || printf '\n[db]\nmajor_version = 17\n' >> supabase/config.toml
+          # Database container only. `supabase start` applies supabase/migrations on first start and
+          # fails with the migration's own error if one cannot be replayed from scratch.
+          supabase start -x gotrue,realtime,storage-api,imgproxy,kong,mailpit,postgrest,postgres-meta,studio,edge-runtime,logflare,vector,supavisor
+
+      - name: Install postgresql-client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+
+      - name: Run SQL tests against the throwaway database
+        env:
+          DB_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+          ADVISORY_FILE: .github/db-checks-advisory-pr.txt
+          ALL_ADVISORY: "1"            # first run maps the baseline; switched off once it is known
+          SUITE_LABEL: DB tests on a fresh database (PR)
+        run: scripts/run-db-tests.sh
+
+      - name: Dump container logs on failure
+        if: failure()
+        run: docker ps -a --format '{{.Names}} {{.Status}}' ; docker logs supabase_db_alzqlvfaftwegptfbfej 2>&1 | tail -60 || true
