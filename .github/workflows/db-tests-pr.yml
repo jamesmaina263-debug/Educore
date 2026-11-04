@@ -40,12 +40,14 @@ jobs:
           version: "2.116.0"   # same pin as deploy-migrations.yml
 
       - name: Start throwaway Postgres and replay every migration
+        id: start
         run: |
+          set -o pipefail
           # Production runs Postgres 17 (config.toml does not pin it, so set it for this job only).
           grep -q '^\[db\]' supabase/config.toml || printf '\n[db]\nmajor_version = 17\n' >> supabase/config.toml
           # Database container only. `supabase start` applies supabase/migrations on first start and
           # fails with the migration's own error if one cannot be replayed from scratch.
-          supabase start -x gotrue,realtime,storage-api,imgproxy,kong,mailpit,postgrest,postgres-meta,studio,edge-runtime,logflare,vector,supavisor
+          supabase start -x gotrue,realtime,storage-api,imgproxy,kong,mailpit,postgrest,postgres-meta,studio,edge-runtime,logflare,vector,supavisor 2>&1 | tee /tmp/supabase-start.log
 
       - name: Install postgresql-client
         run: sudo apt-get update && sudo apt-get install -y postgresql-client
@@ -58,6 +60,11 @@ jobs:
           SUITE_LABEL: DB tests on a fresh database (PR)
         run: scripts/run-db-tests.sh
 
-      - name: Dump container logs on failure
-        if: failure()
-        run: docker ps -a --format '{{.Names}} {{.Status}}' ; docker logs supabase_db_alzqlvfaftwegptfbfej 2>&1 | tail -60 || true
+      - name: Report startup failure as an annotation
+        if: failure() && steps.start.outcome == 'failure'
+        run: |
+          # Job logs are not retrievable from every environment, so put the useful part in an annotation.
+          msg=$(tail -n 35 /tmp/supabase-start.log | tr -d '\r' | awk '{gsub(/%/,"%25"); printf "%s%%0A", $0}')
+          echo "::error title=supabase start failed (migration replay or container startup)::${msg}"
+          dbmsg=$(docker logs "$(docker ps -a --format '{{.Names}}' | grep supabase_db | head -1)" 2>&1 | grep -iE "error|fatal|panic" | tail -15 | cut -c1-300 | awk '{gsub(/%/,"%25"); printf "%s%%0A", $0}')
+          [ -n "$dbmsg" ] && echo "::error title=database container errors::${dbmsg}" || true
