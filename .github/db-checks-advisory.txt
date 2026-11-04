@@ -4,7 +4,6 @@
 # a state production no longer has. Remove a line here to make that test blocking.
 admin_mfa_enforcement.sql
 c2b_ingest_payment.sql
-canteen_stores.sql
 demo_request_to_lead.sql
 growth_report.sql
 manual_admission_numbers.sql
@@ -14,3 +13,7 @@ sales_lead_demos.sql
 sales_whatsapp.sql
 trial_checkins.sql
 trial_nudges.sql
+# WP 5.4+5.5: new test, not yet run against production. Remove this line (make it blocking) once it has passed once.
+bus_guardian_alerts.sql
+# WP 1.3 Pay by Link: new test, validated in a rolled-back run against production before merge. Remove this line (make it blocking) once it has passed once post-deploy.
+pay_by_link.sql
