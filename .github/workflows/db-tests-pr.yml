@@ -1,15 +1,20 @@
 name: DB tests (PR)
 
-# Pre-merge DB coverage. Builds a throwaway Supabase Postgres from supabase/migrations/ and runs
-# every rollback-only SQL test against it, so a PR that ships a migration together with its test
-# is verified before merge, without touching production.
+# Pre-merge DB coverage. Builds a throwaway Supabase Postgres, replays supabase/migrations/ into it,
+# and runs every rollback-only SQL test against it, so a PR that ships a migration together with its
+# test is verified BEFORE merge without touching production. Uses no secrets.
 #
 # Complements db-behavior-checks.yml, which runs the same tests against production after deploy
-# (catches drift in production data, which a fresh database cannot).
+# (that one catches drift in production data, which a fresh database cannot).
 #
-# Only the database container is started. The Supabase image brings the roles (anon,
-# authenticated, service_role), the auth/storage schemas and the pg_net / vault extensions that
-# the migrations expect; a bare postgres image does not.
+# How: `supabase start` (database container only, Postgres 17 like production) provides the roles,
+# the auth/storage schemas and the pg_net/vault extensions the migrations expect; a bare postgres
+# image does not. It is started with an empty migrations folder and scripts/replay-migrations.sh
+# applies each file in its own transaction, because 35 historical migrations cannot be replayed on a
+# fresh database (see .github/db-replay-known-failures.txt). Those are skipped; any OTHER migration
+# that fails to apply, including the PR's own, fails this check.
+#
+# Tests in .github/db-checks-advisory-pr.txt warn instead of failing (stale fixtures, see that file).
 
 on:
   pull_request:
@@ -17,8 +22,10 @@ on:
       - "supabase/migrations/**"
       - "supabase/tests/**"
       - "scripts/run-db-tests.sh"
+      - "scripts/replay-migrations.sh"
       - ".github/workflows/db-tests-pr.yml"
       - ".github/db-checks-advisory-pr.txt"
+      - ".github/db-replay-known-failures.txt"
   workflow_dispatch: {}
 
 concurrency:
@@ -39,32 +46,34 @@ jobs:
         with:
           version: "2.116.0"   # same pin as deploy-migrations.yml
 
-      - name: Start throwaway Postgres and replay every migration
+      - name: Install postgresql-client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+
+      - name: Start throwaway Postgres (no migrations yet)
         id: start
         run: |
           set -o pipefail
-          # Production runs Postgres 17 (config.toml does not pin it, so set it for this job only).
+          mkdir -p /tmp/migrations && cp supabase/migrations/*.sql /tmp/migrations/
+          rm -f supabase/migrations/*.sql
+          # Production runs Postgres 17; config.toml does not pin it, so set it for this job only.
           grep -q '^\[db\]' supabase/config.toml || printf '\n[db]\nmajor_version = 17\n' >> supabase/config.toml
-          # Database container only. `supabase start` applies supabase/migrations on first start and
-          # fails with the migration's own error if one cannot be replayed from scratch.
           supabase start -x gotrue,realtime,storage-api,imgproxy,kong,mailpit,postgrest,postgres-meta,studio,edge-runtime,logflare,vector,supavisor 2>&1 | tee /tmp/supabase-start.log
 
-      - name: Install postgresql-client
-        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+      - name: Report startup failure as an annotation
+        if: failure() && steps.start.outcome == 'failure'
+        run: |
+          msg=$(tail -n 35 /tmp/supabase-start.log | tr -d '\r' | awk '{gsub(/%/,"%25"); printf "%s%%0A", $0}')
+          echo "::error title=supabase start failed::${msg}"
+
+      - name: Replay migrations
+        env:
+          DB_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+          MIGRATIONS_DIR: /tmp/migrations
+        run: scripts/replay-migrations.sh
 
       - name: Run SQL tests against the throwaway database
         env:
           DB_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
           ADVISORY_FILE: .github/db-checks-advisory-pr.txt
-          ALL_ADVISORY: "1"            # first run maps the baseline; switched off once it is known
           SUITE_LABEL: DB tests on a fresh database (PR)
         run: scripts/run-db-tests.sh
-
-      - name: Report startup failure as an annotation
-        if: failure() && steps.start.outcome == 'failure'
-        run: |
-          # Job logs are not retrievable from every environment, so put the useful part in an annotation.
-          msg=$(tail -n 35 /tmp/supabase-start.log | tr -d '\r' | awk '{gsub(/%/,"%25"); printf "%s%%0A", $0}')
-          echo "::error title=supabase start failed (migration replay or container startup)::${msg}"
-          dbmsg=$(docker logs "$(docker ps -a --format '{{.Names}}' | grep supabase_db | head -1)" 2>&1 | grep -iE "error|fatal|panic" | tail -15 | cut -c1-300 | awk '{gsub(/%/,"%25"); printf "%s%%0A", $0}')
-          [ -n "$dbmsg" ] && echo "::error title=database container errors::${dbmsg}" || true
