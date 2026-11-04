@@ -14,6 +14,8 @@ import { PortalAnnouncementsSection, type PortalAnnouncementRow } from "@/compon
 import { PortalCalendarSection } from "@/components/portal/portal-calendar";
 import { PortalCanteenSection, type PortalCanteenEntry, type PortalCanteenPurchase } from "@/components/portal/portal-canteen";
 import { CANTEEN_FLAG } from "@/lib/canteen";
+import { BusAlertsToggle } from "@/components/portal/bus-alerts-toggle";
+import { BUS_ALERTS_FLAG } from "@/lib/bus-alerts";
 import { CALENDAR_FLAG, portalUpcoming, type CalendarEvent, type EventCategory, type EventStatus } from "@/lib/school-calendar";
 import { ReportCardInsightsPanel } from "@/components/exams/report-card-insights-panel";
 import { buildReportCardInsights } from "@/lib/academics/report-card-insights";
@@ -55,6 +57,15 @@ export default async function PortalPage({ searchParams }: { searchParams: Promi
   // School bus: the link only appears for parents at schools that switched on BOTH live tracking and parent bus view.
   const busViewOn =
     roleName === "parent" && (await hasFeatureFlag(supabase, "feature.transport.live_tracking")) && (await hasFeatureFlag(supabase, "feature.transport.parent_bus_view"));
+
+  // WP 5.4: the opt-out for bus alert SMS. Shown to every parent whenever the school has guardian bus alerts on, and
+  // deliberately NOT tied to the bus map flags above, so a guardian can always stop these messages. Opted in unless
+  // a stored row says otherwise (the database checks the same row before every send).
+  let busAlertsEnabled: boolean | null = null;
+  if (roleName === "parent" && (await hasFeatureFlag(supabase, BUS_ALERTS_FLAG))) {
+    const { data: busPref } = await supabase.from("bus_alert_preferences").select("enabled").eq("school_user_id", schoolUser.id).maybeSingle();
+    busAlertsEnabled = busPref ? busPref.enabled === true : true;
+  }
 
   // School calendar: parents at schools that switched the events calendar on see upcoming events.
   // The database policy already hides staff-only events from parents; the query repeats the filter.
@@ -720,6 +731,7 @@ export default async function PortalPage({ searchParams }: { searchParams: Promi
           </Link>
         </div>
       )}
+      {busAlertsEnabled !== null && <BusAlertsToggle initialEnabled={busAlertsEnabled} />}
       <div className="panel p-4">
         <p className="label-eyebrow mb-2">Notification preferences</p>
         <NotificationPreferencesPanel initialRows={preferenceRows} />
