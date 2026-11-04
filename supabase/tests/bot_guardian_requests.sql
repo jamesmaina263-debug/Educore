@@ -2,7 +2,7 @@
 --   psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -f supabase/tests/bot_guardian_requests.sql
 -- Needs the migration already deployed. Callers are simulated with request.jwt.claims + role
 -- authenticated / service_role. The script opens with begin; and ends with rollback; and a final
--- tripwire fails loudly if any fixture row persisted. (CI: .github/workflows/bot-guardian-requests-behavior-check.yml)
+-- tripwire fails loudly if any fixture row persisted. (CI: .github/workflows/db-behavior-checks.yml)
 begin;
 
 do $$
