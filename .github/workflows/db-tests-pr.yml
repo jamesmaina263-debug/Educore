@@ -1,0 +1,79 @@
+name: DB tests (PR)
+
+# Pre-merge DB coverage. Builds a throwaway Supabase Postgres, replays supabase/migrations/ into it,
+# and runs every rollback-only SQL test against it, so a PR that ships a migration together with its
+# test is verified BEFORE merge without touching production. Uses no secrets.
+#
+# Complements db-behavior-checks.yml, which runs the same tests against production after deploy
+# (that one catches drift in production data, which a fresh database cannot).
+#
+# How: `supabase start` (database container only, Postgres 17 like production) provides the roles,
+# the auth/storage schemas and the pg_net/vault extensions the migrations expect; a bare postgres
+# image does not. It is started with an empty migrations folder and scripts/replay-migrations.sh
+# applies each file in its own transaction, because 35 historical migrations cannot be replayed on a
+# fresh database (see .github/db-replay-known-failures.txt). Those are skipped; any OTHER migration
+# that fails to apply, including the PR's own, fails this check.
+#
+# Tests in .github/db-checks-advisory-pr.txt warn instead of failing (stale fixtures, see that file).
+
+on:
+  pull_request:
+    paths:
+      - "supabase/migrations/**"
+      - "supabase/tests/**"
+      - "scripts/run-db-tests.sh"
+      - "scripts/replay-migrations.sh"
+      - ".github/workflows/db-tests-pr.yml"
+      - ".github/db-checks-advisory-pr.txt"
+      - ".github/db-replay-known-failures.txt"
+  workflow_dispatch: {}
+
+concurrency:
+  group: db-tests-pr-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  db-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: supabase/setup-cli@v3
+        with:
+          version: "2.116.0"   # same pin as deploy-migrations.yml
+
+      - name: Install postgresql-client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+
+      - name: Start throwaway Postgres (no migrations yet)
+        id: start
+        run: |
+          set -o pipefail
+          mkdir -p /tmp/migrations && cp supabase/migrations/*.sql /tmp/migrations/
+          rm -f supabase/migrations/*.sql
+          # Production runs Postgres 17; config.toml does not pin it, so set it for this job only.
+          grep -q '^\[db\]' supabase/config.toml || printf '\n[db]\nmajor_version = 17\n' >> supabase/config.toml
+          supabase start -x gotrue,realtime,storage-api,imgproxy,kong,mailpit,postgrest,postgres-meta,studio,edge-runtime,logflare,vector,supavisor 2>&1 | tee /tmp/supabase-start.log
+
+      - name: Report startup failure as an annotation
+        if: failure() && steps.start.outcome == 'failure'
+        run: |
+          msg=$(tail -n 35 /tmp/supabase-start.log | tr -d '\r' | awk '{gsub(/%/,"%25"); printf "%s%%0A", $0}')
+          echo "::error title=supabase start failed::${msg}"
+
+      - name: Replay migrations
+        env:
+          DB_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+          MIGRATIONS_DIR: /tmp/migrations
+        run: scripts/replay-migrations.sh
+
+      - name: Run SQL tests against the throwaway database
+        env:
+          DB_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+          ADVISORY_FILE: .github/db-checks-advisory-pr.txt
+          SUITE_LABEL: DB tests on a fresh database (PR)
+        run: scripts/run-db-tests.sh
