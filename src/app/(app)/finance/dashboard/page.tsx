@@ -2,12 +2,15 @@ import { createClient } from "@/lib/supabase/server";
 import { hasFeatureFlag } from "@/lib/feature-flags";
 import { VOTE_HEAD_FLAG } from "@/lib/vote-heads";
 import { VoteHeadsLink } from "@/components/finance/vote-heads-link";
+import { CASHBOOK_FLAG } from "@/lib/cashbook";
+import { CashbookLink } from "@/components/finance/cashbook-link";
 import { loadFinanceContext, kes, ageInvoiceRows } from "../_data";
 import { FinancePageShell } from "@/components/finance/finance-page-shell";
 
 export default async function FinanceDashboardPage() {
   const ctx = await loadFinanceContext();
   const showVoteHeadsLink = ctx.canRead && (await hasFeatureFlag(await createClient(), VOTE_HEAD_FLAG));
+  const showCashbookLink = ctx.canRead && (await hasFeatureFlag(await createClient(), CASHBOOK_FLAG));
 
   const recentPayments = ctx.paymentRows.slice(0, 6);
   const topOutstanding = [...ctx.balanceRows]
@@ -27,6 +30,7 @@ export default async function FinanceDashboardPage() {
   return (
     <FinancePageShell ctx={ctx} section="Dashboard" title="Finance Dashboard">
       {showVoteHeadsLink && <VoteHeadsLink />}
+      {showCashbookLink && <CashbookLink />}
       <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
         <div className="panel px-4 py-3">
           <p className="label-eyebrow">Invoiced this term</p>
