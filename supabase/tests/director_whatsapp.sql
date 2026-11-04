@@ -69,6 +69,7 @@ begin
   -- (7 removed: school_users has a unique index on active phones, uq_school_users_active_phone, so two active staff can
   -- never hold the same number; the phone_in_use branch is only a second line of defence.)
 
+  execute 'reset role';
   -- 8. lookup + answers (service side)
   select count(*) into n from director_whatsapp_lookup('+254712345678'); assert n = 1, '8: lookup finds the director';
   select count(*) into n from director_whatsapp_lookup('+254700000000'); assert n = 0, '8: unknown number';
