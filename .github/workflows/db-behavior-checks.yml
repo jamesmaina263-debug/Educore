@@ -8,8 +8,8 @@ name: DB behavior checks
 # the migration is not applied yet. workflow_run makes the ordering real instead of assumed.
 #
 # Triggers
-#   workflow_run  - after "Deploy migrations" succeeds on main (the normal path)
-#   push          - test-only or runner-only changes, where no deploy happens
+#   workflow_run  - after "Deploy migrations" succeeds on main. Deploy migrations runs on every
+#                   push to main, so this covers every commit, including test-only changes.
 #   schedule      - nightly, so drift in production data (a flag turned on for a real school, live
 #                   tracker rows) is caught when it happens, not on the next migration push
 #   dispatch      - manual
@@ -22,12 +22,6 @@ on:
     workflows: ["Deploy migrations"]
     types: [completed]
     branches: [main]
-  push:
-    branches: [main]
-    paths:
-      - "supabase/tests/**"
-      - ".github/workflows/db-behavior-checks.yml"
-      - ".github/db-checks-advisory.txt"
   schedule:
     - cron: "0 3 * * *"
   workflow_dispatch: {}
