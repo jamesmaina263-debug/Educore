@@ -31,6 +31,7 @@ export const NEVER_PREFIX = new Set([
   "student-performance-appraisal", "teacher-performance-management",
   "schools",
   "unsubscribe",
+  "pay",
 ]);
 
 export type SlugRouting = { type: "next" } | { type: "redirect"; url: URL } | { type: "rewrite"; url: URL };

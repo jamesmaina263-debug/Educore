@@ -85,6 +85,7 @@ describe("proxy matcher: everything that needs the proxy is still matched", () =
       "/admin/analytics",
       "/notifications",
       "/unsubscribe/abc123",
+      "/pay/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
       "/api/admin/analytics-live",
       "/api/admin/page-views",
       "/api/billing/invoices/abc/pdf",
