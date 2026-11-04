@@ -19,3 +19,5 @@ bus_guardian_alerts.sql
 pay_by_link.sql
 # WP 3.3 director WhatsApp: new test, validated on a scratch Postgres only. Remove this line (make it blocking) once it has passed once post-deploy.
 director_whatsapp.sql
+# WP 6.1 cashbook: new test, validated pre-merge on the throwaway database (PR check). Remove this line (make it blocking) once it has passed once post-deploy against production.
+cashbook.sql
