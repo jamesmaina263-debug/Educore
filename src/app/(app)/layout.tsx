@@ -62,6 +62,10 @@ export default async function AppRouteGroupLayout({ children }: { children: Reac
     if (schemeOfWorkEnabled === false) disabledHrefs.push("/academics/curriculum");
     // Schools that don't want AI-drafted exam papers switch this module off.
     if (examPapersEnabled === false) disabledHrefs.push("/exams/papers");
+    // Learning portal lite (WP 8.1) is behind a feature flag, not a module toggle: show the entry only when the
+    // school has it on. Fails closed (any error or non-true answer hides the entry).
+    const { data: learningOn } = await supabase.rpc("my_school_has_feature_flag", { p_key: "feature.learning.portal" });
+    if (learningOn !== true) disabledHrefs.push("/academics/learning");
   }
 
   return (
