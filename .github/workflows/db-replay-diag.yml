@@ -8,6 +8,7 @@ on:
   pull_request:
     paths:
       - ".github/workflows/db-replay-diag.yml"
+      - "scripts/run-db-tests.sh"
 
 permissions:
   contents: read
@@ -44,5 +45,13 @@ jobs:
             fi
           done
           echo "applied=$ok failed=$bad"
-          echo "::error title=replay: ${bad} of $((ok+bad)) migrations failed on a fresh database::${msgs}"
+          echo "$msgs" | sed 's/%0A/\n/g' > /tmp/fails.txt
+          echo "::error title=replay part 1: ${bad} of $((ok+bad)) migrations failed on a fresh database::$(sed -n 1,18p /tmp/fails.txt | awk '{printf "%s%%0A", $0}')"
+          echo "::error title=replay part 2::$(sed -n 19,40p /tmp/fails.txt | awk '{printf "%s%%0A", $0}')"
           exit 0
+      - name: Run the SQL tests on the tolerantly-replayed database (all advisory)
+        env:
+          DB_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+          ALL_ADVISORY: "1"
+          SUITE_LABEL: baseline on a replayed database
+        run: scripts/run-db-tests.sh
