@@ -1,0 +1,48 @@
+name: DB replay diagnostic (temporary)
+
+# Temporary: maps every migration that cannot be replayed on a fresh database, in one run.
+# Starts Supabase Postgres with NO migrations, then applies each file in its own transaction (as the
+# CLI does) and records failures instead of stopping at the first. Deleted before the PR merges.
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/db-replay-diag.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  diag:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: supabase/setup-cli@v3
+        with:
+          version: "2.116.0"
+      - name: Install postgresql-client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+      - name: Start database with an empty migrations folder
+        run: |
+          set -o pipefail
+          mkdir -p /tmp/migs && cp supabase/migrations/*.sql /tmp/migs/
+          rm -f supabase/migrations/*.sql
+          grep -q '^\[db\]' supabase/config.toml || printf '\n[db]\nmajor_version = 17\n' >> supabase/config.toml
+          supabase start -x gotrue,realtime,storage-api,imgproxy,kong,mailpit,postgrest,postgres-meta,studio,edge-runtime,logflare,vector,supavisor 2>&1 | tail -15
+      - name: Apply every migration, record every failure
+        run: |
+          set +e
+          URL=postgresql://postgres:postgres@127.0.0.1:54322/postgres
+          ok=0; bad=0; msgs=""
+          for f in /tmp/migs/*.sql; do
+            out=$(psql "$URL" -v ON_ERROR_STOP=1 --single-transaction -f "$f" 2>&1)
+            if [ $? -eq 0 ]; then ok=$((ok+1)); else
+              bad=$((bad+1))
+              err=$(echo "$out" | grep -m1 -E "ERROR" | cut -c1-170 | tr -d '\r' | sed 's/%/%25/g')
+              msgs="${msgs}$(basename $f | cut -c1-70): ${err}%0A"
+            fi
+          done
+          echo "applied=$ok failed=$bad"
+          echo "::error title=replay: ${bad} of $((ok+bad)) migrations failed on a fresh database::${msgs}"
+          exit 0
