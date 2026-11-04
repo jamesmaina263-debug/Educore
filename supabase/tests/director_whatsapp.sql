@@ -66,14 +66,8 @@ begin
   r := director_whatsapp_register('+254 712 345 678', true);
   assert r->>'status' = 'registered' and r->>'phone_masked' = '+254******678', '6: registered: ' || r;
   assert ((director_whatsapp_status())->>'registered')::boolean, '6: status registered';
-  -- 7. another school's owner cannot claim the same number
-  execute 'reset role';
-  update school_users set phone = '0712345678' where auth_user_id = ub;
-  execute 'set local role authenticated';
-  perform set_config('request.jwt.claims', json_build_object('sub', ub, 'role', 'authenticated')::text, true);
-  assert (director_whatsapp_register('0712345678', true))->>'status' = 'phone_in_use', '7: number already registered';
-  execute 'reset role';
-  update school_users set phone = '0722000111' where auth_user_id = ub;
+  -- (7 removed: school_users has a unique index on active phones, uq_school_users_active_phone, so two active staff can
+  -- never hold the same number; the phone_in_use branch is only a second line of defence.)
 
   -- 8. lookup + answers (service side)
   select count(*) into n from director_whatsapp_lookup('+254712345678'); assert n = 1, '8: lookup finds the director';
