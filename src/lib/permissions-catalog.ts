@@ -212,6 +212,15 @@ export const PERMISSION_CATALOG: PermissionGroup[] = [
     ],
   },
   {
+    module: "canteen",
+    label: "Canteen",
+    permissions: [
+      { key: "canteen.read", label: "View the canteen, sales and student wallets" },
+      { key: "canteen.sell", label: "Take canteen sales, add money to wallets and receive stock" },
+      { key: "canteen.manage", label: "Set canteen prices, correct stock, void sales and pay out wallet balances" },
+    ],
+  },
+  {
     module: "communication",
     label: "Communication",
     permissions: [

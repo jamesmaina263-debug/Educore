@@ -12,6 +12,8 @@ import { PortalPtMeetingsSection, type PortalSlotRow } from "@/components/portal
 import { PortalConnectSection, type PortalConnectItemRow } from "@/components/portal/portal-connect";
 import { PortalAnnouncementsSection, type PortalAnnouncementRow } from "@/components/portal/portal-announcements";
 import { PortalCalendarSection } from "@/components/portal/portal-calendar";
+import { PortalCanteenSection, type PortalCanteenEntry, type PortalCanteenPurchase } from "@/components/portal/portal-canteen";
+import { CANTEEN_FLAG } from "@/lib/canteen";
 import { CALENDAR_FLAG, portalUpcoming, type CalendarEvent, type EventCategory, type EventStatus } from "@/lib/school-calendar";
 import { ReportCardInsightsPanel } from "@/components/exams/report-card-insights-panel";
 import { buildReportCardInsights } from "@/lib/academics/report-card-insights";
@@ -123,6 +125,50 @@ export default async function PortalPage({ searchParams }: { searchParams: Promi
   }
 
   const selected = students.find((s) => s.id === childParam) ?? students[0];
+
+  // Canteen wallet (WP 8.5): read-only. The database policies already limit these rows to the guardian's own
+  // children (or the student themself); the filter picks the child being viewed. Money is added and paid back
+  // in cash at the canteen, so nothing on this page can move money.
+  const canteenOn = (roleName === "parent" || roleName === "student") && (await hasFeatureFlag(supabase, CANTEEN_FLAG));
+  let canteenHasWallet = false;
+  let canteenBalance = 0;
+  let canteenEntries: PortalCanteenEntry[] = [];
+  let canteenPurchases: PortalCanteenPurchase[] = [];
+  if (canteenOn && selected) {
+    const [{ data: wallet }, { data: entryRows }, { data: saleRows }] = await Promise.all([
+      supabase.from("canteen_wallets").select("balance").eq("student_id", selected.id).maybeSingle(),
+      supabase
+        .from("canteen_wallet_entries")
+        .select("id, kind, amount, balance_after, note, created_at")
+        .eq("student_id", selected.id)
+        .order("created_at", { ascending: false })
+        .limit(15),
+      supabase
+        .from("canteen_sales")
+        .select("id, tender, total, status, created_at, canteen_sale_lines(item_name, qty)")
+        .eq("student_id", selected.id)
+        .order("created_at", { ascending: false })
+        .limit(10),
+    ]);
+    canteenHasWallet = !!wallet;
+    canteenBalance = Number(wallet?.balance ?? 0);
+    canteenEntries = (entryRows ?? []).map((e) => ({
+      id: e.id as string,
+      kind: e.kind as PortalCanteenEntry["kind"],
+      amount: Number(e.amount),
+      balanceAfter: Number(e.balance_after),
+      note: (e.note as string | null) ?? null,
+      createdAt: e.created_at as string,
+    }));
+    canteenPurchases = (saleRows ?? []).map((sl) => ({
+      id: sl.id as string,
+      total: Number(sl.total),
+      tender: sl.tender as "wallet" | "cash",
+      status: sl.status as "completed" | "voided",
+      createdAt: sl.created_at as string,
+      lines: ((sl.canteen_sale_lines as unknown as { item_name: string; qty: number }[] | null) ?? []).map((l) => `${l.qty} × ${l.item_name}`),
+    }));
+  }
   const prefsResult = await getMyNotificationPreferences();
   const preferenceRows = "success" in prefsResult ? prefsResult.rows : [];
 
@@ -648,6 +694,12 @@ export default async function PortalPage({ searchParams }: { searchParams: Promi
           <Link href="/portal/whatsapp-pin" className="mt-2 inline-block text-sm font-medium underline underline-offset-2">
             Set or change your PIN
           </Link>
+        </div>
+      )}
+      {canteenOn && selected && (
+        <div className="panel p-4">
+          <p className="label-eyebrow mb-2">Canteen wallet</p>
+          <PortalCanteenSection hasWallet={canteenHasWallet} balance={canteenBalance} entries={canteenEntries} purchases={canteenPurchases} />
         </div>
       )}
       {learningOn && (
