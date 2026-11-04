@@ -66,6 +66,9 @@ export default async function AppRouteGroupLayout({ children }: { children: Reac
     // school has it on. Fails closed (any error or non-true answer hides the entry).
     const { data: learningOn } = await supabase.rpc("my_school_has_feature_flag", { p_key: "feature.learning.portal" });
     if (learningOn !== true) disabledHrefs.push("/academics/learning");
+    // Events and houses calendar (WP 8.6): same rule, its own flag.
+    const { data: calendarOn } = await supabase.rpc("my_school_has_feature_flag", { p_key: "feature.school.events_calendar" });
+    if (calendarOn !== true) disabledHrefs.push("/calendar");
   }
 
   return (
