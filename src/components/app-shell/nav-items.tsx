@@ -112,6 +112,7 @@ const academicsChildren: NavChild[] = [
   { label: "Competency Appraisal", href: "/academics/competency-appraisal", icon: ClipboardCheck },
   { label: "Scheme of Work", href: "/academics/scheme-of-work", icon: NotebookPen },
   { label: "Learning", href: "/academics/learning", icon: BookOpen },
+  { label: "Calendar", href: "/calendar", icon: CalendarRange },
   { label: "Curriculum Content", href: "/academics/curriculum", icon: FileUp },
   { label: "KICD Content", href: "/academics/kicd-content", icon: Library },
   { label: "Timetable", href: "/academics/timetable", icon: CalendarClock },
