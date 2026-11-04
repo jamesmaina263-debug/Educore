@@ -48,11 +48,13 @@ begin
     (ch1, sa, 'Kid', 'One', date '2012-01-01', 'male', 'approved'),
     (ch2, sa, 'Kid', 'Two', date '2012-01-02', 'female', 'approved'),
     (ch3, sa, 'Kid', 'Three', date '2012-01-03', 'male', 'approved');
+  -- The real schema refuses status active/enrolled until a student has a primary-contact guardian, so the
+  -- guardians go in first.
+  insert into student_guardians (student_id, guardian_user_id, relationship, primary_contact) values
+    (ch1, su_p1, 'guardian', true), (ch2, su_p2, 'guardian', true);
   update students set status = 'enrolled' where id in (ch1, ch2);
   update students set status = 'withdrawn' where id = ch3;
   update students set school_user_id = su_stu where id = ch1;
-  insert into student_guardians (student_id, guardian_user_id, relationship, primary_contact) values
-    (ch1, su_p1, 'guardian', true), (ch2, su_p2, 'guardian', true);
   -- a teacher who may SELL (per-school override) but is not a manager
   insert into role_permissions (role_id, school_id, permission_key, allowed) values
     (r_tea, sa, 'canteen.sell', true), (r_tea, sa, 'canteen.read', true);
