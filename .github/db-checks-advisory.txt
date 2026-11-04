@@ -4,7 +4,6 @@
 # a state production no longer has. Remove a line here to make that test blocking.
 admin_mfa_enforcement.sql
 c2b_ingest_payment.sql
-canteen_stores.sql
 demo_request_to_lead.sql
 growth_report.sql
 manual_admission_numbers.sql
