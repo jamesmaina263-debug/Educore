@@ -1,6 +1,6 @@
 -- Behavioural test for Phase 2.7+2.8 (migration *_bot_menu_language). Rollback-only, synthetic fixtures.
 --   psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -f supabase/tests/bot_menu_language.sql
--- Needs the migration already deployed. (CI: .github/workflows/bot-menu-language-behavior-check.yml)
+-- Needs the migration already deployed. (CI: .github/workflows/db-behavior-checks.yml)
 begin;
 
 do $$

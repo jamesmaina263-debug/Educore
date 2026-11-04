@@ -1,7 +1,7 @@
 -- Behavioral test for Phase 1.2 (migration *_check_mpesa_code). Rollback-only, synthetic fixtures.
 --   psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -f supabase/tests/check_mpesa_code.sql
 -- Needs the migration already deployed. Callers are simulated with request.jwt.claims + role authenticated.
--- Runs in CI via .github/workflows/check-mpesa-code-behavior-check.yml. SAFETY: one transaction that ends
+-- Runs in CI via .github/workflows/db-behavior-checks.yml. SAFETY: one transaction that ends
 -- in `rollback;`; a failed assertion aborts and rolls back too; a final tripwire fails loudly if any
 -- fixture row is ever found to have persisted.
 begin;

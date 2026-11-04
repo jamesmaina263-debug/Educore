@@ -70,6 +70,8 @@ jobs:
           blocking_failed=0
           advisory_failed=0
           passed=0
+          blocking_msgs=""
+          advisory_msgs=""
           { echo "| Test | Mode | Result |"; echo "|---|---|---|"; } > /tmp/summary.md
 
           for f in supabase/tests/*.sql; do
@@ -95,13 +97,17 @@ jobs:
               continue
             fi
 
-            echo "$out" | grep -E "ERROR|CONTEXT|DETAIL|HINT|LEAK|refusing" | head -10 | while IFS= read -r line; do
-              if [ "$mode" = advisory ]; then
-                echo "::warning title=$name (advisory)::${line}"
-              else
-                echo "::error title=$name::${line}"
-              fi
-            done
+            # GitHub caps annotations at 10 warnings and 10 errors per step, which would hide most
+            # failures. Collect one line per failing test and emit a single aggregated annotation
+            # per level at the end (%25 and %0A are the workflow-command escapes for % and newline).
+            err=$(echo "$out" | grep -m1 -E "ERROR|refusing" | cut -c1-220 | tr -d '\r' | sed 's/%/%25/g')
+            ctx=$(echo "$out" | grep -m1 -E "CONTEXT|LEAK" | cut -c1-140 | tr -d '\r' | sed 's/%/%25/g')
+            entry="${name}: ${err} ${ctx}"
+            if [ "$mode" = advisory ]; then
+              advisory_msgs="${advisory_msgs}${entry}%0A"
+            else
+              blocking_msgs="${blocking_msgs}${entry}%0A"
+            fi
             first=$(echo "$out" | grep -m1 -E "ERROR|refusing" | cut -c1-150 | tr '|' '/')
             if [ "$mode" = advisory ]; then
               advisory_failed=$((advisory_failed + 1))
@@ -119,5 +125,7 @@ jobs:
             cat /tmp/summary.md
           } >> "$GITHUB_STEP_SUMMARY"
 
+          [ -n "$blocking_msgs" ] && echo "::error title=${blocking_failed} blocking DB test(s) failing::${blocking_msgs}"
+          [ -n "$advisory_msgs" ] && echo "::warning title=${advisory_failed} advisory DB test(s) failing (not blocking)::${advisory_msgs}"
           echo "passed=$passed blocking_failed=$blocking_failed advisory_failed=$advisory_failed"
           [ "$blocking_failed" -eq 0 ]
