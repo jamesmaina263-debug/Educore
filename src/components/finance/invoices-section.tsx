@@ -13,6 +13,7 @@ import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuIte
 import { TableExportMenu } from "@/components/shared/table-export-menu";
 import { recordPaymentAction } from "@/app/(app)/finance/actions";
 import { MpesaPushTrigger } from "@/components/finance/mpesa-push-trigger";
+import { PayLinkButton } from "@/components/finance/pay-link-button";
 
 export interface InvoiceListRow {
   id: string;
@@ -43,11 +44,13 @@ export function InvoicesSection({
   canWrite,
   schoolName,
   mpesaActive,
+  payByLinkEnabled = false,
 }: {
   invoices: InvoiceListRow[];
   canWrite: boolean;
   schoolName: string;
   mpesaActive: boolean;
+  payByLinkEnabled?: boolean;
 }) {
   const router = useRouter();
   const [target, setTarget] = useState<InvoiceListRow | null>(null);
@@ -240,6 +243,11 @@ export function InvoicesSection({
                     />
                   )}
                 </div>
+                {payByLinkEnabled && target && mpesaActive && (
+                  <div className="col-span-full rounded-md border border-dashed p-2">
+                    <PayLinkButton studentId={target.student_id} invoiceId={target.id} amount={amount} canCreate={canWrite} />
+                  </div>
+                )}
               </div>
             ) : (
               <div className="space-y-1.5">

@@ -125,3 +125,13 @@ describe("pending-approval route", () => {
     expect(resolveSlugRouting(makeRequest("/pending-approval"), false).type).toBe("next");
   });
 });
+
+describe("public Pay by Link route", () => {
+  it("is never rewritten as a school slug", () => {
+    expect(NEVER_PREFIX.has("pay")).toBe(true);
+    expect(APP_ROUTE_SEGMENTS.has("pay")).toBe(false);
+    const token = "0123456789abcdef".repeat(4);
+    expect(resolveSlugRouting(makeRequest(`/pay/${token}`), false)).toEqual({ type: "next" });
+    expect(resolveSlugRouting(makeRequest(`/pay/${token}`, "some-school"), true)).toEqual({ type: "next" });
+  });
+});
