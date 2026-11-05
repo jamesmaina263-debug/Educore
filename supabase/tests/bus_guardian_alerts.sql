@@ -237,6 +237,25 @@ begin
   assert not has_function_privilege('authenticated', 'public.bus_alert_queue_sms(uuid,uuid,uuid,text,text,text,uuid)', 'execute'), '12h: signed-in users cannot queue SMS directly';
   assert not has_function_privilege('authenticated', 'public.bus_alert_in_quiet_hours(time,time)', 'execute'), '12i: quiet-hours helper is internal';
 
+  -- ===== 12b. cancel_unsent_bus_alerts: a failed immediate send must not go out late =====
+  assert pg_temp.raises_as(u_p1, 'select cancel_unsent_bus_alerts()', '42501'), '12b-a: a parent cannot cancel alerts';
+  assert pg_temp.raises_as(u_dep, 'select cancel_unsent_bus_alerts()', '42501'), '12b-b: read-only staff cannot cancel alerts';
+  assert not has_function_privilege('anon', 'public.cancel_unsent_bus_alerts()', 'execute'), '12b-c: anon cannot cancel';
+  -- an unrelated module's queued message in the same school must be left alone
+  insert into notification_logs (school_id, recipient_phone, recipient_type, channel, body, segments, source_module)
+    values (sa, '0711000009', 'guardian', 'sms', 'Fee reminder (not a bus alert)', 1, 'fee_reminder');
+  select count(*) into n from notification_logs where school_id = sa and source_module = 'bus_alert' and status = 'queued';
+  assert n > 0, '12b-d: there are queued bus alerts to cancel';
+  assert (pg_temp.val_as(u_tm, 'cancel_unsent_bus_alerts()') #>> '{}')::int = n, '12b-e: cancels exactly the queued bus alerts';
+  select count(*) into n from notification_logs where school_id = sa and source_module = 'bus_alert' and status = 'queued';
+  assert n = 0, '12b-f: none left queued';
+  select count(*) into n from notification_logs where school_id = sa and source_module = 'bus_alert' and status = 'failed' and provider_response like 'Cancelled:%';
+  assert n > 0, '12b-g: cancelled rows say why';
+  select count(*) into n from notification_logs where school_id = sa and source_module = 'fee_reminder' and status = 'queued';
+  assert n = 1, '12b-h: another module''s queued message is untouched';
+  assert (pg_temp.val_as(u_tm, 'cancel_unsent_bus_alerts()') #>> '{}')::int = 0, '12b-i: a second call cancels nothing';
+  assert pg_temp.raises_as(u_tmb, 'select cancel_unsent_bus_alerts()', '55000'), '12b-j: a school without the flag is refused';
+
   -- ===== 13. flag off again hides everything, even from the school's own staff =====
   update school_feature_flags set enabled = false where school_id = sa and flag_id = f;
   assert pg_temp.val_as(u_tm, 'coalesce((select count(*) from bus_alerts), 0)')::text::int = 0, '13a: flag off hides the log';
