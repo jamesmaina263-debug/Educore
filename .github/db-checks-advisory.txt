@@ -19,3 +19,5 @@ pay_by_link.sql
 director_whatsapp.sql
 # WP 6.1 cashbook: new test, validated pre-merge on the throwaway database (PR check). Remove this line (make it blocking) once it has passed once post-deploy against production.
 cashbook.sql
+# WP 3.2 director alerts: new test, validated in a rolled-back run against production before merge. Make it blocking once it has passed once post-deploy.
+director_alerts.sql
