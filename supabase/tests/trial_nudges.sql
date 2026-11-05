@@ -80,6 +80,8 @@ begin
     ((select id from schools where slug = 'tn-nobody-school'), nobody, (select id from roles where name = 'principal'), 'TN Nobody', 'tn-nobody@example.invalid');
   insert into platform_team_members (id, name, email) values (rep, 'TN Rep', 'tn-rep@example.invalid'), (rep2, 'TN Rep Two', 'tn-rep2@example.invalid');
 
+  -- a real 'demo-academy' school may already exist (unique slug): move it aside inside this rolled-back transaction
+  update schools set slug = 'demo-academy-moved-aside' where slug = 'demo-academy';
   sch_a := pg_temp.mk('tn-a-running', 'trial', 'trialing', interval '20 days', 'Owner.A@Example.Invalid');
   sch_b := pg_temp.mk('tn-b-noowner', 'trial', 'trialing', interval '20 days', null);
   sch_c := pg_temp.mk('tn-c-ended3', 'suspended', 'past_due', interval '-3 days', 'owner.c@example.invalid');
