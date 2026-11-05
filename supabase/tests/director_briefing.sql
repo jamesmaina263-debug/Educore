@@ -50,8 +50,10 @@ begin
     (sa, 'cash', 5000, timestamptz '2026-02-27 10:00+03', 'unallocated'),
     (sa, 'mpesa', 7000, timestamptz '2026-03-01 10:00+03', 'unallocated'),
     (sa, 'mpesa', 3000, timestamptz '2026-03-02 10:00+03', 'unallocated'),
-    (sa, 'mpesa', 99999, timestamptz '2026-03-02 11:00+03', 'pending'),
     (sa, 'cash', 2000, timestamptz '2026-02-25 10:00+03', 'unallocated');
+  -- a pending request (needs a learner by the table's own rule) is not money yet and must never be counted
+  insert into payments (school_id, student_id, method, amount, recorded_at, status)
+  select sa, id, 'mpesa', 99999, timestamptz '2026-03-02 11:00+03', 'pending' from students where school_id = sa limit 1;
 
   -- 1. flags: nothing without both
   select count(*) into v_n from director_briefing_evaluate(tue);
