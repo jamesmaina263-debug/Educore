@@ -23,3 +23,5 @@ cashbook.sql
 director_alerts.sql
 # WP 3.1 director briefing: new test, validated pre-merge on the throwaway database (PR check). Make it blocking once it has passed once post-deploy.
 director_briefing.sql
+# WP 5.3 bot part (where is the bus): new test, validated on a scratch Postgres only. Make it blocking once it has passed once post-deploy.
+bot_bus_status.sql
