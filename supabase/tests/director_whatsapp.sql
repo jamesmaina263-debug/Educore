@@ -10,7 +10,7 @@ declare
   ay uuid := gen_random_uuid(); tm uuid := gen_random_uuid();
   s1 uuid := gen_random_uuid(); s2 uuid := gen_random_uuid();
   r_prin uuid; r_owner uuid; r_teacher uuid; r_parent uuid; r_burs uuid; flag uuid;
-  r jsonb; n integer; failed boolean;
+  r jsonb; n integer; failed boolean; g1 uuid;
 begin
   select id into r_prin from roles where name = 'principal';
   select id into r_owner from roles where name = 'school_owner';
@@ -78,6 +78,8 @@ begin
   insert into terms (id, school_id, academic_year_id, name, term_number, start_date, end_date) values (tm, sa, ay, 'T1', 1, current_date - 90, current_date + 90);
   insert into students (id, school_id, first_name, last_name, date_of_birth, gender, status) values
     (s1, sa, 'Sam', 'One', date '2012-01-01', 'male', 'approved'), (s2, sa, 'Sue', 'Two', date '2012-01-02', 'female', 'approved');
+  insert into school_users (school_id, role_id, full_name, phone, status) values (sa, r_parent, 'Guardian Fx', '+254700099001', 'active') returning id into g1;
+  insert into student_guardians (student_id, guardian_user_id, relationship, primary_contact) values (s1, g1, 'guardian', true), (s2, g1, 'guardian', true);
   update students set status = 'enrolled' where id in (s1, s2);
   update students set status = 'active' where id in (s1, s2);
   insert into invoices (school_id, student_id, term_id, total_amount) values (sa, s1, tm, 5000), (sa, s2, tm, 1500);
