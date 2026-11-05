@@ -3,12 +3,22 @@ import { createClient } from "@/lib/supabase/server";
 import { getCachedUser } from "@/lib/supabase/get-user";
 import { logout } from "@/app/login/actions";
 import { AppShell } from "@/components/app-shell/app-shell";
+import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
+import { TableExportMenu } from "@/components/shared/table-export-menu";
 import { SchoolAnalyticsCharts } from "@/components/exams/school-analytics-charts";
 import { getSchoolAnalytics } from "@/app/(app)/exams/school-analytics-actions";
 import { round1 } from "@/lib/academics/performance-analytics";
 
-type Params = { year?: string; class?: string; subject?: string; term?: string };
+type Params = { year?: string; class?: string; subject?: string; term?: string; band?: string };
+
+const FLAG_LABEL: Record<string, string> = {
+  declining: "Declining",
+  consistently_low: "Consistently low",
+  improving: "Significant improvement",
+  stagnant: "Stagnant",
+  below_threshold: "Below threshold",
+};
 
 function Stat({ label, value, hint }: { label: string; value: string; hint?: string }) {
   return (
@@ -58,6 +68,7 @@ export default async function SchoolAnalyticsPage({ searchParams }: { searchPara
     classId: params.class || undefined,
     subjectId: params.subject || undefined,
     termNumber: term && term >= 1 && term <= 3 ? term : undefined,
+    band: params.band || undefined,
   });
   if ("error" in data) return shell(<p className="text-sm text-danger">Could not load school analytics: {data.error}</p>);
 
@@ -94,6 +105,13 @@ export default async function SchoolAnalyticsPage({ searchParams }: { searchPara
           <select name="term" defaultValue={params.term ?? ""} className={select}>
             <option value="">All terms</option>
             {[1, 2, 3].map((t) => <option key={t} value={t}>Term {t}</option>)}
+          </select>
+        </label>
+        <label className="flex flex-col gap-1 text-xs text-muted-foreground">
+          Performance category
+          <select name="band" defaultValue={params.band ?? ""} className={select}>
+            <option value="">All categories</option>
+            {s.distribution.map((d) => <option key={d.label} value={d.label}>{d.label}</option>)}
           </select>
         </label>
         <button type="submit" className="rounded-md border border-border px-3 py-1 text-sm font-medium">Apply</button>
@@ -143,6 +161,101 @@ export default async function SchoolAnalyticsPage({ searchParams }: { searchPara
               </ul>
             )}
           </section>
+
+          <section className="rounded-md border border-border p-3">
+            <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+              <h3 className="text-sm font-semibold">Early warning ({data.warnings.length})</h3>
+              <TableExportMenu
+                label="Export intervention list"
+                filenameStub={`${schoolName ?? "school"}-intervention-list`}
+                title="Students requiring academic intervention"
+                subtitle={`${schoolName ?? ""} · Threshold ${data.interventionThreshold}% · Based on closed exams`}
+                size="sm"
+                rows={data.warnings.map((w) => ({
+                  Student: w.name,
+                  "Admission no.": w.admissionNumber,
+                  "Latest term average (%)": round1(w.latestAverage),
+                  "Change (pp)": w.change === null ? "" : round1(w.change),
+                  Category: w.band ?? "",
+                  Indicators: w.flags.map((f) => FLAG_LABEL[f]).join("; "),
+                }))}
+              />
+            </div>
+            {data.warnings.length === 0 ? (
+              <p className="text-xs text-muted-foreground">No students are flagged. Students with fewer than three recorded assessments are never flagged.</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-left text-xs text-muted-foreground">
+                      <th className="py-1 pr-3">Student</th>
+                      <th className="py-1 pr-3">Latest term</th>
+                      <th className="py-1 pr-3">Change</th>
+                      <th className="py-1">Indicators</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {data.warnings.slice(0, 100).map((w) => (
+                      <tr key={w.studentId} className="border-t border-border">
+                        <td className="py-1 pr-3">
+                          <Link href={`/students/${w.studentId}`} className="font-medium underline-offset-2 hover:underline">{w.name}</Link>
+                          <span className="ml-2 text-xs text-muted-foreground">{w.admissionNumber}</span>
+                        </td>
+                        <td className="py-1 pr-3">{pct(w.latestAverage)}</td>
+                        <td className="py-1 pr-3">{w.change === null ? "—" : `${w.change > 0 ? "+" : ""}${round1(w.change)} pp`}</td>
+                        <td className="py-1">
+                          <span className="flex flex-wrap gap-1">
+                            {w.flags.map((f) => (
+                              <Badge key={f} variant={f === "improving" ? "default" : f === "stagnant" ? "secondary" : "destructive"}>{FLAG_LABEL[f]}</Badge>
+                            ))}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {data.warnings.length > 100 && <p className="mt-1 text-xs text-muted-foreground">Showing the 100 weakest of {data.warnings.length}; export for the full list.</p>}
+              </div>
+            )}
+          </section>
+
+          <div className="flex flex-wrap gap-2">
+            <TableExportMenu
+              label="Export class averages"
+              filenameStub={`${schoolName ?? "school"}-class-performance`}
+              title="Class performance"
+              subtitle={`${schoolName ?? ""} · School average ${pct(s.overallAverage)}`}
+              size="sm"
+              rows={s.classAverages.map((c) => ({ Class: c.label, "Average (%)": round1(c.average), Assessments: c.assessments }))}
+            />
+            <TableExportMenu
+              label="Export subject averages"
+              filenameStub={`${schoolName ?? "school"}-subject-performance`}
+              title="Subject performance"
+              subtitle={`${schoolName ?? ""} · School average ${pct(s.overallAverage)}`}
+              size="sm"
+              rows={s.subjectAverages.map((x) => ({
+                Subject: x.label,
+                "Average (%)": round1(x.average),
+                "Change (pp)": x.change === null ? "" : round1(x.change),
+                "Needs intervention": x.needsIntervention ? "Yes" : "No",
+              }))}
+            />
+            <TableExportMenu
+              label="Export year summary"
+              filenameStub={`${schoolName ?? "school"}-year-performance`}
+              title="School performance by year"
+              subtitle={schoolName ?? ""}
+              size="sm"
+              rows={s.yearAverages.map((y) => ({
+                Year: y.yearName,
+                "Average (%)": round1(y.average),
+                "Change (pp)": y.changeFromPrevious === null ? "" : round1(y.changeFromPrevious),
+                Assessments: y.assessments,
+                Complete: y.incomplete ? "No" : "Yes",
+              }))}
+            />
+          </div>
 
           <p className="text-xs text-muted-foreground">
             Based on closed exams only. Missing marks are excluded, never counted as zero.

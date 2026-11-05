@@ -1,7 +1,7 @@
 "use client";
 
 import { Bar, BarChart, CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis, Legend } from "recharts";
-import type { SchoolSummary } from "@/lib/academics/performance-analytics";
+import type { MatrixRow, SchoolSummary } from "@/lib/academics/performance-analytics";
 import { round1 } from "@/lib/academics/performance-analytics";
 
 function Panel({ title, empty, children }: { title: string; empty?: boolean; children: React.ReactNode }) {
@@ -10,6 +10,30 @@ function Panel({ title, empty, children }: { title: string; empty?: boolean; chi
       <h3 className="mb-2 text-sm font-semibold">{title}</h3>
       {empty ? <p className="text-xs text-muted-foreground">No data for the selected filters.</p> : <div className="h-60 w-full">{children}</div>}
     </section>
+  );
+}
+
+const PALETTE = ["#2563eb", "#16a34a", "#ca8a04", "#dc2626", "#7c3aed", "#0891b2", "#db2777", "#65a30d", "#ea580c", "#475569"];
+
+function seriesKeys(rows: MatrixRow[]): string[] {
+  return [...new Set(rows.flatMap((r) => Object.keys(r).filter((k) => k !== "year")))];
+}
+
+function GroupedBars({ rows }: { rows: MatrixRow[] }) {
+  const keys = seriesKeys(rows);
+  return (
+    <ResponsiveContainer width="100%" height="100%">
+      <BarChart data={rows} margin={{ top: 5, right: 16, left: -10, bottom: 5 }}>
+        <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
+        <XAxis dataKey="year" tick={{ fontSize: 11 }} />
+        <YAxis domain={[0, 100]} unit="%" tick={{ fontSize: 11 }} />
+        <Tooltip formatter={(v, name) => [`${v}%`, String(name)]} />
+        <Legend wrapperStyle={{ fontSize: 11 }} />
+        {keys.map((k, i) => (
+          <Bar key={k} dataKey={k} fill={PALETTE[i % PALETTE.length]} radius={[3, 3, 0, 0]} />
+        ))}
+      </BarChart>
+    </ResponsiveContainer>
   );
 }
 
@@ -69,6 +93,12 @@ export function SchoolAnalyticsCharts({ summary }: { summary: SchoolSummary }) {
             <Bar dataKey="average" fill="currentColor" radius={[0, 4, 4, 0]} />
           </BarChart>
         </ResponsiveContainer>
+      </Panel>
+      <Panel title="Classes across years" empty={summary.classByYear.length === 0}>
+        <GroupedBars rows={summary.classByYear} />
+      </Panel>
+      <Panel title="Subjects across years" empty={summary.subjectByYear.length === 0}>
+        <GroupedBars rows={summary.subjectByYear} />
       </Panel>
       {dist.length > 0 && (
         <Panel title="Students by performance category">

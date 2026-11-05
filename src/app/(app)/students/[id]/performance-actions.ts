@@ -6,6 +6,7 @@ import {
   buildSubjectProgression,
   buildTermAverages,
   buildYearlySeries,
+  attendancePercentage,
   normaliseMarks,
   summarizeHistory,
   type HistorySummary,
@@ -14,7 +15,14 @@ import {
   type YearPoint,
 } from "@/lib/academics/performance-analytics";
 
+export interface AttendanceSummary {
+  percentage: number;
+  daysRecorded: number;
+}
+
 export interface StudentPerformanceHistory {
+  /** Share of recorded school days attended (late counts as attended). Null when no attendance is on file. */
+  attendance: AttendanceSummary | null;
   years: YearPoint[];
   summary: HistorySummary;
   subjects: SubjectProgression[];
@@ -45,7 +53,15 @@ export async function getStudentPerformanceHistory(studentId: string): Promise<S
         .sort((a, b) => b.average - a.average);
     }
 
-    return { years, summary: summarizeHistory(marks, years), subjects: buildSubjectProgression(marks), termsByYear, subjectsByYear };
+    const count = async (status: "present" | "late" | "absent") => {
+      const { count: n } = await supabase.from("student_attendance").select("id", { count: "exact", head: true }).eq("student_id", studentId).eq("status", status);
+      return n ?? 0;
+    };
+    const [present, late, absent] = await Promise.all([count("present"), count("late"), count("absent")]);
+    const pctAttended = attendancePercentage(present, late, absent);
+    const attendance = pctAttended === null ? null : { percentage: pctAttended, daysRecorded: present + late + absent };
+
+    return { attendance, years, summary: summarizeHistory(marks, years), subjects: buildSubjectProgression(marks), termsByYear, subjectsByYear };
   } catch (e) {
     return { error: e instanceof Error ? e.message : "Could not load performance history." };
   }

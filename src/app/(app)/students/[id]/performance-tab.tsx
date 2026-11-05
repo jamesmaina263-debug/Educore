@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Bar, BarChart, CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { Badge } from "@/components/ui/badge";
+import { TableExportMenu } from "@/components/shared/table-export-menu";
 import type { StudentPerformanceHistory } from "./performance-actions";
 import type { TrendDirection } from "@/lib/academics/growth-trend";
 import { round1 } from "@/lib/academics/performance-analytics";
@@ -38,7 +39,21 @@ function Stat({ label, value, hint }: { label: string; value: string; hint?: str
  * getStudentPerformanceHistory; every number is computed in performance-analytics.ts, nothing is
  * calculated here. Years with fewer than three terms of results are labelled incomplete, never hidden.
  */
-export function PerformanceTab({ history }: { history: StudentPerformanceHistory | { error: string } }) {
+export function PerformanceTab({
+  history,
+  studentName,
+  admissionNumber,
+  schoolName,
+  className,
+  enrolledOn,
+}: {
+  history: StudentPerformanceHistory | { error: string };
+  studentName: string;
+  admissionNumber: string | null;
+  schoolName: string | null;
+  className: string | null;
+  enrolledOn: string | null;
+}) {
   const [subjectId, setSubjectId] = useState<string>("");
   const [yearId, setYearId] = useState<string>("");
 
@@ -62,7 +77,48 @@ export function PerformanceTab({ history }: { history: StudentPerformanceHistory
 
   return (
     <div className="flex flex-col gap-6">
+      <section className="flex flex-wrap items-center justify-between gap-2 text-sm text-muted-foreground">
+        <p>
+          {studentName}
+          {admissionNumber ? ` · ${admissionNumber}` : ""}
+          {className ? ` · ${className}` : ""}
+          {enrolledOn ? ` · Enrolled ${enrolledOn}` : ""}
+        </p>
+        <div className="flex gap-2">
+          <TableExportMenu
+            label="Export history"
+            size="sm"
+            filenameStub={`${studentName}-academic-history`}
+            title={`Academic history: ${studentName}`}
+            subtitle={`${schoolName ?? ""}${admissionNumber ? ` · ${admissionNumber}` : ""} · Average ${pct(summary.historicalAverage)} over ${summary.yearsTracked} year(s) · Change in percentage points`}
+            rows={years.map((y) => ({
+              Year: y.yearName,
+              "Average (%)": round1(y.average),
+              "Change (pp)": y.changeFromPrevious === null ? "" : round1(y.changeFromPrevious),
+              Assessments: y.assessments,
+              Terms: y.termsCovered.join(", "),
+              Complete: y.incomplete ? "No" : "Yes",
+            }))}
+          />
+          <TableExportMenu
+            label="Export subjects"
+            size="sm"
+            filenameStub={`${studentName}-subject-progression`}
+            title={`Subject progression: ${studentName}`}
+            subtitle={schoolName ?? ""}
+            rows={subjects.flatMap((sub) =>
+              sub.points.map((p) => ({ Subject: sub.subjectName, Year: p.yearName, "Average (%)": round1(p.average), "Change (pp)": p.changeFromPrevious === null ? "" : round1(p.changeFromPrevious) })),
+            )}
+          />
+        </div>
+      </section>
+
       <section className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        <Stat
+          label="Attendance"
+          value={history.attendance ? pct(history.attendance.percentage) : "—"}
+          hint={history.attendance ? `${history.attendance.daysRecorded} days recorded` : "No attendance on file"}
+        />
         <Stat label="Growth since enrolment" value={pp(summary.growthSinceEnrolment)} hint="Last year minus first year" />
         <Stat label="Historical average" value={pct(summary.historicalAverage)} />
         <Stat label="Years tracked" value={String(summary.yearsTracked)} />

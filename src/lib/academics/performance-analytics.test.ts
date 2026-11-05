@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  attendancePercentage,
+  buildEarlyWarnings,
+  buildMatrix,
   buildSubjectProgression,
   buildTermAverages,
   buildYearlySeries,
@@ -206,5 +209,75 @@ describe("summarizeSchool", () => {
     expect(s.overallAverage).toBeNull();
     expect(s.bestClass).toBeNull();
     expect(s.studentsAssessed).toBe(0);
+  });
+});
+
+describe("buildEarlyWarnings", () => {
+  const termMarks = (studentId: string, scores: number[]) =>
+    scores.map((raw, i) => mark({ studentId, ...Y.y2024, termNumber: i + 1, rawScore: raw }));
+
+  it("flags a declining student and one below threshold, with the data that triggered it", () => {
+    const rows = buildEarlyWarnings(normaliseMarks(termMarks("a", [80, 70, 55])));
+    expect(rows[0].flags).toContain("declining");
+    expect(rows[0].change).toBeCloseTo(-25);
+  });
+
+  it("flags consistently low, and below threshold", () => {
+    const rows = buildEarlyWarnings(normaliseMarks(termMarks("a", [40, 41, 40])));
+    expect(rows[0].flags).toEqual(expect.arrayContaining(["consistently_low", "below_threshold", "stagnant"]));
+  });
+
+  it("flags significant improvement", () => {
+    const rows = buildEarlyWarnings(normaliseMarks(termMarks("a", [50, 60, 72])));
+    expect(rows[0].flags).toContain("improving");
+  });
+
+  it("never flags a student on incomplete records", () => {
+    expect(buildEarlyWarnings(normaliseMarks(termMarks("a", [20, 15])))).toEqual([]);
+  });
+
+  it("ignores missing marks rather than treating them as zero", () => {
+    const m = normaliseMarks([...termMarks("a", [70, 72, 71]), mark({ studentId: "a", ...Y.y2024, termNumber: 3, rawScore: null })]);
+    const rows = buildEarlyWarnings(m);
+    expect(rows[0].assessments).toBe(3); // the null mark is not an assessment
+    expect(rows[0].flags).not.toContain("below_threshold");
+    expect(rows[0].flags).not.toContain("declining");
+  });
+
+  it("sorts weakest first", () => {
+    const rows = buildEarlyWarnings(normaliseMarks([...termMarks("a", [40, 41, 42]), ...termMarks("b", [30, 31, 32])]));
+    expect(rows.map((r) => r.studentId)).toEqual(["b", "a"]);
+  });
+});
+
+describe("attendancePercentage", () => {
+  it("counts late as attended and returns null with no records", () => {
+    expect(attendancePercentage(8, 1, 1)).toBe(90);
+    expect(attendancePercentage(0, 0, 0)).toBeNull();
+  });
+});
+
+describe("buildMatrix", () => {
+  it("leaves absent class/year cells out instead of zero", () => {
+    const m = normaliseMarks([
+      mark({ ...Y.y2023, classLabel: "Grade 1", rawScore: 60 }),
+      mark({ ...Y.y2024, classLabel: "Grade 1", rawScore: 70 }),
+      mark({ ...Y.y2024, classLabel: "Grade 2", rawScore: 50 }),
+    ]);
+    const rows = buildMatrix(m, (x) => x.classLabel);
+    expect(rows[0]).toEqual({ year: "2023", "Grade 1": 60 });
+    expect(rows[1]).toEqual({ year: "2024", "Grade 1": 70, "Grade 2": 50 });
+  });
+});
+
+describe("summarizeSchool students and categories", () => {
+  it("attaches each student's configured category", () => {
+    const bands: GradeBand[] = [
+      { label: "High", min: 60, max: 100, order: 1 },
+      { label: "Low", min: 0, max: 59.99, order: 2 },
+    ];
+    const s = summarizeSchool(normaliseMarks([mark({ studentId: "x", rawScore: 80 }), mark({ studentId: "y", rawScore: 30 })]), {}, bands);
+    expect(s.students.find((r) => r.studentId === "x")?.band).toBe("High");
+    expect(s.students.find((r) => r.studentId === "y")?.band).toBe("Low");
   });
 });

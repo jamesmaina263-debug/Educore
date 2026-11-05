@@ -199,6 +199,8 @@ export interface SubjectAverage extends NamedAverage {
   needsIntervention: boolean;
 }
 
+export type MatrixRow = { year: string } & Record<string, string | number>;
+
 export interface SchoolSummary {
   overallAverage: number | null;
   studentsAssessed: number;
@@ -216,6 +218,11 @@ export interface SchoolSummary {
   yearAverages: YearPoint[];
   termAverages: TermAverage[];
   distribution: { label: string; count: number }[];
+  /** One row per assessed student (after filters), with the configured category their average falls in. */
+  students: { studentId: string; average: number; band: string | null }[];
+  /** Grouped-bar data: one row per year, one column per class / subject. Gaps are absent, never zero. */
+  classByYear: MatrixRow[];
+  subjectByYear: MatrixRow[];
   /** Students whose averages fall in no configured band (e.g. gaps in the scale). */
   unbanded: number;
 }
@@ -293,7 +300,12 @@ export function summarizeSchool(
     else unbanded++;
   }
 
+  const students = studentAverages.map((a) => ({ ...a, band: bandFor(a.average, sortedBands)?.label ?? null }));
+
   return {
+    students,
+    classByYear: buildMatrix(history, (m) => m.classLabel),
+    subjectByYear: buildMatrix(history, (m) => m.subjectName),
     overallAverage: mean(scoped.map((m) => m.percentage)),
     studentsAssessed: studentAverages.length,
     improving,
@@ -311,4 +323,84 @@ export function summarizeSchool(
     distribution: [...dist].map(([label, count]) => ({ label, count })),
     unbanded,
   };
+}
+
+/** Year x category averages for grouped bars (e.g. each class across years). Absent cells stay absent. */
+export function buildMatrix(marks: PctMark[], category: (m: PctMark) => string): MatrixRow[] {
+  const years = [...new Map(marks.map((m) => [m.yearId, m])).values()].sort((a, b) => a.yearStart.localeCompare(b.yearStart));
+  return years.map((y) => {
+    const row: MatrixRow = { year: y.yearName };
+    for (const [cat, rows] of groupBy(
+      marks.filter((m) => m.yearId === y.yearId),
+      category,
+    )) {
+      row[cat] = round1(mean(rows.map((r) => r.percentage)) as number);
+    }
+    return row;
+  });
+}
+
+// ------------------------------------------------------------------ early warning
+
+export type WarningFlag = "declining" | "consistently_low" | "improving" | "stagnant" | "below_threshold";
+
+export interface EarlyWarningRow {
+  studentId: string;
+  /** Most recent term average on file. */
+  latestAverage: number;
+  /** Percentage-point change from the first to the latest term on file; null with one term. */
+  change: number | null;
+  termsOnFile: number;
+  assessments: number;
+  flags: WarningFlag[];
+}
+
+export interface EarlyWarningOptions {
+  threshold?: number;
+  /** A student with fewer valid assessments than this is never flagged: incomplete records are not evidence. */
+  minAssessments?: number;
+  /** Change (pp) from first to latest term that counts as significant improvement. */
+  significantImprovement?: number;
+  /** Max spread (pp) across 3+ terms that counts as stagnant. */
+  stagnantSpread?: number;
+}
+
+/**
+ * Early-warning flags per student from their TERM-level averages (so a first-year student can be
+ * flagged within the year). Students with too few valid assessments are skipped entirely rather than
+ * labelled weak on incomplete records. Flags are indicators for a teacher to investigate, not verdicts.
+ */
+export function buildEarlyWarnings(marks: PctMark[], opts: EarlyWarningOptions = {}): EarlyWarningRow[] {
+  const threshold = opts.threshold ?? DEFAULT_INTERVENTION_THRESHOLD;
+  const minAssessments = opts.minAssessments ?? 3;
+  const bigGain = opts.significantImprovement ?? 10;
+  const spread = opts.stagnantSpread ?? 3;
+  const rows: EarlyWarningRow[] = [];
+
+  for (const [studentId, own] of groupBy(marks, (m) => m.studentId)) {
+    if (own.length < minAssessments) continue;
+    const byTerm = [...groupBy(own, (m) => `${m.yearStart}|${m.termNumber}`)]
+      .map(([key, r]) => ({ key, average: mean(r.map((x) => x.percentage)) as number }))
+      .sort((a, b) => a.key.localeCompare(b.key));
+    const values = byTerm.map((t) => t.average);
+    const latest = values[values.length - 1];
+    const change = values.length >= 2 ? latest - values[0] : null;
+    const flags: WarningFlag[] = [];
+
+    const direction = classifyTrend(byTerm.map((t) => ({ label: t.key, value: t.average }))).direction;
+    if (direction === "declining") flags.push("declining");
+    if (change !== null && change >= bigGain) flags.push("improving");
+    if (values.length >= 2 && values.every((v) => v < threshold)) flags.push("consistently_low");
+    if (values.length >= 3 && Math.max(...values) - Math.min(...values) <= spread) flags.push("stagnant");
+    if (latest < threshold) flags.push("below_threshold");
+
+    if (flags.length > 0) rows.push({ studentId, latestAverage: latest, change, termsOnFile: values.length, assessments: own.length, flags });
+  }
+  return rows.sort((a, b) => a.latestAverage - b.latestAverage);
+}
+
+/** Share of recorded school days attended. Late counts as attended. Null when there are no records. */
+export function attendancePercentage(present: number, late: number, absent: number): number | null {
+  const total = present + late + absent;
+  return total === 0 ? null : ((present + late) / total) * 100;
 }

@@ -529,7 +529,14 @@ export default async function StudentProfilePage({
           </TabsContent>
 
           <TabsContent value="performance">
-            <PerformanceTab history={performanceHistory} />
+            <PerformanceTab
+              history={performanceHistory}
+              studentName={fullName}
+              admissionNumber={student.admission_number}
+              schoolName={schoolName ?? null}
+              className={(student.streams as unknown as { classes: { name: string } | null } | null)?.classes?.name ?? null}
+              enrolledOn={student.admission_date}
+            />
           </TabsContent>
 
           {disciplineModuleEnabled && (
