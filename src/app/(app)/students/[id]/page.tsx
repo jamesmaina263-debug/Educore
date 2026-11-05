@@ -19,6 +19,8 @@ import { PathwayFitCard } from "@/components/students/pathway-fit-card";
 import { computePathwayFit, type PathwayFitMarkInput } from "@/lib/academics/pathway-fit";
 import { getStudentGrowth } from "./growth-actions";
 import { GrowthTab } from "./growth-tab";
+import { getStudentPerformanceHistory } from "./performance-actions";
+import { PerformanceTab } from "./performance-tab";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { getSchoolSlug } from "@/lib/school-slug-server";
@@ -48,6 +50,7 @@ export default async function StudentProfilePage({
     { data: student },
     { data: originatingApplication },
     growthSummary,
+    performanceHistory,
     { data: guardianLinks },
     { data: documentRows },
     { data: certificateRows },
@@ -87,6 +90,7 @@ export default async function StudentProfilePage({
       .maybeSingle(),
     supabase.from("applications").select("id, application_number").eq("resulting_student_id", id).maybeSingle(),
     getStudentGrowth(id),
+    getStudentPerformanceHistory(id),
     supabase
       .from("student_guardians")
       .select("id, relationship, primary_contact, school_users(full_name, phone)")
@@ -368,6 +372,7 @@ export default async function StudentProfilePage({
             <TabsTrigger value="medical">Medical</TabsTrigger>
             <TabsTrigger value="certificates">Certificates</TabsTrigger>
             <TabsTrigger value="growth">Growth</TabsTrigger>
+            <TabsTrigger value="performance">Performance</TabsTrigger>
             {disciplineModuleEnabled && <TabsTrigger value="discipline">Discipline</TabsTrigger>}
             {canSeeBiometricTab && <TabsTrigger value="biometric">Biometric</TabsTrigger>}
           </TabsList>
@@ -521,6 +526,10 @@ export default async function StudentProfilePage({
 
           <TabsContent value="growth">
             <GrowthTab summary={growthSummary} />
+          </TabsContent>
+
+          <TabsContent value="performance">
+            <PerformanceTab history={performanceHistory} />
           </TabsContent>
 
           {disciplineModuleEnabled && (
