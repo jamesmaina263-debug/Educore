@@ -1,6 +1,7 @@
 import { createClient } from "jsr:@supabase/supabase-js@2.112.4";
 import { buildCorsHeaders } from "../_shared/cors.ts";
 import { sendSecurityAlert } from "../_shared/securityAlert.ts";
+import { timingSafeEqual } from "../_shared/timingSafeEqual.ts";
 import {
   getDarajaOAuthToken,
   initiateDarajaStkPush,
@@ -26,8 +27,21 @@ Deno.serve(async (req) => {
   }
 
   try {
+    // Two ways in:
+    //  * user mode (unchanged): the caller's own JWT, and an RLS-gated read below proves they can see this request.
+    //  * internal mode (WP 1.3b): the shared DISPATCH_SECRET in x-dispatch-secret, the same server-to-server path
+    //    mpesa-stk-query and send-communication use. Pay by Link and the WhatsApp bot raise requests with no signed-in
+    //    staff member, and the gateway 401s an sb_secret_ service key sent as a Bearer token (verify_jwt is therefore
+    //    false for this function; user-mode callers are still authenticated by the RLS read, so an anonymous caller
+    //    that merely sends a Bearer value gets nothing). Internal mode only dispatches requests that
+    //    mpesa_stk_internal_dispatch_allowed() approves (requests raised by those features), never an arbitrary id.
+    const dispatchSecret = Deno.env.get("DISPATCH_SECRET");
+    const providedSecret = req.headers.get("x-dispatch-secret");
+    const isDispatchCaller =
+      !!dispatchSecret && !!providedSecret && timingSafeEqual(providedSecret, dispatchSecret);
+
     const authHeader = req.headers.get("Authorization");
-    if (!authHeader) {
+    if (!isDispatchCaller && !authHeader) {
       return json({ error: "Missing Authorization header." }, 401);
     }
 
@@ -36,23 +50,38 @@ Deno.serve(async (req) => {
       return json({ error: "request_id is required." }, 400);
     }
 
-    // User-scoped client: the read below is RLS-gated (finance.read + same school), so a
-    // caller who isn't actually authorized to see this school's finance data gets nothing back
-    // here regardless of whether they know the request_id -- this is the real cross-tenant
-    // guard, not just "the id happened to be hard to guess".
-    const userClient = createClient(
+    const serviceClient = createClient(
       Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_ANON_KEY")!,
-      { global: { headers: { Authorization: authHeader } } },
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
 
-    const { data: request, error: requestError } = await userClient
-      .from("mpesa_stk_requests")
-      .select("id, school_id, amount, phone_number, status, checkout_request_id")
-      .eq("id", request_id)
-      .maybeSingle();
+    const requestColumns = "id, school_id, amount, phone_number, status, checkout_request_id";
+    let request: {
+      id: string; school_id: string; amount: number; phone_number: string; status: string; checkout_request_id: string | null;
+    } | null = null;
 
-    if (requestError || !request) {
+    if (isDispatchCaller) {
+      const { data: allowed } = await serviceClient.rpc("mpesa_stk_internal_dispatch_allowed", { p_request_id: request_id });
+      if (allowed !== true) {
+        return json({ error: "STK request not found or not visible to you." }, 404);
+      }
+      const { data } = await serviceClient.from("mpesa_stk_requests").select(requestColumns).eq("id", request_id).maybeSingle();
+      request = data;
+    } else {
+      // User-scoped client: the read below is RLS-gated (finance.read + same school), so a
+      // caller who isn't actually authorized to see this school's finance data gets nothing back
+      // here regardless of whether they know the request_id -- this is the real cross-tenant
+      // guard, not just "the id happened to be hard to guess".
+      const userClient = createClient(
+        Deno.env.get("SUPABASE_URL")!,
+        Deno.env.get("SUPABASE_ANON_KEY")!,
+        { global: { headers: { Authorization: authHeader! } } },
+      );
+      const { data } = await userClient.from("mpesa_stk_requests").select(requestColumns).eq("id", request_id).maybeSingle();
+      request = data;
+    }
+
+    if (!request) {
       return json({ error: "STK request not found or not visible to you." }, 404);
     }
     if (request.status !== "pending" || request.checkout_request_id) {
@@ -63,11 +92,6 @@ Deno.serve(async (req) => {
     if (!normalizedPhone) {
       return json({ error: "Stored phone number is not a valid Kenyan number." }, 422);
     }
-
-    const serviceClient = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-    );
 
     // Atomic claim, BEFORE the Daraja call: without this, two overlapping invocations for the
     // same request_id (double-tap, client retry) could both pass the checks above and both send

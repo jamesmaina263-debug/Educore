@@ -3,6 +3,7 @@
 import { headers } from "next/headers";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getRealClientIp } from "@/lib/get-real-client-ip";
+import { dispatchInternalStkPush } from "@/lib/mpesa-internal-push";
 import {
   hashPayLinkToken,
   isPayLinkToken,
@@ -34,14 +35,13 @@ export async function startPayLinkPayment(token: string, phoneInput: string): Pr
     return { ok: false, message: payLinkErrorMessage(error?.message) };
   }
 
-  // The UNCHANGED mpesa-stk-push does the Daraja call. If this invoke fails we deliberately do NOT
-  // mark the request failed: the push may have reached Safaricom, and a resolved row would make the
-  // callback ignore a real payment. A row left pending is reconciled by the stale-pending watchdog.
-  const { data, error: invokeError } = await admin.functions.invoke("mpesa-stk-push", {
-    body: { request_id: requestId },
-  });
-  if (invokeError || (data && typeof data === "object" && "error" in data && data.error)) {
-    console.error("pay-link: mpesa-stk-push invoke failed", invokeError?.message ?? "error in body");
+  // mpesa-stk-push does the Daraja call, through its internal mode (WP 1.3b: x-dispatch-secret; the service key as a
+  // Bearer token is rejected by the gateway). If this fails we deliberately do NOT mark the request failed: the push
+  // may have reached Safaricom, and a resolved row would make the callback ignore a real payment. A row left pending
+  // is reconciled by the stale-pending watchdog.
+  const pushed = await dispatchInternalStkPush(requestId);
+  if (!pushed.ok) {
+    console.error("pay-link: internal STK push failed", pushed.reason, pushed.status ?? "");
     return { ok: false, message: "We could not send the M-Pesa prompt. Please wait two minutes and try again." };
   }
   return { ok: true, requestId };
