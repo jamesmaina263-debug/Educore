@@ -15,7 +15,6 @@ import { PortalCalendarSection } from "@/components/portal/portal-calendar";
 import { PortalCanteenSection, type PortalCanteenEntry, type PortalCanteenPurchase } from "@/components/portal/portal-canteen";
 import { CANTEEN_FLAG } from "@/lib/canteen";
 import { BusAlertsToggle } from "@/components/portal/bus-alerts-toggle";
-import { BUS_ALERTS_FLAG } from "@/lib/bus-alerts";
 import { CALENDAR_FLAG, portalUpcoming, type CalendarEvent, type EventCategory, type EventStatus } from "@/lib/school-calendar";
 import { ReportCardInsightsPanel } from "@/components/exams/report-card-insights-panel";
 import { buildReportCardInsights } from "@/lib/academics/report-card-insights";
@@ -58,11 +57,13 @@ export default async function PortalPage({ searchParams }: { searchParams: Promi
   const busViewOn =
     roleName === "parent" && (await hasFeatureFlag(supabase, "feature.transport.live_tracking")) && (await hasFeatureFlag(supabase, "feature.transport.parent_bus_view"));
 
-  // WP 5.4: the opt-out for bus alert SMS. Shown to every parent whenever the school has guardian bus alerts on, and
-  // deliberately NOT tied to the bus map flags above, so a guardian can always stop these messages. Opted in unless
-  // a stored row says otherwise (the database checks the same row before every send).
+  // WP 5.4: the opt-out for bus alert SMS. Shown to a parent only when their school's bus alerts are actually LIVE
+  // (flag on and mode live; a school that is off or only testing never messages guardians, so there is nothing to
+  // opt out of). Deliberately NOT tied to the bus map flags above, so a guardian can always stop these messages.
+  // Opted in unless a stored row says otherwise (the database checks the same row before every send).
   let busAlertsEnabled: boolean | null = null;
-  if (roleName === "parent" && (await hasFeatureFlag(supabase, BUS_ALERTS_FLAG))) {
+  const busAlertsLive = roleName === "parent" ? (await supabase.rpc("bus_alerts_live_for_my_school")).data === true : false;
+  if (busAlertsLive) {
     const { data: busPref } = await supabase.from("bus_alert_preferences").select("enabled").eq("school_user_id", schoolUser.id).maybeSingle();
     busAlertsEnabled = busPref ? busPref.enabled === true : true;
   }
