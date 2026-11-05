@@ -5,6 +5,7 @@ import { getRealClientIp } from "../_shared/getRealClientIp.ts";
 import { getWhatsAppProvider } from "../_shared/whatsapp/index.ts";
 import { handleInboundMessage, ESCALATION_ACK } from "../_shared/chatbot/dispatcher.ts";
 import type { EscalationReason } from "../_shared/chatbot/types.ts";
+import { tryHandleDirectorMessage } from "../_shared/chatbot/director.ts";
 
 // Public endpoint -- deploy with --no-verify-jwt (Twilio cannot send a Supabase JWT). Authenticity
 // is instead established per-request via the Twilio signature (see verifyTwilioSignature.ts).
@@ -125,6 +126,14 @@ Deno.serve(async (req) => {
     ]);
     if (withinPhoneLimit === false || withinGlobalLimit === false) {
       await sendReply(phoneNumber, RATE_LIMITED_REPLY);
+      return EMPTY_TWIML;
+    }
+
+    // WP 3.3: a registered director (feature.bot.director) asking for school figures. handled=false for every other sender
+    // (and on any lookup error), in which case everything below runs exactly as before.
+    const director = await tryHandleDirectorMessage({ supabase, phone: phoneNumber, text: body, messageSid });
+    if (director.handled) {
+      if (director.reply) await sendReply(phoneNumber, director.reply);
       return EMPTY_TWIML;
     }
 

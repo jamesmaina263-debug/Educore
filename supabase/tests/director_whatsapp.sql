@@ -10,7 +10,7 @@ declare
   ay uuid := gen_random_uuid(); tm uuid := gen_random_uuid();
   s1 uuid := gen_random_uuid(); s2 uuid := gen_random_uuid();
   r_prin uuid; r_owner uuid; r_teacher uuid; r_parent uuid; r_burs uuid; flag uuid;
-  r jsonb; n integer; failed boolean;
+  r jsonb; n integer; failed boolean; g1 uuid;
 begin
   select id into r_prin from roles where name = 'principal';
   select id into r_owner from roles where name = 'school_owner';
@@ -66,15 +66,11 @@ begin
   r := director_whatsapp_register('+254 712 345 678', true);
   assert r->>'status' = 'registered' and r->>'phone_masked' = '+254******678', '6: registered: ' || r;
   assert ((director_whatsapp_status())->>'registered')::boolean, '6: status registered';
-  -- 7. another school's owner cannot claim the same number
-  execute 'reset role';
-  update school_users set phone = '0712345678' where auth_user_id = ub;
-  execute 'set local role authenticated';
-  perform set_config('request.jwt.claims', json_build_object('sub', ub, 'role', 'authenticated')::text, true);
-  assert (director_whatsapp_register('0712345678', true))->>'status' = 'phone_in_use', '7: number already registered';
-  execute 'reset role';
-  update school_users set phone = '0722000111' where auth_user_id = ub;
+  -- (7 removed: school_users has a unique index on active phones, uq_school_users_active_phone, so two active staff can
+  -- never hold the same number; the phone_in_use branch is only a second line of defence.)
 
+  execute 'reset role';
+  perform set_config('request.jwt.claims', '{}', true);   -- service side: no staff caller (the school_users trigger guards role_id/status for staff)
   -- 8. lookup + answers (service side)
   select count(*) into n from director_whatsapp_lookup('+254712345678'); assert n = 1, '8: lookup finds the director';
   select count(*) into n from director_whatsapp_lookup('+254700000000'); assert n = 0, '8: unknown number';
@@ -83,6 +79,8 @@ begin
   insert into terms (id, school_id, academic_year_id, name, term_number, start_date, end_date) values (tm, sa, ay, 'T1', 1, current_date - 90, current_date + 90);
   insert into students (id, school_id, first_name, last_name, date_of_birth, gender, status) values
     (s1, sa, 'Sam', 'One', date '2012-01-01', 'male', 'approved'), (s2, sa, 'Sue', 'Two', date '2012-01-02', 'female', 'approved');
+  insert into school_users (school_id, role_id, full_name, phone, status) values (sa, r_parent, 'Guardian Fx', '+254700099001', 'active') returning id into g1;
+  insert into student_guardians (student_id, guardian_user_id, relationship, primary_contact) values (s1, g1, 'guardian', true), (s2, g1, 'guardian', true);
   update students set status = 'enrolled' where id in (s1, s2);
   update students set status = 'active' where id in (s1, s2);
   insert into invoices (school_id, student_id, term_id, total_amount) values (sa, s1, tm, 5000), (sa, s2, tm, 1500);
