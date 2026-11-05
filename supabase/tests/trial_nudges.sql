@@ -432,6 +432,7 @@ begin
   -- audit_log is append-only; lift that for this rolled-back transaction so the school can be deleted
   alter table audit_log disable trigger user;
   delete from audit_log where school_id = sch_a;
+  delete from inventory_categories where school_id = sch_a;
   delete from schools where id = sch_a;
   select count(*) into n from trial_nudges where school_id = sch_a;
   if n <> 0 then raise exception 'FAIL 15b: deleting a school left its messages (%)', n; end if;
