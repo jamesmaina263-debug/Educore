@@ -2,6 +2,7 @@ import type { ToolDefinition } from "./types.ts";
 import type { BotIntent } from "./intents.ts";
 import { feeBalanceTool } from "./tools/feeBalance.ts";
 import { attendanceTool } from "./tools/attendance.ts";
+import { busStatusTool } from "./tools/busStatus.ts";
 
 // Only intents that resolve to an actual data-backed tool go here (greeting/escalate/unknown/
 // switch_child are handled directly by the dispatcher, not via a tool). Adding results, report
@@ -12,4 +13,5 @@ import { attendanceTool } from "./tools/attendance.ts";
 export const TOOL_REGISTRY: Partial<Record<BotIntent, ToolDefinition>> = {
   fee_balance: feeBalanceTool,
   attendance: attendanceTool,
+  bus: busStatusTool,
 };
