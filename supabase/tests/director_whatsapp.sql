@@ -70,6 +70,7 @@ begin
   -- never hold the same number; the phone_in_use branch is only a second line of defence.)
 
   execute 'reset role';
+  perform set_config('request.jwt.claims', '{}', true);   -- service side: no staff caller (the school_users trigger guards role_id/status for staff)
   -- 8. lookup + answers (service side)
   select count(*) into n from director_whatsapp_lookup('+254712345678'); assert n = 1, '8: lookup finds the director';
   select count(*) into n from director_whatsapp_lookup('+254700000000'); assert n = 0, '8: unknown number';
