@@ -64,9 +64,11 @@ begin
   insert into auth.users (id, aud, role, email) values
     (staff, 'authenticated', 'authenticated', 'wa-staff@example.invalid'),
     (nobody, 'authenticated', 'authenticated', 'wa-nobody@example.invalid');
+  -- the non-admin fixture must belong to a school (school_users requires school_id for every role but super_admin and group_admin)
+  insert into schools (name, slug, application_number_prefix) values ('WA Nobody School', 'wa-nobody-school', 'ZWA');
   insert into school_users (school_id, auth_user_id, role_id, full_name, email) values
     (null, staff, (select id from roles where name = 'super_admin'), 'WA Staff', 'wa-staff@example.invalid'),
-    (null, nobody, (select id from roles where name = 'principal'), 'WA Nobody', 'wa-nobody@example.invalid');
+    ((select id from schools where slug = 'wa-nobody-school'), nobody, (select id from roles where name = 'principal'), 'WA Nobody', 'wa-nobody@example.invalid');
   insert into platform_team_members (id, name, email) values (rep, 'WA Rep', 'wa-rep@example.invalid'), (rep2, 'WA Rep Two', 'wa-rep2@example.invalid');
   insert into schools (name, slug) values ('WA Trial School', 'wa-trial-school') returning id into sch;
   insert into marketing_demo_requests (id, name, school_name, role, email, phone) values (demo_id, 'Demo Person', 'Demo School', 'Principal', 'demo@example.invalid', '0700 000 001');

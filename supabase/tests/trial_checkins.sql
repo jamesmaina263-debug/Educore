@@ -50,9 +50,11 @@ begin
   insert into auth.users (id, aud, role, email) values
     (staff, 'authenticated', 'authenticated', 'tck-staff@example.invalid'),
     (nobody, 'authenticated', 'authenticated', 'tck-nobody@example.invalid');
+  -- the non-admin fixture must belong to a school (school_users requires school_id for every role but super_admin and group_admin)
+  insert into schools (name, slug, application_number_prefix) values ('TCK Nobody School', 'tck-nobody-school', 'ZTC');
   insert into school_users (school_id, auth_user_id, role_id, full_name, email) values
     (null, staff, (select id from roles where name = 'super_admin'), 'TCK Staff', 'tck-staff@example.invalid'),
-    (null, nobody, (select id from roles where name = 'principal'), 'TCK Nobody', 'tck-nobody@example.invalid');
+    ((select id from schools where slug = 'tck-nobody-school'), nobody, (select id from roles where name = 'principal'), 'TCK Nobody', 'tck-nobody@example.invalid');
   insert into platform_team_members (id, name, email) values (rep, 'TCK Rep', 'tck-rep@example.invalid');
 
   insert into schools (name, slug) values ('TCK Trial School', 'tck-trial-school') returning id into trial_school;

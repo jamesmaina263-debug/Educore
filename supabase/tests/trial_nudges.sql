@@ -72,9 +72,11 @@ begin
   insert into auth.users (id, aud, role, email) values
     (staff, 'authenticated', 'authenticated', 'tn-staff@example.invalid'),
     (nobody, 'authenticated', 'authenticated', 'tn-nobody@example.invalid');
+  -- the non-admin fixture must belong to a school (school_users requires school_id for every role but super_admin and group_admin)
+  insert into schools (name, slug, application_number_prefix) values ('TN Nobody School', 'tn-nobody-school', 'ZTN');
   insert into school_users (school_id, auth_user_id, role_id, full_name, email) values
     (null, staff, (select id from roles where name = 'super_admin'), 'TN Staff', 'tn-staff@example.invalid'),
-    (null, nobody, (select id from roles where name = 'principal'), 'TN Nobody', 'tn-nobody@example.invalid');
+    ((select id from schools where slug = 'tn-nobody-school'), nobody, (select id from roles where name = 'principal'), 'TN Nobody', 'tn-nobody@example.invalid');
   insert into platform_team_members (id, name, email) values (rep, 'TN Rep', 'tn-rep@example.invalid'), (rep2, 'TN Rep Two', 'tn-rep2@example.invalid');
 
   sch_a := pg_temp.mk('tn-a-running', 'trial', 'trialing', interval '20 days', 'Owner.A@Example.Invalid');

@@ -58,9 +58,11 @@ begin
   insert into auth.users (id, aud, role, email) values
     (staff, 'authenticated', 'authenticated', 'grt-staff@example.invalid'),
     (nobody, 'authenticated', 'authenticated', 'grt-nobody@example.invalid');
+  -- the non-admin fixture must belong to a school (school_users requires school_id for every role but super_admin and group_admin)
+  insert into schools (name, slug, application_number_prefix) values ('GRT Nobody School', 'grt-nobody-school', 'ZGR');
   insert into school_users (school_id, auth_user_id, role_id, full_name, email) values
     (null, staff, (select id from roles where name = 'super_admin'), 'GRT Staff', 'grt-staff@example.invalid'),
-    (null, nobody, (select id from roles where name = 'principal'), 'GRT Nobody', 'grt-nobody@example.invalid');
+    ((select id from schools where slug = 'grt-nobody-school'), nobody, (select id from roles where name = 'principal'), 'GRT Nobody', 'grt-nobody@example.invalid');
 
   -- ---------- 1. access control and input checks ----------
   perform pg_temp.as_anon();
