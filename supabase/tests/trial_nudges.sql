@@ -429,6 +429,8 @@ begin
   end if;
   delete from school_users where school_id = sch_a;
   delete from school_subscriptions where school_id = sch_a;
+  -- audit_log is append-only; lift that for this rolled-back transaction so the school can be deleted
+  alter table audit_log disable trigger user;
   delete from audit_log where school_id = sch_a;
   delete from schools where id = sch_a;
   select count(*) into n from trial_nudges where school_id = sch_a;
