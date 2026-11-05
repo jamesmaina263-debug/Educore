@@ -143,6 +143,8 @@ begin
   select count(*) into n from notification_logs where school_id = sa and source_module = 'bus_alert' and recipient_type = 'guardian';
   assert n = 0, '5g: still no guardian message in test mode';
 
+  assert pg_temp.val_as(u_p1, 'bus_alerts_live_for_my_school()') = 'false'::jsonb, '5h: parent is not shown the opt-out while the school is only testing';
+
   -- ===== 6. live needs a test; changing the phone resets the test =====
   assert pg_temp.raises_as(u_tm, format('select set_bus_alert_mode(%L, null)', 'live'), '22023'), '6a: live refused until a test alert was queued';
   assert pg_temp.raises_as(u_dep, 'select send_bus_test_alert()', '42501'), '6b: read-only role cannot send a test';
@@ -152,6 +154,10 @@ begin
   assert (select mode from bus_alert_settings where school_id = sa) = 'live', '6d: live allowed after a test';
   assert pg_temp.raises_as(u_tm, format('select set_bus_alert_mode(%L, %L)', 'live', '0799999999'), '22023'), '6e: a new test phone must be tested before live';
   perform pg_temp.run_as(u_tm, format('select set_bus_alert_mode(%L, null)', 'live'));  -- unchanged phone still live
+  assert pg_temp.val_as(u_p1, 'bus_alerts_live_for_my_school()') = 'true'::jsonb, '6f: parent in a live school is shown the opt-out';
+  assert pg_temp.val_as(u_tmb, 'bus_alerts_live_for_my_school()') = 'false'::jsonb, '6g: a school with no settings is not live';
+  assert not has_function_privilege('anon', 'public.bus_alerts_live_for_my_school()', 'execute'), '6h: anon cannot call the probe';
+
 
   -- ===== 7. live: opt-out, missing phone, quiet hours =====
   -- The 10-minute repeat guard looks at created_at, which is the transaction start, so push earlier alerts just
@@ -260,6 +266,7 @@ begin
   update school_feature_flags set enabled = false where school_id = sa and flag_id = f;
   assert pg_temp.val_as(u_tm, 'coalesce((select count(*) from bus_alerts), 0)')::text::int = 0, '13a: flag off hides the log';
   assert pg_temp.raises_as(u_tm, format('select send_bus_delay_alert(%L, 30, null)', rt_n), '55000'), '13b: flag off refuses sending';
+  assert pg_temp.val_as(u_p1, 'bus_alerts_live_for_my_school()') = 'false'::jsonb, '13c: flag off hides the opt-out even for a live school';
 
   raise notice 'bus_guardian_alerts behavioural checks: all passed';
 end $$;
