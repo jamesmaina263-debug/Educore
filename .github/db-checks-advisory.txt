@@ -25,3 +25,5 @@ director_alerts.sql
 director_briefing.sql
 # WP 5.3 bot part (where is the bus): new test, validated on a scratch Postgres only. Make it blocking once it has passed once post-deploy.
 bot_bus_status.sql
+# WP 1.3b internal dispatch: new test, validated in a rolled-back run against production before merge. Make it blocking once it has passed once post-deploy.
+mpesa_stk_internal_dispatch.sql
