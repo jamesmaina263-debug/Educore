@@ -84,7 +84,7 @@ begin
   assert v_kind = 'saturday', '4: Saturday produces the digest';
   -- Sat 7 Mar: this week = 1..7 Mar (7000 + 3000); the 7 days before = 22..28 Feb (5000 + 2000)
   assert (v_payload ->> 'collected')::numeric = 10000 and (v_payload ->> 'previous_week')::numeric = 7000, '4: 7 days vs the 7 before: ' || v_payload;
-  assert (v_payload ->> 'attendance_rate_pct')::numeric = 80, '4: Mon-Fri 2..6 Mar holds only Monday\'s register: 8 present of 10';
+  assert (v_payload ->> 'attendance_rate_pct')::numeric = 80, '4: Mon-Fri 2..6 Mar holds only Monday''s register: 8 present of 10';
   select count(*) into v_n from director_briefing_evaluate(sun);
   assert v_n = 0, '4: Sunday -> nothing';
 
