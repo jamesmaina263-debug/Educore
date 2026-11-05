@@ -429,6 +429,7 @@ begin
   end if;
   delete from school_users where school_id = sch_a;
   delete from school_subscriptions where school_id = sch_a;
+  delete from audit_log where school_id = sch_a;
   delete from schools where id = sch_a;
   select count(*) into n from trial_nudges where school_id = sch_a;
   if n <> 0 then raise exception 'FAIL 15b: deleting a school left its messages (%)', n; end if;
