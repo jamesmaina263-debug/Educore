@@ -5,6 +5,7 @@ import { guardianCanAccessStudent } from "./authorize.ts";
 import { TOOL_REGISTRY } from "./registry.ts";
 import { tryHandleGuardianRequest } from "./guardianRequests.ts";
 import { chatText, menuText, prepareMenuTurn } from "./menu.ts";
+import { mentionsBus } from "./bus.ts";
 import { beginDocumentRequest, documentsEnabled, looksLikePin, pendingPinRequest, submitPinAndDeliver } from "./documents.ts";
 
 export const GREETING_REPLY =
@@ -63,7 +64,17 @@ export async function handleInboundMessage(inputCtx: ChatContext): Promise<Dispa
   });
   if (guardianRequest) return guardianRequest;
 
-  const intent = classifyIntent(ctx.messageText, { documents });
+  // WP 5.3 bot part: one flag lookup, and only for a message that actually mentions the bus. Fails closed.
+  let bus = false;
+  if (mentionsBus(ctx.messageText)) {
+    try {
+      const { data } = await ctx.supabase.rpc("bot_bus_enabled", { p_school_id: ctx.schoolId });
+      bus = data === true;
+    } catch {
+      bus = false;
+    }
+  }
+  const intent = classifyIntent(ctx.messageText, { documents, bus });
 
   if (intent === "greeting") {
     return { replyText: menu ? menuText(menu.language, menu.features) : GREETING_REPLY, escalate: false, escalationReason: null };

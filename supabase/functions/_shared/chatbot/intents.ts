@@ -19,6 +19,7 @@ export type BotIntent =
   | "switch_child"
   | "report_card"
   | "statement"
+  | "bus"
   | "escalate"
   | "unknown";
 
@@ -31,7 +32,7 @@ const STATEMENT_WORDS = ["statement", "fee statement", "statement of account"];
 const REPORT_CARD_WORDS = ["report card", "reportcard", "report", "results", "result", "matokeo", "ripoti"];
 const ESCALATE_WORDS = ["agent", "human", "person", "staff", "principal", "complaint", "mwalimu", "help me", "talk to someone", "speak to"];
 
-export function classifyIntent(rawText: string, opts: { documents?: boolean } = {}): BotIntent {
+export function classifyIntent(rawText: string, opts: { documents?: boolean; bus?: boolean } = {}): BotIntent {
   const text = rawText.trim().toLowerCase();
   if (!text) return "unknown";
 
@@ -41,6 +42,10 @@ export function classifyIntent(rawText: string, opts: { documents?: boolean } = 
   if (opts.documents && STATEMENT_WORDS.some((w) => text.includes(w))) return "statement";
   if (FEE_WORDS.some((w) => text.includes(w))) return "fee_balance";
   if (ATTENDANCE_WORDS.some((w) => text.includes(w))) return "attendance";
+  // WP 5.3 bot part: only produced when the school has live bus tracking AND the parent bus view on (see
+  // dispatcher.ts). Placed after fees and attendance so "bus fee balance" stays a fee question. With the
+  // option off, a bus message classifies exactly as before (unknown, so it goes to the school office).
+  if (opts.bus && /(^|[^a-z])(bus|buses|basi|school bus|school van|schoolbus)([^a-z]|$)/.test(text)) return "bus";
   // After fee and attendance so "attendance report" stays an attendance question.
   if (opts.documents && REPORT_CARD_WORDS.some((w) => new RegExp(`(^|[^a-z])${w}([^a-z]|$)`).test(text))) return "report_card";
   if (GREETING_WORDS.some((w) => text === w || text.startsWith(w + " ") || text.startsWith(w + ","))) return "greeting";
@@ -51,4 +56,4 @@ export function classifyIntent(rawText: string, opts: { documents?: boolean } = 
 // Intents that need a resolved student before a tool can run. Kept as an explicit list (rather
 // than "anything not in a hardcoded switch") so a new intent added to the registry automatically
 // gets disambiguation for free just by being added here -- see dispatcher.ts.
-export const STUDENT_SCOPED_INTENTS: ReadonlySet<BotIntent> = new Set(["fee_balance", "attendance", "switch_child", "report_card", "statement"]);
+export const STUDENT_SCOPED_INTENTS: ReadonlySet<BotIntent> = new Set(["fee_balance", "attendance", "switch_child", "report_card", "statement", "bus"]);
