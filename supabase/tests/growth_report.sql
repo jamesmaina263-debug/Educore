@@ -114,8 +114,8 @@ begin
     insert into schools (name, slug) values ('GRT Trial School ' || i, 'grt-trial-' || i) returning id into s;
     insert into school_subscriptions (school_id, status) values (s, case i when 1 then 'active' else 'trialing' end);
     insert into marketing_signup_attribution (school_id, utm_campaign) values (s, 'grt-trial-campaign');
-    if i = 1 then insert into platform_invoices (school_id, status) values (s, 'paid'); end if;
-    if i = 2 then insert into platform_invoices (school_id, status) values (s, 'issued'); end if;  -- issued is not paid
+    if i = 1 then perform set_config('educore.invoice_write', 'on', true); insert into platform_invoices (school_id, status) values (s, 'paid'); end if;
+    if i = 2 then perform set_config('educore.invoice_write', 'on', true); insert into platform_invoices (school_id, status) values (s, 'issued'); end if;  -- issued is not paid
   end loop;
   insert into schools (name, slug) values ('GRT Trial Unattributed', 'grt-trial-unattr') returning id into s;
   insert into school_subscriptions (school_id, status) values (s, 'past_due');

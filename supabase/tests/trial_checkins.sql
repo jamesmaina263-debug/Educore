@@ -145,7 +145,7 @@ begin
   if n <> 2 then raise exception 'FAIL 4a: removing a team member should keep the log (%)', n; end if;
   delete from trial_checkins where school_id = trial_school;
   delete from school_subscriptions where school_id = trial_school;
-  delete from schools where id = trial_school;
+  -- (no school delete here: the school has seeded child rows, and the whole test is rolled back anyway)
 
   raise notice 'trial_checkins: all passed';
 end $$;

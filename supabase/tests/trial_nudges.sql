@@ -39,13 +39,14 @@ end $$;
 -- A school with a subscription and (optionally) an owner.
 create or replace function pg_temp.mk(p_slug text, p_school_status text, p_sub_status text, p_ends interval, p_owner_email text)
 returns uuid language plpgsql as $$
-declare v_id uuid;
+declare v_id uuid; v_auth uuid := gen_random_uuid();
 begin
   insert into schools (name, slug, status) values ('TN ' || p_slug, p_slug, p_school_status) returning id into v_id;
   insert into school_subscriptions (school_id, status, trial_ends_at) values (v_id, p_sub_status, now() + p_ends);
   if p_owner_email is not null then
+    insert into auth.users (id, aud, role, email) values (v_auth, 'authenticated', 'authenticated', 'tn-owner-' || p_slug || '@example.invalid');
     insert into school_users (school_id, auth_user_id, role_id, full_name, email, status)
-    values (v_id, gen_random_uuid(), (select id from roles where name = 'school_owner'), 'Owner ' || p_slug, p_owner_email, 'active');
+    values (v_id, v_auth, (select id from roles where name = 'school_owner'), 'Owner ' || p_slug, p_owner_email, 'active');
   end if;
   return v_id;
 end $$;
