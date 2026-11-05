@@ -48,8 +48,12 @@ verify_jwt = true
 [functions.c2b-register-url-prod]
 verify_jwt = true
 
+# User mode: the app server action calls it with the staff member's JWT (authenticated inside by an RLS-gated read).
+# Internal mode (WP 1.3b): Pay by Link / the WhatsApp bot call it with x-dispatch-secret (same DISPATCH_SECRET and
+# constant-time compare as mpesa-stk-query). verify_jwt must be false because the gateway 401s an sb_secret_ service
+# key sent as a Bearer token; internal mode only dispatches requests approved by mpesa_stk_internal_dispatch_allowed().
 [functions.mpesa-stk-push]
-verify_jwt = true
+verify_jwt = false
 
 # Fallback for a lost Daraja callback: called from the app (user JWT, authenticated inside via an
 # RLS-gated read) and from the stale-pending cron (x-dispatch-secret, same DISPATCH_SECRET and
