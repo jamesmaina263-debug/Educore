@@ -1,6 +1,8 @@
 version: 2
 updates:
-  # npm dependencies. Grouped into one weekly PR for minor/patch bumps so
+  # Cadence cut to monthly with at most 2 open PRs (5 Nov 2026): every dependabot PR is a Vercel preview build and
+  # the team was running out of build credit. Security updates are not affected by this schedule.
+  # npm dependencies. Grouped into one monthly PR for minor/patch bumps so
   # this doesn't spam individual PRs for every transitive package; major
   # version bumps still get their own PR since those are more likely to
   # need real review. Every PR still has to pass the normal `ci` check
@@ -9,8 +11,8 @@ updates:
   - package-ecosystem: "npm"
     directory: "/"
     schedule:
-      interval: "weekly"
-    open-pull-requests-limit: 10
+      interval: "monthly"
+    open-pull-requests-limit: 2
     groups:
       minor-and-patch:
         update-types: ["minor", "patch"]
@@ -26,11 +28,11 @@ updates:
         update-types: ["version-update:semver-major"]
 
   # GitHub Actions versions pinned in .github/workflows/*.yml (e.g.
-  # actions/checkout@v4). Same weekly cadence, kept separate from the npm
+  # actions/checkout@v4). Same monthly cadence, kept separate from the npm
   # ecosystem above per Dependabot's own convention.
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
-      interval: "weekly"
+      interval: "monthly"
     labels:
       - "dependencies"
