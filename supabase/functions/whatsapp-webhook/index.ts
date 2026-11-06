@@ -6,6 +6,7 @@ import { getWhatsAppProvider } from "../_shared/whatsapp/index.ts";
 import { handleInboundMessage, ESCALATION_ACK } from "../_shared/chatbot/dispatcher.ts";
 import type { EscalationReason } from "../_shared/chatbot/types.ts";
 import { tryHandleDirectorMessage } from "../_shared/chatbot/director.ts";
+import { tryHandleLeaveApproval } from "../_shared/chatbot/leaveApproval.ts";
 
 // Public endpoint -- deploy with --no-verify-jwt (Twilio cannot send a Supabase JWT). Authenticity
 // is instead established per-request via the Twilio signature (see verifyTwilioSignature.ts).
@@ -126,6 +127,16 @@ Deno.serve(async (req) => {
     ]);
     if (withinPhoneLimit === false || withinGlobalLimit === false) {
       await sendReply(phoneNumber, RATE_LIMITED_REPLY);
+      return EMPTY_TWIML;
+    }
+
+    // WP 4.5: a verified approver (director registry + feature.bot.hr_approvals + separate consent + staff.leave.approve)
+    // handling staff leave: LEAVE, APPROVE/REJECT <code>, or the 6-digit confirmation code. This must run BEFORE the
+    // director hook, which answers every message from a registered director. handled=false for every other sender and
+    // message (and on any error), so everything below runs exactly as before.
+    const leave = await tryHandleLeaveApproval({ supabase, phone: phoneNumber, text: body, messageSid });
+    if (leave.handled) {
+      for (const text of leave.replies) await sendReply(phoneNumber, text);
       return EMPTY_TWIML;
     }
 
