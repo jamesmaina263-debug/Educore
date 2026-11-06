@@ -31,3 +31,5 @@ mpesa_stk_internal_dispatch.sql
 bot_pay.sql
 # WP 4.5 leave over WhatsApp: new test, validated in a rolled-back run against production before merge. Make it blocking once it has passed once post-deploy.
 leave_whatsapp.sql
+# WP 8.2 part 3 (learner questions): new test, validated on a scratch Postgres only. Make it blocking once it has passed in CI and once post-deploy.
+tutor_qa.sql
