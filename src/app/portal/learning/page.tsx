@@ -35,6 +35,7 @@ export default async function PortalLearningPage({ searchParams }: { searchParam
   let resources: LearnerResource[] = [];
   let quizzes: LearnerQuiz[] = [];
   let guides: LearnerGuide[] = [];
+  let qaEnabled = false; // learner questions: flag AND the school's safeguarding set-up (checked in the database)
   if (current?.current_class_id) {
     const stream = current.current_class_id;
     const [{ data: subjects }, { data: resRows }, { data: quizRows }, { data: attemptRows }] = await Promise.all([
@@ -60,6 +61,10 @@ export default async function PortalLearningPage({ searchParams }: { searchParam
         body: g.body as string,
         sources: ((g.source_snapshot as { title?: string }[] | null) ?? []).map((s) => s.title ?? "").filter(Boolean),
       }));
+      if (guides.length > 0) {
+        const { data: ready } = await supabase.rpc("tutor_qa_my_ready"); // fails closed: anything but true hides the box
+        qaEnabled = ready === true;
+      }
     }
 
     resources = (resRows ?? []).map((r) => ({
@@ -106,7 +111,7 @@ export default async function PortalLearningPage({ searchParams }: { searchParam
         ) : !current.current_class_id ? (
           <p className="text-sm text-muted-foreground">{current.first_name} has not been placed in a class yet.</p>
         ) : (
-          <PortalLearning studentId={current.id} resources={resources} quizzes={quizzes} guides={guides} />
+          <PortalLearning studentId={current.id} resources={resources} quizzes={quizzes} guides={guides} qaEnabled={qaEnabled} />
         )}
       </div>
     </div>

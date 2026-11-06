@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getCachedUser } from "@/lib/supabase/get-user";
@@ -7,6 +8,7 @@ import { AppShell } from "@/components/app-shell/app-shell";
 import { TutorSection, type TutorDraftRow } from "@/components/learning/tutor-section";
 import { LEARNING_FLAG } from "@/lib/learning-portal";
 import { TUTOR_FLAG } from "@/lib/ai/tutor";
+import { QA_FLAG } from "@/lib/ai/tutor-qa";
 
 export default async function TutorPage() {
   const supabase = await createClient();
@@ -30,6 +32,7 @@ export default async function TutorPage() {
     supabase.from("tutor_drafts").select("id, stream_id, subject_id, title, body, status, source_snapshot, model, created_by, created_at").order("created_at", { ascending: false }).limit(100),
   ]);
 
+  const showQuestionsLink = await hasFeatureFlag(supabase, QA_FLAG);
   const me = (schoolUser?.id as string | undefined) ?? null;
   const drafts: TutorDraftRow[] = (draftRows ?? []).map((d) => ({
     id: d.id as string,
@@ -54,6 +57,9 @@ export default async function TutorPage() {
       userRole={roleName}
       onSignOut={logout}
     >
+      {showQuestionsLink && (
+        <p className="mb-3 text-sm"><Link href="/academics/learning/tutor/questions" className="underline underline-offset-2">Learner questions and set-up</Link></p>
+      )}
       <TutorSection
         streams={(streams ?? []).map((s) => ({ id: s.id as string, label: `${(s.classes as unknown as { name: string } | null)?.name ?? ""} ${s.name as string}`.trim() }))}
         subjects={(subjects ?? []).map((s) => ({ id: s.id as string, label: s.name as string }))}
