@@ -87,7 +87,20 @@ begin
   begin delete from audit_log where record_id = v_sf; exception when insufficient_privilege then v_failed := true; end;
   assert v_failed, '6: delete blocked';
   v_failed := false;
-  begin truncate audit_log; exception when insufficient_privilege then v_failed := true; end;
+  -- TRUNCATE takes ACCESS EXCLUSIVE on audit_log BEFORE its trigger or privilege check runs, so on
+  -- a database with any other session holding a lock on audit_log (the nightly backup's pg_dump
+  -- holds one for ~2 minutes) it queues, and every audited write queues behind it, until
+  -- statement_timeout (120s). Fail fast instead: 3s, then a clear error. Observed 2026-11-05 09:13
+  -- on production: 'canceling statement due to statement timeout' after exactly 120s.
+  -- (Left at 3s for the rest of this transaction, which only runs quick statements.)
+  perform set_config('lock_timeout', '3s', true);
+  begin
+    truncate audit_log;
+  exception
+    when insufficient_privilege then v_failed := true;
+    when lock_not_available then
+      raise exception '6: audit_log is locked by another session (a backup or a long transaction); not a logic failure, rerun when it has finished';
+  end;
   assert v_failed, '6: truncate blocked';
   assert exists (select 1 from audit_log where record_id = v_sf), '6: rows intact';
 

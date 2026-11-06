@@ -34,6 +34,7 @@ concurrency:
 
 permissions:
   contents: read
+  actions: read   # to see whether the nightly backup is running
 
 jobs:
   run:
@@ -54,6 +55,22 @@ jobs:
 
       - name: Install postgresql-client
         run: sudo apt-get update && sudo apt-get install -y postgresql-client
+
+      # The nightly backup's pg_dump holds a shared lock on every table for ~2 minutes. A test that
+      # needs an exclusive lock (audit_hardening.sql truncates audit_log) would queue behind it until
+      # statement_timeout. Seen on production 2026-11-05 09:13, when the suite started 5 seconds
+      # before the dump. Wait for a running backup instead of colliding with it.
+      - name: Wait for a running nightly backup
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for i in $(seq 1 24); do
+            n=$(gh api "repos/${{ github.repository }}/actions/workflows/nightly-backup.yml/runs?status=in_progress" --jq '.total_count' 2>/dev/null || echo 0)
+            if [ "$n" = "0" ]; then echo "no backup running"; exit 0; fi
+            echo "nightly backup is running, waiting 30s ($i/24)"
+            sleep 30
+          done
+          echo "::warning::the nightly backup was still running after 12 minutes; continuing anyway"
 
       - name: Run behavior tests sequentially
         env:
