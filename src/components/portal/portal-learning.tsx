@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { submitLearningQuizAction } from "@/app/portal/learning/actions";
+import { TutorQaBox } from "@/components/portal/tutor-qa-box";
 import { RESOURCE_LABELS, isHttpsUrl, type ResourceKind } from "@/lib/learning-portal";
 import { attemptsLeft, bestOf, buildAnswers, formatScore, unansweredCount, type SubmitResult, type TakeAttempt } from "@/lib/learning-quiz-taking";
 
@@ -128,7 +129,7 @@ function QuizTaker({ quiz, studentId }: { quiz: LearnerQuiz; studentId: string }
   );
 }
 
-export function PortalLearning({ studentId, resources, quizzes, guides = [] }: { studentId: string; resources: LearnerResource[]; quizzes: LearnerQuiz[]; guides?: LearnerGuide[] }) {
+export function PortalLearning({ studentId, resources, quizzes, guides = [], qaEnabled = false }: { studentId: string; resources: LearnerResource[]; quizzes: LearnerQuiz[]; guides?: LearnerGuide[]; qaEnabled?: boolean }) {
   const grouped = KIND_ORDER.map((k) => ({ kind: k, items: resources.filter((r) => r.kind === k) })).filter((g) => g.items.length > 0);
   return (
     <div className="space-y-5">
@@ -147,6 +148,7 @@ export function PortalLearning({ studentId, resources, quizzes, guides = [] }: {
           </ul>
         </section>
       )}
+      {qaEnabled && guides.length > 0 && <TutorQaBox studentId={studentId} />}
       {quizzes.length > 0 && (
         <section className="space-y-2">
           <h2 className="text-sm font-semibold">Quizzes</h2>
