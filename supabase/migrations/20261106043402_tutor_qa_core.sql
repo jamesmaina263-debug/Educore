@@ -24,7 +24,8 @@ where not exists (select 1 from public.platform_feature_flags where lower(key) =
 
 -- 1. Per-school confirmations (the second lock).
 create table if not exists public.tutor_qa_school_settings (
-  school_id uuid primary key references public.schools(id) on delete cascade,
+  id uuid primary key default gen_random_uuid(), -- audit_row_change() expects an id column
+  school_id uuid not null unique references public.schools(id) on delete cascade,
   safeguarding_contact_id uuid references public.school_users(id) on delete set null,
   dpia_confirmed_at timestamptz,
   parent_notice_confirmed_at timestamptz,
