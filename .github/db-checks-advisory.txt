@@ -27,3 +27,5 @@ director_briefing.sql
 bot_bus_status.sql
 # WP 1.3b internal dispatch: new test, validated in a rolled-back run against production before merge. Make it blocking once it has passed once post-deploy.
 mpesa_stk_internal_dispatch.sql
+# WP 7.2 staff loan ledger: new test, validated on a scratch Postgres with the real payroll migrations loaded. Make it blocking once it has passed once post-deploy.
+staff_loans.sql
