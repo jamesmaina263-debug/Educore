@@ -4,6 +4,9 @@ import {
   buildEarlyWarnings,
   buildMatrix,
   buildSubjectProgression,
+  configFor,
+  levelBands,
+  levelPoints,
   buildTermAverages,
   buildYearlySeries,
   normaliseMarks,
@@ -26,8 +29,13 @@ function mark(p: Partial<PerfMark>): PerfMark {
     yearStart: "2024-01-01",
     termNumber: 1,
     examId: `e${n++}`,
+    kind: "percent",
     rawScore: 50,
     maxScore: 100,
+    levelOrder: null,
+    levelCount: null,
+    levelPoints: null,
+    levelLabel: null,
     ...p,
   };
 }
@@ -41,8 +49,8 @@ const Y = {
 describe("normaliseMarks", () => {
   it("converts to a percentage of each mark's own maximum", () => {
     const [a, b] = normaliseMarks([mark({ rawScore: 40, maxScore: 50 }), mark({ rawScore: 40, maxScore: 100 })]);
-    expect(a.percentage).toBe(80);
-    expect(b.percentage).toBe(40);
+    expect(a.score).toBe(80);
+    expect(b.score).toBe(40);
   });
 
   it("excludes missing marks and unusable maximums instead of counting zero", () => {
@@ -54,7 +62,7 @@ describe("normaliseMarks", () => {
       mark({ rawScore: 0 }),
     ]);
     expect(out).toHaveLength(1);
-    expect(out[0].percentage).toBe(0); // a recorded zero is a real zero
+    expect(out[0].score).toBe(0); // a recorded zero is a real zero
   });
 });
 
@@ -279,5 +287,102 @@ describe("summarizeSchool students and categories", () => {
     const s = summarizeSchool(normaliseMarks([mark({ studentId: "x", rawScore: 80 }), mark({ studentId: "y", rawScore: 30 })]), {}, bands);
     expect(s.students.find((r) => r.studentId === "x")?.band).toBe("High");
     expect(s.students.find((r) => r.studentId === "y")?.band).toBe("Low");
+  });
+});
+
+// ---------------------------------------------------------------------- CBC level marks
+const LABELS = ["A — Exceeding Expectation", "B — Meeting Expectation", "C — Approaching Expectation", "D — Below Expectation"];
+function lvl(order: number, p: Partial<PerfMark> = {}): PerfMark {
+  return mark({ kind: "level", rawScore: null, maxScore: null, levelOrder: order, levelCount: 4, levelPoints: null, levelLabel: LABELS[order - 1], ...p });
+}
+
+describe("CBC level scoring", () => {
+  it("scores the best level highest when the scale has no points (A=4 ... D=1)", () => {
+    expect(normaliseMarks([lvl(1), lvl(2), lvl(3), lvl(4)]).map((m) => m.score)).toEqual([4, 3, 2, 1]);
+  });
+
+  it("uses the scale's own points when it has them", () => {
+    expect(levelPoints(2.5, 2, 4)).toBe(2.5);
+    expect(levelPoints(null, 2, 4)).toBe(3);
+  });
+
+  it("drops level marks it cannot place on the scale instead of guessing", () => {
+    expect(normaliseMarks([lvl(0), lvl(5), lvl(1, { levelCount: null }), lvl(1, { levelOrder: null })])).toEqual([]);
+  });
+
+  it("reads improvement from D to A as improving, not declining", () => {
+    const m = normaliseMarks([lvl(4, { ...Y.y2023 }), lvl(3, { ...Y.y2023 }), lvl(1, { ...Y.y2024 }), lvl(1, { ...Y.y2024 })]);
+    const pts = buildYearlySeries(m);
+    const h = summarizeHistory(m, pts, configFor("level", 4));
+    expect(h.trend).toBe("improving");
+    expect(h.growthSinceEnrolment).toBeCloseTo(4 - 1.5);
+  });
+
+  it("uses a quarter of a level as the stable band", () => {
+    const m = normaliseMarks([lvl(2, { ...Y.y2023 }), lvl(2, { ...Y.y2024 })]);
+    expect(summarizeHistory(m, buildYearlySeries(m), configFor("level", 4)).trend).toBe("stable");
+  });
+
+  it("builds one band per level so every student lands in exactly one", () => {
+    const marks = normaliseMarks([lvl(1), lvl(2), lvl(3), lvl(4)]);
+    const bands = levelBands(marks);
+    expect(bands.map((b) => b.label)).toEqual(LABELS);
+    const s = summarizeSchool(
+      normaliseMarks([lvl(1, { studentId: "a" }), lvl(2, { studentId: "b" }), lvl(3, { studentId: "c" }), lvl(4, { studentId: "d" })]),
+      {},
+      bands,
+      configFor("level", 4),
+    );
+    expect(s.distribution.map((d) => d.count)).toEqual([1, 1, 1, 1]);
+    expect(s.unbanded).toBe(0);
+  });
+
+  it("defaults the attention threshold to the scale midpoint", () => {
+    expect(configFor("level", 4).threshold).toBe(2.5);
+    expect(configFor("percent").threshold).toBe(50);
+    expect(configFor("level", 4, 2).threshold).toBe(2);
+  });
+
+  it("flags a CBC student sliding from A to C", () => {
+    const m = normaliseMarks([lvl(1, { termNumber: 1 }), lvl(2, { termNumber: 2 }), lvl(3, { termNumber: 3 })].map((x) => ({ ...x, ...Y.y2024 })));
+    const rows = buildEarlyWarnings(m, configFor("level", 4));
+    expect(rows[0].flags).toContain("declining");
+    expect(rows[0].flags).toContain("below_threshold");
+  });
+});
+
+describe("level series need a level-sized stable band", () => {
+  it("shows a slide from A to D as declining, which the default 5-point band would hide", async () => {
+    const { classifyTrend } = await import("./growth-trend");
+    const series = [lvl(1), lvl(2), lvl(4)].map((m) => ({ label: "t", value: levelPoints(null, m.levelOrder as number, 4) })); // 4, 3, 1
+    expect(classifyTrend(series).direction).toBe("stable"); // default threshold 5: wrong for a 1-4 scale
+    expect(classifyTrend(series, configFor("level", 4).stable).direction).toBe("declining");
+  });
+});
+
+describe("reproduces the live school's CBC figures", () => {
+  // The distribution below is the real set of closed-exam CBC marks in the production database as of
+  // 2026-11-05 (counts only, no learner data), and the expected averages were computed independently
+  // in SQL: 2026 = 21/6 = 3.5, 2027 = 136/44 = 3.0909.
+  const dist: [number, number, number][] = [
+    [0, 1, 3], [0, 2, 3], // 2026, term 1: 3 x A, 3 x B
+    [1, 1, 21], [1, 2, 10], [1, 3, 9], [1, 4, 4], // 2027, term 3
+  ];
+  const yr = (y: number) => ({ yearId: `y${2026 + y}`, yearName: String(2026 + y), yearStart: `${2026 + y}-01-01` });
+  const marks = normaliseMarks(
+    dist.flatMap(([y, level, n]) => Array.from({ length: n }, () => lvl(level, { ...yr(y), termNumber: y === 0 ? 1 : 3, studentId: `s${y}` }))),
+  );
+  it("matches the SQL year averages and flags both years as incomplete", () => {
+    const years = buildYearlySeries(marks);
+    expect(years.map((y) => y.yearName)).toEqual(["2026", "2027"]);
+    expect(years[0].average).toBeCloseTo(3.5, 4);
+    expect(years[1].average).toBeCloseTo(136 / 44, 4);
+    expect(years.every((y) => y.incomplete)).toBe(true);
+    expect(years[1].changeFromPrevious).toBeCloseTo(136 / 44 - 3.5, 4);
+  });
+
+  it("reads the 3.5 -> 3.09 fall as a decline on the level scale", () => {
+    const years = buildYearlySeries(marks);
+    expect(summarizeHistory(marks, years, configFor("level", 4)).trend).toBe("declining");
   });
 });

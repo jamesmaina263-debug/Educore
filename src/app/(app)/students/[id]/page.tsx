@@ -19,7 +19,7 @@ import { PathwayFitCard } from "@/components/students/pathway-fit-card";
 import { computePathwayFit, type PathwayFitMarkInput } from "@/lib/academics/pathway-fit";
 import { getStudentGrowth } from "./growth-actions";
 import { GrowthTab } from "./growth-tab";
-import { getStudentPerformanceHistory } from "./performance-actions";
+import { getStudentPerformanceData } from "./performance-actions";
 import { PerformanceTab } from "./performance-tab";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
@@ -78,7 +78,7 @@ export default async function StudentProfilePage({
   ] = await Promise.all([
     supabase
       .from("school_users")
-      .select("full_name, roles(display_name), schools(name, boarding_enabled)")
+      .select("full_name, roles(display_name), schools(name, boarding_enabled, motto, logo_url, address, phone, email, primary_color)")
       .eq("auth_user_id", user.id)
       .maybeSingle(),
     supabase
@@ -90,7 +90,7 @@ export default async function StudentProfilePage({
       .maybeSingle(),
     supabase.from("applications").select("id, application_number").eq("resulting_student_id", id).maybeSingle(),
     getStudentGrowth(id),
-    getStudentPerformanceHistory(id),
+    getStudentPerformanceData(id),
     supabase
       .from("student_guardians")
       .select("id, relationship, primary_contact, school_users(full_name, phone)")
@@ -312,7 +312,8 @@ export default async function StudentProfilePage({
   const latestExam = latestReportCard?.exams as unknown as { name: string } | null;
 
   const roleName = (schoolUser?.roles as unknown as { display_name: string } | null)?.display_name;
-  const schoolName = (schoolUser?.schools as unknown as { name: string } | null)?.name;
+  const schoolRow = schoolUser?.schools as unknown as { name: string; motto: string | null; logo_url: string | null; address: string | null; phone: string | null; email: string | null; primary_color: string | null } | null;
+  const schoolName = schoolRow?.name;
   const fullName = [student.first_name, student.other_names, student.last_name].filter(Boolean).join(" ");
   const stream = studentStream;
   const classLabel = stream ? `${stream.classes?.name ?? ""} ${stream.name}`.trim() : "Unassigned";
@@ -530,10 +531,18 @@ export default async function StudentProfilePage({
 
           <TabsContent value="performance">
             <PerformanceTab
-              history={performanceHistory}
+              data={performanceHistory}
               studentName={fullName}
               admissionNumber={student.admission_number}
-              schoolName={schoolName ?? null}
+              school={{
+                name: schoolName ?? "EduCore School",
+                motto: schoolRow?.motto ?? null,
+                address: schoolRow?.address ?? null,
+                phone: schoolRow?.phone ?? null,
+                email: schoolRow?.email ?? null,
+                primaryColor: schoolRow?.primary_color ?? null,
+                logoUrl: schoolRow?.logo_url ?? null,
+              }}
               className={(student.streams as unknown as { classes: { name: string } | null } | null)?.classes?.name ?? null}
               enrolledOn={student.admission_date}
             />
