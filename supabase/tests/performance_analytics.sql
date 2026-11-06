@@ -62,7 +62,6 @@ begin
     (b_high, gs_num, 'High', 50, 100, 12, 1), (b_low, gs_num, 'Low', 0, 49.99, 5, 2);
   insert into grading_scale_bands (id, grading_scale_id, label, level_order) values
     (b_a, gs_cbc, 'A - Exceeding', 1), (b_b, gs_cbc, 'B - Meeting', 2), (b_c, gs_cbc, 'C - Approaching', 3), (b_d, gs_cbc, 'D - Below', 4);
-  update schools set default_grading_scale_id = gs_num where id = sa;
 
   insert into classes (id, school_id, academic_year_id, name, level_order, grading_scale_id) values
     (cl_num, sa, ay1, 'Perf Numeric Class', 1, gs_num), (cl_cbc, sa, ay1, 'Perf CBC Class', 2, gs_cbc);
