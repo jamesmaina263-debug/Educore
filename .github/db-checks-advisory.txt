@@ -29,3 +29,5 @@ bot_bus_status.sql
 mpesa_stk_internal_dispatch.sql
 # WP 2.3 bot pay: new test, validated in a rolled-back run against production before merge. Make it blocking once it has passed once post-deploy.
 bot_pay.sql
+# WP 4.5 leave over WhatsApp: new test, validated in a rolled-back run against production before merge. Make it blocking once it has passed once post-deploy.
+leave_whatsapp.sql
