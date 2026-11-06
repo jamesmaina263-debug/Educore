@@ -57,16 +57,38 @@ jobs:
           # Bump deliberately, as a reviewed diff, not silently.
           version: "2.116.0"
 
+      # Retries ONLY on a lock timeout (SQLSTATE 55P03). Root cause, confirmed from production's
+      # Postgres logs on 2026-11-04 (run for dc33c89): the nightly backup's pg_dump runs with no
+      # --exclude-schema, so for its ~2 minute run it holds a shared lock on every table including
+      # supabase_migrations.schema_migrations, and the Supabase CLI's prelude on every `db push`
+      # (ALTER TABLE ... ADD COLUMN IF NOT EXISTS) needs an exclusive lock with a ~4s timeout. The
+      # push failed on "canceling statement due to lock timeout" before applying anything and a
+      # re-run minutes later succeeded. Retrying is safe: each migration runs in its own transaction
+      # and `db push` skips versions already recorded, so a retry only applies what is still pending.
+      # Any other error fails immediately, exactly as before.
       - name: Push migrations
         run: |
           set +e
           if [ "${{ github.event.inputs.dry_run }}" = "true" ]; then
             echo "Dry run -- previewing pending migrations, nothing will be applied:"
             OUTPUT=$(supabase db push --db-url "${{ secrets.SUPABASE_DB_URL }}" --include-all --dry-run 2>&1)
+            STATUS=$?
           else
-            OUTPUT=$(supabase db push --db-url "${{ secrets.SUPABASE_DB_URL }}" --include-all 2>&1)
+            attempt=1
+            max_attempts=6
+            while true; do
+              OUTPUT=$(supabase db push --db-url "${{ secrets.SUPABASE_DB_URL }}" --include-all 2>&1)
+              STATUS=$?
+              [ $STATUS -eq 0 ] && break
+              if echo "$OUTPUT" | grep -qE "SQLSTATE 55P03|lock timeout" && [ $attempt -lt $max_attempts ]; then
+                echo "::warning::db push hit a lock timeout (attempt $attempt of $max_attempts), usually the nightly backup's pg_dump holding a lock on supabase_migrations.schema_migrations. Retrying in ${LOCK_RETRY_SECONDS:-45}s."
+                attempt=$((attempt + 1))
+                sleep "${LOCK_RETRY_SECONDS:-45}"
+                continue
+              fi
+              break
+            done
           fi
-          STATUS=$?
           echo "$OUTPUT"
           if [ $STATUS -ne 0 ]; then
             SAFE=$(echo "$OUTPUT" | sed -E 's#(postgres(ql)?://[^:]+):[^@]*@#\1:REDACTED@#g' | tr '\n' ' ' | tail -c 900)
