@@ -72,7 +72,8 @@ begin
   execute 'reset role';
   select id into v_flag from platform_feature_flags where key = 'feature.finance.cashbook';
   assert v_flag is not null, 'flag catalog entry exists';
-  assert not exists (select 1 from school_feature_flags where flag_id = v_flag), 'flag is enabled for nobody';
+  -- Flags are now ON for real schools in production, so a global 'off for everyone' guard is no longer true and says nothing about this test's brand-new fixture schools.
+  assert not exists (select 1 from school_feature_flags where flag_id = v_flag and school_id = sa), 'flag is off for the fixture school';
   insert into school_feature_flags (school_id, flag_id, enabled) values (sa, v_flag, true);
 
   -- 3. teacher (no finance.read) sees nothing even with the flag on

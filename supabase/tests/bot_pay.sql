@@ -15,7 +15,7 @@ begin
   select id into r_p from roles where name = 'parent';
   select id into f_pay from platform_feature_flags where key = 'feature.bot.pay';
   assert f_pay is not null, 'flag catalog entry exists';
-  assert not exists (select 1 from school_feature_flags where flag_id = f_pay and enabled), 'flag off everywhere';
+  -- Flags are now ON for real schools in production, so a global 'off for everyone' guard is no longer true and says nothing about this test's brand-new fixture schools.
 
   insert into schools (id, name, slug, application_number_prefix) values (sa, 'BotPay Test A', 'botpay-test-a', 'BPA'), (sb, 'BotPay Test B', 'botpay-test-b', 'BPB');
   insert into auth.users (id, aud, role, email) values
