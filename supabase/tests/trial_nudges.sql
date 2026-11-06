@@ -431,9 +431,26 @@ begin
   delete from school_subscriptions where school_id = sch_a;
   -- audit_log is append-only; lift that for this rolled-back transaction so the school can be deleted
   alter table audit_log disable trigger user;
-  delete from audit_log where school_id = sch_a;
-  delete from inventory_items where school_id = sch_a;
-  delete from inventory_categories where school_id = sch_a;
+  -- a new school is seeded with child rows (inventory, biometric profile, and so on) whose foreign keys do NOT cascade.
+  -- Clear every such table for this school (repeated passes, because children reference each other), but leave
+  -- trial_nudges alone: its ON DELETE CASCADE is exactly what 15b checks.
+  declare r record; pass int;
+  begin
+    for pass in 1..8 loop
+      for r in
+        select c.conrelid::regclass::text as t, a.attname::text as col
+          from pg_constraint c
+          join pg_attribute a on a.attrelid = c.conrelid and a.attnum = c.conkey[1]
+         where c.contype = 'f' and c.confrelid = 'public.schools'::regclass
+           and c.confdeltype in ('a', 'r') and array_length(c.conkey, 1) = 1
+      loop
+        begin
+          execute format('delete from %s where %I = $1', r.t, r.col) using sch_a;
+        exception when foreign_key_violation then null;
+        end;
+      end loop;
+    end loop;
+  end;
   delete from schools where id = sch_a;
   select count(*) into n from trial_nudges where school_id = sch_a;
   if n <> 0 then raise exception 'FAIL 15b: deleting a school left its messages (%)', n; end if;
