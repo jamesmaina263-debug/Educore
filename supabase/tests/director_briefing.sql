@@ -23,7 +23,7 @@ begin
   select id into f_dir from platform_feature_flags where key = 'feature.bot.director';
   select id into f_brief from platform_feature_flags where key = 'feature.bot.director_briefing';
   assert f_dir is not null and f_brief is not null, 'flag catalog entries exist';
-  assert not exists (select 1 from school_feature_flags where flag_id = f_brief and enabled), 'briefing flag off everywhere';
+  -- Flags are now ON for real schools in production, so a global 'off for everyone' guard is no longer true; this test only uses its own fixture schools.
 
   insert into schools (id, name, slug, application_number_prefix) values (sa, 'DBrief Test', 'dbrief-test-a', 'DBT');
   insert into auth.users (id, aud, role, email) values
