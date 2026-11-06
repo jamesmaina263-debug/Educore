@@ -9,9 +9,9 @@
 //     out of 50 and out of 100 are comparable.
 //  2. A missing mark (null score) or an unusable maximum is EXCLUDED, never
 //     counted as zero.
-//  3. A year/subject average is the mean of its valid assessment percentages.
+//  3. A year/subject average is the mean of its valid assessment scores.
 //     The schema has no per-exam weighting, so assessments weigh equally.
-//  4. Year-on-year change is in PERCENTAGE POINTS (60% -> 75% is +15 pp).
+//  4. Year-on-year change is in score points: PERCENTAGE POINTS for percent marks (60% -> 75% is +15 pp).
 //  5. A year with fewer than `expectedTerms` terms of results is flagged
 //     `incomplete` rather than silently compared as if it were whole.
 //  6. Nothing is invented: no data means null / empty, never a default value.
@@ -19,8 +19,44 @@
 import { classifyTrend, type TrendDirection } from "@/lib/academics/growth-trend";
 
 export const DEFAULT_EXPECTED_TERMS = 3;
-/** School-wide "needs intervention" threshold (percent) when the school has not configured one. */
+/** School-wide "needs intervention" threshold (percent) when none is chosen. */
 export const DEFAULT_INTERVENTION_THRESHOLD = 50;
+
+// Two assessment models exist in EduCore and they are NEVER mixed in one average:
+//  - "percent": numeric marks, converted to a percentage of each paper's own maximum;
+//  - "level":   CBC band marks (e.g. A-D). A level has no percentage, so it is scored in LEVEL POINTS:
+//               the scale's own `points` when it has them, otherwise rank-derived points where the best
+//               level scores the number of levels and the worst scores 1 (A=4 ... D=1 on a 4-level scale).
+export type ScoreKind = "percent" | "level";
+
+export interface AnalyticsConfig {
+  kind: ScoreKind;
+  /** Lowest and highest possible score on this scale. */
+  min: number;
+  max: number;
+  unit: string;
+  /** A change smaller than or equal to this (in score units) reads as stable. */
+  stable: number;
+  /** Averages below this need attention. Defaults to the scale midpoint. */
+  threshold: number;
+  /** First-to-latest term change that counts as a significant improvement. */
+  significantImprovement: number;
+  /** Max spread across 3+ terms that counts as stagnant. */
+  stagnantSpread: number;
+}
+
+export function configFor(kind: ScoreKind, maxLevels = 4, threshold?: number): AnalyticsConfig {
+  if (kind === "percent") {
+    return { kind, min: 0, max: 100, unit: "%", stable: 5, threshold: threshold ?? DEFAULT_INTERVENTION_THRESHOLD, significantImprovement: 10, stagnantSpread: 3 };
+  }
+  const levels = Math.max(2, maxLevels);
+  return { kind, min: 1, max: levels, unit: " pts", stable: 0.25, threshold: threshold ?? (1 + levels) / 2, significantImprovement: 0.5, stagnantSpread: 0.15 };
+}
+
+/** Points for a CBC level: the scale's own points when present, else best level = levelCount ... worst = 1. */
+export function levelPoints(points: number | null, levelOrder: number, levelCount: number): number {
+  return points !== null && Number.isFinite(points) ? points : levelCount - levelOrder + 1;
+}
 
 export interface PerfMark {
   studentId: string;
@@ -34,13 +70,24 @@ export interface PerfMark {
   yearStart: string;
   termNumber: number;
   examId: string;
+  /** Display name of the exam, when known (used for the mark-by-mark table). */
+  examName?: string;
+  kind: ScoreKind;
+  /** percent marks */
   rawScore: number | null;
   maxScore: number | null;
+  /** level marks: 1 = best level; levelCount = number of levels on that mark's scale */
+  levelOrder: number | null;
+  levelCount: number | null;
+  levelPoints: number | null;
+  levelLabel: string | null;
 }
 
+/** A mark reduced to one comparable number: a percentage, or level points. */
 export interface PctMark extends PerfMark {
-  percentage: number;
+  score: number;
 }
+export type ScoredMark = PctMark;
 
 export interface YearPoint {
   yearId: string;
@@ -57,7 +104,7 @@ export interface YearPoint {
 
 export interface HistorySummary {
   yearsTracked: number;
-  /** Last tracked year minus first tracked year, in percentage points. Null with fewer than 2 years. */
+  /** Last tracked year minus first tracked year, in score points (percentage points for percent marks). Null with fewer than 2 years. */
   growthSinceEnrolment: number | null;
   highestYear: YearPoint | null;
   lowestYear: YearPoint | null;
@@ -73,15 +120,38 @@ function mean(values: number[]): number | null {
   return values.reduce((a, b) => a + b, 0) / values.length;
 }
 
-/** Converts raw marks to percentages, dropping anything that cannot be normalised. */
+/** Reduces marks to one comparable score each, dropping anything that cannot be scored honestly. */
 export function normaliseMarks(marks: PerfMark[]): PctMark[] {
   const out: PctMark[] = [];
   for (const m of marks) {
+    if (m.kind === "level") {
+      const { levelOrder: o, levelCount: c } = m;
+      if (o === null || c === null || !Number.isInteger(o) || !Number.isInteger(c) || o < 1 || o > c) continue;
+      out.push({ ...m, score: levelPoints(m.levelPoints, o, c) });
+      continue;
+    }
     if (m.rawScore === null || m.maxScore === null) continue;
     if (!Number.isFinite(m.rawScore) || !Number.isFinite(m.maxScore) || m.maxScore <= 0 || m.rawScore < 0) continue;
-    out.push({ ...m, percentage: (m.rawScore / m.maxScore) * 100 });
+    out.push({ ...m, score: (m.rawScore / m.maxScore) * 100 });
   }
   return out;
+}
+
+/** Bands for the category breakdown of a LEVEL scale: each level owns the half-point either side of its points. */
+export function levelBands(marks: PctMark[]): GradeBand[] {
+  const seen = new Map<string, GradeBand>();
+  for (const m of marks) {
+    if (m.kind !== "level" || m.levelOrder === null || m.levelCount === null || !m.levelLabel) continue;
+    if (seen.has(m.levelLabel)) continue;
+    const p = levelPoints(m.levelPoints, m.levelOrder, m.levelCount);
+    seen.set(m.levelLabel, { label: m.levelLabel, min: m.levelOrder === m.levelCount ? p - 0.5 : p - 0.5, max: p + 0.49, order: m.levelOrder });
+  }
+  const bands = [...seen.values()].sort((a, b) => a.order - b.order);
+  if (bands.length > 0) {
+    bands[0].max = Math.max(bands[0].max, bands[0].min + 0.99); // best level absorbs the top edge
+    bands[bands.length - 1].min = Math.min(bands[bands.length - 1].min, 0.5); // worst level absorbs the bottom edge
+  }
+  return bands;
 }
 
 function groupBy<T, K>(items: T[], key: (t: T) => K): Map<K, T[]> {
@@ -95,11 +165,11 @@ function groupBy<T, K>(items: T[], key: (t: T) => K): Map<K, T[]> {
   return map;
 }
 
-/** One point per academic year, chronological, with percentage-point change from the previous year. */
+/** One point per academic year, chronological, with change (score points) from the previous year. */
 export function buildYearlySeries(marks: PctMark[], expectedTerms = DEFAULT_EXPECTED_TERMS): YearPoint[] {
   const points: YearPoint[] = [];
   for (const [yearId, rows] of groupBy(marks, (m) => m.yearId)) {
-    const avg = mean(rows.map((r) => r.percentage));
+    const avg = mean(rows.map((r) => r.score));
     if (avg === null) continue;
     const terms = [...new Set(rows.map((r) => r.termNumber))].sort((a, b) => a - b);
     points.push({
@@ -120,19 +190,19 @@ export function buildYearlySeries(marks: PctMark[], expectedTerms = DEFAULT_EXPE
   return points;
 }
 
-export function summarizeHistory(marks: PctMark[], points: YearPoint[]): HistorySummary {
+export function summarizeHistory(marks: PctMark[], points: YearPoint[], cfg: AnalyticsConfig = configFor("percent")): HistorySummary {
   if (points.length === 0) {
     return { yearsTracked: 0, growthSinceEnrolment: null, highestYear: null, lowestYear: null, historicalAverage: null, trend: "insufficient_data" };
   }
   const highest = points.reduce((a, b) => (b.average > a.average ? b : a));
   const lowest = points.reduce((a, b) => (b.average < a.average ? b : a));
-  const trend = classifyTrend(points.map((p) => ({ label: p.yearName, value: p.average })));
+  const trend = classifyTrend(points.map((p) => ({ label: p.yearName, value: p.average })), cfg.stable);
   return {
     yearsTracked: points.length,
     growthSinceEnrolment: points.length >= 2 ? points[points.length - 1].average - points[0].average : null,
     highestYear: highest,
     lowestYear: lowest,
-    historicalAverage: mean(marks.map((m) => m.percentage)),
+    historicalAverage: mean(marks.map((m) => m.score)),
     trend: trend.direction,
   };
 }
@@ -146,11 +216,11 @@ export interface SubjectProgression {
 }
 
 /** Per-subject yearly series, e.g. Mathematics from enrolment to now. */
-export function buildSubjectProgression(marks: PctMark[], expectedTerms = DEFAULT_EXPECTED_TERMS): SubjectProgression[] {
+export function buildSubjectProgression(marks: PctMark[], expectedTerms = DEFAULT_EXPECTED_TERMS, stable = 5): SubjectProgression[] {
   const result: SubjectProgression[] = [];
   for (const [subjectId, rows] of groupBy(marks, (m) => m.subjectId)) {
     const points = buildYearlySeries(rows, expectedTerms);
-    const trend = classifyTrend(points.map((p) => ({ label: p.yearName, value: p.average })));
+    const trend = classifyTrend(points.map((p) => ({ label: p.yearName, value: p.average })), stable);
     result.push({ subjectId, subjectName: rows[0].subjectName, points, direction: trend.direction, change: trend.change });
   }
   return result.sort((a, b) => a.subjectName.localeCompare(b.subjectName));
@@ -164,7 +234,7 @@ export interface TermAverage {
 
 export function buildTermAverages(marks: PctMark[]): TermAverage[] {
   return [...groupBy(marks, (m) => m.termNumber)]
-    .map(([termNumber, rows]) => ({ termNumber, average: mean(rows.map((r) => r.percentage)) as number, assessments: rows.length }))
+    .map(([termNumber, rows]) => ({ termNumber, average: mean(rows.map((r) => r.score)) as number, assessments: rows.length }))
     .sort((a, b) => a.termNumber - b.termNumber);
 }
 
@@ -247,7 +317,7 @@ function toNamed(groups: Map<string, PctMark[]>, label: (rows: PctMark[]) => str
   return [...groups].map(([id, rows]) => ({
     id,
     label: label(rows),
-    average: mean(rows.map((r) => r.percentage)) as number,
+    average: mean(rows.map((r) => r.score)) as number,
     assessments: rows.length,
   }));
 }
@@ -256,7 +326,7 @@ export function summarizeSchool(
   allMarks: PctMark[],
   filter: SchoolFilter = {},
   bands: GradeBand[] = [],
-  interventionThreshold = DEFAULT_INTERVENTION_THRESHOLD,
+  cfg: AnalyticsConfig = configFor("percent"),
   expectedTerms = DEFAULT_EXPECTED_TERMS,
 ): SchoolSummary {
   const scoped = applyFilter(allMarks, filter, false);
@@ -264,7 +334,7 @@ export function summarizeSchool(
   const history = applyFilter(allMarks, filter, true);
 
   const byStudent = groupBy(scoped, (m) => m.studentId);
-  const studentAverages = [...byStudent].map(([studentId, rows]) => ({ studentId, average: mean(rows.map((r) => r.percentage)) as number }));
+  const studentAverages = [...byStudent].map(([studentId, rows]) => ({ studentId, average: mean(rows.map((r) => r.score)) as number }));
 
   let improving = 0;
   let declining = 0;
@@ -272,7 +342,7 @@ export function summarizeSchool(
   let insufficientHistory = 0;
   for (const [, rows] of groupBy(history, (m) => m.studentId)) {
     const series = buildYearlySeries(rows, expectedTerms);
-    const dir = classifyTrend(series.map((p) => ({ label: p.yearName, value: p.average }))).direction;
+    const dir = classifyTrend(series.map((p) => ({ label: p.yearName, value: p.average })), cfg.stable).direction;
     if (dir === "improving") improving++;
     else if (dir === "declining") declining++;
     else if (dir === "stable") consistent++;
@@ -286,7 +356,7 @@ export function summarizeSchool(
       const rows = history.filter((m) => m.subjectId === s.id);
       const series = buildYearlySeries(rows, expectedTerms);
       const change = series.length >= 2 ? series[series.length - 1].average - series[series.length - 2].average : null;
-      const needsIntervention = s.average < interventionThreshold || (change !== null && change <= -5);
+      const needsIntervention = s.average < cfg.threshold || (change !== null && change < -cfg.stable);
       return { ...s, change, needsIntervention };
     })
     .sort((a, b) => b.average - a.average);
@@ -306,7 +376,7 @@ export function summarizeSchool(
     students,
     classByYear: buildMatrix(history, (m) => m.classLabel),
     subjectByYear: buildMatrix(history, (m) => m.subjectName),
-    overallAverage: mean(scoped.map((m) => m.percentage)),
+    overallAverage: mean(scoped.map((m) => m.score)),
     studentsAssessed: studentAverages.length,
     improving,
     declining,
@@ -334,7 +404,7 @@ export function buildMatrix(marks: PctMark[], category: (m: PctMark) => string):
       marks.filter((m) => m.yearId === y.yearId),
       category,
     )) {
-      row[cat] = round1(mean(rows.map((r) => r.percentage)) as number);
+      row[cat] = round1(mean(rows.map((r) => r.score)) as number);
     }
     return row;
   });
@@ -355,44 +425,31 @@ export interface EarlyWarningRow {
   flags: WarningFlag[];
 }
 
-export interface EarlyWarningOptions {
-  threshold?: number;
-  /** A student with fewer valid assessments than this is never flagged: incomplete records are not evidence. */
-  minAssessments?: number;
-  /** Change (pp) from first to latest term that counts as significant improvement. */
-  significantImprovement?: number;
-  /** Max spread (pp) across 3+ terms that counts as stagnant. */
-  stagnantSpread?: number;
-}
-
 /**
  * Early-warning flags per student from their TERM-level averages (so a first-year student can be
  * flagged within the year). Students with too few valid assessments are skipped entirely rather than
  * labelled weak on incomplete records. Flags are indicators for a teacher to investigate, not verdicts.
+ * Thresholds come from the scale config (percent or CBC level points).
  */
-export function buildEarlyWarnings(marks: PctMark[], opts: EarlyWarningOptions = {}): EarlyWarningRow[] {
-  const threshold = opts.threshold ?? DEFAULT_INTERVENTION_THRESHOLD;
-  const minAssessments = opts.minAssessments ?? 3;
-  const bigGain = opts.significantImprovement ?? 10;
-  const spread = opts.stagnantSpread ?? 3;
+export function buildEarlyWarnings(marks: PctMark[], cfg: AnalyticsConfig = configFor("percent"), minAssessments = 3): EarlyWarningRow[] {
   const rows: EarlyWarningRow[] = [];
 
   for (const [studentId, own] of groupBy(marks, (m) => m.studentId)) {
     if (own.length < minAssessments) continue;
     const byTerm = [...groupBy(own, (m) => `${m.yearStart}|${m.termNumber}`)]
-      .map(([key, r]) => ({ key, average: mean(r.map((x) => x.percentage)) as number }))
+      .map(([key, r]) => ({ key, average: mean(r.map((x) => x.score)) as number }))
       .sort((a, b) => a.key.localeCompare(b.key));
     const values = byTerm.map((t) => t.average);
     const latest = values[values.length - 1];
     const change = values.length >= 2 ? latest - values[0] : null;
     const flags: WarningFlag[] = [];
 
-    const direction = classifyTrend(byTerm.map((t) => ({ label: t.key, value: t.average }))).direction;
+    const direction = classifyTrend(byTerm.map((t) => ({ label: t.key, value: t.average })), cfg.stable).direction;
     if (direction === "declining") flags.push("declining");
-    if (change !== null && change >= bigGain) flags.push("improving");
-    if (values.length >= 2 && values.every((v) => v < threshold)) flags.push("consistently_low");
-    if (values.length >= 3 && Math.max(...values) - Math.min(...values) <= spread) flags.push("stagnant");
-    if (latest < threshold) flags.push("below_threshold");
+    if (change !== null && change >= cfg.significantImprovement) flags.push("improving");
+    if (values.length >= 2 && values.every((v) => v < cfg.threshold)) flags.push("consistently_low");
+    if (values.length >= 3 && Math.max(...values) - Math.min(...values) <= cfg.stagnantSpread) flags.push("stagnant");
+    if (latest < cfg.threshold) flags.push("below_threshold");
 
     if (flags.length > 0) rows.push({ studentId, latestAverage: latest, change, termsOnFile: values.length, assessments: own.length, flags });
   }
@@ -403,4 +460,24 @@ export function buildEarlyWarnings(marks: PctMark[], opts: EarlyWarningOptions =
 export function attendancePercentage(present: number, late: number, absent: number): number | null {
   const total = present + late + absent;
   return total === 0 ? null : ((present + late) / total) * 100;
+}
+
+// ------------------------------------------------------------------ display helpers
+
+/** "72.5%" for percent marks, "2.75 pts" for CBC level points. Null shows an em dash, never a zero. */
+export function formatScore(n: number | null | undefined, cfg: AnalyticsConfig): string {
+  if (n === null || n === undefined) return "—";
+  return cfg.kind === "percent" ? `${round1(n)}%` : `${Math.round(n * 100) / 100} pts`;
+}
+
+/** Signed change: "+5 pp" for percent marks (percentage points), "+0.5 pts" for CBC level points. */
+export function formatChange(n: number | null | undefined, cfg: AnalyticsConfig): string {
+  if (n === null || n === undefined) return "—";
+  const v = cfg.kind === "percent" ? round1(n) : Math.round(n * 100) / 100;
+  return `${v > 0 ? "+" : ""}${v} ${cfg.kind === "percent" ? "pp" : "pts"}`;
+}
+
+/** Display rounding for chart data: 1dp for percentages, 2dp for level points. */
+export function roundFor(n: number, cfg: AnalyticsConfig): number {
+  return cfg.kind === "percent" ? round1(n) : Math.round(n * 100) / 100;
 }

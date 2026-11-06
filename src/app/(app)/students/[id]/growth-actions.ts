@@ -3,6 +3,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { tagSentryRequestContext } from "@/lib/observability/sentry-context";
 import { classifyTrend, type TrendResult } from "@/lib/academics/growth-trend";
+import { configFor, levelPoints } from "@/lib/academics/performance-analytics";
 
 // ---------------------------------------------------------------------------
 // Growth analysis (Performance Appraisal Engine directive, Phase 12 / roadmap
@@ -113,11 +114,28 @@ export async function getStudentGrowth(studentId: string): Promise<StudentGrowth
     };
   });
 
+  // Number of levels per grading scale. A band's own `points` is used when the scale has them; otherwise
+  // the level is scored best = number of levels ... worst = 1. (Using level_order directly would read
+  // A=1 ... D=4 as a RISE when a learner slides from A to D.)
+  const { data: levelRows } = await supabase.from("grading_scale_bands").select("grading_scale_id, level_order");
+  const levelCounts = new Map<string, number>();
+  for (const b of (levelRows ?? []) as { grading_scale_id: string; level_order: number }[]) {
+    levelCounts.set(b.grading_scale_id, Math.max(levelCounts.get(b.grading_scale_id) ?? 0, b.level_order));
+  }
+  const bandValue = (band: { points: number | null; level_order: number; grading_scale_id: string }): number | null => {
+    const count = levelCounts.get(band.grading_scale_id);
+    return count === undefined ? (band.points ?? null) : levelPoints(band.points, band.level_order, count);
+  };
+
+  // These two series are level points (1 to 3 or 4), where the default 5-point stable band could never be
+  // exceeded, so every trend would read "stable". Use the level scale's own band (a quarter of a level).
+  const LEVEL_STABLE = configFor("level").stable;
+
   // ---- 2. Core-competency / value / PCI trend (per term) ----
   const { data: indicatorRows, error: indicatorError } = await supabase
     .from("competency_indicator_ratings")
     .select(
-      "indicator_id, term_id, competency_indicators(name, type), grading_scale_bands(points, level_order), terms(term_number, academic_years(start_date), name)",
+      "indicator_id, term_id, competency_indicators(name, type), grading_scale_bands(points, level_order, grading_scale_id), terms(term_number, academic_years(start_date), name)",
     )
     .eq("student_id", studentId);
   if (indicatorError) return { error: indicatorError.message };
@@ -128,14 +146,15 @@ export async function getStudentGrowth(studentId: string): Promise<StudentGrowth
   >();
   for (const r of indicatorRows ?? []) {
     const indicator = r.competency_indicators as unknown as { name: string; type: string } | null;
-    const band = r.grading_scale_bands as unknown as { points: number | null; level_order: number } | null;
+    const band = r.grading_scale_bands as unknown as { points: number | null; level_order: number; grading_scale_id: string } | null;
     const term = r.terms as unknown as { term_number: number; name: string; academic_years: { start_date: string } | null } | null;
-    if (!indicator || !band || !term?.academic_years) continue;
+    const value = band ? bandValue(band) : null;
+    if (!indicator || !band || value === null || !term?.academic_years) continue;
     const entry = indicatorSeries.get(r.indicator_id) ?? { name: indicator.name, type: indicator.type, points: [] };
     entry.points.push({
       key: { yearStart: term.academic_years.start_date, termNumber: term.term_number, examCreatedAt: "" },
       label: term.name,
-      value: band.points ?? band.level_order,
+      value,
     });
     indicatorSeries.set(r.indicator_id, entry);
   }
@@ -146,7 +165,7 @@ export async function getStudentGrowth(studentId: string): Promise<StudentGrowth
       indicatorId,
       indicatorName: name,
       indicatorType: type,
-      trend: classifyTrend(sorted.map(({ label, value }) => ({ label, value }))),
+      trend: classifyTrend(sorted.map(({ label, value }) => ({ label, value })), LEVEL_STABLE),
     };
   });
 
@@ -154,7 +173,7 @@ export async function getStudentGrowth(studentId: string): Promise<StudentGrowth
   const { data: cmRows, error: cmError } = await supabase
     .from("competency_marks")
     .select(
-      "sub_strand_id, exam_id, curriculum_sub_strands(name, curriculum_strands(subjects(name))), grading_scale_bands(points, level_order), exams(name, created_at, terms(term_number, academic_years(start_date)))",
+      "sub_strand_id, exam_id, curriculum_sub_strands(name, curriculum_strands(subjects(name))), grading_scale_bands(points, level_order, grading_scale_id), exams(name, created_at, terms(term_number, academic_years(start_date)))",
     )
     .eq("student_id", studentId);
   if (cmError) return { error: cmError.message };
@@ -168,13 +187,14 @@ export async function getStudentGrowth(studentId: string): Promise<StudentGrowth
       name: string;
       curriculum_strands: { subjects: { name: string } | null } | null;
     } | null;
-    const band = r.grading_scale_bands as unknown as { points: number | null; level_order: number } | null;
+    const band = r.grading_scale_bands as unknown as { points: number | null; level_order: number; grading_scale_id: string } | null;
     const exam = r.exams as unknown as {
       name: string;
       created_at: string;
       terms: { term_number: number; academic_years: { start_date: string } | null } | null;
     } | null;
-    if (!subStrand || !band || !exam?.terms?.academic_years) continue;
+    const value = band ? bandValue(band) : null;
+    if (!subStrand || !band || value === null || !exam?.terms?.academic_years) continue;
     const entry = subStrandSeries.get(r.sub_strand_id) ?? {
       name: subStrand.name,
       subjectName: subStrand.curriculum_strands?.subjects?.name ?? "—",
@@ -183,7 +203,7 @@ export async function getStudentGrowth(studentId: string): Promise<StudentGrowth
     entry.points.push({
       key: { yearStart: exam.terms.academic_years.start_date, termNumber: exam.terms.term_number, examCreatedAt: exam.created_at },
       label: exam.name,
-      value: band.points ?? band.level_order,
+      value,
     });
     subStrandSeries.set(r.sub_strand_id, entry);
   }
@@ -195,7 +215,7 @@ export async function getStudentGrowth(studentId: string): Promise<StudentGrowth
         subStrandId,
         subStrandName: name,
         subjectName,
-        trend: classifyTrend(sorted.map(({ label, value }) => ({ label, value }))),
+        trend: classifyTrend(sorted.map(({ label, value }) => ({ label, value })), LEVEL_STABLE),
       };
     },
   );
