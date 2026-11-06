@@ -183,6 +183,7 @@ begin
   assert pg_temp.sqlstate_of(format('select tutor_qa_check(%L)', ch1)) = '54000', '10: check refuses at the limit';
   assert pg_temp.sqlstate_of(format('select save_tutor_qa(%L, ''key-limit-01'', ''q'', ''not_covered'', null, ''{}''::uuid[], null, null, null, null)', ch1)) = '54000', '10: save refuses at the limit';
   assert save_tutor_qa(ch1, 'key-answered-1', 'x', 'not_covered', null, '{}', null, null, null, null) = q1, '10: a retry of an old key still returns its row at the limit';
+  assert save_tutor_qa(ch1, 'key-limit-sg', 'i want to die', 'safeguarding', null, '{}', null, null, null, null) is not null, '10: a safeguarding hit is recorded even at the limit';
   execute 'reset role';
 
   -- 11. expiry: hidden at once, deleted lazily on the next save

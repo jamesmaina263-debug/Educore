@@ -283,7 +283,8 @@ begin
   if v_id is not null then
     return v_id;
   end if;
-  if not public.tutor_qa_under_limit(r.school_id, p_student) then
+  -- the limit never blocks recording a safeguarding hit: a child in trouble must always be flagged
+  if p_status <> 'safeguarding' and not public.tutor_qa_under_limit(r.school_id, p_student) then
     raise exception 'Daily question limit reached.' using errcode = '54000';
   end if;
   if p_status = 'answered' then
