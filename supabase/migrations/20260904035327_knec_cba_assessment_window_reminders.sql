@@ -1,5 +1,13 @@
 -- CBA assessment-window reminders (Phase 7 of the current build order).
 --
+-- CORRECTED SAME DAY: the "global, platform-staff-authored via /admin/cba-windows" design
+-- described below (and in the table comment further down) was superseded a few hours later by
+-- 20260904072518_knec_cba_windows_school_authored.sql -- windows are per-school data, entered by
+-- that school's own management (knec.manage), not by platform staff, and there is no
+-- /admin/cba-windows route. Left as-is here rather than rewritten, since this file is a verbatim
+-- record of what actually ran at this version -- read the follow-up migration for the current
+-- design, not this comment.
+--
 -- KNEC publishes its own Competency-Based Assessment windows (e.g. "Grade 4/5 Term 3 CBA
 -- uploads due Oct 23") via circulars/portal notices -- not something KICD/KNEC licenses, just
 -- an operational date a school needs to hit. This is pure EduCore-authored operational data:
