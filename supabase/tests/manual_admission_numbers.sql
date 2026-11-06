@@ -5,6 +5,11 @@
 -- run two sessions that insert the same / a case-variant number while one holds its txn open.
 begin;
 
+-- This test is about admission numbers, not guardians: switch off the primary-guardian rule for this rolled-back
+-- transaction only (it blocks inserting an 'active' student that has no guardian).
+alter table students disable trigger trg_students_enforce_primary_guardian;
+alter table students disable trigger trg_students_enforce_status_transition;
+
 do $$
 declare
   a uuid := gen_random_uuid();

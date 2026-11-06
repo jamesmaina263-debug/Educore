@@ -39,13 +39,14 @@ end $$;
 -- A school with a subscription and (optionally) an owner.
 create or replace function pg_temp.mk(p_slug text, p_school_status text, p_sub_status text, p_ends interval, p_owner_email text)
 returns uuid language plpgsql as $$
-declare v_id uuid;
+declare v_id uuid; v_auth uuid := gen_random_uuid();
 begin
   insert into schools (name, slug, status) values ('TN ' || p_slug, p_slug, p_school_status) returning id into v_id;
   insert into school_subscriptions (school_id, status, trial_ends_at) values (v_id, p_sub_status, now() + p_ends);
   if p_owner_email is not null then
+    insert into auth.users (id, aud, role, email) values (v_auth, 'authenticated', 'authenticated', 'tn-owner-' || p_slug || '@example.invalid');
     insert into school_users (school_id, auth_user_id, role_id, full_name, email, status)
-    values (v_id, gen_random_uuid(), (select id from roles where name = 'school_owner'), 'Owner ' || p_slug, p_owner_email, 'active');
+    values (v_id, v_auth, (select id from roles where name = 'school_owner'), 'Owner ' || p_slug, p_owner_email, 'active');
   end if;
   return v_id;
 end $$;
@@ -72,11 +73,15 @@ begin
   insert into auth.users (id, aud, role, email) values
     (staff, 'authenticated', 'authenticated', 'tn-staff@example.invalid'),
     (nobody, 'authenticated', 'authenticated', 'tn-nobody@example.invalid');
+  -- the non-admin fixture must belong to a school (school_users requires school_id for every role but super_admin and group_admin)
+  insert into schools (name, slug, application_number_prefix) values ('TN Nobody School', 'tn-nobody-school', 'ZTN');
   insert into school_users (school_id, auth_user_id, role_id, full_name, email) values
     (null, staff, (select id from roles where name = 'super_admin'), 'TN Staff', 'tn-staff@example.invalid'),
-    (null, nobody, (select id from roles where name = 'principal'), 'TN Nobody', 'tn-nobody@example.invalid');
+    ((select id from schools where slug = 'tn-nobody-school'), nobody, (select id from roles where name = 'principal'), 'TN Nobody', 'tn-nobody@example.invalid');
   insert into platform_team_members (id, name, email) values (rep, 'TN Rep', 'tn-rep@example.invalid'), (rep2, 'TN Rep Two', 'tn-rep2@example.invalid');
 
+  -- a real 'demo-academy' school may already exist (unique slug): move it aside inside this rolled-back transaction
+  update schools set slug = 'demo-academy-moved-aside' where slug = 'demo-academy';
   sch_a := pg_temp.mk('tn-a-running', 'trial', 'trialing', interval '20 days', 'Owner.A@Example.Invalid');
   sch_b := pg_temp.mk('tn-b-noowner', 'trial', 'trialing', interval '20 days', null);
   sch_c := pg_temp.mk('tn-c-ended3', 'suspended', 'past_due', interval '-3 days', 'owner.c@example.invalid');
@@ -424,6 +429,28 @@ begin
   end if;
   delete from school_users where school_id = sch_a;
   delete from school_subscriptions where school_id = sch_a;
+  -- audit_log is append-only; lift that for this rolled-back transaction so the school can be deleted
+  alter table audit_log disable trigger user;
+  -- a new school is seeded with child rows (inventory, biometric profile, and so on) whose foreign keys do NOT cascade.
+  -- Clear every such table for this school (repeated passes, because children reference each other), but leave
+  -- trial_nudges alone: its ON DELETE CASCADE is exactly what 15b checks.
+  declare r record; pass int;
+  begin
+    for pass in 1..8 loop
+      for r in
+        select c.conrelid::regclass::text as t, a.attname::text as col
+          from pg_constraint c
+          join pg_attribute a on a.attrelid = c.conrelid and a.attnum = c.conkey[1]
+         where c.contype = 'f' and c.confrelid = 'public.schools'::regclass
+           and c.confdeltype in ('a', 'r') and array_length(c.conkey, 1) = 1
+      loop
+        begin
+          execute format('delete from %s where %I = $1', r.t, r.col) using sch_a;
+        exception when foreign_key_violation then null;
+        end;
+      end loop;
+    end loop;
+  end;
   delete from schools where id = sch_a;
   select count(*) into n from trial_nudges where school_id = sch_a;
   if n <> 0 then raise exception 'FAIL 15b: deleting a school left its messages (%)', n; end if;

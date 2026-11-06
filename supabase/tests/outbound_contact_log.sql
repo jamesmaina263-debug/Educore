@@ -55,9 +55,11 @@ begin
   insert into auth.users (id, aud, role, email) values
     (staff, 'authenticated', 'authenticated', 'ocl-staff@example.invalid'),
     (nobody, 'authenticated', 'authenticated', 'ocl-nobody@example.invalid');
+  -- the non-admin fixture must belong to a school (school_users requires school_id for every role but super_admin and group_admin)
+  insert into schools (name, slug, application_number_prefix) values ('OCL Nobody School', 'ocl-nobody-school', 'ZOC');
   insert into school_users (school_id, auth_user_id, role_id, full_name, email) values
     (null, staff, (select id from roles where name = 'super_admin'), 'OCL Staff', 'ocl-staff@example.invalid'),
-    (null, nobody, (select id from roles where name = 'principal'), 'OCL Nobody', 'ocl-nobody@example.invalid');
+    ((select id from schools where slug = 'ocl-nobody-school'), nobody, (select id from roles where name = 'principal'), 'OCL Nobody', 'ocl-nobody@example.invalid');
   insert into platform_team_members (id, name, email) values (rep, 'OCL Rep', 'ocl-rep@example.invalid');
 
   -- existing customers / requests / leads the import must dedupe against

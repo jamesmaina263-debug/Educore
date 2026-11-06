@@ -58,9 +58,11 @@ begin
   insert into auth.users (id, aud, role, email) values
     (staff, 'authenticated', 'authenticated', 'grt-staff@example.invalid'),
     (nobody, 'authenticated', 'authenticated', 'grt-nobody@example.invalid');
+  -- the non-admin fixture must belong to a school (school_users requires school_id for every role but super_admin and group_admin)
+  insert into schools (name, slug, application_number_prefix) values ('GRT Nobody School', 'grt-nobody-school', 'ZGR');
   insert into school_users (school_id, auth_user_id, role_id, full_name, email) values
     (null, staff, (select id from roles where name = 'super_admin'), 'GRT Staff', 'grt-staff@example.invalid'),
-    (null, nobody, (select id from roles where name = 'principal'), 'GRT Nobody', 'grt-nobody@example.invalid');
+    ((select id from schools where slug = 'grt-nobody-school'), nobody, (select id from roles where name = 'principal'), 'GRT Nobody', 'grt-nobody@example.invalid');
 
   -- ---------- 1. access control and input checks ----------
   perform pg_temp.as_anon();
@@ -112,8 +114,8 @@ begin
     insert into schools (name, slug) values ('GRT Trial School ' || i, 'grt-trial-' || i) returning id into s;
     insert into school_subscriptions (school_id, status) values (s, case i when 1 then 'active' else 'trialing' end);
     insert into marketing_signup_attribution (school_id, utm_campaign) values (s, 'grt-trial-campaign');
-    if i = 1 then insert into platform_invoices (school_id, status) values (s, 'paid'); end if;
-    if i = 2 then insert into platform_invoices (school_id, status) values (s, 'issued'); end if;  -- issued is not paid
+    if i = 1 then perform set_config('educore.invoice_write', 'on', true); insert into platform_invoices (school_id, subscription_id, status, subtotal_kes, invoice_number, invoice_date, period_start, period_end, student_count, amount_kes, due_at) values (s, (select id from school_subscriptions where school_id = s), 'paid', 0, 'GRT-INV-1', current_date, current_date, current_date + 30, 0, 0, now()); end if;
+    if i = 2 then perform set_config('educore.invoice_write', 'on', true); insert into platform_invoices (school_id, subscription_id, status, subtotal_kes, invoice_number, invoice_date, period_start, period_end, student_count, amount_kes, due_at) values (s, (select id from school_subscriptions where school_id = s), 'issued', 0, 'GRT-INV-2', current_date, current_date, current_date + 30, 0, 0, now()); end if;  -- issued is not paid
   end loop;
   insert into schools (name, slug) values ('GRT Trial Unattributed', 'grt-trial-unattr') returning id into s;
   insert into school_subscriptions (school_id, status) values (s, 'past_due');

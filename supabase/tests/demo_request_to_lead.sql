@@ -53,9 +53,11 @@ begin
   insert into auth.users (id, aud, role, email) values
     (staff, 'authenticated', 'authenticated', 'drl-staff@example.invalid'),
     (nobody, 'authenticated', 'authenticated', 'drl-nobody@example.invalid');
+  -- the non-admin fixture must belong to a school (school_users requires school_id for every role but super_admin and group_admin)
+  insert into schools (name, slug, application_number_prefix) values ('DRL Nobody School', 'drl-nobody-school', 'ZDR');
   insert into school_users (school_id, auth_user_id, role_id, full_name, email) values
     (null, staff, (select id from roles where name = 'super_admin'), 'DRL Staff', 'drl-staff@example.invalid'),
-    (null, nobody, (select id from roles where name = 'principal'), 'DRL Nobody', 'drl-nobody@example.invalid');
+    ((select id from schools where slug = 'drl-nobody-school'), nobody, (select id from roles where name = 'principal'), 'DRL Nobody', 'drl-nobody@example.invalid');
   insert into platform_team_members (id, name, email) values
     (rep, 'DRL Rep', 'drl-rep@example.invalid'), (rep2, 'DRL Rep Two', 'drl-rep2@example.invalid');
 
