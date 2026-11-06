@@ -6,12 +6,29 @@ import { TOOL_REGISTRY } from "./registry.ts";
 import { tryHandleGuardianRequest } from "./guardianRequests.ts";
 import { chatText, menuText, prepareMenuTurn } from "./menu.ts";
 import { mentionsBus } from "./bus.ts";
+import { tryHandleBotPay } from "./pay.ts";
 import { beginDocumentRequest, documentsEnabled, looksLikePin, pendingPinRequest, submitPinAndDeliver } from "./documents.ts";
 
 export const GREETING_REPLY =
   "Hi! You can ask me about your child's fee balance or attendance. Type 'agent' any time to talk to the school office directly.";
 export const ESCALATION_ACK =
   "I've passed your message to the school office -- someone will get back to you here on WhatsApp shortly.";
+
+// Sends an already-created STK request through mpesa-stk-push's INTERNAL mode (WP 1.3b), authenticated with the
+// shared DISPATCH_SECRET, the same server-to-server path mpesa-stk-query and send-communication use. True only if the
+// push was accepted. Never logs the secret or the phone number.
+async function dispatchStkPush(requestId: string): Promise<boolean> {
+  const baseUrl = Deno.env.get("SUPABASE_URL");
+  const secret = Deno.env.get("DISPATCH_SECRET");
+  if (!baseUrl || !secret) return false;
+  const res = await fetch(`${baseUrl}/functions/v1/mpesa-stk-push`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "x-dispatch-secret": secret },
+    body: JSON.stringify({ request_id: requestId }),
+    signal: AbortSignal.timeout(20_000),
+  });
+  return res.ok;
+}
 
 // The single place that decides "does the bot answer this, or does it go to a human" -- and,
 // critically, the single place that runs authorization and picks up tool-level failures, so no
@@ -63,6 +80,34 @@ export async function handleInboundMessage(inputCtx: ChatContext): Promise<Dispa
     canAccessStudent: (guardianUserId, studentId, schoolId) => guardianCanAccessStudent(ctx.supabase, guardianUserId, studentId, schoolId),
   });
   if (guardianRequest) return guardianRequest;
+
+  // WP 2.3 bot pay: only a message that parses as "pay ...", YES or NO does anything here, and "pay ..." costs one
+  // flag lookup (feature.bot.pay AND M-Pesa active). With the flag off, or for any other message, this returns null
+  // and everything below behaves exactly as before. All money rules live in the bot_guardian_pay_* functions.
+  try {
+    const pay = await tryHandleBotPay(
+      {
+        supabase: ctx.supabase,
+        schoolId: ctx.schoolId,
+        conversationId: ctx.conversationId,
+        guardianUserId: ctx.guardianUserId,
+        currentStudentId: ctx.currentStudentId,
+        messageText: ctx.messageText,
+        language: ctx.language,
+      },
+      {
+        getChildren: () => getGuardianChildren(ctx.supabase, ctx.guardianUserId, ctx.schoolId),
+        resolveChild: resolveChildContext,
+        canAccessStudent: (studentId) => guardianCanAccessStudent(ctx.supabase, ctx.guardianUserId, studentId, ctx.schoolId),
+        dispatchPush: dispatchStkPush,
+        escalationAck: ack,
+      },
+    );
+    if (pay) return pay;
+  } catch (err) {
+    console.error("[chatbot] Pay flow failed:", err);
+    return { replyText: ack, escalate: true, escalationReason: "tool_error" };
+  }
 
   // WP 5.3 bot part: one flag lookup, and only for a message that actually mentions the bus. Fails closed.
   let bus = false;
