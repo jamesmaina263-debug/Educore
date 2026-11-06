@@ -11,3 +11,32 @@
 # auth_school_id()/auth_is_super_admin() directly, so the first real run of
 # this check is expected to either come back clean or surface something that
 # genuinely needs a look -- not something to pre-allowlist speculatively.
+# Reviewed 2026-11-05 against production's actual policy and function definitions.
+#
+# These ten tables have RLS on and a SELECT policy that does not name auth_school_id() directly.
+# Each policy calls a SECURITY DEFINER helper (fixed search_path, STABLE) whose body begins with
+# `p_school = auth_school_id()`, so tenant scoping is enforced one call away. The checker only
+# greps the policy text, so it cannot see through the helper. Recheck a helper here if its
+# definition ever changes.
+#
+# canteen_staff_can_read(school) = school = auth_school_id() AND flag feature.canteen.stores
+#                                  AND auth_has_permission('canteen.read')
+# canteen_can_see_student(school, student) = school = auth_school_id() AND flag feature.canteen.stores
+#                                  AND (canteen.read OR guardian of student OR the student themself)
+canteen_items
+canteen_stock_movements
+canteen_sales
+canteen_wallets
+canteen_wallet_entries
+# Child of canteen_sales: the policy is EXISTS (select 1 from canteen_sales ...), and the parent's
+# own RLS applies inside that subquery, so a row is visible only if its parent sale is.
+canteen_sale_lines
+#
+# learning_can_see_stream(school, stream) = school = auth_school_id() AND flag feature.learning.portal
+#                                  AND (academics.read OR guardian of a student in the stream
+#                                       OR a student in the stream)
+learning_quizzes
+learning_resources
+tutor_drafts
+# Child of learning_quizzes: EXISTS (select 1 from learning_quizzes ...), scoped by the parent's RLS.
+learning_quiz_questions
