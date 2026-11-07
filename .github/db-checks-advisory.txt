@@ -11,3 +11,6 @@ leave_whatsapp.sql
 sales_whatsapp.sql
 trial_checkins.sql
 trial_nudges.sql
+# WP 3.5 same-day absence and WP 3.4 group digest: new tests, validated by the PR throwaway-database check. Make them blocking once each has passed once post-deploy against production.
+same_day_absence.sql
+group_digest.sql
