@@ -26,3 +26,14 @@ Flag off. Refund rows are append-only records; nothing is deleted.
 
 ## Approval question
 **Build the refund workflow (request, approve, pay-out record) dark? (yes / no)**
+
+## Built (database core, 6 Nov 2026): what was decided and where it differs from the design above
+Migration `20261106140000_wp_4_3_refunds_core.sql`, test `supabase/tests/refunds.sql`. Dark: `feature.finance.refunds` is off for everyone. No app screen yet (a separate PR after this migration is deployed, per AGENTS.md).
+
+1. **Scope is narrower than point 2 above.** v1 refunds only money held as CREDIT: the part of a confirmed/recorded payment not applied to any invoice (overpayment, duplicate, paid in error). Refunding fees already applied to an invoice needs an invoice adjustment first and is NOT built. Reason codes: overpayment, duplicate_payment, paid_in_error, other (note required).
+2. **Accounting (point 4): reuse the existing ledger, do not invent one.** A paid-out refund adds exactly one `payment_reversals` row and no allocation row. `v_student_balances` already subtracts reversals from net received and `cashbook_lines_internal` already lists them as money out, so balances and the cashbook update with no edit to either. `reverse_payment()` is deliberately NOT reused: it pulls amounts back off invoices first, which would re-open an invoice and leave the credit unchanged when the money refunded is credit.
+3. **The ledger changes only at the pay-out record** (money really left), atomically with the pay-out row. Request and approval change no balance. The pay-out re-checks the ledger, so credit applied to a new invoice after approval makes the pay-out refuse.
+4. **Permission (STOP item decided):** request, cancel and pay-out use the existing `finance.write` (bursar, owner). Approval uses a new key `finance.refund.approve`, granted by default to `school_owner` and `principal` only, so the maker and checker are different roles by default.
+5. **Single-person schools (STOP item decided):** when another active user with `finance.refund.approve` exists, the requester cannot approve their own request. This is enforced ALWAYS, not only when `feature.controls.two_person` is on (money going out). When the requester is the only approver, self-approval is allowed and flagged `self_approved: true` in the audit log.
+6. **Not done:** a separate "Refunds" cashbook line (reversals already appear as money out, labelled "Payment reversal"); automated B2C pay-out (still a separate STOP).
+7. **Known quirk, not changed:** `v_student_balances` counts a `pending` payment as received, so `credit_balance` is overstated while an STK push is pending. The refund check does not rely on that alone: it also needs a confirmed/recorded payment with its own unapplied surplus.
