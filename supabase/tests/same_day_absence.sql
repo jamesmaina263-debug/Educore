@@ -57,7 +57,7 @@ begin
     (sa, s4, st, date '2026-03-02', 'absent', 'class'),
     (sa, s5, st, date '2026-03-01', 'absent', 'class'),
     (sa, s6, st, date '2026-03-02', 'absent', 'class');
-  update student_attendance set status = 'present' where student_id = s6 and attendance_date = date '2026-03-02';
+  update student_attendance set status = 'present', edit_reason = 'test correction' where student_id = s6 and attendance_date = date '2026-03-02';
 
   -- 1. no settings row -> nothing, even at a good time
   select count(*) into v_n from same_day_absence_evaluate(mon_ok);
