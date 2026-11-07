@@ -1,7 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
-import { loadPerformanceMarks } from "@/lib/academics/load-performance-marks";
+import { loadStudentPerformanceMarks } from "@/lib/academics/load-performance-marks";
 import { loadReportSettings } from "@/lib/academics/report-settings";
 import type { GradeBand, PerfMark } from "@/lib/academics/performance-analytics";
 
@@ -50,7 +50,7 @@ export async function getStudentPerformanceData(studentId: string): Promise<Stud
       const { data: signed } = await supabase.storage.from("student-documents").createSignedUrl(me.photo_storage_path as string, 300);
       photoUrl = signed?.signedUrl ?? null;
     }
-    const loaded = await loadPerformanceMarks(supabase, { studentId });
+    const loaded = await loadStudentPerformanceMarks(supabase, studentId);
 
     const countStatus = async (status: "present" | "late" | "absent") => {
       const { count } = await supabase.from("student_attendance").select("id", { count: "exact", head: true }).eq("student_id", studentId).eq("status", status);

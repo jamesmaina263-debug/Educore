@@ -1,147 +1,164 @@
 import type { createClient } from "@/lib/supabase/server";
 import type { PerfMark } from "@/lib/academics/performance-analytics";
+import {
+  groupRowToMark,
+  studentRowToMark,
+  validAggregate,
+  type GroupAggregateRow,
+  type StudentAggregateRow,
+} from "@/lib/academics/performance-aggregates";
+import type { PctMark } from "@/lib/academics/performance-analytics";
 
-// Read-only loader for the Academic Performance Analytics module. It runs through the caller's own
-// Supabase session, so existing RLS decides which marks come back; no service role lives here.
+// Read-only loaders for the Academic Performance Analytics module. Both go through database functions
+// (migrations 20261106090000-20261106090200) and run as the signed-in user:
 //
-// What is returned:
-//  - numeric marks (raw_score + the paper's maximum from exam_subjects) as kind "percent";
-//  - CBC band marks (band_id) as kind "level", with the scale's level count so the pure layer can score
-//    them (see performance-analytics.ts);
-//  - only marks from CLOSED exams: open exams are still being entered and would make a year look weaker.
+//  * loadStudentPerformanceMarks: ONE student's multi-year results, via get_student_performance_marks.
+//    That function returns exactly the marks the caller may already read (staff with exams.read, or a
+//    guardian / the student themselves once the report card is released) plus the year, term, paper
+//    maximum and band names that guardians and students cannot join to directly under RLS.
+//  * loadPerformanceAggregates: the whole school (or a teacher's classes), summed in the database
+//    (performance_group_aggregates / performance_student_aggregates) instead of transferring every mark.
 //
-// What is NOT hidden: any row that cannot be placed (its term/year is not readable by this viewer, or a
-// level mark's scale size is unknown) is counted in `skipped`, and a result cut off at MAX_ROWS sets
-// `truncated`, so the UI can say so instead of showing a smaller picture as if it were the whole one.
+// Only closed exams count. Rows that cannot be placed are counted in `skipped`; a result cut off at the row
+// cap sets `truncated`, so the UI says so instead of presenting a smaller picture as the whole one.
 
 type Client = Awaited<ReturnType<typeof createClient>>;
 
 const PAGE = 1000;
 export const MAX_ROWS = 100_000;
+export const MAX_AGGREGATE_ROWS = 200_000;
 
-interface Year {
-  id: string;
-  name: string;
-  start_date: string;
+/** Page through an RPC that returns a set, up to `cap` rows, reporting whether the cap cut it short. */
+async function pageRpc<T>(fetchPage: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: { message: string } | null }>, cap: number): Promise<{ rows: T[]; truncated: boolean }> {
+  const rows: T[] = [];
+  for (let from = 0; ; from += PAGE) {
+    if (from >= cap) return { rows, truncated: true };
+    const { data, error } = await fetchPage(from, from + PAGE - 1);
+    if (error) throw new Error(`Query failed: ${error.message}`);
+    const page = data ?? [];
+    rows.push(...page);
+    if (page.length < PAGE) return { rows, truncated: false };
+  }
 }
-interface TermShape {
-  term_number: number;
-  academic_years: Year | Year[] | null;
-}
-interface Band {
-  label: string;
-  points: number | string | null;
-  level_order: number;
-  grading_scale_id: string;
-}
-interface Row {
+
+// ------------------------------------------------------------------- one student
+
+export interface StudentMarkRow {
   student_id: string;
   class_id: string;
+  class_name: string;
   subject_id: string;
+  subject_name: string;
   exam_id: string;
-  raw_score: number | null;
-  band_id: string | null;
-  subjects: { name: string } | { name: string }[] | null;
-  classes: { name: string } | { name: string }[] | null;
-  exam_subjects: { max_score: number } | { max_score: number }[] | null;
-  grading_scale_bands: Band | Band[] | null;
-  exams: { name: string | null; terms: TermShape | TermShape[] | null } | { name: string | null; terms: TermShape | TermShape[] | null }[] | null;
+  exam_name: string | null;
+  raw_score: number | string | null;
+  max_score: number | string | null;
+  band_label: string | null;
+  band_points: number | string | null;
+  band_level_order: number | null;
+  band_scale_id: string | null;
+  level_count: number | null;
+  term_number: number;
+  year_id: string;
+  year_name: string;
+  year_start: string;
 }
 
-const one = <T,>(v: T | T[] | null | undefined): T | null => (Array.isArray(v) ? (v[0] ?? null) : (v ?? null));
+const num = (v: number | string | null): number | null => {
+  if (v === null || v === undefined) return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+};
 
-export interface LoadedPerformanceMarks {
-  marks: PerfMark[];
-  /** Rows read but not usable for this viewer (unreadable term/year, unknown scale size). */
-  skipped: number;
-  /** True when the row cap was reached, so the figures cover only part of the data. */
-  truncated: boolean;
-}
-
-export interface LoadOptions {
-  studentId?: string;
-  /** Restrict to these classes (teacher scope). An empty array returns nothing. */
-  classIds?: string[];
-}
-
-export function mapRows(rows: Row[], levelCounts: Map<string, number>): { marks: PerfMark[]; skipped: number } {
+/**
+ * Maps the function's rows. A mark with a raw score is a PERCENT mark; only a mark with no raw score is a
+ * CBC level mark. The order matters: numeric-model marks also carry a derived band, so checking the band
+ * first would score every numeric mark as a CBC level.
+ */
+export function mapStudentRows(rows: StudentMarkRow[]): { marks: PerfMark[]; skipped: number } {
   const marks: PerfMark[] = [];
   let skipped = 0;
   for (const r of rows) {
-    const term = one(one(r.exams)?.terms ?? null);
-    const year = one(term?.academic_years ?? null);
-    if (!term || !year) {
-      skipped++;
-      continue;
-    }
     const base = {
       studentId: r.student_id,
       classId: r.class_id,
-      classLabel: one(r.classes)?.name ?? "Unknown class",
+      classLabel: r.class_name ?? "Unknown class",
       subjectId: r.subject_id,
-      subjectName: one(r.subjects)?.name ?? "Unknown subject",
-      yearId: year.id,
-      yearName: year.name,
-      yearStart: year.start_date,
-      termNumber: term.term_number,
+      subjectName: r.subject_name ?? "Unknown subject",
+      yearId: r.year_id,
+      yearName: r.year_name,
+      yearStart: r.year_start,
+      termNumber: Number(r.term_number),
       examId: r.exam_id,
-      examName: one(r.exams)?.name ?? undefined,
+      examName: r.exam_name ?? undefined,
     };
-    const band = one(r.grading_scale_bands);
-    if (r.band_id && band) {
-      const count = levelCounts.get(band.grading_scale_id) ?? null;
-      if (count === null) {
-        skipped++;
+    const raw = num(r.raw_score);
+    if (raw !== null) {
+      marks.push({ ...base, kind: "percent", rawScore: raw, maxScore: num(r.max_score), levelOrder: null, levelCount: null, levelPoints: null, levelLabel: null });
+    } else if (r.band_label !== null && r.band_level_order !== null) {
+      if (r.level_count === null) {
+        skipped++; // scale size unknown: cannot score honestly
         continue;
       }
-      const points = band.points === null ? null : Number(band.points);
-      marks.push({ ...base, kind: "level", rawScore: null, maxScore: null, levelOrder: band.level_order, levelCount: count, levelPoints: Number.isFinite(points) ? points : null, levelLabel: band.label });
-    } else if (r.raw_score !== null) {
-      marks.push({ ...base, kind: "percent", rawScore: r.raw_score, maxScore: one(r.exam_subjects)?.max_score ?? null, levelOrder: null, levelCount: null, levelPoints: null, levelLabel: null });
+      marks.push({ ...base, kind: "level", rawScore: null, maxScore: null, levelOrder: r.band_level_order, levelCount: r.level_count, levelPoints: num(r.band_points), levelLabel: r.band_label });
     }
   }
   return { marks, skipped };
 }
 
-export async function loadPerformanceMarks(supabase: Client, opts: LoadOptions = {}): Promise<LoadedPerformanceMarks> {
-  if (opts.classIds && opts.classIds.length === 0) return { marks: [], skipped: 0, truncated: false };
+export interface LoadedStudentMarks {
+  marks: PerfMark[];
+  skipped: number;
+  truncated: boolean;
+}
 
-  const rows: Row[] = [];
-  let truncated = false;
-  for (let from = 0; ; from += PAGE) {
-    if (from >= MAX_ROWS) {
-      truncated = true;
-      break;
-    }
-    let q = supabase
-      .from("marks")
-      .select(
-        "student_id, class_id, subject_id, exam_id, raw_score, band_id, subjects(name), classes(name), exam_subjects(max_score), grading_scale_bands(label, points, level_order, grading_scale_id), exams!inner(name, status, terms(term_number, academic_years(id, name, start_date)))",
-      )
-      .eq("exams.status", "closed")
-      .or("raw_score.not.is.null,band_id.not.is.null");
-    if (opts.studentId) q = q.eq("student_id", opts.studentId);
-    if (opts.classIds) q = q.in("class_id", opts.classIds);
-    const { data, error } = (await q.order("id", { ascending: true }).range(from, from + PAGE - 1)) as unknown as {
-      data: Row[] | null;
-      error: { message: string } | null;
-    };
-    if (error) throw new Error(`Query failed: ${error.message}`);
-    const page = data ?? [];
-    rows.push(...page);
-    if (page.length < PAGE) break;
-  }
+export async function loadStudentPerformanceMarks(supabase: Client, studentId: string): Promise<LoadedStudentMarks> {
+  const { rows, truncated } = await pageRpc<StudentMarkRow>(
+    (from, to) => supabase.rpc("get_student_performance_marks", { p_student_id: studentId }).range(from, to) as unknown as PromiseLike<{ data: StudentMarkRow[] | null; error: { message: string } | null }>,
+    MAX_ROWS,
+  );
+  return { ...mapStudentRows(rows), truncated };
+}
 
-  // Number of levels per scale: needed to score a level mark (best level = count ... worst = 1).
-  const scaleIds = [...new Set(rows.map((r) => one(r.grading_scale_bands)?.grading_scale_id).filter((x): x is string => !!x))];
-  const levelCounts = new Map<string, number>();
-  if (scaleIds.length > 0) {
-    const { data, error } = await supabase.from("grading_scale_bands").select("grading_scale_id, level_order").in("grading_scale_id", scaleIds);
-    if (error) throw new Error(`Query failed: ${error.message}`);
-    for (const b of (data ?? []) as { grading_scale_id: string; level_order: number }[]) {
-      levelCounts.set(b.grading_scale_id, Math.max(levelCounts.get(b.grading_scale_id) ?? 0, b.level_order));
-    }
-  }
+// ------------------------------------------------------------------- whole school
 
-  return { ...mapRows(rows, levelCounts), truncated };
+export interface LoadAggregateOptions {
+  /** Restrict to these classes (teacher scope). An empty array returns nothing. */
+  classIds?: string[];
+  /** Filters applied in the database to the per-student rows. */
+  classId?: string;
+  subjectId?: string;
+}
+
+export interface LoadedAggregates {
+  /** One row per student x class x year x term x model, already limited to the chosen class / subject. */
+  studentMarks: PctMark[];
+  /** One row per class x subject x year x term x model. */
+  groupMarks: PctMark[];
+  truncated: boolean;
+}
+
+export async function loadPerformanceAggregates(supabase: Client, opts: LoadAggregateOptions = {}): Promise<LoadedAggregates> {
+  if (opts.classIds && opts.classIds.length === 0) return { studentMarks: [], groupMarks: [], truncated: false };
+  const scope = opts.classIds ?? null;
+
+  const [groups, students] = await Promise.all([
+    pageRpc<GroupAggregateRow>(
+      (from, to) => supabase.rpc("performance_group_aggregates", { p_class_ids: scope }).range(from, to) as unknown as PromiseLike<{ data: GroupAggregateRow[] | null; error: { message: string } | null }>,
+      MAX_AGGREGATE_ROWS,
+    ),
+    pageRpc<StudentAggregateRow>(
+      (from, to) =>
+        supabase
+          .rpc("performance_student_aggregates", { p_class_ids: scope, p_class_id: opts.classId ?? null, p_subject_id: opts.subjectId ?? null })
+          .range(from, to) as unknown as PromiseLike<{ data: StudentAggregateRow[] | null; error: { message: string } | null }>,
+      MAX_AGGREGATE_ROWS,
+    ),
+  ]);
+
+  return {
+    groupMarks: groups.rows.filter(validAggregate).map(groupRowToMark),
+    studentMarks: students.rows.filter(validAggregate).map(studentRowToMark),
+    truncated: groups.truncated || students.truncated,
+  };
 }

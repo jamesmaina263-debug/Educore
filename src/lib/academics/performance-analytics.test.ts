@@ -6,6 +6,7 @@ import {
   buildSubjectProgression,
   configFor,
   levelBands,
+  levelBandsFromScale,
   levelPoints,
   buildTermAverages,
   buildYearlySeries,
@@ -384,5 +385,13 @@ describe("reproduces the live school's CBC figures", () => {
   it("reads the 3.5 -> 3.09 fall as a decline on the level scale", () => {
     const years = buildYearlySeries(marks);
     expect(summarizeHistory(marks, years, configFor("level", 4)).trend).toBe("declining");
+  });
+});
+
+describe("levelBandsFromScale", () => {
+  it("builds the same bands from a scale's levels as from marks on that scale", () => {
+    const fromMarks = levelBands(normaliseMarks([lvl(1), lvl(2), lvl(3), lvl(4)]));
+    const fromScale = levelBandsFromScale(LABELS.map((label, i) => ({ label, level_order: i + 1, points: null })));
+    expect(fromScale).toEqual(fromMarks);
   });
 });

@@ -81,11 +81,19 @@ export interface PerfMark {
   levelCount: number | null;
   levelPoints: number | null;
   levelLabel: string | null;
+  /** Grading scale the level belongs to (set on database-aggregated rows, used to build category bands). */
+  scaleId?: string | null;
 }
 
 /** A mark reduced to one comparable number: a percentage, or level points. */
 export interface PctMark extends PerfMark {
   score: number;
+  /**
+   * How many individual marks this row stands for. Absent (= 1) for a single mark; set when the database
+   * has already summed marks (score is then their mean), so every average below is a weighted mean and a
+   * pre-aggregated input gives exactly the same answer as the individual marks would.
+   */
+  weight?: number;
 }
 export type ScoredMark = PctMark;
 
@@ -115,9 +123,13 @@ export interface HistorySummary {
 
 export const round1 = (n: number): number => Math.round(n * 10) / 10;
 
-function mean(values: number[]): number | null {
-  if (values.length === 0) return null;
-  return values.reduce((a, b) => a + b, 0) / values.length;
+/** Number of individual marks a set of rows stands for. */
+export const wcount = (rows: PctMark[]): number => rows.reduce((a, r) => a + (r.weight ?? 1), 0);
+
+/** Mean score of a set of rows, each counted as many times as its weight. Null when empty. */
+export function wmean(rows: PctMark[]): number | null {
+  const n = wcount(rows);
+  return n === 0 ? null : rows.reduce((a, r) => a + r.score * (r.weight ?? 1), 0) / n;
 }
 
 /** Reduces marks to one comparable score each, dropping anything that cannot be scored honestly. */
@@ -137,14 +149,19 @@ export function normaliseMarks(marks: PerfMark[]): PctMark[] {
   return out;
 }
 
-/** Bands for the category breakdown of a LEVEL scale: each level owns the half-point either side of its points. */
-export function levelBands(marks: PctMark[]): GradeBand[] {
+interface LevelEntry {
+  label: string;
+  order: number;
+  count: number;
+  points: number | null;
+}
+
+function bandsFromLevels(entries: LevelEntry[]): GradeBand[] {
   const seen = new Map<string, GradeBand>();
-  for (const m of marks) {
-    if (m.kind !== "level" || m.levelOrder === null || m.levelCount === null || !m.levelLabel) continue;
-    if (seen.has(m.levelLabel)) continue;
-    const p = levelPoints(m.levelPoints, m.levelOrder, m.levelCount);
-    seen.set(m.levelLabel, { label: m.levelLabel, min: m.levelOrder === m.levelCount ? p - 0.5 : p - 0.5, max: p + 0.49, order: m.levelOrder });
+  for (const e of entries) {
+    if (seen.has(e.label)) continue;
+    const p = levelPoints(e.points, e.order, e.count);
+    seen.set(e.label, { label: e.label, min: p - 0.5, max: p + 0.49, order: e.order });
   }
   const bands = [...seen.values()].sort((a, b) => a.order - b.order);
   if (bands.length > 0) {
@@ -152,6 +169,21 @@ export function levelBands(marks: PctMark[]): GradeBand[] {
     bands[bands.length - 1].min = Math.min(bands[bands.length - 1].min, 0.5); // worst level absorbs the bottom edge
   }
   return bands;
+}
+
+/** Bands for the category breakdown of a LEVEL scale: each level owns the half-point either side of its points. */
+export function levelBands(marks: PctMark[]): GradeBand[] {
+  return bandsFromLevels(
+    marks
+      .filter((m) => m.kind === "level" && m.levelOrder !== null && m.levelCount !== null && !!m.levelLabel)
+      .map((m) => ({ label: m.levelLabel as string, order: m.levelOrder as number, count: m.levelCount as number, points: m.levelPoints })),
+  );
+}
+
+/** The same bands straight from a grading scale's own levels (used when marks arrive pre-aggregated by the database). */
+export function levelBandsFromScale(levels: { label: string; level_order: number; points: number | string | null }[]): GradeBand[] {
+  const count = Math.max(0, ...levels.map((l) => l.level_order));
+  return bandsFromLevels(levels.map((l) => ({ label: l.label, order: l.level_order, count, points: l.points === null ? null : Number(l.points) })));
 }
 
 function groupBy<T, K>(items: T[], key: (t: T) => K): Map<K, T[]> {
@@ -169,7 +201,7 @@ function groupBy<T, K>(items: T[], key: (t: T) => K): Map<K, T[]> {
 export function buildYearlySeries(marks: PctMark[], expectedTerms = DEFAULT_EXPECTED_TERMS): YearPoint[] {
   const points: YearPoint[] = [];
   for (const [yearId, rows] of groupBy(marks, (m) => m.yearId)) {
-    const avg = mean(rows.map((r) => r.score));
+    const avg = wmean(rows);
     if (avg === null) continue;
     const terms = [...new Set(rows.map((r) => r.termNumber))].sort((a, b) => a - b);
     points.push({
@@ -177,7 +209,7 @@ export function buildYearlySeries(marks: PctMark[], expectedTerms = DEFAULT_EXPE
       yearName: rows[0].yearName,
       yearStart: rows[0].yearStart,
       average: avg,
-      assessments: rows.length,
+      assessments: wcount(rows),
       termsCovered: terms,
       incomplete: terms.length < expectedTerms,
       changeFromPrevious: null,
@@ -202,7 +234,7 @@ export function summarizeHistory(marks: PctMark[], points: YearPoint[], cfg: Ana
     growthSinceEnrolment: points.length >= 2 ? points[points.length - 1].average - points[0].average : null,
     highestYear: highest,
     lowestYear: lowest,
-    historicalAverage: mean(marks.map((m) => m.score)),
+    historicalAverage: wmean(marks),
     trend: trend.direction,
   };
 }
@@ -234,7 +266,7 @@ export interface TermAverage {
 
 export function buildTermAverages(marks: PctMark[]): TermAverage[] {
   return [...groupBy(marks, (m) => m.termNumber)]
-    .map(([termNumber, rows]) => ({ termNumber, average: mean(rows.map((r) => r.score)) as number, assessments: rows.length }))
+    .map(([termNumber, rows]) => ({ termNumber, average: wmean(rows) as number, assessments: wcount(rows) }))
     .sort((a, b) => a.termNumber - b.termNumber);
 }
 
@@ -297,12 +329,12 @@ export interface SchoolSummary {
   unbanded: number;
 }
 
-function applyFilter(marks: PctMark[], f: SchoolFilter, skipYear: boolean): PctMark[] {
+function applyFilter(marks: PctMark[], f: SchoolFilter, skipYear: boolean, ignoreSubject = false): PctMark[] {
   return marks.filter(
     (m) =>
       (skipYear || !f.yearId || m.yearId === f.yearId) &&
       (!f.classId || m.classId === f.classId) &&
-      (!f.subjectId || m.subjectId === f.subjectId) &&
+      (ignoreSubject || !f.subjectId || m.subjectId === f.subjectId) &&
       (!f.termNumber || m.termNumber === f.termNumber),
   );
 }
@@ -317,8 +349,8 @@ function toNamed(groups: Map<string, PctMark[]>, label: (rows: PctMark[]) => str
   return [...groups].map(([id, rows]) => ({
     id,
     label: label(rows),
-    average: mean(rows.map((r) => r.score)) as number,
-    assessments: rows.length,
+    average: wmean(rows) as number,
+    assessments: wcount(rows),
   }));
 }
 
@@ -328,13 +360,23 @@ export function summarizeSchool(
   bands: GradeBand[] = [],
   cfg: AnalyticsConfig = configFor("percent"),
   expectedTerms = DEFAULT_EXPECTED_TERMS,
+  groupMarks?: PctMark[],
 ): SchoolSummary {
-  const scoped = applyFilter(allMarks, filter, false);
+  // Two input shapes give identical results:
+  //  * per-mark: `allMarks` is every mark (student + class + subject on each);
+  //  * pre-aggregated by the database (performance_*_aggregates): `allMarks` are STUDENT rows (student x class x
+  //    year x term, already limited to the chosen subject, so the subject filter is not re-applied to them) and
+  //    `groupMarks` are CLASS x SUBJECT rows (year x term). Student figures use the first, class/subject/year/term
+  //    figures use the second. Rows carry a weight, so the means are exact.
+  const aggregated = groupMarks !== undefined;
+  const scoped = applyFilter(allMarks, filter, false, aggregated);
   // Trend labels need every year, so they ignore the year filter.
-  const history = applyFilter(allMarks, filter, true);
+  const history = applyFilter(allMarks, filter, true, aggregated);
+  const groupScoped = aggregated ? applyFilter(groupMarks, filter, false) : scoped;
+  const groupHistory = aggregated ? applyFilter(groupMarks, filter, true) : history;
 
   const byStudent = groupBy(scoped, (m) => m.studentId);
-  const studentAverages = [...byStudent].map(([studentId, rows]) => ({ studentId, average: mean(rows.map((r) => r.score)) as number }));
+  const studentAverages = [...byStudent].map(([studentId, rows]) => ({ studentId, average: wmean(rows) as number }));
 
   let improving = 0;
   let declining = 0;
@@ -349,11 +391,11 @@ export function summarizeSchool(
     else insufficientHistory++;
   }
 
-  const classAverages = toNamed(groupBy(scoped, (m) => m.classId), (r) => r[0].classLabel).sort((a, b) => b.average - a.average);
+  const classAverages = toNamed(groupBy(groupScoped, (m) => m.classId), (r) => r[0].classLabel).sort((a, b) => b.average - a.average);
 
-  const subjectAverages: SubjectAverage[] = toNamed(groupBy(scoped, (m) => m.subjectId), (r) => r[0].subjectName)
+  const subjectAverages: SubjectAverage[] = toNamed(groupBy(groupScoped, (m) => m.subjectId), (r) => r[0].subjectName)
     .map((s) => {
-      const rows = history.filter((m) => m.subjectId === s.id);
+      const rows = groupHistory.filter((m) => m.subjectId === s.id);
       const series = buildYearlySeries(rows, expectedTerms);
       const change = series.length >= 2 ? series[series.length - 1].average - series[series.length - 2].average : null;
       const needsIntervention = s.average < cfg.threshold || (change !== null && change < -cfg.stable);
@@ -374,9 +416,9 @@ export function summarizeSchool(
 
   return {
     students,
-    classByYear: buildMatrix(history, (m) => m.classLabel),
-    subjectByYear: buildMatrix(history, (m) => m.subjectName),
-    overallAverage: mean(scoped.map((m) => m.score)),
+    classByYear: buildMatrix(groupHistory, (m) => m.classLabel),
+    subjectByYear: buildMatrix(groupHistory, (m) => m.subjectName),
+    overallAverage: wmean(groupScoped),
     studentsAssessed: studentAverages.length,
     improving,
     declining,
@@ -388,8 +430,8 @@ export function summarizeSchool(
     subjectAverages,
     bestSubject: subjectAverages[0] ?? null,
     weakestSubject: subjectAverages.length > 0 ? subjectAverages[subjectAverages.length - 1] : null,
-    yearAverages: buildYearlySeries(history, expectedTerms),
-    termAverages: buildTermAverages(scoped),
+    yearAverages: buildYearlySeries(groupHistory, expectedTerms),
+    termAverages: buildTermAverages(groupScoped),
     distribution: [...dist].map(([label, count]) => ({ label, count })),
     unbanded,
   };
@@ -404,7 +446,7 @@ export function buildMatrix(marks: PctMark[], category: (m: PctMark) => string):
       marks.filter((m) => m.yearId === y.yearId),
       category,
     )) {
-      row[cat] = round1(mean(rows.map((r) => r.score)) as number);
+      row[cat] = round1(wmean(rows) as number);
     }
     return row;
   });
@@ -435,9 +477,9 @@ export function buildEarlyWarnings(marks: PctMark[], cfg: AnalyticsConfig = conf
   const rows: EarlyWarningRow[] = [];
 
   for (const [studentId, own] of groupBy(marks, (m) => m.studentId)) {
-    if (own.length < minAssessments) continue;
+    if (wcount(own) < minAssessments) continue;
     const byTerm = [...groupBy(own, (m) => `${m.yearStart}|${m.termNumber}`)]
-      .map(([key, r]) => ({ key, average: mean(r.map((x) => x.score)) as number }))
+      .map(([key, r]) => ({ key, average: wmean(r) as number }))
       .sort((a, b) => a.key.localeCompare(b.key));
     const values = byTerm.map((t) => t.average);
     const latest = values[values.length - 1];
@@ -451,7 +493,7 @@ export function buildEarlyWarnings(marks: PctMark[], cfg: AnalyticsConfig = conf
     if (values.length >= 3 && Math.max(...values) - Math.min(...values) <= cfg.stagnantSpread) flags.push("stagnant");
     if (latest < cfg.threshold) flags.push("below_threshold");
 
-    if (flags.length > 0) rows.push({ studentId, latestAverage: latest, change, termsOnFile: values.length, assessments: own.length, flags });
+    if (flags.length > 0) rows.push({ studentId, latestAverage: latest, change, termsOnFile: values.length, assessments: wcount(own), flags });
   }
   return rows.sort((a, b) => a.latestAverage - b.latestAverage);
 }
