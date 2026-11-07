@@ -19,7 +19,7 @@ begin
   select id into f_dir from platform_feature_flags where key = 'feature.bot.director';
   select id into f_hr from platform_feature_flags where key = 'feature.bot.hr_approvals';
   assert f_hr is not null, 'flag catalog entry exists';
-  assert not exists (select 1 from school_feature_flags where flag_id = f_hr and enabled), 'flag off everywhere';
+  -- (production may have the flag on for real schools; the fixture school below starts with it off)
 
   insert into schools (id, name, slug, application_number_prefix) values (sa, 'Leave WA Test', 'leavewa-test-a', 'LWT');
   insert into auth.users (id, aud, role, email) values

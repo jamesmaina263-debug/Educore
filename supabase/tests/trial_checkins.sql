@@ -110,7 +110,7 @@ begin
 
   -- super admin reads; nobody can write the table directly
   perform pg_temp.as_user(staff);
-  select count(*) into n from trial_checkins;
+  select count(*) into n from trial_checkins where school_id = trial_school;   -- production holds real check-ins too
   if n <> 2 then raise exception 'FAIL 3d: super admin sees % rows', n; end if;
   v := pg_temp.err(format('insert into trial_checkins (school_id, channel, outcome) values (%L, ''call'', ''no_answer'')', trial_school));
   if v = '' then raise exception 'FAIL 3e: direct insert allowed'; end if;
