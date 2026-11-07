@@ -219,7 +219,9 @@ begin
   perform set_config('request.jwt.claims', json_build_object('sub', u_tb, 'role', 'authenticated')::text, true);
   assert pg_temp.sqlstate_of(format('select tutor_qa_set_opt_out(%L, false)', ch1)) = '42501', '11b: other school staff cannot';
   perform set_config('request.jwt.claims', json_build_object('sub', u_t, 'role', 'authenticated')::text, true);
-  assert tutor_qa_opt_out_status(ch1) = true, '11b: school staff can read it';
+  assert pg_temp.sqlstate_of(format('select tutor_qa_opt_out_status(%L)', ch1)) = '42501', '11b: a teacher without academics.write cannot manage a family''s setting';
+  perform set_config('request.jwt.claims', json_build_object('sub', u_dp, 'role', 'authenticated')::text, true);
+  assert tutor_qa_opt_out_status(ch1) = true, '11b: staff who can write academic records can read it';
   -- delete keeps an unreviewed safeguarding flag
   perform set_config('request.jwt.claims', json_build_object('sub', u_p1, 'role', 'authenticated')::text, true);
   res := tutor_qa_delete_questions(ch1);
@@ -230,7 +232,7 @@ begin
   select count(*) into n from tutor_qa_opt_outs where student_id = ch1 and school_id = sa; assert n = 1, '11b: exactly one opt-out row';
   -- staff can switch it back on at a family's request
   execute 'set local role authenticated';
-  perform set_config('request.jwt.claims', json_build_object('sub', u_t, 'role', 'authenticated')::text, true);
+  perform set_config('request.jwt.claims', json_build_object('sub', u_dp, 'role', 'authenticated')::text, true);
   perform tutor_qa_set_opt_out(ch1, false);
   assert tutor_qa_opt_out_status(ch1) = false, '11b: staff switched it back on';
   perform set_config('request.jwt.claims', json_build_object('sub', u_p1, 'role', 'authenticated')::text, true);
