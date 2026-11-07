@@ -39,7 +39,8 @@ begin
 
   select id into v_flag from platform_feature_flags where key = 'feature.finance.pay_by_link';
   assert v_flag is not null, 'flag catalog entry exists';
-  assert not exists (select 1 from school_feature_flags where flag_id = v_flag and enabled), 'flag is off for every school';
+  -- Flags are now ON for real schools in production, so a global 'off for everyone' guard is no longer true and says nothing about this test's brand-new fixture schools.
+  assert not exists (select 1 from school_feature_flags where flag_id = v_flag and school_id = sa and enabled), 'flag is off for the fixture school';
 
   -- 1. flag OFF: staff cannot create
   execute 'set local role authenticated';

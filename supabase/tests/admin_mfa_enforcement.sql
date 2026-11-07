@@ -31,12 +31,16 @@ begin
   if v_ok is not true then raise exception 'FAIL: flag off, aal1 super admin should still be accepted'; end if;
 
   -- 2. set_admin_mfa_required(true) must REFUSE while there are no verified factors.
-  begin
-    perform set_admin_mfa_required(true, 1);
-    raise exception 'FAIL: enforcement turned on with zero verified factors';
-  exception when others then
-    if sqlerrm like 'FAIL:%' then raise; end if;
-  end;
+  -- Only meaningful while no verified factor exists anywhere. Production now has one (a real admin
+  -- enrolled), so the 'zero factors' precondition cannot be recreated there without touching auth data.
+  if not exists (select 1 from auth.mfa_factors where status = 'verified') then
+    begin
+      perform set_admin_mfa_required(true, 1);
+      raise exception 'FAIL: enforcement turned on with zero verified factors';
+    exception when others then
+      if sqlerrm like 'FAIL:%' then raise; end if;
+    end;
+  end if;
 
   -- 3. Give the admin one verified TOTP factor, then enforcement may be turned on.
   insert into auth.mfa_factors (id, user_id, friendly_name, factor_type, status, created_at, updated_at)

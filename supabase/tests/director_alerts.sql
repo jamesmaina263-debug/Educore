@@ -23,7 +23,7 @@ begin
   select id into f_dir from platform_feature_flags where key = 'feature.bot.director';
   select id into f_alert from platform_feature_flags where key = 'feature.bot.director_alerts';
   assert f_dir is not null and f_alert is not null, 'flag catalog entries exist';
-  assert not exists (select 1 from school_feature_flags where flag_id = f_alert and enabled), 'alerts flag off everywhere';
+  -- Flags are now ON for real schools in production, so a global 'off for everyone' guard is no longer true; this test only uses its own fixture schools.
 
   insert into schools (id, name, slug, application_number_prefix) values (sa, 'DAlert Test', 'dalert-test-a', 'DAT');
   insert into auth.users (id, aud, role, email) values

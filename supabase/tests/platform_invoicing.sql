@@ -11,7 +11,7 @@ create or replace function pg_temp.as_user(p_uid uuid) returns void language plp
 begin
   execute 'reset role';
   execute 'set local role authenticated';
-  perform set_config('request.jwt.claims', json_build_object('sub', p_uid, 'role', 'authenticated')::text, true);
+  perform set_config('request.jwt.claims', json_build_object('sub', p_uid, 'role', 'authenticated', 'aal', 'aal2')::text, true);
 end $$;
 
 create or replace function pg_temp.as_service() returns void language plpgsql as $$

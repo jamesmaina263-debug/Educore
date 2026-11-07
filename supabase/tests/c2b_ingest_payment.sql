@@ -23,7 +23,7 @@ declare
 begin
   select id into v_flag_id from platform_feature_flags where lower(key) = 'feature.finance.c2b_capture';
   assert v_flag_id is not null, 'flag catalog row exists';
-  assert not exists (select 1 from school_feature_flags where school_feature_flags.flag_id = v_flag_id and enabled), 'flag is enabled for nobody';
+  -- Flags are now ON for real schools in production, so a global 'off for everyone' guard is no longer true and says nothing about this test's brand-new fixture schools.
 
   -- ---------- fixtures ----------
   insert into schools (id, name, slug, application_number_prefix) values
