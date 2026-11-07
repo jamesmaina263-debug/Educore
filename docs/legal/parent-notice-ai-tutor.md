@@ -17,7 +17,7 @@ From [date], [School name] is trying a study helper in the EduCore learning port
 - **We ask children not to type names, phone numbers or addresses.** The system blocks many of these. We do not send your child's name or account details to the AI service. The question text is processed by Google's AI service on our behalf, and stored in Frankfurt, Germany.
 - **Child safety first.** If a message suggests that a child may be unsafe or unhappy, the child is told to speak to a trusted adult and a member of staff, [safeguarding contact name], follows our safeguarding procedure.
 - **Limits.** Each child can ask up to [10] questions a day.
-- **Your choices.** You can ask us to see, correct or delete your child's questions, or to stop your child using the helper, by contacting [office email / phone]. We will respond within [14] days. [Interim: the school office passes your request to EduCore support, who act on it.]
+- **Your choices.** You can stop the helper for your child, switch it back on, and delete your child's saved questions yourself in the learning portal, at any time. You can also ask the school office to do it for you, or ask to see or correct your child's questions, at [office email / phone]. We will respond within [14] days. (A message that suggests a child may be unsafe is kept until a member of staff has followed it up.)
 - **Why we are doing this.** To help children study with material their own teacher has approved.
 
 Questions or concerns: [name, role, contact].
@@ -38,7 +38,7 @@ Kuanzia [tarehe], [Jina la shule] inajaribu msaidizi wa kujisomea kwenye tovuti 
 - **Tunawaomba watoto wasiandike majina, nambari za simu wala anwani.** Mfumo huzuia mengi ya haya. Hatutumi jina la mtoto wako wala taarifa za akaunti yake kwa huduma ya AI. Maandishi ya swali huchakatwa na huduma ya AI ya Google kwa niaba yetu, na kuhifadhiwa Frankfurt, Ujerumani.
 - **Usalama wa mtoto kwanza.** Ujumbe ukionyesha kuwa mtoto huenda hayuko salama au ana huzuni, mtoto huambiwa aongee na mtu mzima anayemwamini, na mfanyakazi, [jina la mhusika wa ulinzi wa watoto], hufuata utaratibu wa shule wa ulinzi wa watoto.
 - **Kikomo.** Kila mtoto anaweza kuuliza hadi maswali [10] kwa siku.
-- **Chaguo lako.** Unaweza kuomba kuona, kusahihisha au kufuta maswali ya mtoto wako, au kumzuia asitumie msaidizi, kwa kuwasiliana na [barua pepe / simu ya ofisi]. Tutajibu ndani ya siku [14].
+- **Chaguo lako.** Unaweza kumzuia mtoto wako asitumie msaidizi, kumruhusu tena, na kufuta maswali yake yaliyohifadhiwa mwenyewe kwenye tovuti ya masomo wakati wowote. Unaweza pia kuomba ofisi ya shule ikufanyie hivyo, au kuomba kuona au kusahihisha maswali ya mtoto wako, kupitia [barua pepe / simu ya ofisi]. Tutajibu ndani ya siku [14]. (Ujumbe unaoonyesha mtoto huenda hayuko salama huhifadhiwa hadi mfanyakazi aufuatilie.)
 
 Maswali au wasiwasi: [jina, cheo, mawasiliano].
 Wako mwaminifu, [Mwalimu Mkuu]

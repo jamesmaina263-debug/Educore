@@ -62,6 +62,7 @@ export async function askTutorQuestionAction(input: { studentId: string; questio
     if (!(checkError.code === "54000" && verdict.action === "safeguarding")) {
       if (checkError.code === "54000") return { ok: true, status: "not_covered", text: QA_MESSAGES.limit[lang], sources: [] };
       if (checkError.code === "55000") return { ok: false, error: "Questions are not switched on for your school." };
+      if (checkError.code === "TQ001") return { ok: false, error: "Questions are switched off for this learner." };
       return { ok: false, error: "You can't ask a question for this learner." };
     }
   }
@@ -136,4 +137,34 @@ export async function askTutorQuestionAction(input: { studentId: string; questio
   if (!saved) return { ok: true, status: "not_covered", text: QA_MESSAGES.not_covered[lang], sources: [] };
   const titles = chosen.filter((g) => parsed.usedIds.includes(g.id)).map((g) => g.title);
   return { ok: true, status: "answered", text: parsed.answer, sources: titles };
+}
+
+export type PrivacyResult = { ok: true; deleted?: number; kept?: number } | { ok: false; error: string };
+
+// A family (or the learner, for switching OFF only) stops or restarts the question helper for one learner. The database
+// decides who may do this: the learner's own account (off only), a linked parent or guardian, or school staff.
+export async function setQaOptOutAction(input: { studentId: string; optOut: boolean }): Promise<PrivacyResult> {
+  if (!isUuid(input.studentId)) return { ok: false, error: "Choose a learner." };
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "You are signed out. Sign in again." };
+  const { error } = await supabase.rpc("tutor_qa_set_opt_out", { p_student: input.studentId, p_opt_out: input.optOut === true });
+  if (error) {
+    if (error.code === "42501") return { ok: false, error: input.optOut ? "You can't change this setting." : "Ask a parent, guardian or the school to switch questions back on." };
+    return { ok: false, error: "Could not save. Try again." };
+  }
+  return { ok: true };
+}
+
+// Deletes the learner's stored questions. A worrying message that staff have not yet looked at is kept until they have, and
+// the count kept is returned so the screen can say so honestly.
+export async function deleteQaQuestionsAction(input: { studentId: string }): Promise<PrivacyResult> {
+  if (!isUuid(input.studentId)) return { ok: false, error: "Choose a learner." };
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "You are signed out. Sign in again." };
+  const { data, error } = await supabase.rpc("tutor_qa_delete_questions", { p_student: input.studentId });
+  if (error) return { ok: false, error: error.code === "42501" ? "You can't delete these questions." : "Could not delete. Try again." };
+  const r = (data ?? {}) as { deleted?: number; kept_for_safeguarding?: number };
+  return { ok: true, deleted: Number(r.deleted ?? 0), kept: Number(r.kept_for_safeguarding ?? 0) };
 }
