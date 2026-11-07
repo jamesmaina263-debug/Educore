@@ -109,6 +109,9 @@ begin
   -- 1. Creation, numbering, calculation
   -- =========================================================
   perform pg_temp.as_user(staff);
+  -- Production now has VAT on and auto-issue/auto-send on; the arithmetic below assumes the defaults.
+  -- Pinned inside this rolled-back transaction only (tax is switched on explicitly further down).
+  perform set_platform_billing_settings('{"tax_enabled":false,"auto_issue":false,"auto_send":false}'::jsonb);
   inv1 := create_platform_invoice(sa, '2026-05-04', '2026-08-07', false, null, null, null);
   inv2 := create_platform_invoice(sb, '2026-05-04', '2026-08-07', false, null, null, null);
   select invoice_number into n1 from platform_invoices where id = inv1;
