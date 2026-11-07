@@ -1,0 +1,40 @@
+name: group-digest-cron
+
+# WP 3.4 group admin Saturday digest, DRY-RUN: evaluates what is due and records would_send rows. Sends nothing
+# (see src/app/api/cron/group-digest/route.ts). With the feature flags off everywhere it does nothing.
+# 04:00-06:59 UTC = 07:00-09:59 Nairobi on Saturday: the digest window (07:00-10:00).
+# Reuses EXTERNAL_CRON_SECRET. Calls the "www" host directly (bare host 308-redirects).
+
+on:
+  schedule:
+    - cron: "*/30 4-6 * * 6"
+  workflow_dispatch: {}
+
+jobs:
+  trigger:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call /api/cron/group-digest
+        run: |
+          status=$(curl -s -o /tmp/response.json -w "%{http_code}" \
+            -H "Authorization: Bearer ${{ secrets.EXTERNAL_CRON_SECRET }}" \
+            "https://www.educoreafrica.com/api/cron/group-digest")
+          echo "HTTP status: $status"
+          cat /tmp/response.json
+          if [ "$status" -ge 300 ]; then
+            echo "::error::group-digest cron call failed with status $status"
+            exit 1
+          fi
+
+      - name: Notify Slack on failure
+        if: failure()
+        env:
+          WEBHOOK_URL: ${{ secrets.SECURITY_ALERT_WEBHOOK_URL }}
+          RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          if [ -z "$WEBHOOK_URL" ]; then
+            echo "SECURITY_ALERT_WEBHOOK_URL not set -- skipping Slack notification."
+            exit 0
+          fi
+          python3 -c "import json, os; text = ':rotating_light: *Group digest cron call failed*.\n• *run*: ' + os.environ['RUN_URL']; json.dump({'text': text}, open('/tmp/slack_payload.json', 'w'))"
+          curl -s -X POST -H "Content-Type: application/json" -d @/tmp/slack_payload.json "$WEBHOOK_URL" > /dev/null || true
