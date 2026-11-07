@@ -34,7 +34,7 @@ begin
   execute 'set local role authenticated';
   perform set_config('request.jwt.claims', json_build_object('sub', ua, 'role', 'authenticated')::text, true);
   r := director_whatsapp_register('0711000999', true);
-  assert r->>'status' = 'disabled', '2: flag off -> disabled: ' || r;
+  assert r->>'status' = 'disabled', '2: flag off -> disabled: ' || r::text;
   execute 'reset role';
   insert into school_feature_flags (school_id, flag_id, enabled) values (sa, flag, true), (sb, flag, true);
 
@@ -64,7 +64,7 @@ begin
   -- 6. success + status + masked
   execute 'set local role authenticated';
   r := director_whatsapp_register('+254 712 345 678', true);
-  assert r->>'status' = 'registered' and r->>'phone_masked' = '+254******999', '6: registered: ' || r;
+  assert r->>'status' = 'registered' and r->>'phone_masked' = '+254******999', '6: registered: ' || r::text;
   assert ((director_whatsapp_status())->>'registered')::boolean, '6: status registered';
   -- (7 removed: school_users has a unique index on active phones, uq_school_users_active_phone, so two active staff can
   -- never hold the same number; the phone_in_use branch is only a second line of defence.)
@@ -87,17 +87,17 @@ begin
   insert into payments (school_id, student_id, method, amount, status) values (sa, s1, 'mpesa', 300, 'unallocated');
 
   r := director_whatsapp_answer('+254711000999', 'collection_today', 'SMdw1');
-  assert r->>'status' = 'ok' and (r->'data'->>'total')::numeric = 300 and (r->'data'->>'count')::integer = 1, '8: collection today: ' || r;
+  assert r->>'status' = 'ok' and (r->'data'->>'total')::numeric = 300 and (r->'data'->>'count')::integer = 1, '8: collection today: ' || r::text;
   r := director_whatsapp_answer('+254711000999', 'outstanding', 'SMdw2');
-  assert (r->'data'->>'outstanding')::numeric = 6500 and (r->'data'->>'learners_owing')::integer = 2 and (r->'data'->>'unallocated_received')::numeric = 300, '8: outstanding: ' || r;
+  assert (r->'data'->>'outstanding')::numeric = 6500 and (r->'data'->>'learners_owing')::integer = 2 and (r->'data'->>'unallocated_received')::numeric = 300, '8: outstanding: ' || r::text;
   r := director_whatsapp_answer('+254711000999', 'top_arrears', 'SMdw3');
-  assert r->'data'->'rows'->0->>'name' = 'Sam O.', '8: top arrears: ' || r;
+  assert r->'data'->'rows'->0->>'name' = 'Sam O.', '8: top arrears: ' || r::text;
   r := director_whatsapp_answer('+254711000999', 'attendance_today', 'SMdw4');
-  assert (r->'data'->>'active_learners')::integer = 2 and (r->'data'->>'marked')::integer = 0, '8: attendance with nothing marked: ' || r;
+  assert (r->'data'->>'active_learners')::integer = 2 and (r->'data'->>'marked')::integer = 0, '8: attendance with nothing marked: ' || r::text;
   r := director_whatsapp_answer('+254711000999', 'absentees_today', 'SMdw5');
-  assert (r->'data'->>'total')::integer = 0, '8: absentees none: ' || r;
+  assert (r->'data'->>'total')::integer = 0, '8: absentees none: ' || r::text;
   r := director_whatsapp_answer('+254711000999', 'enrolment', 'SMdw6');
-  assert (r->'data'->>'active_learners')::integer = 2, '8: enrolment: ' || r;
+  assert (r->'data'->>'active_learners')::integer = 2, '8: enrolment: ' || r::text;
   assert (director_whatsapp_answer('+254711000999', 'enrolment', 'SMdw6'))->>'status' = 'duplicate', '8: a repeated MessageSid is a no-op';
   assert (director_whatsapp_answer('+254711000999', 'drop table', 'SMdw7'))->>'status' = 'unknown_topic', '8: unknown topic';
   assert (director_whatsapp_answer('+254799999999', 'enrolment', 'SMdw8'))->>'status' = 'not_director', '8: not a director';

@@ -181,7 +181,12 @@ begin
   assert not has_table_privilege('authenticated', 'inbound_payment_events', 'update'), 'authenticated cannot update events';
 
   -- ---------- 15. nothing leaked into audit_log from the config secret ----------
-  assert not exists (select 1 from audit_log where table_name = 'mpesa_c2b_config'), 'config has no audit trigger, so its token is never copied to audit_log';
+  -- Real C2B admin actions (c2b_register_url, c2b_set_mode) legitimately write audit rows for this table, so
+  -- the check is on the SECRET, not on the table: no audit row may carry the confirmation token.
+  assert not exists (select 1 from audit_log where table_name = 'mpesa_c2b_config'
+                       and (coalesce(new_data::text, '') || coalesce(old_data::text, '')) ilike '%confirmation_token%'), 'the config token is never copied to audit_log';
+  assert not exists (select 1 from pg_trigger where tgrelid = 'mpesa_c2b_config'::regclass and not tgisinternal
+                       and pg_get_triggerdef(oid) ilike '%audit%'), 'config has no audit trigger';
 
   raise notice 'c2b_ingest_payment: all assertions passed';
 end $$;
