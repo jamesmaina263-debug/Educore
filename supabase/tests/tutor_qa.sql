@@ -213,6 +213,7 @@ begin
   perform tutor_qa_set_opt_out(ch1, true); -- idempotent
   perform set_config('request.jwt.claims', json_build_object('sub', u_stu, 'role', 'authenticated')::text, true);
   assert tutor_qa_opt_out_status(ch1) = true, '11b: the learner''s own account sees the setting';
+  assert pg_temp.sqlstate_of(format('select tutor_qa_set_opt_out(%L, false)', ch1)) = '42501', '11b: a learner cannot switch their own questions back on';
   perform set_config('request.jwt.claims', json_build_object('sub', u_p2, 'role', 'authenticated')::text, true);
   assert pg_temp.sqlstate_of(format('select tutor_qa_set_opt_out(%L, false)', ch1)) = '42501', '11b: another family cannot switch it back on';
   perform set_config('request.jwt.claims', json_build_object('sub', u_tb, 'role', 'authenticated')::text, true);

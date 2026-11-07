@@ -3,7 +3,7 @@
 -- Why: the parent notice and the DPIA (docs/legal/) promise that a family can stop their child using the question helper and
 -- can have the child's questions deleted. Until now only a whole-school switch existed.
 --   * tutor_qa_opt_outs: one row per opted-out learner (no child text; audited: who switched it off and when).
---   * tutor_qa_set_opt_out(student, bool): the learner's own account, a linked parent/guardian, or staff with academics.write
+--   * tutor_qa_set_opt_out(student, bool): the learner's own account (switch OFF only, never back on), a linked parent/guardian, or staff with academics.write
 --     (acting on a family's request) in the same school. Switching OFF is allowed at any time, whatever the flags say.
 --   * tutor_qa_opt_out_status(student): same people may read it.
 --   * tutor_qa_delete_questions(student): same people; deletes the learner's stored questions EXCEPT unreviewed safeguarding
@@ -33,7 +33,7 @@ create trigger trg_audit_tutor_qa_opt_outs
 -- Who may manage a learner's setting: the learner's own account, a linked parent or guardian, or school staff who can write
 -- academic records. Internal helper.
 create or replace function public.tutor_qa_manage_scope(p_student uuid)
-returns table (school_id uuid, actor uuid)
+returns table (school_id uuid, actor uuid, actor_role text)
 language plpgsql
 security definer
 set search_path to 'public'
@@ -64,7 +64,7 @@ begin
   if not v_ok then
     raise exception 'Not authorized.' using errcode = '42501';
   end if;
-  return query select v_school, v_su;
+  return query select v_school, v_su, v_role;
 end;
 $$;
 revoke all on function public.tutor_qa_manage_scope(uuid) from public, anon, authenticated;
@@ -79,6 +79,10 @@ declare
   r record;
 begin
   select * into r from public.tutor_qa_manage_scope(p_student);
+  -- a learner may switch questions OFF for themselves but not back ON: that is for a parent, guardian or the school
+  if r.actor_role = 'student' and p_opt_out is not true then
+    raise exception 'Ask a parent or the school to switch questions back on.' using errcode = '42501';
+  end if;
   if p_opt_out is true then
     insert into public.tutor_qa_opt_outs (school_id, student_id, opted_out_by) values (r.school_id, p_student, r.actor)
     on conflict (student_id) do nothing;
