@@ -29,7 +29,7 @@ declare
   f_portal uuid; f_tutor uuid; f_qa uuid;
   note1 uuid := gen_random_uuid(); note2 uuid := gen_random_uuid(); note_other uuid := gen_random_uuid();
   d_ok uuid := gen_random_uuid(); d_draft uuid := gen_random_uuid(); d_other uuid := gen_random_uuid(); d_stale uuid := gen_random_uuid();
-  q1 uuid; q1b uuid; q_sg uuid; n integer; ok boolean; s text;
+  q1 uuid; q1b uuid; q_sg uuid; n integer; ok boolean; s text; res jsonb;
 begin
   select id into r_teacher from roles where name = 'teacher';
   select id into r_dp from roles where name = 'deputy_principal';
@@ -197,6 +197,45 @@ begin
   select count(*) into n from tutor_qa_questions where school_id = sa; assert n = 1, '11: expired rows were purged on save, got ' || n;
   assert tutor_qa_purge() >= 0, '11: purge runs';
 
+  -- 11b. per-learner opt-out and deletion
+  execute 'set local role authenticated';
+  perform set_config('request.jwt.claims', json_build_object('sub', u_p1, 'role', 'authenticated')::text, true);
+  assert tutor_qa_opt_out_status(ch1) = false, '11b: not opted out at first';
+  perform save_tutor_qa(ch1, 'key-del-0001', 'a question to delete', 'not_covered', null, '{}', null, null, null, null);
+  perform save_tutor_qa(ch1, 'key-del-0002', 'someone is hurting me', 'safeguarding', null, '{}', null, null, null, null);
+  assert pg_temp.sqlstate_of(format('select tutor_qa_set_opt_out(%L, true)', ch2)) = '42501', '11b: a parent may not opt out another family''s child';
+  assert pg_temp.sqlstate_of(format('select tutor_qa_opt_out_status(%L)', ch2)) = '42501', '11b: nor read it';
+  assert pg_temp.sqlstate_of(format('select tutor_qa_delete_questions(%L)', ch2)) = '42501', '11b: nor delete';
+  perform tutor_qa_set_opt_out(ch1, true);
+  assert tutor_qa_opt_out_status(ch1) = true, '11b: opted out';
+  assert pg_temp.sqlstate_of(format('select tutor_qa_check(%L)', ch1)) = 'TQ001', '11b: check refuses an opted-out learner';
+  assert pg_temp.sqlstate_of(format('select save_tutor_qa(%L, ''key-del-0003'', ''q'', ''not_covered'', null, ''{}''::uuid[], null, null, null, null)', ch1)) = 'TQ001', '11b: save refuses an opted-out learner';
+  perform tutor_qa_set_opt_out(ch1, true); -- idempotent
+  perform set_config('request.jwt.claims', json_build_object('sub', u_stu, 'role', 'authenticated')::text, true);
+  assert tutor_qa_opt_out_status(ch1) = true, '11b: the learner''s own account sees the setting';
+  perform set_config('request.jwt.claims', json_build_object('sub', u_p2, 'role', 'authenticated')::text, true);
+  assert pg_temp.sqlstate_of(format('select tutor_qa_set_opt_out(%L, false)', ch1)) = '42501', '11b: another family cannot switch it back on';
+  perform set_config('request.jwt.claims', json_build_object('sub', u_tb, 'role', 'authenticated')::text, true);
+  assert pg_temp.sqlstate_of(format('select tutor_qa_set_opt_out(%L, false)', ch1)) = '42501', '11b: other school staff cannot';
+  perform set_config('request.jwt.claims', json_build_object('sub', u_t, 'role', 'authenticated')::text, true);
+  assert tutor_qa_opt_out_status(ch1) = true, '11b: school staff can read it';
+  -- delete keeps an unreviewed safeguarding flag
+  perform set_config('request.jwt.claims', json_build_object('sub', u_p1, 'role', 'authenticated')::text, true);
+  res := tutor_qa_delete_questions(ch1);
+  assert (res->>'deleted')::int >= 1 and (res->>'kept_for_safeguarding')::int = 1, '11b: deleted the ordinary rows and kept the unreviewed flag: ' || res::text;
+  execute 'reset role';
+  select count(*) into n from tutor_qa_questions where student_id = ch1 and review_status <> 'new'; assert n = 0, '11b: no ordinary rows left';
+  select count(*) into n from tutor_qa_questions where student_id = ch1 and review_status = 'new'; assert n = 1, '11b: the safeguarding flag is still there';
+  select count(*) into n from tutor_qa_opt_outs where student_id = ch1 and school_id = sa; assert n = 1, '11b: exactly one opt-out row';
+  -- staff can switch it back on at a family's request
+  execute 'set local role authenticated';
+  perform set_config('request.jwt.claims', json_build_object('sub', u_t, 'role', 'authenticated')::text, true);
+  perform tutor_qa_set_opt_out(ch1, false);
+  assert tutor_qa_opt_out_status(ch1) = false, '11b: staff switched it back on';
+  perform set_config('request.jwt.claims', json_build_object('sub', u_p1, 'role', 'authenticated')::text, true);
+  assert tutor_qa_check(ch1) = st1, '11b: the learner can ask again';
+  execute 'reset role';
+
   -- 12. switching a confirmation off, or the flag off, switches the feature off
   execute 'set local role authenticated';
   perform set_config('request.jwt.claims', json_build_object('sub', u_own, 'role', 'authenticated')::text, true);
@@ -215,6 +254,10 @@ begin
   assert not has_function_privilege('authenticated', 'public.tutor_qa_resolve(uuid)', 'execute'), '13: authenticated may not call tutor_qa_resolve';
   assert not has_function_privilege('authenticated', 'public.tutor_qa_purge()', 'execute'), '13: authenticated may not purge';
   assert has_function_privilege('service_role', 'public.tutor_qa_purge()', 'execute'), '13: service_role may purge';
+  assert not has_function_privilege('anon', 'public.tutor_qa_set_opt_out(uuid, boolean)', 'execute'), '13: anon may not opt out';
+  assert has_function_privilege('authenticated', 'public.tutor_qa_set_opt_out(uuid, boolean)', 'execute'), '13: authenticated may call opt-out (checked inside)';
+  assert not has_function_privilege('authenticated', 'public.tutor_qa_manage_scope(uuid)', 'execute'), '13: the internal helper is not callable';
+  assert not has_table_privilege('authenticated', 'public.tutor_qa_opt_outs', 'insert'), '13: no direct insert on opt-outs';
   assert not has_table_privilege('authenticated', 'public.tutor_qa_questions', 'insert'), '13: no direct insert grant';
   assert not has_table_privilege('authenticated', 'public.tutor_qa_questions', 'update'), '13: no direct update grant';
   assert not has_table_privilege('authenticated', 'public.tutor_qa_questions', 'delete'), '13: no direct delete grant';
