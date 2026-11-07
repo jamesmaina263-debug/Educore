@@ -129,7 +129,7 @@ function QuizTaker({ quiz, studentId }: { quiz: LearnerQuiz; studentId: string }
   );
 }
 
-export function PortalLearning({ studentId, resources, quizzes, guides = [], qaEnabled = false }: { studentId: string; resources: LearnerResource[]; quizzes: LearnerQuiz[]; guides?: LearnerGuide[]; qaEnabled?: boolean }) {
+export function PortalLearning({ studentId, resources, quizzes, guides = [], qaEnabled = false, qaOptedOut = false, qaCanSwitchOn = false, learnerName = "this learner" }: { studentId: string; resources: LearnerResource[]; quizzes: LearnerQuiz[]; guides?: LearnerGuide[]; qaEnabled?: boolean; qaOptedOut?: boolean; qaCanSwitchOn?: boolean; learnerName?: string }) {
   const grouped = KIND_ORDER.map((k) => ({ kind: k, items: resources.filter((r) => r.kind === k) })).filter((g) => g.items.length > 0);
   return (
     <div className="space-y-5">
@@ -148,7 +148,7 @@ export function PortalLearning({ studentId, resources, quizzes, guides = [], qaE
           </ul>
         </section>
       )}
-      {qaEnabled && guides.length > 0 && <TutorQaBox studentId={studentId} />}
+      {qaEnabled && guides.length > 0 && <TutorQaBox studentId={studentId} learnerName={learnerName} initiallyOptedOut={qaOptedOut} canSwitchOn={qaCanSwitchOn} />}
       {quizzes.length > 0 && (
         <section className="space-y-2">
           <h2 className="text-sm font-semibold">Quizzes</h2>

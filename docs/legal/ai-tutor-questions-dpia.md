@@ -52,12 +52,12 @@ Question text is sent to Google, whose processing location is not confirmed (**V
 | R6 | Data used by the AI provider to train models | **Unknown** | High | None possible in code | **Unknown** | **VERIFY the Google terms before enabling (section 3)** |
 | R7 | Data leaves Kenya | Certain | Medium | Contract, minimal data, no identity sent | Medium | Counsel to confirm basis (section 5) |
 | R8 | Over-reliance or doing homework by AI | Medium | Low | Prompt gives hints for "check yourself" questions rather than final answers | Low | Teachers set expectations |
-| R9 | A family wants their child excluded or their data deleted | Medium | Medium | School can switch the feature off for the whole school | Medium: **no per-child opt-out and no self-serve deletion yet** | Build a per-learner opt-out and a delete function; until then handle by request to EduCore support |
+| R9 | A family wants their child excluded or their data deleted | Medium | Medium | Per-learner opt-out and deletion: a parent or guardian can stop the helper, switch it back on and delete saved questions in the learning portal; a learner can switch it off for themselves but not back on; school staff can do all three at a family's request on the Learner questions screen. Refused in the database for an opted-out learner | Low: an unreviewed worrying message is kept until staff have followed it up, so deletion is not instant for those | Tell families in the notice; staff check requests daily |
 | R10 | Cost or abuse by repeated questions | Low | Low | Daily limit in the database; kill switch | Low | None |
 | R11 | Personal data breach | Low | High | Standard platform controls | Low | Follow the school breach procedure (notify the Commissioner within 72 hours where required, s.43; **VERIFY**) |
 
 ## 7. Data subject rights
-Access, correction, objection and deletion requests go to the school, which asks EduCore support. EduCore can produce or delete a learner's questions on request (manual database action today). **A per-child opt-out in the product is not built yet**; until it is, a parent who objects is handled by asking EduCore to switch off the learner's access, or the school may keep the feature off.
+Access, correction and objection requests go to the school. A parent or guardian can switch the helper off for their child, switch it back on, and delete the child's saved questions themselves in the learning portal. Staff can do the same on request (Learner questions screen). A learner can switch the helper off for themselves but not back on. An unreviewed worrying (safeguarding) message is kept until a member of staff has followed it up, then it can be deleted. A copy of a child's questions on request is still a manual action by EduCore support.
 
 ## 8. Consultation
 Record here who was consulted: parents' representatives, teachers, the safeguarding contact, the school's lawyer or data protection officer. ______
