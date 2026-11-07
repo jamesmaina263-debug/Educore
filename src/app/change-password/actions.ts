@@ -5,6 +5,10 @@ import { createClient } from "@/lib/supabase/server";
 import { tagSentryRequestContext } from "@/lib/observability/sentry-context";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isPasswordPwned } from "@/lib/password-breach-check";
+import {
+  friendlyPasswordUpdateError,
+  PASSWORD_SESSION_MISSING_MESSAGE,
+} from "@/lib/auth/password-messages";
 
 export type ChangePasswordState = { error: string | null };
 
@@ -36,10 +40,12 @@ export async function changePassword(
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
+  // No session (reset link opened in another browser, or the session was lost): say so on the
+  // login page instead of bouncing there silently.
+  if (!user) redirect(`/login?error=${encodeURIComponent(PASSWORD_SESSION_MISSING_MESSAGE)}`);
 
   const { error: updateError } = await supabase.auth.updateUser({ password: newPassword });
-  if (updateError) return { error: updateError.message };
+  if (updateError) return { error: friendlyPasswordUpdateError(updateError) };
 
   // Clear the gating flags via the service-role client. auth.uid() is null
   // for service-role calls, which the escalation-guard trigger on

@@ -33,12 +33,18 @@
 // migrate, crypto.ts creates the one row it needs on first use.
 
 const DB_NAME = "educore-offline";
-const DB_VERSION = 3;
+const DB_VERSION = 4;
 
 export const STORES = {
   pendingMutations: "pending_mutations",
   cachedReads: "cached_reads",
   deviceKey: "device_key",
+  // v4 (OS-03): downloaded attachment files (task + submission), keyed by
+  // storage_path, so a chosen file can be reopened offline. See
+  // offline/downloads.ts. A read cache like `cached_reads` -- cleared on
+  // logout for the same tenant-data-leak reason, not preserved like
+  // `pending_mutations`.
+  offlineFiles: "offline_files",
 } as const;
 
 const LEGACY_PENDING_ATTENDANCE_STORE = "pending_attendance";
@@ -87,6 +93,12 @@ function openDb(): Promise<IDBDatabase> {
       if (event.oldVersion < 3) {
         if (!db.objectStoreNames.contains(STORES.deviceKey)) {
           db.createObjectStore(STORES.deviceKey, { keyPath: "id" });
+        }
+      }
+
+      if (event.oldVersion < 4) {
+        if (!db.objectStoreNames.contains(STORES.offlineFiles)) {
+          db.createObjectStore(STORES.offlineFiles, { keyPath: "storage_path" });
         }
       }
 

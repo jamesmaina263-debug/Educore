@@ -38,6 +38,12 @@ These are targets to design toward, not current guarantees:
 
 ## 3. Interim measure built this session
 
+**Owner:** James (founder) — there's no dedicated infrastructure/ops role yet.
+Whoever holds that role once one exists should take this over; until then,
+James is who a failed nightly-backup run's Slack alert (see the workflow's
+"Notify Slack on failure" step) should reach, and who decides on the Pro-plan
+upgrade in section 4.
+
 Since upgrading to Supabase Pro is a cost decision for the business, not a
 technical one I can make unilaterally, this session adds a **nightly logical
 backup via GitHub Actions** (`.github/workflows/nightly-backup.yml`) as a
