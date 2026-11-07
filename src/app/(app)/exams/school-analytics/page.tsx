@@ -9,10 +9,12 @@ import { TableExportMenu } from "@/components/shared/table-export-menu";
 import { SchoolAnalyticsCharts } from "@/components/exams/school-analytics-charts";
 import { PerformanceReportButton } from "@/components/exams/performance-report-button";
 import { getSchoolAnalytics } from "@/app/(app)/exams/school-analytics-actions";
+import { saveAnalyticsThreshold } from "@/app/(app)/exams/analytics-settings-actions";
+import { parseAnalyticsSettings } from "@/lib/academics/analytics-settings";
 import { formatChange, formatScore, roundFor, type ScoreKind } from "@/lib/academics/performance-analytics";
 import { schoolReportModel } from "@/lib/academics/performance-report-model";
 
-type Params = { year?: string; class?: string; subject?: string; term?: string; band?: string; model?: string; threshold?: string };
+type Params = { year?: string; class?: string; subject?: string; term?: string; band?: string; model?: string; threshold?: string; settings?: string; settings_error?: string };
 
 const FLAG_LABEL: Record<string, string> = {
   declining: "Declining",
@@ -46,11 +48,11 @@ export default async function SchoolAnalyticsPage({ searchParams }: { searchPara
 
   const { data: schoolUser } = await supabase
     .from("school_users")
-    .select("full_name, roles(display_name), schools(name, motto, logo_url, address, phone, email, primary_color)")
+    .select("full_name, roles(display_name), schools(name, motto, logo_url, address, phone, email, primary_color, analytics_settings)")
     .eq("auth_user_id", user.id)
     .maybeSingle();
   const roleName = (schoolUser?.roles as unknown as { display_name: string } | null)?.display_name;
-  const school = schoolUser?.schools as unknown as { name: string; motto: string | null; logo_url: string | null; address: string | null; phone: string | null; email: string | null; primary_color: string | null } | null;
+  const school = schoolUser?.schools as unknown as { name: string; motto: string | null; logo_url: string | null; address: string | null; phone: string | null; email: string | null; primary_color: string | null; analytics_settings: unknown } | null;
   const schoolName = school?.name;
   const shell = (children: React.ReactNode) => (
     <AppShell
@@ -73,6 +75,7 @@ export default async function SchoolAnalyticsPage({ searchParams }: { searchPara
     band: params.band || undefined,
     kind: params.model === "percent" || params.model === "level" ? (params.model as ScoreKind) : undefined,
     threshold: threshold !== undefined && Number.isFinite(threshold) ? threshold : undefined,
+    saved: parseAnalyticsSettings(school?.analytics_settings),
   });
   if ("denied" in data) return shell(<p className="text-sm text-muted-foreground">You don&apos;t have access to school analytics.</p>);
   if ("error" in data) return shell(<p className="text-sm text-danger">Could not load school analytics: {data.error}</p>);
@@ -170,17 +173,33 @@ export default async function SchoolAnalyticsPage({ searchParams }: { searchPara
         </label>
         <label className="flex flex-col gap-1 text-xs text-muted-foreground">
           Attention threshold ({cfg.min}–{cfg.max}{cfg.unit.trim() === "%" ? "%" : " pts"})
-          <input name="threshold" type="number" step={kind === "percent" ? 1 : 0.25} min={cfg.min} max={cfg.max} defaultValue={cfg.threshold} className={`${select} w-24`} />
+          <input name="threshold" type="number" step={kind === "percent" ? 1 : 0.25} min={cfg.min} max={cfg.max} defaultValue={data.thresholdSource === "url" ? cfg.threshold : undefined} placeholder={String(cfg.threshold)} className={`${select} w-24`} />
         </label>
         <button type="submit" className="rounded-md border border-border px-3 py-1 text-sm font-medium">Apply</button>
       </form>
 
-      {(data.truncated || data.skipped > 0) && (
+      {data.scope === "school" && (
+        <form action={saveAnalyticsThreshold} className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+          <input type="hidden" name="kind" value={kind} />
+          <input type="hidden" name="threshold" value={cfg.threshold} />
+          {(["year", "class", "subject", "term", "band", "model"] as const).map((k) => (params[k] ? <input key={k} type="hidden" name={`keep_${k}`} value={params[k]} /> : null))}
+          <span>
+            Attention threshold in use: <span className="font-medium text-foreground">{cfg.threshold}{cfg.kind === "percent" ? "%" : " pts"}</span>{" "}
+            ({data.thresholdSource === "saved" ? "school default" : data.thresholdSource === "url" ? "this view only" : "built-in default"})
+          </span>
+          {data.thresholdSource === "url" && <button type="submit" name="intent" value="save" className="rounded-md border border-border px-2 py-1 font-medium text-foreground">Save as school default</button>}
+          {data.thresholdSource === "saved" && <button type="submit" name="intent" value="reset" className="rounded-md border border-border px-2 py-1 font-medium text-foreground">Reset to built-in default</button>}
+        </form>
+      )}
+
+      {data.truncated && (
         <p className="rounded-md border border-border bg-muted/40 p-2 text-xs text-muted-foreground">
-          {data.truncated && "The data is larger than the page can load, so these figures cover only part of it. "}
-          {data.skipped > 0 && `${data.skipped} mark(s) could not be placed in a year or scale for your account and are left out.`}
+          The data is larger than the page can load, so these figures cover only part of it.
         </p>
       )}
+
+      {params.settings && <p className="rounded-md border border-border bg-muted/40 p-2 text-xs">{params.settings === "reset" ? "School default cleared. Built-in default restored." : "Saved as the school default."}</p>}
+      {params.settings_error && <p className="rounded-md border border-border p-2 text-xs text-danger">{params.settings_error}</p>}
 
       {s.studentsAssessed === 0 ? (
         <p className="text-sm text-muted-foreground">No closed-exam results match these filters yet. Analytics appear automatically as exams are closed.</p>

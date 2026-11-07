@@ -608,6 +608,14 @@ export default async function PortalPage({ searchParams }: { searchParams: Promi
       )}
 
       <div className="panel p-4">
+        <p className="label-eyebrow mb-1">Progress</p>
+        <p className="text-sm text-muted-foreground">See how {selected.name} has done year by year since enrolment, subject by subject.</p>
+        <Link href={`/portal/progress?child=${selected.id}`} className="mt-2 inline-block text-sm font-medium underline underline-offset-2">
+          View progress since enrolment
+        </Link>
+      </div>
+
+      <div className="panel p-4">
         <p className="label-eyebrow mb-1">Latest result</p>
         {rc ? (
           <div>
