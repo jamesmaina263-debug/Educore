@@ -4,7 +4,7 @@ import { getCachedUser } from "@/lib/supabase/get-user";
 import { hasFeatureFlag } from "@/lib/feature-flags";
 import { logout } from "@/app/login/actions";
 import { AppShell } from "@/components/app-shell/app-shell";
-import { ReviewButton, TutorQaSettings } from "@/components/learning/tutor-qa-admin";
+import { ReviewButton, TutorQaFamilyRequests, TutorQaSettings } from "@/components/learning/tutor-qa-admin";
 import { LEARNING_FLAG } from "@/lib/learning-portal";
 import { TUTOR_FLAG } from "@/lib/ai/tutor";
 import { QA_FLAG } from "@/lib/ai/tutor-qa";
@@ -29,6 +29,14 @@ export default async function TutorQuestionsPage() {
   const schoolName = (schoolUser?.schools as unknown as { name: string } | null)?.name;
   const canConfigure = roleName === "school_owner" || roleName === "principal";
 
+  const [{ data: canWrite }, { data: learnerRows }, { data: optRows }] = await Promise.all([
+    supabase.rpc("auth_has_permission", { p_permission_key: "academics.write" }),
+    supabase.from("students").select("id, first_name, last_name").not("current_class_id", "is", null).order("first_name").limit(2000),
+    supabase.from("tutor_qa_opt_outs").select("student_id, students(first_name, last_name)").limit(2000),
+  ]);
+  const nameOf = (f?: string, l?: string) => `${f ?? ""} ${l ?? ""}`.trim() || "Learner";
+  const learners = (learnerRows ?? []).map((l) => ({ id: l.id as string, name: nameOf(l.first_name as string, l.last_name as string) }));
+  const optedOut = (optRows ?? []).map((o) => { const st = o.students as unknown as { first_name: string; last_name: string } | null; return { id: o.student_id as string, name: nameOf(st?.first_name, st?.last_name) }; });
   const [{ data: settings }, { data: staffRows }, { data: rows }] = await Promise.all([
     supabase.from("tutor_qa_school_settings").select("safeguarding_contact_id, dpia_confirmed_at, parent_notice_confirmed_at, retention_days, daily_question_limit").maybeSingle(),
     supabase.from("school_users").select("id, full_name, roles(name)").eq("status", "active").order("full_name").limit(500),
@@ -56,6 +64,7 @@ export default async function TutorQuestionsPage() {
           notice={Boolean(settings?.parent_notice_confirmed_at)}
           canConfigure={canConfigure}
         />
+        <TutorQaFamilyRequests learners={learners} optedOut={optedOut} canWrite={canWrite === true} />
         <p className="text-xs text-muted-foreground">
           Questions are kept for {(settings?.retention_days as number | undefined) ?? 90} days and then removed. Each learner can ask up to {(settings?.daily_question_limit as number | undefined) ?? 10} a day.
           Answers come only from approved study guides and are written by AI: please look at them from time to time.

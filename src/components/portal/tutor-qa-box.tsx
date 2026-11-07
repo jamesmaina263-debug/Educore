@@ -1,14 +1,58 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { askTutorQuestionAction } from "@/app/portal/learning/qa-actions";
+import { askTutorQuestionAction, deleteQaQuestionsAction, setQaOptOutAction } from "@/app/portal/learning/qa-actions";
 import { MAX_QUESTION_CHARS } from "@/lib/ai/tutor-qa";
 
 interface Exchange { id: string; question: string; text: string; sources: string[]; tone: "answer" | "notice" | "care" }
 
 // The question box on the learner / parent portal. Shown only when the school has switched learner questions on AND
 // completed the safeguarding set-up (the page checks tutor_qa_my_ready). Never shows anything the server did not return.
-export function TutorQaBox({ studentId }: { studentId: string }) {
+function PrivacyControls({ studentId, optedOut, canSwitchOn, onChanged }: { studentId: string; optedOut: boolean; canSwitchOn: boolean; onChanged: (optedOut: boolean) => void }) {
+  const [msg, setMsg] = useState<string | null>(null);
+  const [pending, start] = useTransition();
+  return (
+    <div className="space-y-1 border-t pt-2 text-xs">
+      <div className="flex flex-wrap gap-2">
+        {(!optedOut || canSwitchOn) && (
+          <button
+            type="button"
+            disabled={pending}
+            className="rounded border px-2 py-1 font-medium disabled:opacity-50"
+            onClick={() => start(async () => {
+              setMsg(null);
+              const res = await setQaOptOutAction({ studentId, optOut: !optedOut });
+              if (res.ok) onChanged(!optedOut);
+              else setMsg(res.error);
+            })}
+          >
+            {optedOut ? "Switch questions back on" : "Stop questions for this learner"}
+          </button>
+        )}
+        <button
+          type="button"
+          disabled={pending}
+          className="rounded border px-2 py-1 font-medium disabled:opacity-50"
+          onClick={() => {
+            if (!window.confirm("Delete all the questions and answers saved for this learner? This cannot be undone.")) return;
+            start(async () => {
+              setMsg(null);
+              const res = await deleteQaQuestionsAction({ studentId });
+              if (!res.ok) setMsg(res.error);
+              else setMsg(`Deleted ${res.deleted ?? 0}.${res.kept ? ` ${res.kept} worrying message${res.kept === 1 ? "" : "s"} must be kept until a member of staff has looked at ${res.kept === 1 ? "it" : "them"}.` : ""}`);
+            });
+          }}
+        >
+          Delete saved questions
+        </button>
+      </div>
+      {msg && <p role="status">{msg}</p>}
+    </div>
+  );
+}
+
+export function TutorQaBox({ studentId, learnerName, initiallyOptedOut, canSwitchOn }: { studentId: string; learnerName: string; initiallyOptedOut: boolean; canSwitchOn: boolean }) {
+  const [optedOut, setOptedOut] = useState(initiallyOptedOut);
   const [text, setText] = useState("");
   const [items, setItems] = useState<Exchange[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -30,6 +74,15 @@ export function TutorQaBox({ studentId }: { studentId: string }) {
     });
   }
 
+  if (optedOut) {
+    return (
+      <section className="space-y-2 rounded border p-3" aria-labelledby="tutor-qa-title">
+        <h2 id="tutor-qa-title" className="text-sm font-semibold">Ask a question about your study guides</h2>
+        <p className="text-sm text-muted-foreground">Questions are switched off for {learnerName}.{canSwitchOn ? "" : " Ask a parent, guardian or the school to switch them back on."}</p>
+        <PrivacyControls studentId={studentId} optedOut canSwitchOn={canSwitchOn} onChanged={setOptedOut} />
+      </section>
+    );
+  }
   return (
     <section className="space-y-2 rounded border p-3" aria-labelledby="tutor-qa-title">
       <h2 id="tutor-qa-title" className="text-sm font-semibold">Ask a question about your study guides</h2>
@@ -64,6 +117,7 @@ export function TutorQaBox({ studentId }: { studentId: string }) {
           </li>
         ))}
       </ul>
+      <PrivacyControls studentId={studentId} optedOut={false} canSwitchOn={canSwitchOn} onChanged={setOptedOut} />
     </section>
   );
 }
