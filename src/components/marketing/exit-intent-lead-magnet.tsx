@@ -26,8 +26,15 @@ import { submitLeadMagnet, type LeadMagnetState } from "@/app/(marketing)/lead-m
 
 const STORAGE_KEY = "educore_lead_magnet_state";
 const SUPPRESS_DISMISS_DAYS = 30;
-const SCROLL_DEPTH_FALLBACK = 0.6; // 60% down the page
-const DWELL_TIME_FALLBACK_MS = 25_000;
+// Originally 0.6 / 25_000. Lowered after GA4 showed most mobile sessions on
+// blog-driven (Facebook) traffic averaging ~12s with a >90% bounce rate --
+// most touch visitors were leaving well before either fallback could ever
+// fire, so the lead magnet was effectively invisible to them. These new
+// thresholds are still well past a reflexive accidental tap (12s dwell,
+// ~1/3 of the way down a post), but fire early enough to catch a visitor
+// who is about to bounce rather than one who has already left.
+const SCROLL_DEPTH_FALLBACK = 0.35; // 35% down the page
+const DWELL_TIME_FALLBACK_MS = 12_000;
 const DOWNLOAD_URL = "/downloads/cbc-digital-readiness-checklist.pdf";
 const RESOURCE = "cbc_digital_readiness_checklist";
 
