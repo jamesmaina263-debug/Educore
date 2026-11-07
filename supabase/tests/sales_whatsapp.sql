@@ -74,6 +74,9 @@ begin
   insert into marketing_demo_requests (id, name, school_name, role, email, phone) values (demo_id, 'Demo Person', 'Demo School', 'Principal', 'demo@example.invalid', '0700 000 001');
 
   -- ---------- 0. the promotional switch defaults OFF ----------
+  -- production's single settings row may have been switched on by the owner; reset it inside this rolled-back transaction
+  perform pg_temp.as_owner();
+  update sales_whatsapp_settings set promotional_enabled = false;
   perform pg_temp.as_user(staff);
   if (select promotional_enabled from admin_get_sales_whatsapp_settings()) then raise exception 'FAIL 0a: promotional is on by default'; end if;
 

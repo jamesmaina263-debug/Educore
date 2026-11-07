@@ -98,6 +98,9 @@ begin
   insert into trial_checkins (school_id, channel, outcome) values (sch_f, 'call', 'asked_to_stop'), (sch_g, 'call', 'reached_not_interested');
 
   -- ---------- 0. switches default OFF ----------
+  -- production's single settings row may have been switched on by the owner; reset it inside this rolled-back transaction
+  perform pg_temp.as_owner();
+  update trial_nudge_settings set sending_enabled = false, promotional_enabled = false;
   perform pg_temp.as_user(staff);
   if (select sending_enabled or promotional_enabled from admin_get_trial_nudge_settings()) then
     raise exception 'FAIL 0a: a switch is on by default';

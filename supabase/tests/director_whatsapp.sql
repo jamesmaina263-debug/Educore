@@ -63,7 +63,7 @@ begin
 
   -- 6. success + status + masked
   execute 'set local role authenticated';
-  r := director_whatsapp_register('+254 712 345 678', true);
+  r := director_whatsapp_register('+254 711 000 999', true);
   assert r->>'status' = 'registered' and r->>'phone_masked' = '+254******999', '6: registered: ' || r::text;
   assert ((director_whatsapp_status())->>'registered')::boolean, '6: status registered';
   -- (7 removed: school_users has a unique index on active phones, uq_school_users_active_phone, so two active staff can

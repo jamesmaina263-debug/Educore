@@ -1,37 +1,13 @@
-# Tests that exist in supabase/tests/ but were not wired into any workflow when the
-# post-deploy runner (db-behavior-checks.yml) was introduced. Their failures are reported as
-# warnings, not blocking, until each has been run against production and fixed if it assumed
-# a state production no longer has. Remove a line here to make that test blocking.
-admin_mfa_enforcement.sql
-c2b_ingest_payment.sql
-demo_request_to_lead.sql
-growth_report.sql
-manual_admission_numbers.sql
-outbound_contact_log.sql
-platform_invoicing.sql
-sales_lead_demos.sql
+# Tests that report warnings instead of failing the post-deploy run (db-behavior-checks.yml).
+# Every other test in supabase/tests/ is blocking. A test belongs here only until it has passed once
+# post-deploy against production; then delete its line.
+#
+# 7 Nov 2026: all other tests passed in the post-deploy run on 9dcf2a4 and were promoted to blocking.
+# These five failed there because they assumed production was still in its fresh state (owner switches
+# and flags now on, real check-in rows). Fixtures changed to reset or scope that state inside the
+# rolled-back transaction; director_whatsapp.sql had a typo (registered a number that is not the profile phone).
+director_whatsapp.sql
+leave_whatsapp.sql
 sales_whatsapp.sql
 trial_checkins.sql
 trial_nudges.sql
-# WP 1.3 Pay by Link: new test, validated in a rolled-back run against production before merge. Remove this line (make it blocking) once it has passed once post-deploy.
-pay_by_link.sql
-# WP 3.3 director WhatsApp: new test, validated on a scratch Postgres only. Remove this line (make it blocking) once it has passed once post-deploy.
-director_whatsapp.sql
-# WP 6.1 cashbook: new test, validated pre-merge on the throwaway database (PR check). Remove this line (make it blocking) once it has passed once post-deploy against production.
-cashbook.sql
-# WP 3.2 director alerts: new test, validated in a rolled-back run against production before merge. Make it blocking once it has passed once post-deploy.
-director_alerts.sql
-# WP 3.1 director briefing: new test, validated pre-merge on the throwaway database (PR check). Make it blocking once it has passed once post-deploy.
-director_briefing.sql
-# WP 5.3 bot part (where is the bus): new test, validated on a scratch Postgres only. Make it blocking once it has passed once post-deploy.
-bot_bus_status.sql
-# WP 1.3b internal dispatch: new test, validated in a rolled-back run against production before merge. Make it blocking once it has passed once post-deploy.
-mpesa_stk_internal_dispatch.sql
-# WP 2.3 bot pay: new test, validated in a rolled-back run against production before merge. Make it blocking once it has passed once post-deploy.
-bot_pay.sql
-# WP 4.5 leave over WhatsApp: new test, validated in a rolled-back run against production before merge. Make it blocking once it has passed once post-deploy.
-leave_whatsapp.sql
-# WP 8.2 part 3 (learner questions): new test, validated on a scratch Postgres only. Make it blocking once it has passed in CI and once post-deploy.
-tutor_qa.sql
-# WP 4.3 refunds: new test, validated on a scratch Postgres with real helper and view definitions plus mutation checks, and by the PR throwaway-database check. Make it blocking once it has passed once post-deploy against production.
-refunds.sql
